@@ -20,7 +20,7 @@ site/              # tudo o que é publicado
   index.html       # a lista de projetos, um <article class="project"> por projeto
   style.css        # o visual escrachado: amarelo, contorno preto grosso, sombra dura
   favicon.svg
-  easter-egg.js    # o Milton ou a Luma sobem num canto da tela a cada 10–20 s e falam num balão
+  easter-egg.js    # o Milton ou a Luma surgem de uma borda sorteada a cada 6–24 s e falam num balão
   img/             # um desenho por projeto: img/<projeto>.svg
                    # e os personagens do easter egg: img/<personagem>-espiando.svg
 .github/workflows/
@@ -48,4 +48,5 @@ Todo projeto tem um desenho em `site/img/<projeto>.svg` que mostra o que o proje
 ## Armadilhas
 
 - ⚠️ O domínio customizado é configurado no repositório (**Settings → Pages**), não por arquivo `CNAME`. Com publicação via Actions, o GitHub ignora o `CNAME` do artefato; adicionar um não muda nada e só confunde quem lê.
+- ⚠️ Não teste o easter egg com `google-chrome --headless --virtual-time-budget`: o relógio virtual não avança as animações do `easter-egg.js`, então o balão não aparece. Também não role a página nesse modo, porque a captura põe os elementos fixos fora do lugar. Teste num navegador de verdade: sirva `site/` (`python3 -m http.server`) e chame `appear()` no console para o personagem surgir na hora.
 - ⚠️ Só o conteúdo de `site/` vai para o ar. Arquivo fora dessa pasta não é publicado, então não adianta referenciá-lo do HTML.
