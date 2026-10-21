@@ -6,7 +6,9 @@ Página com os projetos que fiz com IA, publicada em https://slop.lucaspolo.dev/
 
 ## Adicionar um projeto
 
-Copie um bloco `<article class="project">` em `site/index.html`, coloque o projeto novo no topo da lista e ajuste título, descrição, tags e links. O link para o código só entra quando o repositório é público.
+Copie um bloco `<article class="project">` em `site/index.html`, coloque o projeto novo no topo da lista e ajuste título, descrição, selo, tags e links. O link para o código só entra quando o repositório é público.
+
+Cada card tem um desenho em `site/img/<projeto>.svg`. As regras de estilo estão no `AGENTS.md`.
 
 ## Publicação
 
