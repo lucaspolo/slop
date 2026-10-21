@@ -32,7 +32,7 @@ site/              # tudo o que é publicado
 - Projetos em ordem do mais recente para o mais antigo.
 - O link "código" só aparece quando o repositório é público; link para repositório privado dá 404 para o visitante.
 - Texto em português.
-- O visual é escrachado de propósito e tem um tema só, sem modo escuro. Os cards ficam tortos, alternando a inclinação, e cada um tem um selo estrelado (`.badge`) com uma palavra curta; nos cards pares o selo vai para o canto esquerdo.
+- O visual é escrachado de propósito e tem um tema só, sem modo escuro. Os cards ficam tortos, alternando a inclinação, e cada um tem um selo estrelado (`.badge`) com uma palavra curta. O selo fica no canto superior direito; com `class="badge left"` ele vai para o esquerdo. Escolha o lado que não cobre nada importante do desenho (na Luma, a coroa do Pombo-Rei fica à direita).
 
 ### Desenho de cada card
 
@@ -43,7 +43,7 @@ Todo projeto tem um desenho em `site/img/<projeto>.svg` que mostra o que o proje
 - Use as cores do próprio projeto (o helicóptero do Milton é `#ff5500`, como em `heli.js`).
 - `<title>` dentro do SVG e o mesmo texto no `alt` do `<img>`.
 - Texto dentro do SVG usa `Arial Black, Impact, sans-serif`. ⚠️ SVG carregado por `<img>` não enxerga as fontes da página, então `Bagel Fat One` ali cai numa fonte qualquer.
-- Confira o resultado renderizando, por exemplo com `google-chrome --headless=new --screenshot=out.png --window-size=800,520 file://$PWD/site/img/<projeto>.svg`. O canto superior do desenho fica embaixo do selo (direito nos cards ímpares, esquerdo nos pares), então não ponha nada importante ali.
+- Confira o resultado renderizando, por exemplo com `google-chrome --headless=new --screenshot=out.png --window-size=800,520 file://$PWD/site/img/<projeto>.svg`. Um dos cantos de cima do desenho fica embaixo do selo, então deixe pelo menos um deles livre.
 
 ## Armadilhas
 
