@@ -20,7 +20,9 @@ site/              # tudo o que é publicado
   index.html       # a lista de projetos, um <article class="project"> por projeto
   style.css        # o visual escrachado: amarelo, contorno preto grosso, sombra dura
   favicon.svg
+  easter-egg.js    # o Milton ou a Luma sobem num canto da tela a cada 10–20 s e falam num balão
   img/             # um desenho por projeto: img/<projeto>.svg
+                   # e os personagens do easter egg: img/<personagem>-espiando.svg
 .github/workflows/
   pages.yml        # publica site/ a cada push na main
 ```
