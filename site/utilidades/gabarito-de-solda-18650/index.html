@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gabarito de Solda 18650 · slop</title>
+<meta name="description" content="Gerador de gabarito para segurar células 18650 (e outras) em pé na hora de soldar o pack. Baixa o STL.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: bancada de eletrônica — palco 3D à esquerda, ficha técnica do gabarito à direita; empilha no celular */
+:root {
+  --bg: #edf1ee;
+  --surface: #ffffff;
+  --stage: #e1e8e3;
+  --ink: #142019;
+  --muted: #56655c;
+  --line: #cfd9d2;
+  --accent: #1d6a46;
+  --accent-soft: #d6eadf;
+  --jig: #ee9b45;
+  --cell: #2f6db3;
+  --grid-major: #b5c3ba;
+  --grid-minor: #d0d9d3;
+  --shadow-op: 0.16;
+  --f-display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1411; --surface: #16201a; --stage: #111914; --ink: #e2ebe5; --muted: #91a298;
+    --line: #26342c; --accent: #6bc79a; --accent-soft: #19342a; --jig: #e8954a; --cell: #3d7cc6;
+    --grid-major: #334539; --grid-minor: #1f2c24; --shadow-op: 0.4; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1411; --surface: #16201a; --stage: #111914; --ink: #e2ebe5; --muted: #91a298;
+  --line: #26342c; --accent: #6bc79a; --accent-soft: #19342a; --jig: #e8954a; --cell: #3d7cc6;
+  --grid-major: #334539; --grid-minor: #1f2c24; --shadow-op: 0.4; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 32px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 18px; }
+
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; }
+h1 {
+  font-family: var(--f-display);
+  font-weight: 600;
+  font-size: clamp(1.6rem, 3.2vw, 2.3rem);
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  margin: 0;
+  text-wrap: balance;
+}
+.sub { color: var(--muted); font-size: 0.92rem; margin: 0; }
+.sub b { font-family: var(--f-mono); font-weight: 500; color: var(--ink); }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+.stage {
+  position: relative;
+  background: var(--stage);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  height: min(74vh, 680px);
+  min-height: 360px;
+}
+@media (min-width: 901px) { .stage { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); } }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.stage canvas:active { cursor: grabbing; }
+.stage-hint { position: absolute; left: 14px; right: 14px; bottom: 12px; font-size: 0.78rem; color: var(--muted); pointer-events: none; }
+.views { position: absolute; left: 12px; right: 12px; top: 12px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.views button {
+  font: 500 0.78rem var(--f-body);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 11px;
+  cursor: pointer;
+}
+.views button:hover { border-color: var(--accent); color: var(--accent); }
+.views button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.views .sep { width: 1px; background: var(--line); margin: 2px; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+.panel h2 {
+  font: 600 0.72rem var(--f-body);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+.plan { border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+.plan svg { width: 100%; height: auto; max-height: 260px; display: block; }
+
+.ctrls { display: grid; gap: 10px; }
+.row { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; }
+.row label { font-size: 0.88rem; }
+.row output { font: 500 0.86rem var(--f-mono); font-variant-numeric: tabular-nums; color: var(--accent); }
+.row input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); margin: 0; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+
+.seg { display: flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label {
+  flex: 1;
+  text-align: center;
+  padding: 6px 6px;
+  font-size: 0.83rem;
+  cursor: pointer;
+  border-left: 1px solid var(--line);
+  white-space: nowrap;
+}
+.seg label:first-of-type { border-left: 0; }
+.seg label:hover { color: var(--accent); }
+.seg input:checked + label { background: var(--accent); color: var(--surface); }
+.seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: -3px; }
+.seg.mono label { font-family: var(--f-mono); font-size: 0.8rem; }
+
+.hint { margin: 0; font-size: 0.8rem; color: var(--muted); }
+.hint b { font: 500 0.82rem var(--f-mono); color: var(--ink); }
+
+.check { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; cursor: pointer; }
+.check input { width: 17px; height: 17px; accent-color: var(--accent); margin: 0; }
+
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin: 0; }
+.stats div { min-width: 0; }
+.stats dt { font-size: 0.76rem; color: var(--muted); }
+.stats dd { margin: 0; font: 500 0.95rem var(--f-mono); font-variant-numeric: tabular-nums; }
+.stats dd.hl { color: var(--accent); }
+
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.btn {
+  font: 600 0.84rem var(--f-body);
+  color: var(--surface);
+  background: var(--accent);
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.btn:hover { filter: brightness(1.08); }
+.btn.soft { color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+.status { flex-basis: 100%; margin: 0; font-size: 0.8rem; color: var(--muted); }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px 24px; }
+.notes p { margin: 0; font-size: 0.9rem; color: var(--muted); max-width: 62ch; }
+.notes strong { color: var(--ink); font-weight: 600; }
+.crumbs { margin: 0; font-size: 0.85rem; color: var(--muted); }
+.crumbs a { color: var(--accent); }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav class="crumbs" aria-label="Caminho"><a href="../../">slop</a> / <a href="../">utilidades</a></nav>
+  <header>
+    <h1>Gabarito de Solda 18650</h1>
+    <p class="sub">Placa com encaixes para segurar as células em pé · fileiras alinhadas ou intercaladas · medidas em mm</p>
+  </header>
+
+  <div class="grid">
+    <div class="stage" id="stage">
+      <div class="views">
+        <button type="button" id="v-iso">3/4</button>
+        <button type="button" id="v-top">Cima</button>
+        <button type="button" id="v-side">Lateral</button>
+        <span class="sep" aria-hidden="true"></span>
+        <button type="button" id="cells" aria-pressed="true">Células</button>
+      </div>
+      <div class="stage-hint">Arraste para girar · role ou pince para zoom · grade de 10 mm</div>
+    </div>
+
+    <aside class="panel">
+      <div class="plan">
+        <h2>Vista de cima</h2>
+        <svg id="svg" role="img" aria-label="Vista de cima do gabarito com cotas"></svg>
+      </div>
+
+      <div>
+        <h2>Célula</h2>
+        <div class="ctrls">
+          <div class="seg mono" role="radiogroup" aria-label="Tamanho da célula">
+            <input type="radio" name="preset" id="p14500" value="14500"><label for="p14500">14500</label>
+            <input type="radio" name="preset" id="p18650" value="18650"><label for="p18650">18650</label>
+            <input type="radio" name="preset" id="p21700" value="21700"><label for="p21700">21700</label>
+            <input type="radio" name="preset" id="p26650" value="26650"><label for="p26650">26650</label>
+          </div>
+          <div class="row"><label for="cell">Ø da célula (meça com paquímetro)</label><output id="cell-o"></output><input type="range" id="cell" min="10" max="30" step="0.1"></div>
+          <div class="pair">
+            <div class="row"><label for="clear">Folga</label><output id="clear-o"></output><input type="range" id="clear" min="0" max="1" step="0.05"></div>
+            <div class="row"><label for="tol">Tolerância de impressão</label><output id="tol-o"></output><input type="range" id="tol" min="0" max="0.6" step="0.05"></div>
+          </div>
+          <p class="hint" id="hole-hint"></p>
+        </div>
+      </div>
+
+      <div>
+        <h2>Arranjo</h2>
+        <div class="ctrls">
+          <div class="seg" role="radiogroup" aria-label="Arranjo das fileiras">
+            <input type="radio" name="arr" id="arr-grid" value="grid"><label for="arr-grid">Alinhado</label>
+            <input type="radio" name="arr" id="arr-hex" value="hex"><label for="arr-hex">Intercalado</label>
+          </div>
+          <div class="pair">
+            <div class="row"><label for="cols">Por fileira</label><output id="cols-o"></output><input type="range" id="cols" min="1" max="12" step="1"></div>
+            <div class="row"><label for="rows">Fileiras</label><output id="rows-o"></output><input type="range" id="rows" min="1" max="12" step="1"></div>
+          </div>
+          <label class="check" id="short-wrap" for="short"><input type="checkbox" id="short">Fileiras alternadas com uma célula a menos</label>
+          <div class="row"><label for="gap">Espaço entre células</label><output id="gap-o"></output><input type="range" id="gap" min="0" max="5" step="0.5"></div>
+        </div>
+      </div>
+
+      <div>
+        <h2>Encaixe</h2>
+        <div class="ctrls">
+          <div class="seg" role="radiogroup" aria-label="Tipo de furo">
+            <input type="radio" name="floor" id="fl-lip" value="lip"><label for="fl-lip">Com apoio embaixo</label>
+            <input type="radio" name="floor" id="fl-thru" value="thru"><label for="fl-thru">Passante</label>
+          </div>
+          <div class="row"><label for="depth">Profundidade do encaixe</label><output id="depth-o"></output><input type="range" id="depth" min="5" max="40" step="1"></div>
+          <div class="pair" id="lip-ctrls">
+            <div class="row"><label for="base">Fundo</label><output id="base-o"></output><input type="range" id="base" min="1" max="5" step="0.5"></div>
+            <div class="row"><label for="lip">Aba de apoio</label><output id="lip-o"></output><input type="range" id="lip" min="1" max="5" step="0.5"></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h2>Placa</h2>
+        <div class="ctrls">
+          <div class="seg" role="radiogroup" aria-label="Contorno da placa">
+            <input type="radio" name="shape" id="sh-rect" value="rect"><label for="sh-rect">Retangular</label>
+            <input type="radio" name="shape" id="sh-tight" value="tight"><label for="sh-tight">Justo nas células</label>
+          </div>
+          <div class="row"><label for="margin">Borda em volta</label><output id="margin-o"></output><input type="range" id="margin" min="2" max="12" step="0.5"></div>
+        </div>
+      </div>
+
+      <dl class="stats">
+        <div><dt>Células</dt><dd id="s-count" class="hl"></dd></div>
+        <div><dt>Entre centros</dt><dd id="s-pitch"></dd></div>
+        <div><dt>Placa (L × P × A)</dt><dd id="s-size"></dd></div>
+        <div><dt>Parede entre furos</dt><dd id="s-wall"></dd></div>
+        <div><dt>Pack pronto (L × P)</dt><dd id="s-pack"></dd></div>
+        <div><dt>Filamento PETG</dt><dd id="s-mass"></dd></div>
+      </dl>
+
+      <div class="actions">
+        <button type="button" class="btn" id="download">Baixar STL</button>
+        <button type="button" class="btn soft" id="reset">Voltar ao padrão</button>
+        <p class="status" id="status" role="status"></p>
+      </div>
+    </aside>
+  </div>
+
+  <section class="notes">
+    <p><strong>Alinhado ou intercalado.</strong> No intercalado cada fileira desliza meia célula e encaixa nos vãos da anterior. A distância entre fileiras cai para 87% e o pack fica cerca de 13% mais curto, com o mesmo número de células.</p>
+    <p><strong>Espaço zero.</strong> Com as células encostadas não sobra parede entre os furos. Os encaixes se unem e quem segura as células são os pinos que sobram nos vãos entre elas.</p>
+    <p><strong>Os dois lados.</strong> No passante, vire o gabarito junto com o pack e solde o outro lado. Com apoio, tire o pack e encaixe de cabeça para baixo. No intercalado isso só encaixa com número ímpar de fileiras ou com fileiras alternadas com uma a menos.</p>
+    <p><strong>Calor.</strong> Imprima em PETG ou ABS, porque o PLA amolece perto do ferro. Solda direto na célula aquece o interior: use ferro de 60 W ou mais, fluxo, e no máximo 2 a 3 segundos por ponto. Uma máquina de solda ponto é a opção mais segura.</p>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
+<script>
+(() => {
+  const PRESETS = { '14500': [14.3, 50], '18650': [18.5, 65], '21700': [21.3, 70], '26650': [26.5, 65] };
+  const DEFAULTS = {
+    cell: 18.5, cellH: 65, clear: 0.2, tol: 0.3,
+    arr: 'grid', cols: 4, rows: 3, short: false, gap: 0,
+    floor: 'lip', depth: 15, base: 2, lip: 2,
+    shape: 'rect', margin: 4,
+  };
+  const P = { ...DEFAULTS };
+  const RANGES = ['cell', 'clear', 'tol', 'cols', 'rows', 'gap', 'depth', 'base', 'lip', 'margin'];
+  const PETG = 1.27;  // g/cm³
+
+  // GEOMETRY START
+  const S = 1000;          // escala inteira do Clipper: 1 unidade = 1 µm
+  const SEG = 64;          // lados de cada furo
+  const MIN_WALL = 0.8;    // abaixo disso a parede entre furos não imprime; os furos se unem
+  const MIN_POST = 2;      // mm²: pinos menores que isso entre células somem
+
+  const area = c => {
+    let a = 0;
+    for (let i = 0; i < c.length; i++) {
+      const [x1, y1] = c[i], [x2, y2] = c[(i + 1) % c.length];
+      a += x1 * y2 - x2 * y1;
+    }
+    return a / 2;
+  };
+  const toMM = path => path.map(p => [p.X / S, p.Y / S]);
+  const toInt = c => c.map(([x, y]) => ({ X: Math.round(x * S), Y: Math.round(y * S) }));
+
+  // Polígono circunscrito, para o furo nunca ficar menor que o diâmetro pedido.
+  function circle(cx, cy, r) {
+    const rr = r / Math.cos(Math.PI / SEG), pts = [];
+    for (let k = 0; k < SEG; k++) {
+      const a = 2 * Math.PI * k / SEG;
+      pts.push([Math.round((cx + rr * Math.cos(a)) * S) / S, Math.round((cy + rr * Math.sin(a)) * S) / S]);
+    }
+    return pts;
+  }
+
+  function insidePoly(pt, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, yi] = poly[i], [xj, yj] = poly[j];
+      if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+
+  function layout(p) {
+    const pitch = p.cell + p.gap;
+    // a tolerância compensa o plástico que espalha e fecha o furo na impressão
+    const hole0 = p.cell + p.clear + (p.tol || 0);
+    const wall = pitch - hole0;
+    const merged = wall < MIN_WALL;
+    const hole = merged ? Math.max(hole0, pitch + 0.4) : hole0;
+    const hex = p.arr === 'hex';
+    const rowStep = hex ? pitch * Math.sqrt(3) / 2 : pitch;
+    const centers = [];
+    for (let j = 0; j < p.rows; j++) {
+      const odd = hex && j % 2 === 1;
+      const n = odd && p.short ? p.cols - 1 : p.cols;
+      for (let i = 0; i < n; i++) centers.push([i * pitch + (odd ? pitch / 2 : 0), j * rowStep]);
+    }
+    if (!centers.length) centers.push([0, 0]);
+    const xs = centers.map(c => c[0]), ys = centers.map(c => c[1]);
+    const mx = (Math.min(...xs) + Math.max(...xs)) / 2, my = (Math.min(...ys) + Math.max(...ys)) / 2;
+    centers.forEach(c => { c[0] -= mx; c[1] -= my; });
+    return { centers, pitch, hole, wall, merged };
+  }
+
+  function roundedRect(w, h, r) {
+    const pts = [], n = 10;
+    const corners = [[w / 2 - r, h / 2 - r, 0], [-w / 2 + r, h / 2 - r, 1], [-w / 2 + r, -h / 2 + r, 2], [w / 2 - r, -h / 2 + r, 3]];
+    for (const [cx, cy, q] of corners) {
+      for (let k = 0; k <= n; k++) {
+        const a = (q + k / n) * Math.PI / 2;
+        pts.push([Math.round((cx + r * Math.cos(a)) * S) / S, Math.round((cy + r * Math.sin(a)) * S) / S]);
+      }
+    }
+    return pts;
+  }
+
+  function unionRegions(circles) {
+    const c = new ClipperLib.Clipper();
+    c.AddPaths(circles.map(toInt), ClipperLib.PolyType.ptSubject, true);
+    const tree = new ClipperLib.PolyTree();
+    c.Execute(ClipperLib.ClipType.ctUnion, tree, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+    return tree.Childs().map(node => ({
+      outer: toMM(node.Contour()),
+      posts: node.Childs().map(h => toMM(h.Contour())).filter(h => Math.abs(area(h)) >= MIN_POST),
+    }));
+  }
+
+  function tightOutline(regions, margin) {
+    const co = new ClipperLib.ClipperOffset(2, 0.02 * S);
+    co.AddPaths(regions.map(r => toInt(r.outer)), ClipperLib.JoinType.jtRound, ClipperLib.EndType.etClosedPolygon);
+    const out = new ClipperLib.Paths();
+    co.Execute(out, margin * S);
+    let best = null, bestA = 0;
+    for (const path of out) {
+      const mm = toMM(path), a = Math.abs(area(mm));
+      if (a > bestA) { best = mm; bestA = a; }
+    }
+    return best;
+  }
+
+  function buildJig(p) {
+    const L = layout(p);
+    const r = L.hole / 2;
+    const thru = p.floor === 'thru';
+    const base = thru ? 0 : p.base;
+    const H = base + p.depth;
+
+    const regions = unionRegions(L.centers.map(([x, y]) => circle(x, y, r)));
+
+    let outline;
+    if (p.shape === 'tight') {
+      // com células afastadas, a borda precisa alcançar a do vizinho para a placa sair numa peça só
+      const bridge = L.merged ? 0 : (L.pitch - L.hole) / 2 + 0.6;
+      outline = tightOutline(regions, Math.max(p.margin, bridge));
+    } else {
+      const xs = L.centers.map(c => c[0]), ys = L.centers.map(c => c[1]);
+      const w = Math.max(...xs) - Math.min(...xs) + L.hole + 2 * p.margin;
+      const h = Math.max(...ys) - Math.min(...ys) + L.hole + 2 * p.margin;
+      outline = roundedRect(w, h, Math.min(4, p.margin + r * 0.3));
+    }
+
+    // Furo de baixo: menor que o encaixe pela largura da aba, e sem encostar no vizinho.
+    let rT = Math.max(2, r - p.lip);
+    rT = Math.min(rT, (L.pitch - MIN_WALL) / 2);
+    const throughs = thru ? [] : L.centers.map(([x, y]) => ({ c: [x, y], pts: circle(x, y, rT) }));
+
+    const tris = [];
+    const face = (outer, holes, z, up) => {
+      const all = [outer, ...holes].flat();
+      const v2 = c => c.map(([x, y]) => new THREE.Vector2(x, y));
+      const faces = THREE.ShapeUtils.triangulateShape(v2(outer), holes.map(v2));
+      for (const [a, b, c] of faces) {
+        let A = all[a], B = all[b], C = all[c];
+        const ccw = (B[0] - A[0]) * (C[1] - A[1]) - (B[1] - A[1]) * (C[0] - A[0]) > 0;
+        if (ccw !== up) [B, C] = [C, B];
+        tris.push([[A[0], A[1], z], [B[0], B[1], z], [C[0], C[1], z]]);
+      }
+    };
+    // Parede vertical; o contorno é orientado para o material ficar à esquerda e a normal sair pela direita.
+    const wallOf = (contour, z0, z1, solidInside) => {
+      const c = (area(contour) > 0) === solidInside ? contour : contour.slice().reverse();
+      for (let i = 0; i < c.length; i++) {
+        const [px, py] = c[i], [qx, qy] = c[(i + 1) % c.length];
+        tris.push([[px, py, z0], [qx, qy, z0], [qx, qy, z1]], [[px, py, z0], [qx, qy, z1], [px, py, z1]]);
+      }
+    };
+
+    const pocketOuters = regions.map(g => g.outer);
+    const posts = regions.flatMap(g => g.posts);
+
+    face(outline, pocketOuters, H, true);
+    posts.forEach(pc => face(pc, [], H, true));
+    wallOf(outline, 0, H, true);
+    pocketOuters.forEach(c => wallOf(c, base, H, false));
+    posts.forEach(c => wallOf(c, base, H, true));
+
+    if (thru) {
+      face(outline, pocketOuters, 0, false);
+      posts.forEach(pc => face(pc, [], 0, false));
+    } else {
+      for (const g of regions) {
+        const inner = throughs.filter(t => insidePoly(t.c, g.outer)).map(t => t.pts);
+        face(g.outer, [...g.posts, ...inner], base, true);
+      }
+      face(outline, throughs.map(t => t.pts), 0, false);
+      throughs.forEach(t => wallOf(t.pts, 0, base, false));
+    }
+
+    const ox = outline.map(q => q[0]), oy = outline.map(q => q[1]);
+    const size = [Math.max(...ox) - Math.min(...ox), Math.max(...oy) - Math.min(...oy), H];
+    const cx = L.centers.map(c => c[0]), cy = L.centers.map(c => c[1]);
+    const pack = [Math.max(...cx) - Math.min(...cx) + p.cell, Math.max(...cy) - Math.min(...cy) + p.cell];
+    return { tris, outline, regions, throughs, centers: L.centers, pitch: L.pitch, hole: L.hole, wall: L.wall, merged: L.merged, base, H, size, pack };
+  }
+
+  function meshVolume(tris) {
+    let v = 0;
+    for (const [A, B, C] of tris) {
+      v += (A[0] * (B[1] * C[2] - B[2] * C[1]) - A[1] * (B[0] * C[2] - B[2] * C[0]) + A[2] * (B[0] * C[1] - B[1] * C[0])) / 6;
+    }
+    return v;
+  }
+
+  function stlBytes(tris) {
+    const buf = new ArrayBuffer(84 + tris.length * 50);
+    const dv = new DataView(buf);
+    const header = 'gabarito de solda para baterias';
+    for (let i = 0; i < 80; i++) dv.setUint8(i, i < header.length ? header.charCodeAt(i) : 32);
+    dv.setUint32(80, tris.length, true);
+    let o = 84;
+    for (const [A, B, C] of tris) {
+      const u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], w = [C[0] - A[0], C[1] - A[1], C[2] - A[2]];
+      const nr = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+      const ln = Math.hypot(...nr) || 1;
+      for (const c of [...nr.map(c => c / ln), ...A, ...B, ...C]) { dv.setFloat32(o, c, true); o += 4; }
+      dv.setUint16(o, 0, true); o += 2;
+    }
+    return new Uint8Array(buf);
+  }
+
+  // GEOMETRY END
+
+  const fmt = n => (Math.round(n * 10) / 10).toString().replace('.', ',');
+  const fmt2 = n => (Math.round(n * 100) / 100).toFixed(2).replace('.', ',');
+  const cssVar = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  // ---------- three.js ----------
+  const stage = document.getElementById('stage');
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  stage.prepend(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(35, 1, 1, 4000);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.minDistance = 40;
+  controls.maxDistance = 1200;
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a9a90, 0.55));
+  const key = new THREE.DirectionalLight(0xffffff, 0.85);
+  key.position.set(120, 260, 140);
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.bias = -0.0005;
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0xc8ffe0, 0.3);
+  rim.position.set(-160, 90, -140);
+  scene.add(rim);
+
+  const shadowMat = new THREE.ShadowMaterial({ opacity: 0.16 });
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), shadowMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // O modelo é construído com Z para cima, como no STL; o grupo gira para o Y da cena.
+  const world = new THREE.Group();
+  world.rotation.x = -Math.PI / 2;
+  scene.add(world);
+
+  const jigMat = new THREE.MeshStandardMaterial({ color: 0xee9b45, roughness: 0.55, metalness: 0 });
+  const jig = new THREE.Mesh(new THREE.BufferGeometry(), jigMat);
+  jig.castShadow = true;
+  jig.receiveShadow = true;
+  world.add(jig);
+
+  const cellMat = new THREE.MeshStandardMaterial({ color: 0x2f6db3, roughness: 0.35, metalness: 0.05 });
+  const capMat = new THREE.MeshStandardMaterial({ color: 0xc9ced3, roughness: 0.3, metalness: 0.85 });
+  let cellMesh = null, capMesh = null, showCells = true;
+
+  let grid = null;
+  function applyTheme() {
+    jigMat.color.set(cssVar('--jig') || '#ee9b45').convertSRGBToLinear();
+    cellMat.color.set(cssVar('--cell') || '#2f6db3').convertSRGBToLinear();
+    shadowMat.opacity = parseFloat(cssVar('--shadow-op')) || 0.16;
+    if (grid) { scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
+    grid = new THREE.GridHelper(600, 60, cssVar('--grid-major') || '#b5c3ba', cssVar('--grid-minor') || '#d0d9d3');
+    grid.position.y = 0.02;
+    scene.add(grid);
+    drawPlan();
+  }
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+  new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  let model = null, lastSpan = 0;
+  function rebuild() {
+    model = buildJig(P);
+    const pos = new Float32Array(model.tris.length * 9);
+    let k = 0;
+    for (const t of model.tris) for (const v of t) { pos[k++] = v[0]; pos[k++] = v[1]; pos[k++] = v[2]; }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.computeVertexNormals();
+    jig.geometry.dispose();
+    jig.geometry = geo;
+
+    [cellMesh, capMesh].forEach(m => { if (m) { world.remove(m); m.geometry.dispose(); } });
+    const n = model.centers.length, r = P.cell / 2, h = P.cellH;
+    const cg = new THREE.CylinderGeometry(r, r, h - 0.8, 40).rotateX(Math.PI / 2);
+    const kg = new THREE.CylinderGeometry(r * 0.38, r * 0.38, 0.8, 24).rotateX(Math.PI / 2);
+    cellMesh = new THREE.InstancedMesh(cg, cellMat, n);
+    capMesh = new THREE.InstancedMesh(kg, capMat, n);
+    const m4 = new THREE.Matrix4();
+    model.centers.forEach(([x, y], i) => {
+      cellMesh.setMatrixAt(i, m4.makeTranslation(x, y, model.base + (h - 0.8) / 2));
+      capMesh.setMatrixAt(i, m4.makeTranslation(x, y, model.base + h - 0.4));
+    });
+    cellMesh.castShadow = capMesh.castShadow = true;
+    cellMesh.visible = capMesh.visible = showCells;
+    world.add(cellMesh, capMesh);
+
+    const span = Math.max(model.size[0], model.size[1], showCells ? h : model.H);
+    const sc = key.shadow.camera;
+    const half = Math.max(model.size[0], model.size[1]) / 2 + 80;
+    Object.assign(sc, { left: -half, right: half, top: half, bottom: -half, near: 10, far: 900 });
+    sc.updateProjectionMatrix();
+    controls.target.set(0, (showCells ? model.base + h : model.H) * 0.35, 0);
+    if (Math.abs(span - lastSpan) > lastSpan * 0.25) { setView('v-iso'); lastSpan = span; }
+
+    const vol = meshVolume(model.tris);
+    document.getElementById('s-count').textContent = n + (P.arr === 'hex' ? ' intercaladas' : ' alinhadas');
+    document.getElementById('s-pitch').textContent = fmt(model.pitch) + ' mm';
+    document.getElementById('s-size').textContent = model.size.map(fmt).join(' × ');
+    document.getElementById('s-wall').textContent = model.merged ? 'unidos' : fmt(model.wall) + ' mm';
+    document.getElementById('s-pack').textContent = model.pack.map(fmt).join(' × ');
+    document.getElementById('s-mass').textContent = '≈ ' + Math.round(vol / 1000 * PETG) + ' g';
+    const nominal = P.cell + P.clear + P.tol;
+    document.getElementById('hole-hint').innerHTML = `Furo no arquivo: <b>Ø${fmt2(model.hole)} mm</b>` +
+      (model.hole > nominal + 0.001
+        ? ' (aumentado para os furos se unirem com as células encostadas).'
+        : ` (célula ${fmt2(P.cell)} + folga ${fmt2(P.clear)} + tolerância ${fmt2(P.tol)}).`) +
+      ' Na dúvida, imprima antes um teste com 2 × 1 células.';
+    drawPlan();
+  }
+
+  // ---------- vista de cima ----------
+  const svg = document.getElementById('svg');
+  function drawPlan() {
+    if (!model) return;
+    const ink = cssVar('--ink'), muted = cssVar('--muted'), accent = cssVar('--accent'), jigC = cssVar('--jig'), bg = cssVar('--surface');
+    const [W, D] = model.size;
+    const pad = Math.max(W, D) * 0.09 + 6, fs = Math.max(W, D) * 0.045 + 1.5;
+    const d = c => 'M' + c.map(([x, y]) => `${x.toFixed(2)},${(-y).toFixed(2)}`).join('L') + 'Z';
+    const plate = d(model.outline) + model.regions.map(g => d(g.outer)).join('');
+    const posts = model.regions.flatMap(g => g.posts).map(d).join('');
+    const thr = model.throughs.map(t => d(t.pts)).join('');
+    const x0 = -W / 2, x1 = W / 2, y0 = -D / 2, y1 = D / 2;
+    const tick = Math.max(W, D) * 0.02 + 0.8;
+    svg.setAttribute('viewBox', `${x0 - pad} ${y0 - pad * 0.4} ${W + pad * 1.4} ${D + pad * 1.4}`);
+    svg.innerHTML = `
+      <path d="${plate}" fill="${jigC}" fill-opacity="0.85" fill-rule="evenodd" stroke="${ink}" stroke-width="${tick * 0.18}" />
+      ${posts ? `<path d="${posts}" fill="${jigC}" stroke="${ink}" stroke-width="${tick * 0.18}" />` : ''}
+      ${thr ? `<path d="${thr}" fill="none" stroke="${muted}" stroke-width="${tick * 0.15}" stroke-dasharray="${tick * 0.6} ${tick * 0.4}" />` : ''}
+      <g stroke="${accent}" stroke-width="${tick * 0.16}" fill="${accent}" font-family="JetBrains Mono, ui-monospace, monospace" font-size="${fs}">
+        <line x1="${x0}" y1="${y1 + pad * 0.45}" x2="${x1}" y2="${y1 + pad * 0.45}" />
+        <line x1="${x0}" y1="${y1 + pad * 0.45 - tick}" x2="${x0}" y2="${y1 + pad * 0.45 + tick}" />
+        <line x1="${x1}" y1="${y1 + pad * 0.45 - tick}" x2="${x1}" y2="${y1 + pad * 0.45 + tick}" />
+        <text x="0" y="${y1 + pad * 0.45 + fs * 1.15}" text-anchor="middle" stroke="none">${fmt(W)}</text>
+        <line x1="${x0 - pad * 0.45}" y1="${y0}" x2="${x0 - pad * 0.45}" y2="${y1}" />
+        <line x1="${x0 - pad * 0.45 - tick}" y1="${y0}" x2="${x0 - pad * 0.45 + tick}" y2="${y0}" />
+        <line x1="${x0 - pad * 0.45 - tick}" y1="${y1}" x2="${x0 - pad * 0.45 + tick}" y2="${y1}" />
+        <text x="${x0 - pad * 0.45 - fs * 0.45}" y="0" text-anchor="middle" stroke="none" transform="rotate(-90 ${x0 - pad * 0.45 - fs * 0.45} 0)">${fmt(D)}</text>
+      </g>`;
+  }
+
+  // ---------- controles ----------
+  function syncInputs() {
+    RANGES.forEach(id => {
+      document.getElementById(id).value = P[id];
+      const unit = id === 'cols' || id === 'rows' ? '' : ' mm';
+      const f = id === 'clear' || id === 'tol' ? fmt2 : fmt;
+      document.getElementById(id + '-o').textContent = f(P[id]) + unit;
+    });
+    const preset = Object.entries(PRESETS).find(([, [dia]]) => dia === P.cell);
+    document.querySelectorAll('input[name="preset"]').forEach(el => { el.checked = !!preset && el.value === preset[0]; });
+    document.getElementById('arr-' + P.arr).checked = true;
+    document.getElementById(P.floor === 'thru' ? 'fl-thru' : 'fl-lip').checked = true;
+    document.getElementById(P.shape === 'tight' ? 'sh-tight' : 'sh-rect').checked = true;
+    document.getElementById('short').checked = P.short;
+    document.getElementById('short-wrap').hidden = P.arr !== 'hex';
+    document.getElementById('lip-ctrls').hidden = P.floor === 'thru';
+  }
+  function update() { syncInputs(); rebuild(); }
+
+  RANGES.forEach(id => document.getElementById(id).addEventListener('input', e => { P[id] = parseFloat(e.target.value); update(); }));
+  document.querySelectorAll('input[name="preset"]').forEach(el => el.addEventListener('change', () => {
+    [P.cell, P.cellH] = PRESETS[el.value];
+    update();
+  }));
+  document.querySelectorAll('input[name="arr"]').forEach(el => el.addEventListener('change', () => { P.arr = el.value; update(); }));
+  document.querySelectorAll('input[name="floor"]').forEach(el => el.addEventListener('change', () => { P.floor = el.value; update(); }));
+  document.querySelectorAll('input[name="shape"]').forEach(el => el.addEventListener('change', () => { P.shape = el.value; update(); }));
+  document.getElementById('short').addEventListener('change', e => { P.short = e.target.checked; update(); });
+  document.getElementById('reset').addEventListener('click', () => { Object.assign(P, DEFAULTS); update(); });
+
+  const cellsBtn = document.getElementById('cells');
+  cellsBtn.addEventListener('click', () => {
+    showCells = !showCells;
+    cellsBtn.setAttribute('aria-pressed', String(showCells));
+    cellMesh.visible = capMesh.visible = showCells;
+  });
+
+  function setView(id) {
+    const s = Math.max(model.size[0], model.size[1], 60);
+    const dirs = { 'v-iso': [0.75, 0.85, 1.05], 'v-top': [0.02, 2.1, 0.08], 'v-side': [0, 0.35, 2.0] };
+    const [x, y, z] = dirs[id];
+    camera.position.set(x * s * 1.3, y * s * 1.3, z * s * 1.3);
+  }
+  ['v-iso', 'v-top', 'v-side'].forEach(id => document.getElementById(id).addEventListener('click', () => setView(id)));
+
+  // ---------- exportar ----------
+  const status = document.getElementById('status');
+  const fileBase = () => {
+    const preset = Object.entries(PRESETS).find(([, [dia]]) => dia === P.cell);
+    return `gabarito-${preset ? preset[0] : 'cel' + fmt(P.cell)}-${P.cols}x${P.rows}-${P.arr === 'hex' ? 'intercalado' : 'alinhado'}`;
+  };
+  // O arquivo é montado na própria página e baixado pelo navegador, sem servidor.
+  function save(name, blob) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  document.getElementById('download').addEventListener('click', () => {
+    const name = fileBase() + '.stl';
+    save(name, new Blob([stlBytes(model.tris)], { type: 'model/stl' }));
+    status.textContent = `Baixando ${name}.`;
+  });
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage);
+
+  syncInputs();
+  applyTheme();
+  rebuild();
+  resize();
+
+  (function loop() {
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  })();
+})();
+</script>
+
+</body></html>

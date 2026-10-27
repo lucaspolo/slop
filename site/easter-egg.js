@@ -1,15 +1,18 @@
 // Easter egg: de vez em quando o Milton ou a Luma surgem de uma borda qualquer da tela e falam num balão.
 
+// Os desenhos ficam ao lado deste script; o caminho vale em qualquer página que o carregue.
+const asset = (path) => new URL(path, document.currentScript.src).href;
+
 const CHARACTERS = [
   {
-    img: "img/milton-espiando.svg",
+    img: asset("img/milton-espiando.svg"),
     says: "Milton, the Puton, na área!",
     // Balança a cabeça de um lado para o outro enquanto fala.
     talk: [{ transform: "rotate(-9deg)" }, { transform: "rotate(9deg)" }],
     talkMs: 300,
   },
   {
-    img: "img/luma-espiando.svg",
+    img: asset("img/luma-espiando.svg"),
     says: "AU! AU! AU!",
     // Dá um tranco para cima a cada latido.
     talk: [

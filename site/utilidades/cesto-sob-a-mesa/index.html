@@ -1,0 +1,1012 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cesto Sob a Mesa · slop</title>
+<meta name="description" content="Gerador de cesto modular para prender embaixo da mesa e guardar réguas de tomada e fontes. Imprime sem suporte e baixa os STLs.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: oficina de marcenaria — palco 3D com o tampo da mesa à esquerda, ficha de medidas à direita; empilha no celular */
+:root {
+  --bg: #f0eeea;
+  --surface: #ffffff;
+  --stage: #e6e3dd;
+  --ink: #1f1c18;
+  --muted: #6a645b;
+  --line: #d8d3ca;
+  --accent: #8a5a0b;
+  --accent-soft: #f1e4cc;
+  --part: #4b525c;
+  --part-alt: #6b7480;
+  --desk: #b98d5f;
+  --ok: #2f7a46;
+  --warn: #b0451f;
+  --grid-major: #c3bdb2;
+  --grid-minor: #dcd7ce;
+  --shadow-op: 0.18;
+  --f-display: "Familjen Grotesk", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131210; --surface: #1c1a17; --stage: #171513; --ink: #ece7df; --muted: #a39b8f;
+    --line: #322e28; --accent: #e2b25e; --accent-soft: #3a2d17; --part: #9aa3ae; --part-alt: #7a838e; --desk: #a07a52;
+    --ok: #6cc28a; --warn: #f08a62; --grid-major: #3d3830; --grid-minor: #26231f; --shadow-op: 0.45; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131210; --surface: #1c1a17; --stage: #171513; --ink: #ece7df; --muted: #a39b8f;
+  --line: #322e28; --accent: #e2b25e; --accent-soft: #3a2d17; --part: #9aa3ae; --part-alt: #7a838e; --desk: #a07a52;
+  --ok: #6cc28a; --warn: #f08a62; --grid-major: #3d3830; --grid-minor: #26231f; --shadow-op: 0.45; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 32px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 18px; }
+
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; }
+h1 {
+  font-family: var(--f-display);
+  font-weight: 700;
+  font-size: clamp(1.6rem, 3.2vw, 2.3rem);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
+  text-wrap: balance;
+}
+.sub { color: var(--muted); font-size: 0.92rem; margin: 0; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+.stage {
+  position: relative;
+  background: var(--stage);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  height: min(74vh, 680px);
+  min-height: 360px;
+}
+@media (min-width: 901px) { .stage { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); } }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.stage canvas:active { cursor: grabbing; }
+.stage-hint { position: absolute; left: 14px; right: 14px; bottom: 12px; font-size: 0.78rem; color: var(--muted); pointer-events: none; }
+.views { position: absolute; left: 12px; right: 12px; top: 12px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.views button {
+  font: 500 0.78rem var(--f-body);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 11px;
+  cursor: pointer;
+}
+.views button:hover { border-color: var(--accent); color: var(--accent); }
+.views button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.views .sep { width: 1px; background: var(--line); margin: 2px; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+.panel h2 {
+  font: 600 0.72rem var(--f-body);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.ctrls { display: grid; gap: 10px; }
+.row { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; min-width: 0; }
+.row label { font-size: 0.88rem; }
+.row output { font: 500 0.86rem var(--f-mono); font-variant-numeric: tabular-nums; color: var(--accent); }
+.row input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); margin: 0; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+
+.seg { display: flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { flex: 1; text-align: center; padding: 6px; font-size: 0.83rem; cursor: pointer; border-left: 1px solid var(--line); white-space: nowrap; }
+.seg label:first-of-type { border-left: 0; }
+.seg label:hover { color: var(--accent); }
+.seg input:checked + label { background: var(--accent); color: var(--surface); }
+.seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: -3px; }
+.seg.mono label { font-family: var(--f-mono); font-size: 0.8rem; }
+
+.kit { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 0.86rem; }
+.kit li { display: flex; justify-content: space-between; gap: 10px; }
+.kit b { font: 500 0.86rem var(--f-mono); color: var(--accent); }
+
+.fit { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; margin: 0; }
+.fit::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--ok); flex: none; }
+.fit.bad::before { background: var(--warn); }
+.fit.bad { color: var(--warn); }
+
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin: 0; }
+.stats div { min-width: 0; }
+.stats dt { font-size: 0.76rem; color: var(--muted); }
+.stats dd { margin: 0; font: 500 0.95rem var(--f-mono); font-variant-numeric: tabular-nums; }
+.stats dd.hl { color: var(--accent); }
+
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.btn { font: 600 0.84rem var(--f-body); color: var(--surface); background: var(--accent); border: 0; border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+.btn:hover { filter: brightness(1.08); }
+.btn.soft { color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+.status { flex-basis: 100%; margin: 0; font-size: 0.8rem; color: var(--muted); }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px 24px; }
+.notes p { margin: 0; font-size: 0.9rem; color: var(--muted); max-width: 62ch; }
+.notes strong { color: var(--ink); font-weight: 600; }
+.crumbs { margin: 0; font-size: 0.85rem; color: var(--muted); }
+.crumbs a { color: var(--accent); }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav class="crumbs" aria-label="Caminho"><a href="../../">slop</a> / <a href="../">utilidades</a></nav>
+  <header>
+    <h1>Cesto Sob a Mesa</h1>
+    <p class="sub">Módulos que se encaixam · para réguas de tomada e fontes · imprime sem suporte · medidas em mm</p>
+  </header>
+
+  <div class="grid">
+    <div class="stage" id="stage">
+      <div class="views">
+        <button type="button" id="v-iso">3/4</button>
+        <button type="button" id="v-front">Frente</button>
+        <button type="button" id="v-end">Lado</button>
+        <button type="button" id="v-under">Por baixo</button>
+        <span class="sep" aria-hidden="true"></span>
+        <button type="button" id="explode" aria-pressed="false">Separar módulos</button>
+        <button type="button" id="desk" aria-pressed="true">Tampo</button>
+      </div>
+      <div class="stage-hint">Arraste para girar · role ou pince para zoom · grade de 10 mm · peças na posição de impressão</div>
+    </div>
+
+    <aside class="panel">
+      <div>
+        <h2>Módulos</h2>
+        <div class="ctrls">
+          <div class="pair">
+            <div class="row"><label for="modules">Quantidade</label><output id="modules-o"></output><input type="range" id="modules" min="1" max="6" step="1"></div>
+            <div class="row"><label for="L">Comprimento de cada</label><output id="L-o"></output><input type="range" id="L" min="100" max="340" step="5"></div>
+          </div>
+          <ul class="kit" id="kit"></ul>
+          <div class="row"><label for="fit">Folga dos encaixes</label><output id="fit-o"></output><input type="range" id="fit" min="0.1" max="0.6" step="0.05"></div>
+        </div>
+      </div>
+
+      <div>
+        <h2>Medidas</h2>
+        <div class="ctrls">
+          <div class="pair">
+            <div class="row"><label for="W">Largura</label><output id="W-o"></output><input type="range" id="W" min="50" max="200" step="5"></div>
+            <div class="row"><label for="H">Altura do cesto</label><output id="H-o"></output><input type="range" id="H" min="30" max="150" step="5"></div>
+          </div>
+          <div class="row"><label for="front">Altura da parede da frente (facilita tirar a régua)</label><output id="front-o"></output><input type="range" id="front" min="40" max="100" step="5"></div>
+          <div class="row"><label for="back">Altura da parede de trás</label><output id="back-o"></output><input type="range" id="back" min="40" max="100" step="5"></div>
+        </div>
+      </div>
+
+      <div>
+        <h2>Fixação no tampo</h2>
+        <div class="ctrls">
+          <div class="pair">
+            <div class="row"><label for="ribs">Suportes por lado</label><output id="ribs-o"></output><input type="range" id="ribs" min="1" max="4" step="1"></div>
+            <div class="row"><label for="fin">Espessura da aleta</label><output id="fin-o"></output><input type="range" id="fin" min="4" max="10" step="0.5"></div>
+          </div>
+          <div class="row"><label for="gap">Vão entre o cesto e o tampo</label><output id="gap-o"></output><input type="range" id="gap" min="5" max="80" step="5"></div>
+          <div class="pair">
+            <div class="row"><label for="tab">Aba do parafuso</label><output id="tab-o"></output><input type="range" id="tab" min="20" max="40" step="1"></div>
+            <div class="row"><label for="screw">Ø do parafuso</label><output id="screw-o"></output><input type="range" id="screw" min="3" max="6" step="0.5"></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h2>Paredes e fundo</h2>
+        <div class="ctrls">
+          <div class="pair">
+            <div class="row"><label for="t">Parede</label><output id="t-o"></output><input type="range" id="t" min="2" max="6" step="0.5"></div>
+            <div class="row"><label for="tf">Fundo</label><output id="tf-o"></output><input type="range" id="tf" min="2" max="6" step="0.5"></div>
+          </div>
+          <div class="row"><label for="fillet">Reforço interno nos cantos do fundo</label><output id="fillet-o"></output><input type="range" id="fillet" min="0" max="12" step="1"></div>
+          <div class="seg" role="radiogroup" aria-label="Aberturas de ventilação">
+            <input type="radio" name="vents" id="vt-none" value="none"><label for="vt-none">Sem furos</label>
+            <input type="radio" name="vents" id="vt-some" value="some"><label for="vt-some">Poucos furos</label>
+            <input type="radio" name="vents" id="vt-many" value="many"><label for="vt-many">Muitos furos</label>
+          </div>
+          <div class="pair">
+            <div class="row"><label for="notchW">Passagem de cabo</label><output id="notchW-o"></output><input type="range" id="notchW" min="0" max="60" step="2"></div>
+            <div class="row"><label for="notchD">Fundura</label><output id="notchD-o"></output><input type="range" id="notchD" min="10" max="80" step="2"></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h2>Impressora</h2>
+        <div class="ctrls">
+          <div class="seg mono" role="radiogroup" aria-label="Tamanho da mesa da impressora">
+            <input type="radio" name="bed" id="bed-220" value="220"><label for="bed-220">220</label>
+            <input type="radio" name="bed" id="bed-256" value="256"><label for="bed-256">256</label>
+            <input type="radio" name="bed" id="bed-300" value="300"><label for="bed-300">300</label>
+            <input type="radio" name="bed" id="bed-350" value="350"><label for="bed-350">350</label>
+          </div>
+          <p class="fit" id="fitmsg"></p>
+          <div class="row"><label for="angle">Inclinação máxima sem suporte (a partir da vertical)</label><output id="angle-o"></output><input type="range" id="angle" min="15" max="45" step="1"></div>
+        </div>
+      </div>
+
+      <dl class="stats">
+        <div><dt>Comprimento montado</dt><dd id="s-total" class="hl"></dd></div>
+        <div><dt>Espaço interno (L × A)</dt><dd id="s-inner"></dd></div>
+        <div><dt>Maior peça (C × L × A)</dt><dd id="s-size"></dd></div>
+        <div><dt>Parafusos no total</dt><dd id="s-screws"></dd></div>
+        <div><dt>PETG, conjunto maciço</dt><dd id="s-mass"></dd></div>
+        <div><dt>Altura do esquadro</dt><dd id="s-bridge"></dd></div>
+      </dl>
+
+      <div class="actions">
+        <button type="button" class="btn" id="download">Baixar STLs (.zip)</button>
+        <button type="button" class="btn soft" id="reset">Voltar ao padrão</button>
+        <p class="status" id="status" role="status"></p>
+      </div>
+    </aside>
+  </div>
+
+  <section class="notes">
+    <p><strong>Como os módulos se ligam.</strong> A ponta esquerda tem lingueta, a direita tem encaixe, e os do meio têm um de cada. Nas paredes o encaixe é um rabo de andorinha vertical; no fundo, peças tipo quebra-cabeça. Com o primeiro módulo já parafusado, suba o próximo por baixo até encostar no tampo. Depois empurre uma trava em cada junção, na frente e atrás, pelo lado de fora: ela atravessa os dois blocos e impede o módulo de correr para cima ou para baixo.</p>
+    <p><strong>Sem suporte na impressão.</strong> Nenhuma face fica deitada no ar: tudo sobe na vertical ou na inclinação escolhida em Impressora (padrão 25° a partir da vertical). Isso vale para o esquadro e para o teto do vão do parafuso, que fecha em ogiva até a borda do furo. Vale também para a rampa acima do rasgo da trava e para o topo dos furos de ventilação. A trava imprime deitada. Se o seu fatiador ainda marcar suporte, deixe o ângulo dele um pouco acima do daqui.</p>
+    <p><strong>Parafusos.</strong> Um por suporte, de madeira, cabeça chata com arruela, de 20 a 25 mm. A chave entra por baixo, pelo vão entre as aletas. Em MDF fino, faça pré-furo de 2,5 mm e confira se o parafuso não atravessa o tampo.</p>
+    <p><strong>Material.</strong> Prefira PETG ou ASA, porque fontes esquentam e o PLA se deforma com carga constante. Use 4 perímetros e 25% de preenchimento. Se o encaixe sair duro, aumente a folga em 0,05 mm e imprima de novo só a ponta.</p>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
+<script>
+(() => {
+  const DEFAULTS = {
+    modules: 2, L: 200, fit: 0.3,
+    W: 110, H: 70, front: 100, back: 100,
+    ribs: 2, fin: 6, gap: 30, tab: 26, screw: 4.5,
+    t: 3, tf: 3, fillet: 6, vents: 'some', notchW: 30, notchD: 26,
+    bed: 256, angle: 25,
+  };
+  const P = { ...DEFAULTS };
+  const RANGES = ['modules', 'L', 'fit', 'W', 'H', 'front', 'back', 'ribs', 'fin', 'gap', 'tab', 'screw', 't', 'tf', 'fillet', 'notchW', 'notchD', 'angle'];
+  const PETG = 1.27;  // g/cm³
+
+  // GEOMETRY START
+  // Cada módulo é montado com sólidos fechados que se encostam (fundo, paredes, reforços, aletas, abas, encaixes).
+  // Os fatiadores juntam os sólidos camada por camada.
+  const RIB_DEPTH = 8;     // quanto a aleta sai da parede
+  const TAB_T = 5;         // espessura da aba que encosta no tampo
+  const VENTS = { some: { w: 6, bar: 12, seg: 35 }, many: { w: 8, bar: 6, seg: 45 } };
+  // rabo de andorinha das paredes, num bloco que sai JOINT_D da parede
+  const JOINT_D = 14, DT_NECK = 6, DT_TIP = 9, DT_LEN = 6, JOINT_BLOCK = 13;
+  // trava: placa em T que entra por fora num rasgo horizontal que pega metade de cada bloco
+  const KEY_T = 3, KEY_A = DT_LEN + 3.5, KEY_BAND = 1.6, KEY_HEAD = 4, KEY_WING = 3, KEY_RIDGE = 4;
+  // peças de quebra-cabeça do fundo
+  const FT_NECK = 10, FT_TIP = 15, FT_LEN = 8;
+
+  const area = c => {
+    let a = 0;
+    for (let i = 0; i < c.length; i++) {
+      const [x1, y1] = c[i], [x2, y2] = c[(i + 1) % c.length];
+      a += x1 * y2 - x2 * y1;
+    }
+    return a / 2;
+  };
+  const rect = (u0, v0, u1, v1) => [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+
+  function roundedRect(u0, v0, u1, v1, r, n = 6) {
+    r = Math.min(r, (u1 - u0) / 2 - 0.01, (v1 - v0) / 2 - 0.01);
+    const pts = [];
+    const cs = [[u1 - r, v0 + r, -Math.PI / 2], [u1 - r, v1 - r, 0], [u0 + r, v1 - r, Math.PI / 2], [u0 + r, v0 + r, Math.PI]];
+    for (const [cu, cv, a0] of cs) {
+      for (let k = 0; k <= n; k++) {
+        const a = a0 + (k / n) * Math.PI / 2;
+        pts.push([cu + r * Math.cos(a), cv + r * Math.sin(a)]);
+      }
+    }
+    return pts;
+  }
+
+  // Furo oblongo com as pontas arredondadas, comprido no eixo v.
+  function slot(cu, cv, w, h, n = 8) {
+    const r = w / 2, off = Math.max(0, h / 2 - r), pts = [];
+    for (let k = 0; k <= n; k++) { const a = Math.PI * k / n; pts.push([cu + r * Math.cos(a), cv + off + r * Math.sin(a)]); }
+    for (let k = 0; k <= n; k++) { const a = Math.PI + Math.PI * k / n; pts.push([cu + r * Math.cos(a), cv - off + r * Math.sin(a)]); }
+    return pts;
+  }
+
+  // Furo de parede: fundo arredondado e topo em ogiva, com os lados do topo na inclinação permitida.
+  // Devolve null quando a ogiva não cabe na altura disponível.
+  function slotArch(cu, cv, w, h, tn, n = 8) {
+    const r = w / 2, rise = r / tn;
+    const yb = cv - h / 2 + r, yt = cv + h / 2 - rise;
+    if (yt < yb + 0.5) return null;
+    const pts = [[cu + r, yt], [cu, yt + rise], [cu - r, yt]];
+    for (let k = 0; k <= n; k++) { const a = Math.PI + Math.PI * k / n; pts.push([cu + r * Math.cos(a), yb + r * Math.sin(a)]); }
+    return pts;
+  }
+
+  function circle(cu, cv, r, n = 24) {
+    const pts = [];
+    for (let k = 0; k < n; k++) { const a = 2 * Math.PI * k / n; pts.push([cu + r * Math.cos(a), cv + r * Math.sin(a)]); }
+    return pts;
+  }
+
+  // Centros de furos de largura w com barras de bar entre eles, sem invadir as faixas proibidas.
+  function spread(a, b, w, bar, banned = []) {
+    const n = Math.floor((b - a + bar) / (w + bar));
+    if (n < 1) return [];
+    const first = a + (b - a - (n * w + (n - 1) * bar)) / 2 + w / 2;
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const c = first + i * (w + bar);
+      if (!banned.some(([x0, x1]) => c + w / 2 > x0 && c - w / 2 < x1)) out.push(c);
+    }
+    return out;
+  }
+  // Divide [a, b] em trechos de até maxLen separados por pontes de 6 mm.
+  function segments(a, b, maxLen, bridge = 6) {
+    const n = Math.max(1, Math.ceil((b - a + bridge) / (maxLen + bridge)));
+    const len = (b - a - (n - 1) * bridge) / n;
+    const out = [];
+    for (let i = 0; i < n; i++) out.push([a + i * (len + bridge), a + i * (len + bridge) + len]);
+    return out;
+  }
+
+  // Extruda um polígono com furos ao longo de um eixo. Coordenadas do polígono:
+  // eixo z → (x, y); eixo x → (y, z); eixo y → (x, z).
+  function prism(outer, holes, axis, w0, w1) {
+    const swap = axis === 'y';
+    const loc = c => swap ? c.map(([a, b]) => [b, a]) : c;
+    const O = loc(outer), Hs = holes.map(loc);
+    const map = axis === 'z' ? (u, v, w) => [u, v, w]
+      : axis === 'x' ? (u, v, w) => [w, u, v]
+      : (u, v, w) => [v, w, u];
+    const tris = [];
+    const all = [O, ...Hs].flat();
+    const faces = THREE.ShapeUtils.triangulateShape(O.map(([u, v]) => new THREE.Vector2(u, v)), Hs.map(h => h.map(([u, v]) => new THREE.Vector2(u, v))));
+    for (const [a, b, c] of faces) {
+      let A = all[a], B = all[b], C = all[c];
+      if ((B[0] - A[0]) * (C[1] - A[1]) - (B[1] - A[1]) * (C[0] - A[0]) < 0) [B, C] = [C, B];
+      tris.push([map(A[0], A[1], w1), map(B[0], B[1], w1), map(C[0], C[1], w1)]);
+      tris.push([map(A[0], A[1], w0), map(C[0], C[1], w0), map(B[0], B[1], w0)]);
+    }
+    const side = (contour, solidInside) => {
+      const c = (area(contour) > 0) === solidInside ? contour : contour.slice().reverse();
+      for (let i = 0; i < c.length; i++) {
+        const [pu, pv] = c[i], [qu, qv] = c[(i + 1) % c.length];
+        tris.push([map(pu, pv, w0), map(qu, qv, w0), map(qu, qv, w1)], [map(pu, pv, w0), map(qu, qv, w1), map(pu, pv, w1)]);
+      }
+    };
+    side(O, true);
+    Hs.forEach(h => side(h, false));
+    return tris;
+  }
+
+  // Recorta um polígono por uma reta vertical x = xk, ficando com o lado esquerdo ou direito.
+  function clipX(poly, xk, keepLeft) {
+    const keep = ([x]) => keepLeft ? x <= xk + 1e-9 : x >= xk - 1e-9;
+    const out = [];
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i], b = poly[(i + 1) % poly.length];
+      const ka = keep(a), kb = keep(b);
+      if (ka) out.push(a);
+      if (ka !== kb) { const t = (xk - a[0]) / (b[0] - a[0]); out.push([xk, a[1] + t * (b[1] - a[1])]); }
+    }
+    return out.filter((q, i) => { const r = out[(i + out.length - 1) % out.length]; return Math.hypot(q[0] - r[0], q[1] - r[1]) > 1e-6; });
+  }
+
+  const RAMP_STEP = 0.2;   // degraus de 0,2 mm de altura, uma camada cada, avançando na inclinação permitida
+
+  // Diferença de polígonos com o Clipper (inteiros em µm); devolve [{outer, holes}].
+  const CS = 1000;
+  const toI = c => c.map(([x, y]) => ({ X: Math.round(x * CS), Y: Math.round(y * CS) }));
+  const fromI = c => c.map(q => [q.X / CS, q.Y / CS]);
+  function difference(subject, clips) {
+    const cl = new ClipperLib.Clipper();
+    cl.AddPath(toI(subject), ClipperLib.PolyType.ptSubject, true);
+    cl.AddPaths(clips.map(toI), ClipperLib.PolyType.ptClip, true);
+    const tree = new ClipperLib.PolyTree();
+    cl.Execute(ClipperLib.ClipType.ctDifference, tree, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+    return tree.Childs().map(n => ({ outer: fromI(n.Contour()), holes: n.Childs().map(h => fromI(h.Contour())) }));
+  }
+
+  // Vão entre as duas aletas de cada suporte: passa a cabeça do parafuso e a ponta da chave.
+  const screwGap = p => Math.max(8, 2 * p.screw + 1);
+
+  // Altura do rasgo da trava: no meio do bloco, acima do reforço do fundo.
+  const keySlotZ = (p, hs) => Math.max(p.tf + 4, hs / 2 - (KEY_T + p.fit) / 2);
+
+  // Trava em T: u ao longo da parede (0 = junção), v para fora a partir da face externa da parede.
+  // A haste entra no rasgo até a tira junto à parede; a cabeça fica de fora como batente e pegador.
+  function keyPolygon(p) {
+    const a = KEY_A - p.fit, v0 = KEY_BAND + p.fit, v1 = JOINT_D, v2 = JOINT_D + KEY_HEAD, w = a + KEY_WING;
+    return [[-a, v0], [a, v0], [a, v1], [w, v1], [w, v2], [-w, v2], [-w, v1], [-a, v1]];
+  }
+
+  // Camadas da trava: a placa em T e, por cima da haste, uma lombada com laterais a 45° que
+  // encaixa nas rampas dos dois blocos e prende a trava por cima.
+  function keyLayers(p) {
+    const v0 = KEY_BAND + p.fit, tn = Math.tan(p.angle * Math.PI / 180);
+    // a folga da lombada é medida na vertical: na horizontal fica fit·tn, senão as laterais
+    // íngremes deixariam a trava subir bem mais que a folga
+    const ar = KEY_A - (p.fit / 2) * tn;
+    const layers = [{ poly: keyPolygon(p), w0: 0, w1: KEY_T }];
+    for (let w = KEY_T; w < KEY_T + KEY_RIDGE - 1e-9; w += RAMP_STEP) {
+      const w1 = Math.min(KEY_T + KEY_RIDGE, w + RAMP_STEP);
+      const hw = Math.min(KEY_A - p.fit, ar - (w1 - KEY_T) * tn);  // nunca mais larga que a placa, para imprimir sem degrau
+      layers.push({ poly: rect(-hw, v0, hw, JOINT_D), w0: w, w1 });
+    }
+    return layers;
+  }
+  const keyTris = (p, place) => keyLayers(p).flatMap(({ poly, w0, w1 }) => place(poly, w0, w1));
+
+  // Travas no lugar, para a prévia: uma na frente e uma atrás de cada junção em x0.
+  function keysAt(p, x0, pullOut = 0) {
+    const hF = Math.max(p.tf + 20, p.H * p.front / 100);
+    const hB = Math.max(p.tf + 20, p.H * p.back / 100);
+    const tris = [];
+    for (const s of [-1, 1]) {
+      const yo = s * p.W / 2, z = keySlotZ(p, s < 0 ? hF : hB) + p.fit / 2;
+      tris.push(...keyTris(p, (poly, w0, w1) =>
+        prism(poly.map(([u, v]) => [x0 + u, yo + s * (v + pullOut)]), [], 'z', z + w0, z + w1)));
+    }
+    return tris;
+  }
+
+  function kindsFor(n) {
+    if (n <= 1) return ['single'];
+    return ['left', ...Array(n - 2).fill('mid'), 'right'];
+  }
+
+  // kind: single (fechado nas duas pontas), left (fechado à esquerda, lingueta à direita),
+  // mid (encaixe à esquerda, lingueta à direita), right (encaixe à esquerda, fechado à direita)
+  function buildModule(p, kind) {
+    const { L, W, H, t, tf } = p;
+    const closedL = kind === 'single' || kind === 'left';
+    const closedR = kind === 'single' || kind === 'right';
+    const male = kind === 'left' || kind === 'mid';
+    const female = kind === 'mid' || kind === 'right';
+    const c = p.fit;
+    const hF = Math.max(tf + 20, H * p.front / 100);
+    const hB = Math.max(tf + 20, H * p.back / 100);
+    const f = Math.min(p.fillet, (Math.min(hF, hB) - tf) / 3, W / 6);
+    const zDesk = H + p.gap;
+    const zTab = zDesk - TAB_T;
+    const vent = VENTS[p.vents];
+    const tn = Math.tan(p.angle * Math.PI / 180);  // quanto uma face inclinada avança por mm de altura
+    const gapW = screwGap(p);
+    const ribHalf = p.fin + gapW / 2;
+    const parts = [];
+    const add = (name, tris) => parts.push({ name, tris });
+    const yA = -W / 2 + t, yB = W / 2 - t;
+
+    const e = Math.max(L * 0.15, JOINT_BLOCK + ribHalf + 8, ribHalf + t + 8);
+    // só cabem os suportes que não encostam uns nos outros
+    const nRibs = Math.max(1, Math.min(p.ribs, Math.floor((L - 2 * e) / (2 * ribHalf + 10)) + 1));
+    const ribX = nRibs === 1 ? [0] : Array.from({ length: nRibs }, (_, i) => -L / 2 + e + i * (L - 2 * e) / (nRibs - 1));
+    const banned = ribX.map(x => [x - ribHalf - 3, x + ribHalf + 3]);
+    if (male) banned.push([L / 2 - JOINT_BLOCK - 3, L / 2]);
+    if (female) banned.push([-L / 2, -L / 2 + JOINT_BLOCK + 3]);
+
+    // fundo, com peças de quebra-cabeça na ponta da lingueta e recortes na ponta do encaixe
+    const ftY = spread(yA + f + 4, yB - f - 4, FT_TIP + 2 * c, 30);
+    const floorOutline = [[-L / 2, -W / 2], [L / 2, -W / 2]];
+    if (male) for (const y of ftY) floorOutline.push([L / 2, y - FT_NECK / 2], [L / 2 + FT_LEN, y - FT_TIP / 2], [L / 2 + FT_LEN, y + FT_TIP / 2], [L / 2, y + FT_NECK / 2]);
+    floorOutline.push([L / 2, W / 2], [-L / 2, W / 2]);
+    if (female) for (const y of ftY.slice().reverse()) floorOutline.push([-L / 2, y + FT_NECK / 2 + c], [-L / 2 + FT_LEN + c, y + FT_TIP / 2 + c], [-L / 2 + FT_LEN + c, y - FT_TIP / 2 - c], [-L / 2, y - FT_NECK / 2 - c]);
+    const floorHoles = [];
+    if (vent) {
+      const mx = (closed, joint) => closed ? t + f + 4 : joint ? FT_LEN + c + 5 : 5;
+      const xs = spread(-L / 2 + mx(closedL, female), L / 2 - mx(closedR, false), vent.w, vent.bar);
+      const ys = segments(yA + f + 4, yB - f - 4, vent.seg).filter(([a, b]) => b - a >= vent.w + 2);
+      for (const x of xs) for (const [a, b] of ys) floorHoles.push(slot(x, (a + b) / 2, vent.w, b - a));
+    }
+    add('fundo', prism(floorOutline, floorHoles, 'z', 0, tf));
+
+    // paredes da frente (y < 0) e de trás
+    const wallSlots = h => {
+      if (!vent) return [];
+      const z0 = tf + f + 5, z1 = h - 8;
+      if (z1 - z0 < vent.w * 1.6) return [];
+      const xs = spread(-L / 2 + (closedL ? t : 0) + 5, L / 2 - (closedR ? t : 0) - 5, vent.w, vent.bar, banned);
+      const zs = segments(z0, z1, vent.seg);
+      return xs.flatMap(x => zs.map(([a, b]) => slotArch(x, (a + b) / 2, vent.w, b - a, tn))).filter(Boolean);
+    };
+    add('frente', prism(rect(-L / 2, tf, L / 2, hF), wallSlots(hF), 'y', -W / 2, -W / 2 + t));
+    add('parede de trás', prism(rect(-L / 2, tf, L / 2, hB), wallSlots(hB), 'y', W / 2 - t, W / 2));
+
+    // laterais nas pontas fechadas, com a borda indo da altura da frente à de trás e o rasgo para o cabo
+    const topAt = y => hF + (hB - hF) * (y - yA) / (yB - yA);
+    const nw = Math.min(p.notchW, (yB - yA) - 16);
+    const ends = [];
+    if (closedL) ends.push(-L / 2);
+    if (closedR) ends.push(L / 2 - t);
+    for (const x0 of ends) {
+      const r = nw / 2, yc = (yA + yB) / 2;
+      const minTop = Math.min(topAt(yc - r), topAt(yc + r));
+      const zb = Math.max(tf + f + 6, minTop - Math.max(p.notchD, r + 2));
+      const zc = zb + r;
+      const notch = nw >= 6 && zc < minTop - 1;
+      let outline;
+      if (notch) {
+        outline = [[yA, tf], [yB, tf], [yB, topAt(yB)], [yc + r, topAt(yc + r)], [yc + r, zc]];
+        for (let k = 1; k < 12; k++) { const a = -Math.PI * k / 12; outline.push([yc + r * Math.cos(a), zc + r * Math.sin(a)]); }
+        outline.push([yc - r, zc], [yc - r, topAt(yc - r)], [yA, topAt(yA)]);
+      } else {
+        outline = [[yA, tf], [yB, tf], [yB, topAt(yB)], [yA, topAt(yA)]];
+      }
+      const holes = [];
+      if (vent) {
+        const skip = notch ? [[yc - r - 5, yc + r + 5]] : [];
+        for (const y of spread(yA + 5, yB - 5, vent.w, vent.bar, skip)) {
+          const z0 = tf + f + 5, z1 = topAt(y - vent.w / 2) - 8;
+          if (z1 - z0 < vent.w * 1.6) continue;
+          for (const [a, b] of segments(z0, z1, vent.seg)) {
+            const h = slotArch(y, (a + b) / 2, vent.w, b - a, tn);
+            if (h) holes.push(h);
+          }
+        }
+      }
+      add('lateral', prism(outline, holes, 'x', x0, x0 + t));
+    }
+
+    // reforços triangulares entre o fundo e as paredes, por dentro
+    if (f > 0) {
+      const xa = -L / 2 + (closedL ? t : 0), xb = L / 2 - (closedR ? t : 0);
+      add('reforço', prism([[yA, tf], [yA + f, tf], [yA, tf + f]], [], 'x', xa, xb));
+      add('reforço', prism([[yB, tf], [yB, tf + f], [yB - f, tf]], [], 'x', xa, xb));
+      if (closedL) add('reforço', prism([[xa, tf], [xa + f, tf], [xa, tf + f]], [], 'y', yA, yB));
+      if (closedR) add('reforço', prism([[xb, tf], [xb, tf + f], [xb - f, tf]], [], 'y', yA, yB));
+    }
+
+    // suportes: duas aletas com esquadro na inclinação permitida e o vão da chave entre elas.
+    // Embaixo da aba o vão fecha em ogiva com a mesma inclinação; em volta do furo fica um cone,
+    // também nessa inclinação, onde a cabeça do parafuso assenta.
+    let screws = 0;
+    const drop = (p.tab - RIB_DEPTH) / tn;   // altura do esquadro
+    const zg = zTab - drop;                   // onde o esquadro começa a abrir
+    const q0 = zg > 0 ? RIB_DEPTH : p.tab - zTab * tn;
+    const finOut = z => Math.min(p.tab, zg > 0 ? (z <= zg ? RIB_DEPTH : RIB_DEPTH + (z - zg) * tn) : q0 + z * tn);
+    const zArch = zTab - (gapW / 2) / tn;
+    const rHole = p.screw / 2 + 0.2;
+    for (const s of [-1, 1]) {
+      const hs = s < 0 ? hF : hB;
+      const yo = s * W / 2;
+      // q mede para fora a partir da face externa da parede; acima da borda a aleta cobre a parede
+      const head = zTab - hs > 0.5 ? [[-t, zTab], [-t, hs], [0, hs]] : [[0, zTab]];
+      const foot = zg > 0 ? [[0, 0], [RIB_DEPTH, 0], [RIB_DEPTH, zg]] : [[0, 0], [q0, 0]];
+      const prof = [...foot, [p.tab, zTab], ...head].map(([q, z]) => [yo + s * q, z]);
+      for (const x of ribX) {
+        add('aleta', prism(prof, [], 'x', x - ribHalf, x - gapW / 2));
+        add('aleta', prism(prof, [], 'x', x + gapW / 2, x + ribHalf));
+        const yIn = yo - s * t, yOut = yo + s * p.tab;
+        const yh = yo + s * Math.max(p.screw / 2 + 4, p.tab * 0.55);
+        for (let z = zArch; z < zTab - 1e-9; z += RAMP_STEP) {
+          const z1 = Math.min(zTab, z + RAMP_STEP), half = (zTab - z) * tn;
+          if (half >= gapW / 2) continue;
+          const yEnd = yo + s * finOut(z), ylo = Math.min(yIn, yEnd), yhi = Math.max(yIn, yEnd);
+          const pieces = difference(rect(x - gapW / 2, ylo, x + gapW / 2, yhi),
+            [rect(x - half, ylo - 1, x + half, yhi + 1), circle(x, yh, rHole + half, 32)]);
+          for (const pc of pieces) if (Math.abs(area(pc.outer)) > 0.01) add('aba', prism(pc.outer, pc.holes, 'z', z, z1));
+        }
+        add('aba', prism(roundedRect(x - ribHalf, Math.min(yIn, yOut), x + ribHalf, Math.max(yIn, yOut), 3), [circle(x, yh, p.screw / 2)], 'z', zTab, zDesk));
+        screws++;
+      }
+
+      // encaixes das paredes: bloco por fora da parede, lingueta à direita, rasgo à esquerda.
+      // Na altura da trava o bloco perde a parte da junção; acima dela o material volta em degraus
+      // a 45°, crescendo a partir do lado preso, e uma tira junto à parede segura o conjunto.
+      const y0 = Math.min(yo, yo + s * JOINT_D), y1 = Math.max(yo, yo + s * JOINT_D), yc = (y0 + y1) / 2;
+      const zs = keySlotZ(p, hs), ze = zs + KEY_T + c;
+      const band = (xa, xb) => s > 0 ? rect(xa, y0, xb, y0 + KEY_BAND) : rect(xa, y1 - KEY_BAND, xb, y1);
+      const ramped = (name, full, xStart, xEnd, keepLeft, bandRect) => {
+        add(name, prism(full, [], 'z', 0, zs));
+        add(name, prism(clipX(full, xStart, keepLeft), [], 'z', zs, ze));
+        const dir = Math.sign(xEnd - xStart);
+        let z = ze, xk = xStart;
+        while ((xEnd - xk) * dir > 1e-9 && z < hs - 1e-9) {
+          xk = dir > 0 ? Math.min(xEnd, xk + RAMP_STEP * tn) : Math.max(xEnd, xk - RAMP_STEP * tn);
+          const z1 = Math.min(hs, z + RAMP_STEP);
+          const poly = clipX(full, xk, keepLeft);
+          if (poly.length >= 3 && Math.abs(area(poly)) > 1e-6) add(name, prism(poly, [], 'z', z, z1));
+          z = z1;
+        }
+        if (z < hs - 1e-9) add(name, prism(full, [], 'z', z, hs));
+        add(name, prism(bandRect, [], 'z', zs, z));
+      };
+      if (male) {
+        const xe = L / 2, xb = xe - JOINT_BLOCK;
+        ramped('lingueta',
+          [[xb, y0], [xe, y0], [xe, yc - DT_NECK / 2], [xe + DT_LEN, yc - DT_TIP / 2], [xe + DT_LEN, yc + DT_TIP / 2], [xe, yc + DT_NECK / 2], [xe, y1], [xb, y1]],
+          xe - KEY_A, xe + DT_LEN, true, band(xe - KEY_A, xe));
+      }
+      if (female) {
+        const xs = -L / 2, xb = xs + JOINT_BLOCK;
+        ramped('encaixe',
+          [[xs, y0], [xb, y0], [xb, y1], [xs, y1], [xs, yc + DT_NECK / 2 + c], [xs + DT_LEN + c, yc + DT_TIP / 2 + c], [xs + DT_LEN + c, yc - DT_TIP / 2 - c], [xs, yc - DT_NECK / 2 - c]],
+          xs + KEY_A, xs, false, band(xs, xs + KEY_A));
+      }
+    }
+
+    const tris = parts.flatMap(pt => pt.tris);
+    const extra = male ? Math.max(DT_LEN, FT_LEN) : 0;
+    return {
+      kind, parts, tris, zDesk, hF, screws,
+      size: [L + extra, W + 2 * p.tab, zDesk],
+      inner: [W - 2 * t, Math.max(hF, hB) - tf],
+      gusset: Math.min(drop, zTab),
+    };
+  }
+
+  function meshVolume(tris) {
+    let v = 0;
+    for (const [A, B, C] of tris) {
+      v += (A[0] * (B[1] * C[2] - B[2] * C[1]) - A[1] * (B[0] * C[2] - B[2] * C[0]) + A[2] * (B[0] * C[1] - B[1] * C[0])) / 6;
+    }
+    return v;
+  }
+
+  function stlBytes(tris, label) {
+    const buf = new ArrayBuffer(84 + tris.length * 50);
+    const dv = new DataView(buf);
+    for (let i = 0; i < 80; i++) dv.setUint8(i, i < label.length ? label.charCodeAt(i) & 0x7f : 32);
+    dv.setUint32(80, tris.length, true);
+    let o = 84;
+    for (const [A, B, C] of tris) {
+      const u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], w = [C[0] - A[0], C[1] - A[1], C[2] - A[2]];
+      const nr = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+      const ln = Math.hypot(...nr) || 1;
+      for (const v of [...nr.map(v => v / ln), ...A, ...B, ...C]) { dv.setFloat32(o, v, true); o += 4; }
+      dv.setUint16(o, 0, true); o += 2;
+    }
+    return new Uint8Array(buf);
+  }
+
+  const CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      t[i] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(bytes) {
+    let c = 0xffffffff;
+    for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  }
+
+  // Um .stl por tipo de peça e um LEIA-ME num download só: um .zip sem compressão.
+  function zipFiles(files) {
+    const d = new Date();
+    const time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    const date = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    const chunks = [], centrals = [];
+    let offset = 0;
+    for (const { name, data } of files) {
+      const nameBytes = new TextEncoder().encode(name);
+      const crc = crc32(data);
+      const local = new DataView(new ArrayBuffer(30));
+      local.setUint32(0, 0x04034b50, true);
+      [[4, 20], [6, 0], [8, 0], [10, time], [12, date], [26, nameBytes.length], [28, 0]].forEach(([k, x]) => local.setUint16(k, x, true));
+      [[14, crc], [18, data.length], [22, data.length]].forEach(([k, x]) => local.setUint32(k, x, true));
+      const central = new DataView(new ArrayBuffer(46));
+      central.setUint32(0, 0x02014b50, true);
+      [[4, 20], [6, 20], [8, 0], [10, 0], [12, time], [14, date], [28, nameBytes.length], [30, 0], [32, 0], [34, 0], [36, 0]].forEach(([k, x]) => central.setUint16(k, x, true));
+      [[16, crc], [20, data.length], [24, data.length], [38, 0], [42, offset]].forEach(([k, x]) => central.setUint32(k, x, true));
+      chunks.push(local, nameBytes, data);
+      centrals.push(central, nameBytes);
+      offset += 30 + nameBytes.length + data.length;
+    }
+    const cdSize = centrals.reduce((s, b) => s + b.byteLength, 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true);
+    [[4, 0], [6, 0], [8, files.length], [10, files.length], [20, 0]].forEach(([k, x]) => end.setUint16(k, x, true));
+    end.setUint32(12, cdSize, true);
+    end.setUint32(16, offset, true);
+    return new Blob([...chunks, ...centrals, end], { type: 'application/zip' });
+  }
+  // GEOMETRY END
+
+  const fmt = n => (Math.round(n * 10) / 10).toString().replace('.', ',');
+  const cssVar = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const KIND_NAME = { single: 'Cesto inteiro', left: 'Ponta esquerda', mid: 'Meio', right: 'Ponta direita' };
+  const KIND_FILE = { single: 'inteiro', left: 'ponta-esquerda', mid: 'meio', right: 'ponta-direita' };
+
+  // ---------- three.js ----------
+  const stage = document.getElementById('stage');
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  stage.prepend(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(35, 1, 1, 8000);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.minDistance = 60;
+  controls.maxDistance = 3000;
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x9a948a, 0.55));
+  const key = new THREE.DirectionalLight(0xffffff, 0.85);
+  key.position.set(260, 480, 340);
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.bias = -0.0005;
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0xfff0d8, 0.3);
+  rim.position.set(-300, 120, -260);
+  scene.add(rim);
+
+  const shadowMat = new THREE.ShadowMaterial({ opacity: 0.18 });
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), shadowMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // Modelo em Z para cima, como no STL; o grupo gira para o Y da cena.
+  const world = new THREE.Group();
+  world.rotation.x = -Math.PI / 2;
+  scene.add(world);
+
+  const mats = [
+    new THREE.MeshStandardMaterial({ color: 0x4b525c, roughness: 0.55, metalness: 0 }),
+    new THREE.MeshStandardMaterial({ color: 0x6b7480, roughness: 0.55, metalness: 0 }),
+  ];
+  const deskMat = new THREE.MeshStandardMaterial({ color: 0xb98d5f, roughness: 0.8, transparent: true, opacity: 0.35, depthWrite: false });
+  const deskMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), deskMat);
+  world.add(deskMesh);
+  let showDesk = true, exploded = false;
+  let moduleMeshes = [], geoms = {};
+  const keyMat = new THREE.MeshStandardMaterial({ color: 0x8a5a0b, roughness: 0.5, metalness: 0 });
+  const keyMesh = new THREE.Mesh(new THREE.BufferGeometry(), keyMat);
+  keyMesh.castShadow = true;
+  world.add(keyMesh);
+
+  let grid = null;
+  function applyTheme() {
+    mats[0].color.set(cssVar('--part') || '#4b525c').convertSRGBToLinear();
+    mats[1].color.set(cssVar('--part-alt') || '#6b7480').convertSRGBToLinear();
+    deskMat.color.set(cssVar('--desk') || '#b98d5f').convertSRGBToLinear();
+    keyMat.color.set(cssVar('--accent') || '#8a5a0b').convertSRGBToLinear();
+    shadowMat.opacity = parseFloat(cssVar('--shadow-op')) || 0.18;
+    if (grid) { scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
+    grid = new THREE.GridHelper(1200, 120, cssVar('--grid-major') || '#c3bdb2', cssVar('--grid-minor') || '#dcd7ce');
+    grid.position.y = 0.02;
+    scene.add(grid);
+  }
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+  new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  let models = {}, kinds = [], lastSpan = 0;
+
+  function toGeometry(tris) {
+    const pos = new Float32Array(tris.length * 9);
+    let k = 0;
+    for (const tr of tris) for (const v of tr) { pos[k++] = v[0]; pos[k++] = v[1]; pos[k++] = v[2]; }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  function placeModules() {
+    const n = kinds.length;
+    moduleMeshes.forEach((m, i) => {
+      const off = (i - (n - 1) / 2);
+      m.position.x = off * P.L + (exploded ? off * 40 : 0);
+    });
+    // travas no meio de cada junção; com os módulos separados, ficam puxadas para fora
+    const keyTris = [];
+    for (let i = 0; i + 1 < n; i++) {
+      const x0 = (moduleMeshes[i].position.x + moduleMeshes[i + 1].position.x) / 2;
+      keyTris.push(...keysAt(P, x0, exploded ? 20 : 0));
+    }
+    keyMesh.geometry.dispose();
+    keyMesh.geometry = keyTris.length ? toGeometry(keyTris) : new THREE.BufferGeometry();
+  }
+
+  function rebuild() {
+    kinds = kindsFor(P.modules);
+    models = {};
+    for (const k of new Set(kinds)) models[k] = buildModule(P, k);
+
+    moduleMeshes.forEach(m => world.remove(m));
+    Object.values(geoms).forEach(g => g.dispose());
+    geoms = {};
+    for (const k in models) geoms[k] = toGeometry(models[k].tris);
+    moduleMeshes = kinds.map((k, i) => {
+      const m = new THREE.Mesh(geoms[k], mats[i % 2]);
+      m.castShadow = m.receiveShadow = true;
+      world.add(m);
+      return m;
+    });
+    placeModules();
+
+    const any = models[kinds[0]];
+    const total = P.L * kinds.length;
+    const sy = any.size[1], sz = any.zDesk;
+    deskMesh.scale.set(total + 200, sy + 140, 25);
+    deskMesh.position.set(0, 20, any.zDesk + 12.5);
+    deskMesh.visible = showDesk;
+
+    const half = Math.max(total, sy) / 2 + 160;
+    Object.assign(key.shadow.camera, { left: -half, right: half, top: half, bottom: -half, near: 10, far: 2000 });
+    key.shadow.camera.updateProjectionMatrix();
+    controls.target.set(0, sz * 0.4, 0);
+    const span = Math.max(total, sy, sz);
+    if (Math.abs(span - lastSpan) > lastSpan * 0.25) { setView('v-iso'); lastSpan = span; }
+
+    const counts = {};
+    kinds.forEach(k => { counts[k] = (counts[k] || 0) + 1; });
+    const keyCount = 2 * (kinds.length - 1);
+    document.getElementById('kit').innerHTML = Object.entries(counts)
+      .map(([k, n]) => `<li><span>${KIND_NAME[k]}</span><b>${n} ×</b></li>`).join('') +
+      (keyCount ? `<li><span>Trava da junção</span><b>${keyCount} ×</b></li>` : '');
+
+    const big = Object.values(models).reduce((a, m) => (m.size[0] > a.size[0] ? m : a));
+    const vol = kinds.reduce((s, k) => s + meshVolume(models[k].tris), 0);
+    const screws = kinds.reduce((s, k) => s + models[k].screws, 0);
+    document.getElementById('s-total').textContent = fmt(total) + ' mm';
+    document.getElementById('s-inner').textContent = any.inner.map(fmt).join(' × ');
+    document.getElementById('s-size').textContent = big.size.map(fmt).join(' × ');
+    document.getElementById('s-screws').textContent = screws + ' × Ø' + fmt(P.screw);
+    document.getElementById('s-mass').textContent = '≈ ' + Math.round(vol / 1000 * PETG) + ' g';
+    document.getElementById('s-bridge').textContent = fmt(any.gusset) + ' mm';
+
+    const [bx, by] = big.size;
+    const fits = bx <= P.bed && by <= P.bed;
+    const fit = document.getElementById('fitmsg');
+    fit.classList.toggle('bad', !fits);
+    fit.textContent = fits
+      ? `Cada peça cabe na mesa de ${P.bed} × ${P.bed} mm.`
+      : `A maior peça não cabe em ${P.bed} × ${P.bed} mm (precisa de ${fmt(bx)} × ${fmt(by)}). Diminua o comprimento de cada módulo e aumente a quantidade.`;
+  }
+
+  // ---------- controles ----------
+  function syncInputs() {
+    RANGES.forEach(id => {
+      document.getElementById(id).value = P[id];
+      const unit = id === 'ribs' || id === 'modules' ? '' : id === 'front' || id === 'back' ? '%' : id === 'angle' ? '°' : ' mm';
+      const val = id === 'fit' ? (Math.round(P[id] * 100) / 100).toFixed(2).replace('.', ',') : fmt(P[id]);
+      document.getElementById(id + '-o').textContent = val + unit;
+    });
+    document.getElementById('notchW-o').textContent = P.notchW >= 6 ? fmt(P.notchW) + ' mm' : 'sem';
+    document.getElementById('notchD').disabled = P.notchW < 6;
+    document.getElementById('fit').disabled = P.modules < 2;
+    document.getElementById('vt-' + P.vents).checked = true;
+    document.getElementById('bed-' + P.bed).checked = true;
+    document.getElementById('explode').hidden = P.modules < 2;
+  }
+  function update() { syncInputs(); rebuild(); }
+
+  RANGES.forEach(id => document.getElementById(id).addEventListener('input', e => { P[id] = parseFloat(e.target.value); update(); }));
+  document.querySelectorAll('input[name="vents"]').forEach(el => el.addEventListener('change', () => { P.vents = el.value; update(); }));
+  document.querySelectorAll('input[name="bed"]').forEach(el => el.addEventListener('change', () => { P.bed = parseInt(el.value, 10); update(); }));
+  document.getElementById('reset').addEventListener('click', () => { Object.assign(P, DEFAULTS); update(); });
+
+  const deskBtn = document.getElementById('desk');
+  deskBtn.addEventListener('click', () => {
+    showDesk = !showDesk;
+    deskBtn.setAttribute('aria-pressed', String(showDesk));
+    deskMesh.visible = showDesk;
+  });
+  const explodeBtn = document.getElementById('explode');
+  explodeBtn.addEventListener('click', () => {
+    exploded = !exploded;
+    explodeBtn.setAttribute('aria-pressed', String(exploded));
+    placeModules();
+  });
+
+  function setView(id) {
+    const any = models[kinds[0]];
+    const s = Math.max(P.L * kinds.length, any.size[1], any.size[2]);
+    const dirs = { 'v-iso': [0.75, 0.55, 1.1], 'v-front': [0, 0.25, 1.6], 'v-end': [1.6, 0.25, 0.02], 'v-under': [0.5, -0.6, 1.0] };
+    const [x, y, z] = dirs[id];
+    camera.position.set(x * s * 1.2, y * s * 1.2 + any.size[2] * 0.4, z * s * 1.2);
+  }
+  ['v-iso', 'v-front', 'v-end', 'v-under'].forEach(id => document.getElementById(id).addEventListener('click', () => setView(id)));
+
+  // ---------- exportar ----------
+  const status = document.getElementById('status');
+  function kitFiles() {
+    const counts = {};
+    kinds.forEach(k => { counts[k] = (counts[k] || 0) + 1; });
+    const base = `cesto-mesa-${P.L}x${P.W}x${P.H}`;
+    const files = Object.keys(counts).map(k => ({
+      name: `${base}-${KIND_FILE[k]}${counts[k] > 1 ? '-imprimir-' + counts[k] + 'x' : ''}.stl`,
+      data: stlBytes(models[k].tris, `cesto sob a mesa - ${KIND_FILE[k]}`),
+    }));
+    const keyCount = 2 * (kinds.length - 1);
+    if (keyCount) {
+      files.push({
+        name: `${base}-trava-imprimir-${keyCount}x.stl`,
+        data: stlBytes(keyTris(P, (poly, w0, w1) => prism(poly, [], 'z', w0, w1)), 'cesto sob a mesa - trava'),
+      });
+    }
+    const lines = [
+      `Cesto sob a mesa: ${kinds.length} módulo(s) de ${P.L} mm, ${P.L * kinds.length} mm montado.`,
+      '',
+      ...Object.entries(counts).map(([k, n]) => `${KIND_NAME[k]}: imprimir ${n}x`),
+      keyCount ? `Trava da junção: imprimir ${keyCount}x (deitada, sem suporte)` : '',
+      '',
+      'Imprima com o fundo na mesa, sem suporte. PETG ou ASA, 4 perímetros, 25% de preenchimento.',
+      kinds.length > 1 ? 'Montagem: encaixe os módulos deslizando um no outro na vertical, empurre uma trava em cada junção, na frente e atrás, até a cabeça encostar, e então parafuse.' : '',
+      '',
+      'Parâmetros:',
+      JSON.stringify(P, null, 1),
+    ];
+    files.push({ name: `${base}-LEIA-ME.txt`, data: new TextEncoder().encode(lines.join('\n')) });
+    return { base, files };
+  }
+
+  // O arquivo é montado na própria página e baixado pelo navegador, sem servidor.
+  function save(name, blob) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  document.getElementById('download').addEventListener('click', () => {
+    const { base, files } = kitFiles();
+    save(base + '.zip', zipFiles(files));
+    status.textContent = 'Baixando. Descompacte o .zip: cada tipo de módulo vem num .stl, com a quantidade no nome.';
+  });
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage);
+
+  syncInputs();
+  applyTheme();
+  rebuild();
+  resize();
+
+  (function loop() {
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  })();
+})();
+</script>
+
+</body></html>

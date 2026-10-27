@@ -1,12 +1,13 @@
 # slop
 
-Página estática que lista os projetos feitos com IA ("slops") do Lucas Polo, publicada em https://slop.lucaspolo.dev/ pelo GitHub Pages.
+Site estático com os projetos feitos com IA ("slops") do Lucas Polo, publicado em https://slop.lucaspolo.dev/ pelo GitHub Pages. Tem duas seções: os jogos e as utilidades (geradores de peças para impressão 3D).
 
 ## Stack
 
 | Peça | O quê |
 |---|---|
-| Página | HTML e CSS puros, sem framework nem build |
+| Páginas | HTML e CSS puros, sem framework nem build |
+| Utilidades | Um HTML por gerador, com CSS e JS dentro; three.js r128 e clipper-lib pelo CDN |
 | Fontes | Bagel Fat One (títulos) e Rubik (texto), do Google Fonts |
 | Hospedagem | GitHub Pages via GitHub Actions (`.github/workflows/pages.yml`) |
 | DNS | Porkbun, `CNAME slop → lucaspolo.github.io` |
@@ -17,9 +18,14 @@ Não há `mise.toml` porque não há ferramenta para fixar. Se um dia entrar um 
 
 ```
 site/              # tudo o que é publicado
-  index.html       # a lista de projetos, um <article class="project"> por projeto
-  style.css        # o visual escrachado: amarelo, contorno preto grosso, sombra dura
+  index.html       # página inicial: todos os projetos, numa aba por seção (utilidades primeiro)
+  jogos/index.html # os jogos, no fundo amarelo original
+  utilidades/
+    index.html     # a lista das utilidades
+    <projeto>/index.html  # cada gerador: prévia 3D, medidas e download do STL
+  style.css        # o visual escrachado: contorno preto grosso, sombra dura; serve às listas, não aos geradores
   favicon.svg
+  tabs.js          # troca de aba na página inicial e lembra a aba no endereço (#utilidades, #jogos)
   easter-egg.js    # o Milton ou a Luma surgem de uma borda sorteada a cada 6–24 s e falam num balão
   img/             # um desenho por projeto: img/<projeto>.svg
                    # e os personagens do easter egg: img/<personagem>-espiando.svg
@@ -30,8 +36,11 @@ site/              # tudo o que é publicado
 ## Convenções
 
 - Projetos em ordem do mais recente para o mais antigo.
+- Cada card aparece duas vezes: na aba da página inicial e na página da seção, com o mesmo HTML (título em `<h2>`). Mude os dois juntos.
+- Caminhos são relativos à página: em `jogos/` e `utilidades/` as imagens são `../img/...`. O `easter-egg.js` resolve os desenhos a partir do próprio endereço, então funciona em qualquer pasta.
 - O link "código" só aparece quando o repositório é público; link para repositório privado dá 404 para o visitante.
 - Texto em português.
+- A página inicial e as utilidades usam `<body class="sober">`, com fundo cinza claro; só a página dos jogos fica no amarelo. A cor da aba selecionada vem do `--tint` de cada botão.
 - O visual é escrachado de propósito e tem um tema só, sem modo escuro. Os cards ficam tortos, alternando a inclinação, e cada um tem um selo estrelado (`.badge`) com uma palavra curta. O selo fica no canto superior direito; com `class="badge left"` ele vai para o esquerdo. Escolha o lado que não cobre nada importante do desenho (na Luma, a coroa do Pombo-Rei fica à direita).
 
 ### Desenho de cada card
@@ -44,6 +53,13 @@ Todo projeto tem um desenho em `site/img/<projeto>.svg` que mostra o que o proje
 - `<title>` dentro do SVG e o mesmo texto no `alt` do `<img>`.
 - Texto dentro do SVG usa `Arial Black, Impact, sans-serif`. ⚠️ SVG carregado por `<img>` não enxerga as fontes da página, então `Bagel Fat One` ali cai numa fonte qualquer.
 - Confira o resultado renderizando, por exemplo com `google-chrome --headless=new --screenshot=out.png --window-size=800,520 file://$PWD/site/img/<projeto>.svg`. Um dos cantos de cima do desenho fica embaixo do selo, então deixe pelo menos um deles livre.
+
+### Utilidades
+
+- Cada gerador é uma página inteira e independente, com visual próprio e modo escuro; não usa `style.css`.
+- O STL é montado no navegador e baixado por um link `blob:` (função `save`). Não há servidor nem chamada externa além dos scripts do CDN.
+- Quando há mais de um arquivo (o cesto gera um STL por tipo de peça e um LEIA-ME), eles vão num `.zip` sem compressão, montado por `zipFiles`.
+- O trecho entre `// GEOMETRY START` e `// GEOMETRY END` só depende de parâmetros e devolve triângulos; mantenha a interface fora dele.
 
 ## Armadilhas
 

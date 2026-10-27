@@ -1,0 +1,619 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Emoldurador de Empadinha · slop</title>
+<meta name="description" content="Gerador de emoldurador de empadinha em tronco de cone, maciço ou oco, com pino para segurar. Baixa o STL.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: bancada técnica — palco 3D grande à esquerda, ficha de medidas à direita; empilha no celular */
+:root {
+  --bg: #eef2f6;
+  --surface: #ffffff;
+  --stage: #e3e9f0;
+  --ink: #17212e;
+  --muted: #5a6677;
+  --line: #d3dbe5;
+  --accent: #1d4f91;
+  --accent-soft: #dbe6f5;
+  --obj: #f2efe8;
+  --cut: #8fb0e0;
+  --grid-major: #b9c4d2;
+  --grid-minor: #d3dbe5;
+  --shadow-op: 0.16;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e141c; --surface: #17202b; --stage: #121a24; --ink: #e5ebf2; --muted: #93a0b1;
+    --line: #283444; --accent: #82aaea; --accent-soft: #1d2d45; --obj: #e6e2da; --cut: #6f93cc;
+    --grid-major: #34445a; --grid-minor: #222e3d; --shadow-op: 0.4; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e141c; --surface: #17202b; --stage: #121a24; --ink: #e5ebf2; --muted: #93a0b1;
+  --line: #283444; --accent: #82aaea; --accent-soft: #1d2d45; --obj: #e6e2da; --cut: #6f93cc;
+  --grid-major: #34445a; --grid-minor: #222e3d; --shadow-op: 0.4; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 32px;
+}
+.wrap { max-width: 1200px; margin: 0 auto; display: grid; gap: 18px; }
+
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; }
+h1 {
+  font-family: var(--f-display);
+  font-weight: 700;
+  font-size: clamp(1.6rem, 3.2vw, 2.3rem);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
+  text-wrap: balance;
+}
+.sub { color: var(--muted); font-size: 0.92rem; margin: 0; }
+.sub b { font-family: var(--f-mono); font-weight: 500; color: var(--ink); }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: start; }
+@media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+.stage {
+  position: relative;
+  background: var(--stage);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  height: min(72vh, 640px);
+  min-height: 340px;
+}
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.stage canvas:active { cursor: grabbing; }
+.stage-hint {
+  position: absolute; left: 14px; bottom: 12px; right: 14px;
+  font-size: 0.78rem; color: var(--muted);
+  pointer-events: none;
+}
+.views { position: absolute; right: 12px; top: 12px; left: 12px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.views button {
+  font: 500 0.78rem var(--f-body);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 11px;
+  cursor: pointer;
+}
+.views button:hover { border-color: var(--accent); color: var(--accent); }
+.views button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.views .sep { width: 1px; background: var(--line); margin: 2px 2px; }
+.views button:focus-visible, .panel button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+.panel h2 {
+  font: 600 0.72rem var(--f-body);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+.drawing { border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+.drawing svg { width: 100%; height: auto; max-height: 300px; display: block; }
+
+.ctrls { display: grid; gap: 10px; }
+.row { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; }
+.row label { font-size: 0.88rem; }
+.row output { font: 500 0.88rem var(--f-mono); font-variant-numeric: tabular-nums; color: var(--accent); }
+.row input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); margin: 0; }
+.row.off { opacity: 0.45; }
+
+.switch { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.88rem; cursor: pointer; }
+.switch input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+.warn { margin: 0; font-size: 0.8rem; color: var(--muted); }
+
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin: 0; }
+.stats div { min-width: 0; }
+.stats dt { font-size: 0.76rem; color: var(--muted); }
+.stats dd { margin: 0; font: 500 1rem var(--f-mono); font-variant-numeric: tabular-nums; }
+.stats dd.hl { color: var(--accent); }
+
+.reset {
+  justify-self: start;
+  font: 500 0.84rem var(--f-body);
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.reset:hover { filter: brightness(0.97); }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.download {
+  font: 600 0.84rem var(--f-body);
+  color: var(--surface);
+  background: var(--accent);
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.download:hover { filter: brightness(1.08); }
+.status { flex-basis: 100%; margin: 0; font-size: 0.8rem; color: var(--muted); }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px 24px; }
+.notes p { margin: 0; font-size: 0.9rem; color: var(--muted); max-width: 62ch; }
+.notes strong { color: var(--ink); font-weight: 600; }
+.crumbs { margin: 0; font-size: 0.85rem; color: var(--muted); }
+.crumbs a { color: var(--accent); }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav class="crumbs" aria-label="Caminho"><a href="../../">slop</a> / <a href="../">utilidades</a></nav>
+  <header>
+    <h1>Emoldurador de Empadinha</h1>
+    <p class="sub">Tronco de cone <b>Ø30</b> → <b>Ø40</b>, altura <b>25</b>, com pino no topo · medidas em mm</p>
+  </header>
+
+  <div class="grid">
+    <div class="stage" id="stage">
+      <div class="views">
+        <button type="button" id="v-iso">3/4</button>
+        <button type="button" id="v-top">Cima</button>
+        <button type="button" id="v-side">Lateral</button>
+        <button type="button" id="v-bottom">Base</button>
+        <span class="sep" aria-hidden="true"></span>
+        <button type="button" id="cut" aria-pressed="false">Corte</button>
+      </div>
+      <div class="stage-hint">Arraste para girar · role ou pince para zoom · grade de 10 mm</div>
+    </div>
+
+    <aside class="panel">
+      <div class="drawing">
+        <h2>Corte cotado</h2>
+        <svg id="svg" role="img" aria-label="Corte do emoldurador com cotas"></svg>
+      </div>
+
+      <div>
+        <h2>Cone</h2>
+        <div class="ctrls">
+          <div class="row"><label for="bot">Ø da base (encosta na massa)</label><output id="bot-o"></output><input type="range" id="bot" min="20" max="45" step="1"></div>
+          <div class="row"><label for="top">Ø do topo</label><output id="top-o"></output><input type="range" id="top" min="25" max="55" step="1"></div>
+          <div class="row"><label for="h">Altura do cone</label><output id="h-o"></output><input type="range" id="h" min="15" max="40" step="0.5"></div>
+          <div class="row"><label for="fil">Arredondamento da borda da base</label><output id="fil-o"></output><input type="range" id="fil" min="0" max="4" step="0.5"></div>
+        </div>
+      </div>
+
+      <div>
+        <h2>Vazado</h2>
+        <div class="ctrls">
+          <label class="switch" for="hollow">Oco por dentro, aberto em cima<input type="checkbox" id="hollow" checked></label>
+          <div class="row" id="wall-row"><label for="wall">Espessura da parede</label><output id="wall-o"></output><input type="range" id="wall" min="2" max="6" step="0.5"></div>
+          <div class="row" id="floor-row"><label for="floor">Espessura do fundo (face da massa)</label><output id="floor-o"></output><input type="range" id="floor" min="2" max="8" step="0.5"></div>
+          <p class="warn" id="hollow-warn" hidden>Não cabe o oco com essa haste e essa parede. Diminua a haste ou a parede.</p>
+        </div>
+      </div>
+
+      <div>
+        <h2>Pino</h2>
+        <div class="ctrls">
+          <div class="row"><label for="shaft">Ø da haste</label><output id="shaft-o"></output><input type="range" id="shaft" min="8" max="20" step="1"></div>
+          <div class="row"><label for="knob">Ø da cabeça</label><output id="knob-o"></output><input type="range" id="knob" min="8" max="30" step="1"></div>
+          <div class="row"><label for="pin">Altura do pino (acima da borda)</label><output id="pin-o"></output><input type="range" id="pin" min="20" max="60" step="1"></div>
+        </div>
+      </div>
+
+      <dl class="stats">
+        <div><dt>Altura total</dt><dd id="s-total"></dd></div>
+        <div><dt>Parede vs. vertical</dt><dd id="s-angle"></dd></div>
+        <div><dt>Parede / fundo</dt><dd id="s-thick"></dd></div>
+        <div><dt>PLA</dt><dd id="s-mass"></dd></div>
+        <div><dt>Se fosse maciço</dt><dd id="s-solid"></dd></div>
+        <div><dt>Economia</dt><dd id="s-save" class="hl"></dd></div>
+      </dl>
+
+      <div class="actions">
+        <button type="button" class="download" id="download">Baixar STL</button>
+        <button type="button" class="reset" id="reset">Voltar às medidas originais</button>
+        <p class="status" id="status" role="status"></p>
+      </div>
+    </aside>
+  </div>
+
+  <section class="notes">
+    <p><strong>Vazado.</strong> O cone vira um copinho aberto em cima, com o pino saindo do fundo. A face que aperta a massa continua inteira e lisa, a borda de cima fica com a espessura da parede, e o oco é fácil de lavar.</p>
+    <p><strong>Como imprimir.</strong> Em pé, com a base de 3 cm na mesa. A parede abre só alguns graus em relação à vertical e a cabeça do pino tem cerca de 45°, então não precisa de suporte. Com parede de 3 mm o fatiador já preenche tudo com perímetros.</p>
+    <p><strong>Para gerar o STL.</strong> Ajuste as medidas e toque em “Baixar STL”. O arquivo sai pronto para o fatiador.</p>
+    <p><strong>Higiene.</strong> Peça impressa tem micro sulcos entre as camadas onde a massa gruda. Prefira PETG, polvilhe farinha antes de usar ou envolva a ponta em filme plástico.</p>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(() => {
+  const DEFAULTS = { bot: 30, top: 40, h: 25, fil: 1.5, wall: 3, floor: 4, shaft: 12, knob: 20, pin: 35 };
+  const P = { ...DEFAULTS, hollow: true };
+  const PI = Math.PI;
+  const EDGE = 0.8;       // raio do arredondamento das quinas da borda de cima
+  const PIN_FILLET = 3;   // concordância entre o fundo/topo e a haste, reforça a junção
+  const PLA = 1.24;       // g/cm³
+
+  function arc(pts, cx, cy, r, a0, a1, n) {
+    for (let i = 1; i <= n; i++) {
+      const a = a0 + (a1 - a0) * i / n;
+      pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+    }
+  }
+
+  // Perfil (raio, altura) em mm, do eixo na base até o eixo no topo da cabeça.
+  // No modo vazado o perfil sobe por fora, passa pela borda, desce por dentro até o fundo
+  // e sobe pelo pino; fechado pelo eixo, é a seção da peça.
+  function profile(p) {
+    const R1 = p.bot / 2, R2 = Math.max(p.top / 2, R1), H = p.h;
+    const rs = p.shaft / 2, kr = Math.max(p.knob / 2, rs);
+    const f = Math.min(p.fil, H / 3, R1 / 2);
+    const L = Math.hypot(R2 - R1, H), nx = H / L, ny = -(R2 - R1) / L, an = Math.atan2(ny, nx);
+    const slope = (R2 - R1) / H;
+    const pts = [[0, 0]];
+
+    if (f > 0) {
+      const cy = f, cx = R1 + (-f - f * ny) / nx;
+      pts.push([cx, 0]);
+      arc(pts, cx, cy, f, -PI / 2, an, 10);
+    } else {
+      pts.push([R1, 0]);
+    }
+
+    const tcy = H - EDGE, tcx = R1 + (-EDGE - tcy * ny) / nx;
+    pts.push([tcx + EDGE * nx, tcy + EDGE * ny]);
+    arc(pts, tcx, tcy, EDGE, an, PI / 2, 6);
+
+    let baseY = H, rMax = tcx, t = 0, fl = 0, blocked = false;
+    if (p.hollow) {
+      fl = Math.min(p.floor, H - 5);
+      // parede limitada para sobrar folga entre o oco e a haste no fundo
+      const tMax = (R1 + fl * slope - rs - 2.5) * nx;
+      t = Math.min(p.wall, tMax);
+      if (t < 1.5) {
+        blocked = true;
+        t = 0; fl = 0;
+      } else {
+        const p0x = R1 - t / nx;   // parede interna prolongada até y = 0
+        const icy = H - EDGE, icx = p0x + (EDGE - icy * ny) / nx;
+        pts.push([icx, H]);
+        arc(pts, icx, icy, EDGE, PI / 2, an + PI, 6);
+
+        const fi = Math.max(0.5, Math.min(2, (p0x + fl * slope - rs) * 0.35));
+        const fcy = fl + fi, fcx = p0x + (-fi - fcy * ny) / nx;
+        pts.push([fcx + fi * nx, fcy + fi * ny]);
+        arc(pts, fcx, fcy, fi, an, -PI / 2, 8);
+        baseY = fl; rMax = fcx;
+      }
+    }
+
+    const pf = Math.max(0.5, Math.min(PIN_FILLET, rMax - rs - 0.5));
+    pts.push([rs + pf, baseY]);
+    arc(pts, rs + pf, baseY + pf, pf, -PI / 2, -PI, 8);
+
+    const dy = Math.sqrt(kr * kr - rs * rs);
+    const top = Math.max(H + p.pin, baseY + pf + dy + kr + 2);
+    const kcy = top - kr;
+    pts.push([rs, kcy - dy]);
+    arc(pts, 0, kcy, kr, Math.atan2(-dy, rs), PI / 2, 28);
+    pts[pts.length - 1][0] = 0;
+
+    return { pts, top, R1, R2, H, rs, kr, t, fl, hollow: p.hollow && !blocked, blocked };
+  }
+
+  function volume(pts) {
+    let v = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const [r1, y1] = pts[i - 1], [r2, y2] = pts[i];
+      v += PI * (y2 - y1) * (r1 * r1 + r1 * r2 + r2 * r2) / 3;
+    }
+    return Math.abs(v);
+  }
+
+  // ---------- three.js ----------
+  const stage = document.getElementById('stage');
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  stage.prepend(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(35, 1, 1, 2000);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.minDistance = 60;
+  controls.maxDistance = 600;
+  controls.target.set(0, 28, 0);
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  controls.autoRotate = !reduceMotion;
+  controls.autoRotateSpeed = 1.2;
+  renderer.domElement.addEventListener('pointerdown', () => { controls.autoRotate = false; });
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a96a8, 0.55));
+  const key = new THREE.DirectionalLight(0xffffff, 0.85);
+  key.position.set(80, 160, 90);
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  Object.assign(key.shadow.camera, { left: -90, right: 90, top: 90, bottom: -90, near: 10, far: 500 });
+  key.shadow.bias = -0.0005;
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0xbcd2ff, 0.35);
+  rim.position.set(-120, 60, -100);
+  scene.add(rim);
+
+  const shadowMat = new THREE.ShadowMaterial({ opacity: 0.16 });
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), shadowMat);
+  ground.rotation.x = -PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  let grid = null;
+  const objMat = new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.62, metalness: 0 });
+  const cutMat = new THREE.MeshStandardMaterial({ color: 0x8fb0e0, roughness: 0.8, metalness: 0, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(new THREE.BufferGeometry(), objMat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+
+  // Tampas do corte: a seção nos dois planos que limitam o quarto removido (de frente para a vista 3/4)
+  const capA = new THREE.Mesh(new THREE.BufferGeometry(), cutMat);
+  const capB = new THREE.Mesh(new THREE.BufferGeometry(), cutMat);
+  capB.rotation.y = -PI / 2;
+  [capA, capB].forEach(c => { c.castShadow = true; c.visible = false; scene.add(c); });
+  let showCut = false;
+
+  function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  function applyTheme() {
+    objMat.color.set(cssVar('--obj') || '#f2efe8').convertSRGBToLinear();
+    cutMat.color.set(cssVar('--cut') || '#8fb0e0').convertSRGBToLinear();
+    shadowMat.opacity = parseFloat(cssVar('--shadow-op')) || 0.16;
+    if (grid) { scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
+    grid = new THREE.GridHelper(200, 20, cssVar('--grid-major') || '#b9c4d2', cssVar('--grid-minor') || '#d3dbe5');
+    grid.position.y = 0.02;
+    scene.add(grid);
+    drawSVG();
+  }
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+  new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  function fmt(n) { return (Math.round(n * 10) / 10).toString().replace('.', ','); }
+  function grams(vol) { return Math.round(vol / 1000 * PLA); }
+
+  function rebuild() {
+    const prof = profile(P);
+    const v2 = prof.pts.map(([r, y]) => new THREE.Vector2(r, y));
+    const geo = showCut
+      ? new THREE.LatheGeometry(v2, 128, PI / 2, 3 * PI / 2)
+      : new THREE.LatheGeometry(v2, 128);
+    mesh.geometry.dispose();
+    mesh.geometry = geo;
+
+    const capGeo = new THREE.ShapeGeometry(new THREE.Shape(v2));
+    capA.geometry.dispose();
+    capA.geometry = capGeo;
+    capB.geometry = capGeo;
+    capA.visible = capB.visible = showCut;
+
+    controls.target.y = prof.top * 0.45;
+
+    const vol = volume(prof.pts);
+    const solid = volume(profile({ ...P, hollow: false }).pts);
+    const ang = Math.atan2(prof.R2 - prof.R1, prof.H) * 180 / PI;
+    document.getElementById('s-total').textContent = fmt(prof.top) + ' mm';
+    document.getElementById('s-angle').textContent = fmt(ang) + '°';
+    document.getElementById('s-thick').textContent = prof.hollow ? fmt(prof.t) + ' / ' + fmt(prof.fl) + ' mm' : 'maciço';
+    document.getElementById('s-mass').textContent = '≈ ' + grams(vol) + ' g';
+    document.getElementById('s-solid').textContent = '≈ ' + grams(solid) + ' g';
+    document.getElementById('s-save').textContent = prof.hollow ? Math.round((1 - vol / solid) * 100) + '%' : '—';
+
+    document.getElementById('hollow-warn').hidden = !prof.blocked;
+    ['wall', 'floor'].forEach(id => {
+      document.getElementById(id).disabled = !P.hollow;
+      document.getElementById(id + '-row').classList.toggle('off', !P.hollow);
+    });
+    drawSVG(prof);
+  }
+
+  // ---------- corte cotado ----------
+  const svg = document.getElementById('svg');
+  let lastProf = null;
+  function drawSVG(prof) {
+    prof = prof || lastProf;
+    if (!prof) return;
+    lastProf = prof;
+    const { pts, top, R1, R2, H, kr } = prof;
+    const half = Math.max(R2, kr);
+    const m = 15;
+    const x0 = -half - m, x1 = half + m, yT = top + 14, yB = -12;
+    const W = x1 - x0, Ht = yT - yB;
+    const Y = y => yT - y;  // y do SVG cresce para baixo
+
+    const right = pts.map(([r, y]) => `${r.toFixed(2)},${Y(y).toFixed(2)}`);
+    const left = pts.slice().reverse().map(([r, y]) => `${(-r).toFixed(2)},${Y(y).toFixed(2)}`);
+    const poly = `${right.join(' ')} ${left.join(' ')}`;
+    const ink = cssVar('--ink'), muted = cssVar('--muted'), accent = cssVar('--accent'), fill = cssVar('--accent-soft');
+    const fs = 3.6;
+
+    const dimH = (xa, xb, y, label, ext0) => `
+      <line x1="${xa}" y1="${Y(ext0)}" x2="${xa}" y2="${Y(y) - 1.5}" />
+      <line x1="${xb}" y1="${Y(ext0)}" x2="${xb}" y2="${Y(y) - 1.5}" />
+      <line x1="${xa}" y1="${Y(y)}" x2="${xb}" y2="${Y(y)}" marker-start="url(#ar)" marker-end="url(#ar)" />
+      <text x="${(xa + xb) / 2}" y="${Y(y) - 1.6}" text-anchor="middle">${label}</text>`;
+    const dimV = (x, ya, yb, label, ext0, side) => `
+      <line x1="${ext0}" y1="${Y(ya)}" x2="${x + side * 1.5}" y2="${Y(ya)}" />
+      <line x1="${ext0}" y1="${Y(yb)}" x2="${x + side * 1.5}" y2="${Y(yb)}" />
+      <line x1="${x}" y1="${Y(ya)}" x2="${x}" y2="${Y(yb)}" marker-start="url(#ar)" marker-end="url(#ar)" />
+      <text x="${x + side * 2.8}" y="${(Y(ya) + Y(yb)) / 2}" text-anchor="middle" dominant-baseline="middle"
+        transform="rotate(-90 ${x + side * 2.8} ${(Y(ya) + Y(yb)) / 2})">${label}</text>`;
+
+    svg.setAttribute('viewBox', `${x0} 0 ${W} ${Ht}`);
+    svg.innerHTML = `
+      <defs>
+        <marker id="ar" viewBox="0 0 6 6" refX="3" refY="3" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M0,0 L6,3 L0,6 z" fill="${accent}" />
+        </marker>
+        <pattern id="hatch" patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(45)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="${muted}" stroke-width="0.22" />
+        </pattern>
+      </defs>
+      <polygon points="${poly}" fill="${fill}" />
+      <polygon points="${poly}" fill="url(#hatch)" stroke="${ink}" stroke-width="0.45" stroke-linejoin="round" />
+      <line x1="0" y1="${Y(top) - 4}" x2="0" y2="${Y(0) + 4}" stroke="${muted}" stroke-width="0.25" stroke-dasharray="3 1 0.6 1" />
+      <g stroke="${accent}" stroke-width="0.25" fill="${accent}" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="${fs}">
+        ${dimH(-R1, R1, -7, 'Ø' + fmt(R1 * 2), 0)}
+        ${dimH(-R2, R2, top + 6, 'Ø' + fmt(R2 * 2), H)}
+        ${dimV(half + 7, 0, H, fmt(H), R2 + 1, 1)}
+        ${dimV(-half - 7, 0, top, fmt(top), -half + 2, -1)}
+      </g>`;
+    svg.querySelectorAll('text').forEach(t => t.setAttribute('stroke', 'none'));
+  }
+
+  // ---------- controles ----------
+  const ids = Object.keys(DEFAULTS);
+  function syncInputs() {
+    ids.forEach(id => {
+      document.getElementById(id).value = P[id];
+      document.getElementById(id + '-o').textContent = fmt(P[id]) + ' mm';
+    });
+    document.getElementById('hollow').checked = P.hollow;
+  }
+  ids.forEach(id => {
+    document.getElementById(id).addEventListener('input', e => {
+      P[id] = parseFloat(e.target.value);
+      if (id === 'shaft' && P.knob < P.shaft) P.knob = P.shaft;
+      if (id === 'knob' && P.knob < P.shaft) P.shaft = P.knob;
+      if (id === 'bot' && P.top < P.bot) P.top = P.bot;
+      if (id === 'top' && P.top < P.bot) P.bot = P.top;
+      syncInputs();
+      rebuild();
+    });
+  });
+  document.getElementById('hollow').addEventListener('change', e => { P.hollow = e.target.checked; rebuild(); });
+  document.getElementById('reset').addEventListener('click', () => {
+    Object.assign(P, DEFAULTS, { hollow: true });
+    syncInputs();
+    rebuild();
+  });
+
+  // ---------- STL ----------
+  // Revolve o perfil em fatias que compartilham exatamente os mesmos vértices, para a malha sair fechada.
+  function stlBuffer(pts, n) {
+    const cs = [];
+    for (let j = 0; j < n; j++) cs.push([Math.cos(2 * PI * j / n), Math.sin(2 * PI * j / n)]);
+    const v = ([r, y], j) => r === 0 ? [0, 0, y] : [r * cs[j % n][0], r * cs[j % n][1], y];
+    const tris = [];
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      for (let j = 0; j < n; j++) {
+        const A = v(a, j), B = v(a, j + 1), C = v(b, j + 1), D = v(b, j);
+        if (a[0] !== 0) tris.push([A, B, C]);
+        if (b[0] !== 0) tris.push([A, C, D]);
+      }
+    }
+    const buf = new ArrayBuffer(84 + tris.length * 50);
+    const dv = new DataView(buf);
+    const header = 'emoldurador de empadinha';
+    for (let i = 0; i < 80; i++) dv.setUint8(i, i < header.length ? header.charCodeAt(i) : 32);
+    dv.setUint32(80, tris.length, true);
+    let o = 84;
+    for (const [A, B, C] of tris) {
+      const u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], w = [C[0] - A[0], C[1] - A[1], C[2] - A[2]];
+      const nr = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+      const ln = Math.hypot(...nr) || 1;
+      for (const c of [...nr.map(c => c / ln), ...A, ...B, ...C]) { dv.setFloat32(o, c, true); o += 4; }
+      dv.setUint16(o, 0, true); o += 2;
+    }
+    return new Uint8Array(buf);
+  }
+
+  // O arquivo é montado na própria página e baixado pelo navegador, sem servidor.
+  function save(name, blob) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  const status = document.getElementById('status');
+  document.getElementById('download').addEventListener('click', () => {
+    const name = `emoldurador-empadinha-${fmt(P.bot)}x${fmt(P.top)}.stl`;
+    save(name, new Blob([stlBuffer(profile(P).pts, 192)], { type: 'model/stl' }));
+    status.textContent = `Baixando ${name}.`;
+  });
+
+  const cutBtn = document.getElementById('cut');
+  cutBtn.addEventListener('click', () => {
+    showCut = !showCut;
+    cutBtn.setAttribute('aria-pressed', String(showCut));
+    rebuild();
+  });
+
+  const VIEWS = {
+    'v-iso': [95, 75, 120],
+    'v-top': [20, 170, 30],
+    'v-side': [0, 30, 170],
+    'v-bottom': [40, -120, 60],
+  };
+  Object.entries(VIEWS).forEach(([id, pos]) => {
+    document.getElementById(id).addEventListener('click', () => {
+      controls.autoRotate = false;
+      camera.position.set(...pos);
+    });
+  });
+  camera.position.set(...VIEWS['v-iso']);
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage);
+
+  syncInputs();
+  applyTheme();
+  rebuild();
+  resize();
+
+  (function loop() {
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  })();
+})();
+</script>
+
+</body></html>
