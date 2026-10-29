@@ -200,8 +200,8 @@ h1 {
       <div>
         <h2>Cone</h2>
         <div class="ctrls">
-          <div class="row"><label for="bot">Ø da base (encosta na massa)</label><output id="bot-o"></output><input type="range" id="bot" min="20" max="45" step="1"></div>
-          <div class="row"><label for="top">Ø do topo</label><output id="top-o"></output><input type="range" id="top" min="25" max="55" step="1"></div>
+          <div class="row"><label for="bot">Ø da base (encosta na massa)</label><output id="bot-o"></output><input type="range" id="bot" min="20" max="100" step="1"></div>
+          <div class="row"><label for="top">Ø do topo</label><output id="top-o"></output><input type="range" id="top" min="25" max="100" step="1"></div>
           <div class="row"><label for="h">Altura do cone</label><output id="h-o"></output><input type="range" id="h" min="15" max="40" step="0.5"></div>
           <div class="row"><label for="fil">Arredondamento da borda da base</label><output id="fil-o"></output><input type="range" id="fil" min="0" max="4" step="0.5"></div>
         </div>
@@ -427,6 +427,7 @@ h1 {
     capA.visible = capB.visible = showCut;
 
     controls.target.y = prof.top * 0.45;
+    keepFramed();
 
     const vol = volume(prof.pts);
     const solid = volume(profile({ ...P, hollow: false }).pts);
@@ -455,8 +456,10 @@ h1 {
     lastProf = prof;
     const { pts, top, R1, R2, H, kr } = prof;
     const half = Math.max(R2, kr);
-    const m = 15;
-    const x0 = -half - m, x1 = half + m, yT = top + 14, yB = -12;
+    // Peça grande deixa o desenho menor na tela; cotas, traços e folgas crescem junto para continuar legíveis.
+    const k = Math.max(1, half / 25, top / 60);
+    const m = 15 * k;
+    const x0 = -half - m, x1 = half + m, yT = top + 14 * k, yB = -12 * k;
     const W = x1 - x0, Ht = yT - yB;
     const Y = y => yT - y;  // y do SVG cresce para baixo
 
@@ -464,19 +467,19 @@ h1 {
     const left = pts.slice().reverse().map(([r, y]) => `${(-r).toFixed(2)},${Y(y).toFixed(2)}`);
     const poly = `${right.join(' ')} ${left.join(' ')}`;
     const ink = cssVar('--ink'), muted = cssVar('--muted'), accent = cssVar('--accent'), fill = cssVar('--accent-soft');
-    const fs = 3.6;
+    const fs = 3.6 * k;
 
     const dimH = (xa, xb, y, label, ext0) => `
-      <line x1="${xa}" y1="${Y(ext0)}" x2="${xa}" y2="${Y(y) - 1.5}" />
-      <line x1="${xb}" y1="${Y(ext0)}" x2="${xb}" y2="${Y(y) - 1.5}" />
+      <line x1="${xa}" y1="${Y(ext0)}" x2="${xa}" y2="${Y(y) - 1.5 * k}" />
+      <line x1="${xb}" y1="${Y(ext0)}" x2="${xb}" y2="${Y(y) - 1.5 * k}" />
       <line x1="${xa}" y1="${Y(y)}" x2="${xb}" y2="${Y(y)}" marker-start="url(#ar)" marker-end="url(#ar)" />
-      <text x="${(xa + xb) / 2}" y="${Y(y) - 1.6}" text-anchor="middle">${label}</text>`;
+      <text x="${(xa + xb) / 2}" y="${Y(y) - 1.6 * k}" text-anchor="middle">${label}</text>`;
     const dimV = (x, ya, yb, label, ext0, side) => `
-      <line x1="${ext0}" y1="${Y(ya)}" x2="${x + side * 1.5}" y2="${Y(ya)}" />
-      <line x1="${ext0}" y1="${Y(yb)}" x2="${x + side * 1.5}" y2="${Y(yb)}" />
+      <line x1="${ext0}" y1="${Y(ya)}" x2="${x + side * 1.5 * k}" y2="${Y(ya)}" />
+      <line x1="${ext0}" y1="${Y(yb)}" x2="${x + side * 1.5 * k}" y2="${Y(yb)}" />
       <line x1="${x}" y1="${Y(ya)}" x2="${x}" y2="${Y(yb)}" marker-start="url(#ar)" marker-end="url(#ar)" />
-      <text x="${x + side * 2.8}" y="${(Y(ya) + Y(yb)) / 2}" text-anchor="middle" dominant-baseline="middle"
-        transform="rotate(-90 ${x + side * 2.8} ${(Y(ya) + Y(yb)) / 2})">${label}</text>`;
+      <text x="${x + side * 2.8 * k}" y="${(Y(ya) + Y(yb)) / 2}" text-anchor="middle" dominant-baseline="middle"
+        transform="rotate(-90 ${x + side * 2.8 * k} ${(Y(ya) + Y(yb)) / 2})">${label}</text>`;
 
     svg.setAttribute('viewBox', `${x0} 0 ${W} ${Ht}`);
     svg.innerHTML = `
@@ -484,18 +487,18 @@ h1 {
         <marker id="ar" viewBox="0 0 6 6" refX="3" refY="3" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
           <path d="M0,0 L6,3 L0,6 z" fill="${accent}" />
         </marker>
-        <pattern id="hatch" patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(45)">
-          <line x1="0" y1="0" x2="0" y2="1.8" stroke="${muted}" stroke-width="0.22" />
+        <pattern id="hatch" patternUnits="userSpaceOnUse" width="${1.8 * k}" height="${1.8 * k}" patternTransform="rotate(45)">
+          <line x1="0" y1="0" x2="0" y2="${1.8 * k}" stroke="${muted}" stroke-width="${0.22 * k}" />
         </pattern>
       </defs>
       <polygon points="${poly}" fill="${fill}" />
-      <polygon points="${poly}" fill="url(#hatch)" stroke="${ink}" stroke-width="0.45" stroke-linejoin="round" />
-      <line x1="0" y1="${Y(top) - 4}" x2="0" y2="${Y(0) + 4}" stroke="${muted}" stroke-width="0.25" stroke-dasharray="3 1 0.6 1" />
-      <g stroke="${accent}" stroke-width="0.25" fill="${accent}" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="${fs}">
-        ${dimH(-R1, R1, -7, 'Ø' + fmt(R1 * 2), 0)}
-        ${dimH(-R2, R2, top + 6, 'Ø' + fmt(R2 * 2), H)}
-        ${dimV(half + 7, 0, H, fmt(H), R2 + 1, 1)}
-        ${dimV(-half - 7, 0, top, fmt(top), -half + 2, -1)}
+      <polygon points="${poly}" fill="url(#hatch)" stroke="${ink}" stroke-width="${0.45 * k}" stroke-linejoin="round" />
+      <line x1="0" y1="${Y(top) - 4 * k}" x2="0" y2="${Y(0) + 4 * k}" stroke="${muted}" stroke-width="${0.25 * k}" stroke-dasharray="${[3, 1, 0.6, 1].map(d => d * k).join(' ')}" />
+      <g stroke="${accent}" stroke-width="${0.25 * k}" fill="${accent}" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="${fs}">
+        ${dimH(-R1, R1, -7 * k, 'Ø' + fmt(R1 * 2), 0)}
+        ${dimH(-R2, R2, top + 6 * k, 'Ø' + fmt(R2 * 2), H)}
+        ${dimV(half + 7 * k, 0, H, fmt(H), R2 + k, 1)}
+        ${dimV(-half - 7 * k, 0, top, fmt(top), -half + 2 * k, -1)}
       </g>`;
     svg.querySelectorAll('text').forEach(t => t.setAttribute('stroke', 'none'));
   }
@@ -587,13 +590,27 @@ h1 {
     'v-side': [0, 30, 170],
     'v-bottom': [40, -120, 60],
   };
-  Object.entries(VIEWS).forEach(([id, pos]) => {
+  // As vistas foram ajustadas para a peça padrão; uma peça maior afasta a câmera na mesma proporção.
+  const viewScale = () => Math.max(1, P.top / 45, profile(P).top / 60);
+  let framedScale = 1;
+  function setView(id) {
+    framedScale = viewScale();
+    camera.position.set(...VIEWS[id].map(c => c * framedScale));
+  }
+  // Quando a peça muda de tamanho, aproxima ou afasta a câmera sem mudar o ângulo escolhido.
+  function keepFramed() {
+    const s = viewScale();
+    if (Math.abs(s - framedScale) < 0.01) return;
+    camera.position.sub(controls.target).multiplyScalar(s / framedScale).add(controls.target);
+    framedScale = s;
+  }
+  Object.keys(VIEWS).forEach(id => {
     document.getElementById(id).addEventListener('click', () => {
       controls.autoRotate = false;
-      camera.position.set(...pos);
+      setView(id);
     });
   });
-  camera.position.set(...VIEWS['v-iso']);
+  setView('v-iso');
 
   function resize() {
     const w = stage.clientWidth, h = stage.clientHeight;
