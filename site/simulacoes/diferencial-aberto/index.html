@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Diferencial Aberto 3D · slop</title>
+<meta name="description" content="Simulação 3D de um diferencial aberto: pinhão, coroa, satélites e planetárias girando em linha reta, na curva e com uma roda no gelo.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Saira+Condensed:wght@600;700&display=swap">
+<style>
+/* Layout: palco 3D ocupando a tela à esquerda, painel de instrumentos à direita (empilhados no celular) */
+:root {
+  --bg: #e8ecf0;
+  --surface: #f6f8fa;
+  --raised: #ffffff;
+  --glass: rgba(246, 248, 250, 0.86);
+  --fg: #18212b;
+  --muted: #566473;
+  --line: #cdd5dd;
+  --accent: #b2561a;
+  --on-accent: #ffffff;
+  --scene: #dce2e8;
+  --grid-major: #a9b4bf;
+  --grid-minor: #c7cfd7;
+  --ice: #bfe4f7;
+
+  /* cores das peças: iguais nos dois temas, para a legenda bater com o modelo */
+  --c-pinion: #d49a1f;
+  --c-ring: #c0612a;
+  --c-carrier: #7b8ea3;
+  --c-spider: #cf4436;
+  --c-left: #1f9584;
+  --c-right: #5263d1;
+  --c-steel: #9aa6b2;
+  --c-tire: #24282d;
+
+  --font-display: "Saira Condensed", "Arial Narrow", sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10151b; --surface: #151c24; --raised: #1b2430; --glass: rgba(21, 28, 36, 0.86);
+    --fg: #e4e9ee; --muted: #93a0ad; --line: #283340;
+    --accent: #e5884a; --on-accent: #1a0f08;
+    --scene: #121920; --grid-major: #313d4a; --grid-minor: #1f2832; --ice: #6fb7d9;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10151b; --surface: #151c24; --raised: #1b2430; --glass: rgba(21, 28, 36, 0.86);
+  --fg: #e4e9ee; --muted: #93a0ad; --line: #283340;
+  --accent: #e5884a; --on-accent: #1a0f08;
+  --scene: #121920; --grid-major: #313d4a; --grid-minor: #1f2832; --ice: #6fb7d9;
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.5 var(--font-body);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 384px;
+  overflow: hidden;
+}
+
+.stage { position: relative; min-width: 0; min-height: 0; background: var(--scene); overflow: hidden; }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.labels { position: absolute; inset: 0; pointer-events: none; }
+.labels[hidden] { display: none !important; }
+.lbl {
+  position: absolute; left: 0; top: 0;
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 500 11px/1 var(--font-mono);
+  letter-spacing: 0.02em;
+  color: var(--fg);
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 8px 4px 6px;
+  white-space: nowrap;
+  will-change: transform;
+}
+.lbl i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+.hint {
+  position: absolute;
+  top: 12px;
+  left: calc(14px + env(safe-area-inset-left, 0px));
+  font: 11px/1.3 var(--font-mono);
+  color: var(--muted);
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 9px;
+}
+.hud {
+  position: absolute;
+  left: calc(14px + env(safe-area-inset-left, 0px));
+  bottom: 14px;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+}
+.chip {
+  font: 11px/1 var(--font-mono);
+  color: var(--muted);
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 9px;
+}
+
+.btn {
+  font: 500 13px/1.2 var(--font-body);
+  color: var(--fg);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+}
+.btn:hover { border-color: var(--muted); }
+.btn:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn svg { width: 14px; height: 14px; fill: currentColor; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+.panel {
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  padding-block: 24px 32px;
+  padding-left: 22px;
+  padding-right: max(22px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 24px;
+}
+.eyebrow {
+  font: 500 11px/1.2 var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+h1 {
+  font: 700 38px/0.95 var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  margin: 0 0 10px;
+  text-wrap: balance;
+}
+h2 {
+  font: 600 15px/1.2 var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+.intro { margin: 0; color: var(--muted); max-width: 62ch; }
+
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.seg .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+.field { display: grid; gap: 4px; }
+.field + .field { margin-top: 14px; }
+.field-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.field-head label { font-weight: 600; }
+.field-head output { font: 500 13px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--fg); text-align: right; }
+.ends { display: flex; justify-content: space-between; font: 11px var(--font-mono); color: var(--muted); }
+input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
+
+.ro { display: grid; gap: 12px; }
+.row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 5px 10px; align-items: baseline; }
+.dot { width: 10px; height: 10px; border-radius: 50%; align-self: center; }
+.row .name { min-width: 0; }
+.row .name small { display: block; color: var(--muted); font-size: 12px; line-height: 1.3; }
+.val { font: 500 16px var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.val span { font-size: 11px; color: var(--muted); margin-left: 3px; }
+.bar { grid-column: 2 / -1; height: 6px; border-radius: 3px; background: var(--line); position: relative; }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: currentColor; transition: width 0.25s ease; }
+.bar::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.bar-note { grid-column: 2 / -1; font: 11px var(--font-mono); color: var(--muted); display: flex; justify-content: space-between; }
+
+.eq {
+  margin-top: 14px;
+  font: 12.5px/1.6 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow-x: auto;
+}
+.eq b { font-weight: 500; }
+.torque { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+
+.explain { margin: 0; max-width: 62ch; }
+.explain-title { font-weight: 600; margin: 0 0 4px; }
+
+.toggles { display: grid; gap: 8px; }
+.toggles label { display: flex; align-items: center; gap: 9px; cursor: pointer; }
+.toggles input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+
+.spec { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: 13px; }
+.spec dt { color: var(--muted); }
+.spec dd { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.fail { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); }
+
+@media (max-width: 860px) {
+  html, body { height: auto; }
+  body { display: block; overflow: visible; }
+  .stage { height: 58vh; min-height: 320px; }
+  .panel {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    overflow: visible;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .hint { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bar i { transition: none; }
+}
+.crumbs { margin: 0 0 14px; font: 12px/1.3 var(--font-mono); color: var(--muted); }
+.crumbs a { color: var(--accent); }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<main class="stage" id="stage" aria-label="Modelo 3D do diferencial">
+  <div class="labels" id="labels"></div>
+  <div class="hint">Arraste para girar · role ou use pinça para zoom</div>
+  <div class="hud">
+    <button class="btn primary" id="play" type="button"></button>
+    <button class="btn" id="reset-view" type="button">Recentrar</button>
+    <span class="chip">Câmera lenta 40×</span>
+  </div>
+</main>
+
+<aside class="panel">
+  <header>
+    <nav class="crumbs" aria-label="Caminho"><a href="../../">slop</a> / <a href="../">simulações</a></nav>
+    <p class="eyebrow">Eixo traseiro · simulação em three.js</p>
+    <h1>Diferencial aberto</h1>
+    <p class="intro">O cardã gira o pinhão, o pinhão gira a coroa e a coroa leva junto a caixa de satélites. Dentro da caixa, os satélites deixam cada roda girar numa velocidade diferente, sempre com a média igual à rotação da coroa.</p>
+  </header>
+
+  <section>
+    <h2>Situação</h2>
+    <div class="seg" id="presets">
+      <button class="btn" type="button" data-d="0" data-cat="reta">Linha reta</button>
+      <button class="btn" type="button" data-d="0.25" data-cat="esq">Curva à esquerda</button>
+      <button class="btn" type="button" data-d="-0.25" data-cat="dir">Curva à direita</button>
+      <button class="btn" type="button" data-d="1" data-cat="gelo">Roda no gelo</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="field">
+      <div class="field-head"><label for="rpm">Rotação do cardã</label><output id="rpm-out" for="rpm"></output></div>
+      <input type="range" id="rpm" min="0" max="3000" step="50" value="1200">
+    </div>
+    <div class="field">
+      <div class="field-head"><label for="diff">Diferença entre rodas</label><output id="diff-out" for="diff"></output></div>
+      <input type="range" id="diff" min="-100" max="100" step="1" value="0">
+      <div class="ends"><span>esquerda mais rápida</span><span>direita mais rápida</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Rotações</h2>
+    <div class="ro">
+      <div class="row">
+        <i class="dot" style="background: var(--c-pinion)"></i>
+        <div class="name">Cardã e pinhão<small>entrada, 11 dentes</small></div>
+        <div class="val" id="v-pinion"></div>
+      </div>
+      <div class="row">
+        <i class="dot" style="background: var(--c-ring)"></i>
+        <div class="name">Coroa e caixa de satélites<small>41 dentes, relação 3,73 : 1</small></div>
+        <div class="val" id="v-ring"></div>
+      </div>
+      <div class="row">
+        <i class="dot" style="background: var(--c-spider)"></i>
+        <div class="name">Satélites<small>em torno do próprio pino</small></div>
+        <div class="val" id="v-spider"></div>
+      </div>
+      <div class="row" style="color: var(--c-left)">
+        <i class="dot" style="background: var(--c-left)"></i>
+        <div class="name" style="color: var(--fg)">Roda esquerda<small>planetária e semieixo</small></div>
+        <div class="val" id="v-left" style="color: var(--fg)"></div>
+        <div class="bar"><i id="b-left"></i></div>
+      </div>
+      <div class="row" style="color: var(--c-right)">
+        <i class="dot" style="background: var(--c-right)"></i>
+        <div class="name" style="color: var(--fg)">Roda direita<small>planetária e semieixo</small></div>
+        <div class="val" id="v-right" style="color: var(--fg)"></div>
+        <div class="bar"><i id="b-right"></i></div>
+        <div class="bar-note"><span>parada</span><span>= coroa</span><span>2× coroa</span></div>
+      </div>
+    </div>
+    <div class="eq" id="eq"></div>
+    <p class="torque">Torque: cada roda recebe sempre metade do torque da coroa, em qualquer situação.</p>
+  </section>
+
+  <section aria-live="polite">
+    <h2>O que está acontecendo</h2>
+    <p class="explain-title" id="explain-title"></p>
+    <p class="explain" id="explain"></p>
+  </section>
+
+  <section>
+    <h2>Visualização</h2>
+    <div class="toggles">
+      <label><input type="checkbox" id="tgl-carrier" checked> Caixa de satélites</label>
+      <label><input type="checkbox" id="tgl-housing"> Carcaça do eixo (translúcida)</label>
+      <label><input type="checkbox" id="tgl-labels" checked> Nomes das peças</label>
+    </div>
+  </section>
+
+  <section>
+    <h2>Especificação do modelo</h2>
+    <dl class="spec">
+      <dt>Coroa / pinhão</dt><dd>41 : 11 (3,73 : 1)</dd>
+      <dt>Planetárias</dt><dd>16 dentes, cone 58°</dd>
+      <dt>Satélites</dt><dd>2 × 10 dentes, cone 32°</dd>
+      <dt>Bitola</dt><dd>1,60 m (raio da curva)</dd>
+      <dt>Animação</dt><dd>40× mais lenta que o real</dd>
+    </dl>
+  </section>
+</aside>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(() => {
+  const stage = document.getElementById('stage');
+  if (!window.THREE || !THREE.OrbitControls) {
+    const msg = document.createElement('div');
+    msg.className = 'fail';
+    msg.textContent = 'Não foi possível carregar o three.js. Verifique a conexão e recarregue a página.';
+    stage.appendChild(msg);
+    return;
+  }
+  THREE.ColorManagement.legacyMode = false;
+
+  const SPEC = { ring: 41, pinion: 11, side: 16, spider: 10 };
+  const SLOW = 1 / 40;
+  const TRACK_M = 1.6;
+  const WHEEL_X = 7.7;
+
+  const rootStyle = () => getComputedStyle(document.documentElement);
+  const tok = (cs, name) => cs.getPropertyValue(name).trim();
+  const cs0 = rootStyle();
+  const COL = {};
+  for (const k of ['pinion', 'ring', 'carrier', 'spider', 'left', 'right', 'steel', 'tire']) COL[k] = tok(cs0, '--c-' + k);
+
+  // ---------- cena ----------
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  stage.prepend(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 200);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.minDistance = 5;
+  controls.maxDistance = 45;
+  controls.maxPolarAngle = Math.PI * 0.56;
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x3d4a57, 0.9));
+  const key = new THREE.DirectionalLight(0xffffff, 1.1);
+  key.position.set(6, 12, 9);
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0xc4d6ff, 0.5);
+  rim.position.set(-9, 4, -7);
+  scene.add(rim);
+
+  const mat = (color, extra = {}) => new THREE.MeshStandardMaterial(Object.assign(
+    { color, metalness: 0.35, roughness: 0.45, side: THREE.DoubleSide }, extra));
+  const M = {
+    pinion: mat(COL.pinion, { flatShading: true }),
+    ring: mat(COL.ring, { flatShading: true }),
+    spider: mat(COL.spider, { flatShading: true }),
+    left: mat(COL.left, { flatShading: true }),
+    right: mat(COL.right, { flatShading: true }),
+    carrierSolid: mat(COL.carrier, { metalness: 0.5, roughness: 0.4 }),
+    carrierShell: mat(COL.carrier, { metalness: 0.5, roughness: 0.4, transparent: true, opacity: 0.42, depthWrite: false }),
+    steel: mat(COL.steel, { metalness: 0.6, roughness: 0.35 }),
+    tire: mat(COL.tire, { metalness: 0, roughness: 0.9 }),
+    housing: mat('#8a96a3', { metalness: 0.2, roughness: 0.6, transparent: true, opacity: 0.14, depthWrite: false }),
+  };
+
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const X = V(1, 0, 0), Y = V(0, 1, 0), Z = V(0, 0, 1);
+  const qTo = (dir) => new THREE.Quaternion().setFromUnitVectors(Y, dir.clone().normalize());
+
+  // ω_b / ω_a para duas engrenagens cônicas de ápice comum que se tocam na direção P
+  function ratio(a, b, P) {
+    const va = new THREE.Vector3().crossVectors(a, P);
+    const vb = new THREE.Vector3().crossVectors(b, P);
+    return va.dot(vb) / vb.lengthSq();
+  }
+
+  function cylinder(r, from, to, axis, material, open = false, seg = 40) {
+    const lo = Math.min(from, to), hi = Math.max(from, to);
+    const g = new THREE.CylinderGeometry(r, r, hi - lo, seg, 1, open);
+    const mesh = new THREE.Mesh(g, material);
+    const mid = (lo + hi) / 2;
+    if (axis === 'x') { g.rotateZ(Math.PI / 2); mesh.position.x = mid; }
+    else if (axis === 'z') { g.rotateX(Math.PI / 2); mesh.position.z = mid; }
+    else mesh.position.y = mid;
+    return mesh;
+  }
+
+  // Engrenagem cônica de dentes retos. Eixo local +Y, ápice do cone primitivo na origem.
+  // `contact` + `q` alinham um dente (ou um vão) com a linha de contato, para os dentes engrenarem.
+  function bevelGear({ N, gamma, A, F, hubR, back, material, q, contact, toothAtContact }) {
+    const sg = Math.sin(gamma), cg = Math.cos(gamma);
+    const L1 = A - F, L2 = A;
+    const v = contact.clone().applyQuaternion(q.clone().invert());
+    const phase = Math.atan2(-v.z, v.x) + (toothAtContact ? 0 : Math.PI / N);
+    // ponto a distância L do ápice, deslocado h na normal do cone: (raio, altura)
+    const prof = (L, h) => [L * sg + cg * h, L * cg - sg * h];
+
+    const corner = (L, tip, side) => {
+      const r0 = L * sg, m = 2 * r0 / N, quarterPitch = Math.PI * r0 / (2 * N);
+      const [r, y] = prof(L, tip ? m : -1.25 * m);
+      return [r, y, side * (tip ? 0.5 : 1.15) * quarterPitch];
+    };
+    const P = [];
+    for (const li of [0, 1]) for (const tip of [0, 1]) for (const sd of [-1, 1]) P.push(corner(li ? L2 : L1, tip, sd));
+    const id = (li, tip, sd) => li * 4 + tip * 2 + sd;
+    const quads = [
+      [id(0, 1, 0), id(1, 1, 0), id(1, 1, 1), id(0, 1, 1)],
+      [id(0, 0, 0), id(0, 0, 1), id(1, 0, 1), id(1, 0, 0)],
+      [id(0, 0, 0), id(1, 0, 0), id(1, 1, 0), id(0, 1, 0)],
+      [id(0, 0, 1), id(0, 1, 1), id(1, 1, 1), id(1, 0, 1)],
+      [id(0, 0, 0), id(0, 1, 0), id(0, 1, 1), id(0, 0, 1)],
+      [id(1, 0, 0), id(1, 0, 1), id(1, 1, 1), id(1, 1, 0)],
+    ];
+    const pos = [];
+    for (let i = 0; i < N; i++) {
+      const th = phase + 2 * Math.PI * i / N, c = Math.cos(th), s = Math.sin(th);
+      const T = P.map(([x, y, z]) => [x * c + z * s, y, -x * s + z * c]);
+      for (const [a, b, d, e] of quads) pos.push(...T[a], ...T[b], ...T[d], ...T[a], ...T[d], ...T[e]);
+    }
+    const teeth = new THREE.BufferGeometry();
+    teeth.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    teeth.computeVertexNormals();
+
+    const R1 = prof(L1, -1.25 * 2 * L1 * sg / N);
+    const R2 = prof(L2, -1.25 * 2 * L2 * sg / N);
+    const B = [R2[0] - cg * back, R2[1] + sg * back];
+    const outline = [[hubR, R1[1]], R1, R2, B, [hubR, B[1]], [hubR, R1[1]]]
+      .map(([r, y]) => new THREE.Vector2(r, y));
+    const body = new THREE.LatheGeometry(outline, Math.max(48, N * 3));
+
+    const group = new THREE.Group();
+    group.add(new THREE.Mesh(teeth, material), new THREE.Mesh(body, material));
+    group.quaternion.copy(q);
+    group.userData.backY = B[1];
+    return group;
+  }
+
+  // ---------- geometria do par coroa/pinhão e do conjunto de satélites ----------
+  const gRing = Math.atan2(SPEC.ring, SPEC.pinion);
+  const gPin = Math.PI / 2 - gRing;
+  const gSide = Math.atan2(SPEC.side, SPEC.spider);
+  const gSpider = Math.PI / 2 - gSide;
+  const A_RING = 3.0, F_RING = 0.7;
+  const A_SIDE = 1.3, F_SIDE = 0.45;
+
+  const pRingPinion = X.clone().multiplyScalar(Math.cos(gRing)).add(Z.clone().multiplyScalar(Math.cos(gPin)));
+  const pRight = X.clone().multiplyScalar(Math.cos(gSide)).add(Z.clone().multiplyScalar(Math.cos(gSpider)));
+  const pLeft = X.clone().multiplyScalar(-Math.cos(gSide)).add(Z.clone().multiplyScalar(Math.cos(gSpider)));
+  const pRightLower = X.clone().multiplyScalar(Math.cos(gSide)).add(Z.clone().multiplyScalar(-Math.cos(gSpider)));
+
+  // Pinhão + cardã
+  const pinionSpin = new THREE.Group();
+  scene.add(pinionSpin);
+  pinionSpin.add(bevelGear({
+    N: SPEC.pinion, gamma: gPin, A: A_RING, F: F_RING, hubR: 0.28, back: 0.25,
+    material: M.pinion, q: qTo(Z), contact: pRingPinion, toothAtContact: true,
+  }));
+  pinionSpin.add(cylinder(0.28, 2.9, 7.4, 'z', M.pinion));
+  pinionSpin.add(cylinder(0.9, 7.4, 7.6, 'z', M.pinion));
+  pinionSpin.add(cylinder(0.46, 7.6, 11.5, 'z', M.steel));
+  for (let i = 0; i < 4; i++) {
+    const bolt = cylinder(0.08, 7.3, 7.7, 'z', M.steel, false, 12);
+    const t = i * Math.PI / 2 + Math.PI / 4;
+    bolt.position.x = 0.65 * Math.cos(t);
+    bolt.position.y = 0.65 * Math.sin(t);
+    pinionSpin.add(bolt);
+  }
+  const shaftStripe = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.06, 3.9), M.pinion);
+  shaftStripe.position.set(0, 0.47, 9.55);
+  pinionSpin.add(shaftStripe);
+
+  // Caixa de satélites (gira com a coroa)
+  const carrier = new THREE.Group();
+  scene.add(carrier);
+  carrier.add(bevelGear({
+    N: SPEC.ring, gamma: gRing, A: A_RING, F: F_RING, hubR: 2.05, back: 0.35,
+    material: M.ring, q: qTo(X), contact: pRingPinion, toothAtContact: false,
+  }));
+  const carrierParts = new THREE.Group();
+  carrier.add(carrierParts);
+  const flange = new THREE.Mesh(new THREE.LatheGeometry(
+    [[1.3, 0.85], [2.1, 0.85], [2.1, 1.15], [1.3, 1.15], [1.3, 0.85]].map(([r, y]) => new THREE.Vector2(r, y)), 64),
+    M.carrierSolid);
+  flange.quaternion.copy(qTo(X));
+  carrierParts.add(flange);
+  for (let i = 0; i < 10; i++) {
+    const bolt = cylinder(0.07, 1.1, 1.35, 'x', M.steel, false, 10);
+    const t = i * Math.PI / 5;
+    bolt.position.y = 1.75 * Math.cos(t);
+    bolt.position.z = 1.75 * Math.sin(t);
+    carrierParts.add(bolt);
+  }
+  // casca com duas janelas, para ver os satélites; as janelas ficam entre as pontas do pino
+  for (const start of [0.2 * Math.PI, 1.2 * Math.PI]) {
+    const g = new THREE.SphereGeometry(1.72, 48, 24, start, 0.6 * Math.PI, 0.36, Math.PI - 0.72);
+    g.rotateZ(-Math.PI / 2);
+    carrierParts.add(new THREE.Mesh(g, M.carrierShell));
+  }
+  carrierParts.add(cylinder(0.62, 1.45, 2.4, 'x', M.carrierSolid, true));
+  carrierParts.add(cylinder(0.62, -2.4, -1.45, 'x', M.carrierSolid, true));
+  carrier.add(cylinder(0.14, -1.8, 1.8, 'z', M.steel, false, 20));
+
+  const spiders = [];
+  for (const [dir, contact] of [[Z, pRight], [Z.clone().negate(), pRightLower]]) {
+    const spin = new THREE.Group();
+    const gear = bevelGear({
+      N: SPEC.spider, gamma: gSpider, A: A_SIDE, F: F_SIDE, hubR: 0.15, back: 0.18,
+      material: M.spider, q: qTo(dir), contact, toothAtContact: false,
+    });
+    spin.add(gear);
+    carrier.add(spin);
+    spiders.push({ spin, gear, k: ratio(X, Z, contact) });
+  }
+
+  // Planetárias, semieixos e rodas
+  function makeWheel(sign, material) {
+    const w = new THREE.Group();
+    w.position.x = sign * WHEEL_X;
+    w.add(cylinder(2.25, -0.6, 0.6, 'x', M.tire, false, 64));
+    for (let i = 0; i < 30; i++) {
+      const t = i * 2 * Math.PI / 30;
+      const lug = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.12, 0.3), M.tire);
+      lug.position.set(0, 2.29 * Math.cos(t), 2.29 * Math.sin(t));
+      lug.rotation.x = t;
+      w.add(lug);
+    }
+    w.add(cylinder(1.45, -0.63, 0.63, 'x', M.steel, false, 48));
+    w.add(cylinder(0.35, sign * 0.6, sign * 0.78, 'x', M.steel, false, 24));
+    for (let i = 0; i < 5; i++) {
+      const t = i * 2 * Math.PI / 5;
+      const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.15, 0.24), material);
+      spoke.position.set(sign * 0.66, 0.85 * Math.cos(t), 0.85 * Math.sin(t));
+      spoke.rotation.x = t;
+      w.add(spoke);
+    }
+    const mark = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.55, 0.3), material);
+    mark.position.set(sign * 0.62, 1.9, 0);
+    w.add(mark);
+    return w;
+  }
+
+  function sideShaft(sign, material, contact) {
+    const spin = new THREE.Group();
+    scene.add(spin);
+    const gear = bevelGear({
+      N: SPEC.side, gamma: gSide, A: A_SIDE, F: F_SIDE, hubR: 0.3, back: 0.25,
+      material, q: qTo(X.clone().multiplyScalar(sign)), contact, toothAtContact: true,
+    });
+    spin.add(gear);
+    spin.add(cylinder(0.42, sign * gear.userData.backY, sign * 1.95, 'x', material));
+    spin.add(cylinder(0.22, sign * 1.9, sign * (WHEEL_X - 0.5), 'x', M.steel, false, 24));
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(WHEEL_X - 2.6, 0.05, 0.12), material);
+    stripe.position.set(sign * (WHEEL_X + 1.6) / 2, 0.22, 0);
+    spin.add(stripe);
+    spin.add(makeWheel(sign, material));
+    return spin;
+  }
+  const leftSpin = sideShaft(-1, M.left, pLeft);
+  const rightSpin = sideShaft(1, M.right, pRight);
+
+  // Carcaça do eixo (fixa)
+  const housing = new THREE.Group();
+  const bowl = new THREE.Mesh(new THREE.SphereGeometry(3.75, 48, 32), M.housing);
+  bowl.scale.set(0.6, 1, 1);
+  bowl.position.x = 0.35;
+  housing.add(bowl);
+  housing.add(cylinder(1.15, 2.6, 6.9, 'z', M.housing, false, 40));
+  housing.add(cylinder(0.62, 1.9, WHEEL_X - 0.9, 'x', M.housing, false, 32));
+  housing.add(cylinder(0.62, -(WHEEL_X - 0.9), -1.9, 'x', M.housing, false, 32));
+  housing.visible = false;
+  scene.add(housing);
+
+  // Chão, gelo
+  const GROUND_Y = -2.36;
+  let grid = null;
+  const ice = new THREE.Mesh(new THREE.CircleGeometry(2.4, 48),
+    new THREE.MeshStandardMaterial({ color: '#bfe4f7', roughness: 0.15, metalness: 0, transparent: true, opacity: 0.8 }));
+  ice.rotation.x = -Math.PI / 2;
+  ice.position.y = GROUND_Y + 0.01;
+  ice.visible = false;
+  scene.add(ice);
+
+  function applyTheme() {
+    const cs = rootStyle();
+    const bg = new THREE.Color(tok(cs, '--scene'));
+    scene.background = bg;
+    scene.fog = new THREE.Fog(bg, 34, 70);
+    if (grid) { scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
+    grid = new THREE.GridHelper(48, 48, tok(cs, '--grid-major'), tok(cs, '--grid-minor'));
+    grid.position.y = GROUND_Y;
+    scene.add(grid);
+    ice.material.color.set(tok(cs, '--ice'));
+  }
+  applyTheme();
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+  new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  // ---------- rótulos ----------
+  const labelsEl = document.getElementById('labels');
+  const labelDefs = [
+    { text: 'Pinhão', color: COL.pinion, at: V(0, 1.25, 2.7) },
+    { text: 'Cardã', color: COL.pinion, at: V(0, 0.95, 10) },
+    { text: 'Coroa', color: COL.ring, at: V(1.1, 3.35, 0) },
+    { text: 'Caixa de satélites', color: COL.carrier, at: V(-0.3, -2.0, 0.6) },
+    { text: 'Satélite', color: COL.spider, obj: spiders[0].gear, local: V(0, 1.5, 0) },
+    { text: 'Planetária esq.', color: COL.left, at: V(-0.9, 1.35, 0) },
+    { text: 'Planetária dir.', color: COL.right, at: V(0.9, 1.35, 0) },
+    { text: 'Semieixo esq.', color: COL.left, at: V(-4.6, 0.45, 0) },
+    { text: 'Semieixo dir.', color: COL.right, at: V(4.6, 0.45, 0) },
+  ];
+  for (const def of labelDefs) {
+    const el = document.createElement('span');
+    el.className = 'lbl';
+    const dot = document.createElement('i');
+    dot.style.background = def.color;
+    el.append(dot, def.text);
+    labelsEl.appendChild(el);
+    def.el = el;
+  }
+  const tmp = new THREE.Vector3();
+  function updateLabels(w, h) {
+    for (const def of labelDefs) {
+      if (def.obj) def.obj.localToWorld(tmp.copy(def.local));
+      else tmp.copy(def.at);
+      tmp.project(camera);
+      const visible = tmp.z < 1 && Math.abs(tmp.x) < 1.1 && Math.abs(tmp.y) < 1.1;
+      def.el.style.visibility = visible ? 'visible' : 'hidden';
+      if (!visible) continue;
+      const x = (tmp.x + 1) / 2 * w, y = (1 - tmp.y) / 2 * h;
+      def.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%)`;
+    }
+  }
+
+  // ---------- câmera ----------
+  let stageW = 1, stageH = 1;
+  function resetView() {
+    const far = stageW / stageH < 1.1 ? 1.45 : 1;
+    camera.position.set(11 * far, 7.2 * far, 13.5 * far);
+    controls.target.set(0, -0.3, 1.6);
+    controls.update();
+  }
+  function resize() {
+    const r = stage.getBoundingClientRect();
+    stageW = Math.max(1, r.width);
+    stageH = Math.max(1, r.height);
+    renderer.setSize(stageW, stageH, false);
+    camera.aspect = stageW / stageH;
+    camera.updateProjectionMatrix();
+  }
+  resize();
+  resetView();
+  new ResizeObserver(resize).observe(stage);
+
+  // ---------- estado e interface ----------
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const state = { rpm: 1200, d: 0, playing: !reduceMotion };
+  const kRing = ratio(Z, X, pRingPinion); // ω_coroa / ω_pinhão (negativo: sentidos opostos)
+  let ringAngle = 0;  // ângulo da coroa/caixa em torno de X
+  let beta = 0;       // quanto a roda direita adiantou em relação à coroa (a esquerda atrasa o mesmo)
+
+  const $ = (id) => document.getElementById(id);
+  const fmt0 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+  const fmt1 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const rpmHTML = (n) => `${fmt0.format(n)}<span>rpm</span>`;
+
+  const category = (d) => Math.abs(d) < 0.005 ? 'reta' : Math.abs(d) > 0.995 ? 'gelo' : d > 0 ? 'esq' : 'dir';
+
+  function explain(cat, d) {
+    if (cat === 'reta') return [
+      'Linha reta: o conjunto gira como um eixo rígido.',
+      'A coroa leva a caixa e as duas planetárias juntas. Os satélites são carregados pelo pino, mas não giram em torno dele, então as duas rodas acompanham exatamente a rotação da coroa.',
+    ];
+    if (cat === 'gelo') {
+      const slip = d > 0 ? 'direita' : 'esquerda', grip = d > 0 ? 'esquerda' : 'direita';
+      return [
+        `Roda ${slip} no gelo: ela patina e a ${grip} fica parada.`,
+        `Sem resistência do lado ${slip}, os satélites rolam sobre a planetária ${grip} parada e jogam o dobro da rotação da coroa para a roda ${slip}. Como o diferencial aberto divide o torque por igual, a roda com aderência só recebe o pouco torque que a roda no gelo consegue segurar. Por isso o carro não sai do lugar.`,
+      ];
+    }
+    const outer = d > 0 ? 'direita' : 'esquerda', inner = d > 0 ? 'esquerda' : 'direita';
+    return [
+      `Curva à ${d > 0 ? 'esquerda' : 'direita'}: a roda ${outer} vai por fora e precisa girar mais.`,
+      `Os satélites passam a girar no próprio pino. Isso adianta a planetária ${outer} e atrasa a ${inner} na mesma medida, então a soma das rotações das rodas continua igual ao dobro da rotação da coroa e nenhum pneu é arrastado.`,
+    ];
+  }
+
+  function updateUI() {
+    const d = state.d;
+    const ring = state.rpm * SPEC.pinion / SPEC.ring;
+    const ringR = Math.round(ring);
+    const leftR = Math.round(ring * (1 - d));
+    const rightR = 2 * ringR - leftR;
+    const spider = Math.abs(ring * d) * SPEC.side / SPEC.spider;
+    const cat = category(d);
+
+    $('rpm-out').textContent = `${fmt0.format(state.rpm)} rpm`;
+    let diffText;
+    if (cat === 'reta') diffText = 'rodas iguais';
+    else if (cat === 'gelo') diffText = `${d > 0 ? 'esquerda' : 'direita'} parada`;
+    else diffText = `curva à ${d > 0 ? 'esq.' : 'dir.'} · raio ≈ ${fmt1.format(TRACK_M / (2 * Math.abs(d)))} m`;
+    $('diff-out').textContent = diffText;
+
+    $('v-pinion').innerHTML = rpmHTML(state.rpm);
+    $('v-ring').innerHTML = rpmHTML(ringR);
+    $('v-spider').innerHTML = rpmHTML(spider);
+    $('v-left').innerHTML = rpmHTML(leftR);
+    $('v-right').innerHTML = rpmHTML(rightR);
+    const pct = (n) => ring > 0 ? `${Math.min(100, Math.max(0, n / (2 * ring) * 100))}%` : '0%';
+    $('b-left').style.width = pct(ring * (1 - d));
+    $('b-right').style.width = pct(ring * (1 + d));
+    $('eq').innerHTML =
+      `n<sub>esq</sub> + n<sub>dir</sub> = 2 · n<sub>coroa</sub><br>` +
+      `<b>${fmt0.format(leftR)}</b> + <b>${fmt0.format(rightR)}</b> = 2 × <b>${fmt0.format(ringR)}</b>`;
+
+    const [title, body] = explain(cat, d);
+    $('explain-title').textContent = title;
+    $('explain').textContent = body;
+
+    for (const b of document.querySelectorAll('#presets .btn')) {
+      b.setAttribute('aria-pressed', String(b.dataset.cat === cat));
+    }
+    ice.visible = cat === 'gelo';
+    ice.position.x = d > 0 ? WHEEL_X : -WHEEL_X;
+  }
+
+  const playIcon = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>';
+  const pauseIcon = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z"/></svg>';
+  function updatePlay() {
+    $('play').innerHTML = state.playing ? `${pauseIcon}Pausar` : `${playIcon}Girar`;
+  }
+
+  $('rpm').addEventListener('input', (e) => { state.rpm = Number(e.target.value); updateUI(); });
+  $('diff').addEventListener('input', (e) => { state.d = Number(e.target.value) / 100; updateUI(); });
+  for (const b of document.querySelectorAll('#presets .btn')) {
+    b.addEventListener('click', () => {
+      state.d = Number(b.dataset.d);
+      $('diff').value = String(Math.round(state.d * 100));
+      if (!state.playing) { state.playing = true; updatePlay(); }
+      updateUI();
+    });
+  }
+  $('play').addEventListener('click', () => { state.playing = !state.playing; updatePlay(); });
+  $('reset-view').addEventListener('click', resetView);
+  $('tgl-carrier').addEventListener('change', (e) => { carrierParts.visible = e.target.checked; });
+  $('tgl-housing').addEventListener('change', (e) => { housing.visible = e.target.checked; });
+  $('tgl-labels').addEventListener('change', (e) => { labelsEl.hidden = !e.target.checked; });
+
+  state.rpm = Number($('rpm').value);
+  state.d = Number($('diff').value) / 100;
+  carrierParts.visible = $('tgl-carrier').checked;
+  housing.visible = $('tgl-housing').checked;
+  labelsEl.hidden = !$('tgl-labels').checked;
+  updateUI();
+  updatePlay();
+
+  // ---------- laço de animação ----------
+  const clock = new THREE.Clock();
+  function frame() {
+    const dt = Math.min(clock.getDelta(), 0.05);
+    if (state.playing) {
+      const wPinion = state.rpm / 60 * 2 * Math.PI * SLOW * Math.sign(kRing);
+      const wRing = kRing * wPinion; // positivo: rodas giram para a frente (+Z)
+      ringAngle += wRing * dt;
+      beta += state.d * wRing * dt;
+    }
+    carrier.rotation.x = ringAngle;
+    pinionSpin.rotation.z = ringAngle / kRing;
+    rightSpin.rotation.x = ringAngle + beta;
+    leftSpin.rotation.x = ringAngle - beta;
+    for (const s of spiders) s.spin.rotation.z = s.k * beta;
+
+    controls.update();
+    renderer.render(scene, camera);
+    if (!labelsEl.hidden) updateLabels(stageW, stageH);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>

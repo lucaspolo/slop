@@ -1,6 +1,6 @@
 # slop
 
-Site estático com os projetos feitos com IA ("slops") do Lucas Polo, publicado em https://slop.lucaspolo.dev/ pelo GitHub Pages. Tem duas seções: os jogos e a impressão 3D (geradores de peças).
+Site estático com os projetos feitos com IA ("slops") do Lucas Polo, publicado em https://slop.lucaspolo.dev/ pelo GitHub Pages. Tem três seções: a impressão 3D (geradores de peças), os jogos e as simulações.
 
 ## Stack
 
@@ -8,6 +8,7 @@ Site estático com os projetos feitos com IA ("slops") do Lucas Polo, publicado 
 |---|---|
 | Páginas | HTML e CSS puros, sem framework nem build |
 | Impressão 3D | Um HTML por gerador, com CSS e JS dentro; three.js r128 e clipper-lib pelo CDN |
+| Jogos e simulações | Os jogos maiores vivem no próprio repositório (Vite) e só são linkados; os de um arquivo só, e as simulações, moram aqui num HTML cada |
 | Fontes | Bagel Fat One (títulos) e Rubik (texto), do Google Fonts |
 | Hospedagem | GitHub Pages via GitHub Actions (`.github/workflows/pages.yml`) |
 | DNS | Porkbun, `CNAME slop → lucaspolo.github.io` |
@@ -19,13 +20,18 @@ Não há `mise.toml` porque não há ferramenta para fixar. Se um dia entrar um 
 ```
 site/              # tudo o que é publicado
   index.html       # página inicial: todos os projetos, numa aba por seção (impressão 3D primeiro)
-  jogos/index.html # os jogos, no fundo amarelo original
+  jogos/
+    index.html     # os jogos, no fundo amarelo original
+    <projeto>/index.html  # jogo de um arquivo só que mora aqui (os outros apontam para o próprio GitHub Pages)
   impressao-3d/
     index.html     # a lista dos geradores
     <projeto>/index.html  # cada gerador: prévia 3D, medidas e download do STL
+  simulacoes/
+    index.html     # a lista das simulações
+    <projeto>/index.html  # cada simulação, em three.js
   style.css        # o visual escrachado: contorno preto grosso, sombra dura; serve às listas, não aos geradores
   favicon.svg
-  tabs.js          # troca de aba na página inicial e lembra a aba no endereço (#impressao-3d, #jogos)
+  tabs.js          # troca de aba na página inicial e lembra a aba no endereço (#impressao-3d, #jogos, #simulacoes)
   easter-egg.js    # o Milton ou a Luma surgem de uma borda sorteada a cada 6–24 s e falam num balão
   img/             # um desenho por projeto: img/<projeto>.svg
                    # e os personagens do easter egg: img/<personagem>-espiando.svg
@@ -37,10 +43,10 @@ site/              # tudo o que é publicado
 
 - Projetos em ordem do mais recente para o mais antigo.
 - Cada card aparece duas vezes: na aba da página inicial e na página da seção, com o mesmo HTML (título em `<h2>`). Mude os dois juntos.
-- Caminhos são relativos à página: em `jogos/` e `impressao-3d/` as imagens são `../img/...`. O `easter-egg.js` resolve os desenhos a partir do próprio endereço, então funciona em qualquer pasta.
+- Caminhos são relativos à página: em `jogos/`, `impressao-3d/` e `simulacoes/` as imagens são `../img/...`. O `easter-egg.js` resolve os desenhos a partir do próprio endereço, então funciona em qualquer pasta.
 - O link "código" só aparece quando o repositório é público; link para repositório privado dá 404 para o visitante.
 - Texto em português.
-- A página inicial e a de impressão 3D usam `<body class="sober">`, com fundo cinza claro; só a página dos jogos fica no amarelo. A cor da aba selecionada vem do `--tint` de cada botão.
+- A página inicial e as de impressão 3D e simulações usam `<body class="sober">`, com fundo cinza claro; só a página dos jogos fica no amarelo. A cor da aba selecionada vem do `--tint` de cada botão.
 - O visual é escrachado de propósito e tem um tema só, sem modo escuro. Os cards ficam tortos, alternando a inclinação, e cada um tem um selo estrelado (`.badge`) com uma palavra curta. O selo fica no canto superior direito; com `class="badge left"` ele vai para o esquerdo. Escolha o lado que não cobre nada importante do desenho (na Luma, a coroa do Pombo-Rei fica à direita).
 
 ### Desenho de cada card
@@ -53,6 +59,14 @@ Todo projeto tem um desenho em `site/img/<projeto>.svg` que mostra o que o proje
 - `<title>` dentro do SVG e o mesmo texto no `alt` do `<img>`.
 - Texto dentro do SVG usa `Arial Black, Impact, sans-serif`. ⚠️ SVG carregado por `<img>` não enxerga as fontes da página, então `Bagel Fat One` ali cai numa fonte qualquer.
 - Confira o resultado renderizando, por exemplo com `google-chrome --headless=new --screenshot=out.png --window-size=800,520 file://$PWD/site/img/<projeto>.svg`. Um dos cantos de cima do desenho fica embaixo do selo, então deixe pelo menos um deles livre.
+
+### Páginas trazidas de artefatos do Claude
+
+Alguns projetos nasceram como artefato no claude.ai e vieram para cá como página própria (os geradores, o Porquinhos do Roli e o Diferencial Aberto). Na vinda:
+
+- Troque o cabeçalho que o claude.ai injeta por um `<head>` de verdade, com `lang="pt-BR"`, título `<nome> · slop`, descrição e favicon, e acrescente `[hidden] { display: none !important; }`, que vinha desse cabeçalho.
+- Tire tudo o que usa `window.claude` (salvar no banco do artefato, `downloads`, `hot`) e os textos que mandam falar com o Claude. Progresso fica no `localStorage`; arquivo sai por link `blob:`.
+- No site, o helicóptero do Milton se chama PIG-MTP, não PY2MTP. Troque nos artefatos que trouxerem o nome antigo.
 
 ### Geradores de impressão 3D
 

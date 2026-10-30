@@ -8,22 +8,25 @@ Página com os projetos que fiz com IA, publicada em https://slop.lucaspolo.dev/
 python3 -m http.server -d site
 ```
 
-Abrir o `index.html` direto pelo `file://` não serve, porque os links para `jogos/` e `impressao-3d/` apontam para pastas.
+Abrir o `index.html` direto pelo `file://` não serve, porque os links para `jogos/`, `impressao-3d/` e `simulacoes/` apontam para pastas.
 
 ## Páginas
 
 | Página | O quê |
 |---|---|
-| `/` | Todos os projetos, em abas: impressão 3D e jogos |
+| `/` | Todos os projetos, em abas: impressão 3D, jogos e simulações |
 | `/jogos/` | Os jogos, no visual amarelo original |
+| `/jogos/<projeto>/` | Jogo de um arquivo só que mora aqui, como o Porquinhos do Roli |
 | `/impressao-3d/` | Os geradores de peças para impressão 3D |
 | `/impressao-3d/<projeto>/` | Cada gerador: ajusta as medidas e baixa o STL no navegador |
+| `/simulacoes/` | As simulações, para ver como as coisas funcionam por dentro |
+| `/simulacoes/<projeto>/` | Cada simulação |
 
 ## Adicionar um projeto
 
-Copie um bloco `<article class="project">` e coloque o projeto novo no topo da lista em dois lugares: no painel da aba certa em `site/index.html` e na página da seção, `site/jogos/index.html` ou `site/impressao-3d/index.html`. Ajuste título, descrição, selo, tags e links. O link para o código só entra quando o repositório é público.
+Copie um bloco `<article class="project">` e coloque o projeto novo no topo da lista em dois lugares: no painel da aba certa em `site/index.html` e na página da seção, `site/impressao-3d/index.html`, `site/jogos/index.html` ou `site/simulacoes/index.html`. Ajuste título, descrição, selo, tags e links. O link para o código só entra quando o repositório é público.
 
-Um gerador novo mora em `site/impressao-3d/<projeto>/index.html`, com tudo dentro do próprio arquivo.
+Um gerador novo mora em `site/impressao-3d/<projeto>/index.html`, e uma simulação nova em `site/simulacoes/<projeto>/index.html`, com tudo dentro do próprio arquivo.
 
 Cada card tem um desenho em `site/img/<projeto>.svg`. As regras de estilo estão no `AGENTS.md`.
 
