@@ -35,6 +35,7 @@
   --c-right: #5263d1;
   --c-steel: #9aa6b2;
   --c-tire: #24282d;
+  --c-lock: #8e5bd6;
 
   --font-display: "Saira Condensed", "Arial Narrow", sans-serif;
   --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -255,6 +256,8 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
 .tour-bar span { min-width: 0; padding: 0 6px; font: 500 12px/1.2 var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tour-bar .btn { padding: 5px 12px; border-radius: 999px; }
 .touring .panel > section:not(.tour), .touring .intro, .touring .tour-start, .touring .hint { display: none; }
+.lock-toggle { margin-top: 12px; }
+.lock-toggle small { color: var(--muted); font-size: 12px; }
 .lbl.alerta { color: #fff; background: #c8432b; border-color: #c8432b; }
 .crumbs a { color: var(--accent); }
 [hidden] { display: none !important; }
@@ -292,6 +295,7 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
     <h2 class="tour-title" id="tour-title"></h2>
     <div class="tour-text" id="tour-text"></div>
     <div class="ro" id="tour-ro"></div>
+    <button class="btn" id="tour-acao" type="button" hidden></button>
     <div class="tour-problema" id="tour-problema">
       <p class="tour-problema-rotulo">O problema</p>
       <p id="tour-problema-txt"></p>
@@ -310,6 +314,9 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
       <button class="btn" type="button" data-d="0.25" data-cat="esq">Curva à esquerda</button>
       <button class="btn" type="button" data-d="-0.25" data-cat="dir">Curva à direita</button>
       <button class="btn" type="button" data-d="1" data-cat="gelo">Roda no gelo</button>
+    </div>
+    <div class="toggles lock-toggle">
+      <label><input type="checkbox" id="tgl-blocante"> Travar o blocante <small>a luva roxa, no semieixo direito</small></label>
     </div>
   </section>
 
@@ -358,7 +365,7 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
       </div>
     </div>
     <div class="eq" id="eq"></div>
-    <p class="torque">Torque: cada roda recebe sempre metade do torque da coroa, em qualquer situação.</p>
+    <p class="torque" id="torque-txt"></p>
   </section>
 
   <section aria-live="polite">
@@ -383,6 +390,7 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
       <dt>Planetárias</dt><dd>16 dentes, cone 58°</dd>
       <dt>Satélites</dt><dd>2 × 10 dentes, cone 32°</dd>
       <dt>Bitola</dt><dd>1,60 m (raio da curva)</dd>
+      <dt>Blocante</dt><dd>luva de 6 dentes no semieixo direito</dd>
       <dt>Animação</dt><dd>40× mais lenta que o real</dd>
     </dl>
   </section>
@@ -411,7 +419,7 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
   const tok = (cs, name) => cs.getPropertyValue(name).trim();
   const cs0 = rootStyle();
   const COL = {};
-  for (const k of ['pinion', 'ring', 'carrier', 'spider', 'left', 'right', 'steel', 'tire']) COL[k] = tok(cs0, '--c-' + k);
+  for (const k of ['pinion', 'ring', 'carrier', 'spider', 'left', 'right', 'steel', 'tire', 'lock']) COL[k] = tok(cs0, '--c-' + k);
 
   // ---------- cena ----------
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -448,6 +456,7 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
     carrierShell: mat(COL.carrier, { metalness: 0.5, roughness: 0.4, transparent: true, opacity: 0.42, depthWrite: false }),
     steel: mat(COL.steel, { metalness: 0.6, roughness: 0.35 }),
     tire: mat(COL.tire, { metalness: 0, roughness: 0.9 }),
+    lock: mat(COL.lock, { flatShading: true }),
     housing: mat('#8a96a3', { metalness: 0.2, roughness: 0.6, transparent: true, opacity: 0.14, depthWrite: false }),
   };
 
@@ -650,6 +659,29 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
   const leftSpin = sideShaft(1, M.left, pXpos);
   const rightSpin = sideShaft(-1, M.right, pXneg);
 
+  // Blocante: uma luva com dentes corre no semieixo direito e, travada, encaixa nos dentes da
+  // ponta da caixa. Presa a planetária direita à caixa, os satélites não giram e as rodas andam juntas.
+  const LUVA_SOLTA = -3.5, LUVA_TRAVADA = -2.87, DENTES = 6;
+  const luva = new THREE.Group();
+  luva.add(cylinder(0.6, -0.25, 0.25, 'x', M.lock, false, 32));
+  const dentesCaixa = new THREE.Group();
+  dentesCaixa.add(cylinder(0.62, -2.42, -2.38, 'x', M.lock, false, 32));
+  for (let i = 0; i < DENTES; i++) {
+    const a = i * 2 * Math.PI / DENTES;
+    const dl = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.22, 0.22), M.lock);
+    dl.position.set(0.35, 0.42 * Math.cos(a), 0.42 * Math.sin(a));
+    dl.rotation.x = a;
+    luva.add(dl);
+    const b = a + Math.PI / DENTES;
+    const dc = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.22, 0.22), M.lock);
+    dc.position.set(-2.5, 0.42 * Math.cos(b), 0.42 * Math.sin(b));
+    dc.rotation.x = b;
+    dentesCaixa.add(dc);
+  }
+  luva.position.x = LUVA_SOLTA;
+  rightSpin.add(luva);
+  carrier.add(dentesCaixa);
+
   // Só na apresentação: o eixo inteiriço, que gira com a coroa, e o eixo parado da carroça
   const eixoRigido = new THREE.Group();
   eixoRigido.add(cylinder(0.26, -(WHEEL_X - 0.5), WHEEL_X - 0.5, 'x', M.steel, false, 24));
@@ -713,6 +745,7 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
     { text: 'Eixo parado', color: '#9a6b43', at: V(4.6, 0.6, 0), peca: eixoCarroca },
     { text: 'O pneu escorrega', color: '#ffffff', at: V(WHEEL_X, GROUND_Y + 0.2, 2.6), alerta: true },
     { text: 'O pneu escorrega', color: '#ffffff', at: V(-WHEEL_X, GROUND_Y + 0.2, 2.6), alerta: true },
+    { text: 'Luva do blocante', color: COL.lock, pos: () => V(luva.position.x, 0.95, 0), peca: luva },
   ];
   let mostrarArrasto = false;
   for (const def of labelDefs) {
@@ -727,8 +760,10 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
   const tmp = new THREE.Vector3();
   function updateLabels(w, h) {
     for (const def of labelDefs) {
-      if (def.alerta ? !mostrarArrasto : def.peca && !def.peca.visible) { def.el.style.visibility = 'hidden'; continue; }
-      if (def.obj) def.obj.localToWorld(tmp.copy(def.local));
+      const arrasto = mostrarArrasto || (!tour.ativo && arrastoLivre);
+      if (def.alerta ? !arrasto : def.peca && !def.peca.visible) { def.el.style.visibility = 'hidden'; continue; }
+      if (def.pos) tmp.copy(def.pos());
+      else if (def.obj) def.obj.localToWorld(tmp.copy(def.local));
       else tmp.copy(def.at);
       tmp.project(camera);
       const visible = tmp.z < 1 && Math.abs(tmp.x) < 1.1 && Math.abs(tmp.y) < 1.1;
@@ -769,6 +804,13 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
   // aberto: o diferencial completo · rigido: rodas presas à coroa · solto: coroa sem satélites,
   // rodas paradas · carroca: rodas soltas, cada uma no ritmo da curva
   let modo = 'aberto';
+  let travado = false;      // blocante travado: as rodas giram juntas, como no eixo inteiriço
+  let luvaFase = 0;         // giro da luva no semieixo para os dentes caírem nos vãos da caixa
+  let arrastoLivre = false; // no modo livre, travado na curva: os pneus escorregam
+  function travar(v) {
+    travado = v;
+    if (v) { const passo = 2 * Math.PI / DENTES; luvaFase = -((beta - atraso) % passo); luva.rotation.x = luvaFase; }
+  }
 
   const $ = (id) => document.getElementById(id);
   const fmt0 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
@@ -786,7 +828,7 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
       const slip = d > 0 ? 'direita' : 'esquerda', grip = d > 0 ? 'esquerda' : 'direita';
       return [
         `Roda ${slip} no gelo: ela patina e a ${grip} fica parada.`,
-        `Sem resistência do lado ${slip}, os satélites rolam sobre a planetária ${grip} parada e jogam o dobro da rotação da coroa para a roda ${slip}. Como o diferencial aberto divide o torque por igual, a roda com aderência só recebe o pouco torque que a roda no gelo consegue segurar. Por isso o carro não sai do lugar.`,
+        `Sem resistência do lado ${slip}, os satélites rolam sobre a planetária ${grip} parada e jogam o dobro da rotação da coroa para a roda ${slip}. Como o diferencial aberto divide o torque por igual, a roda com aderência só recebe o pouco torque que a roda no gelo consegue segurar. Por isso o carro não sai do lugar. Marque “Travar o blocante” para ver a saída.`,
       ];
     }
     const outer = d > 0 ? 'direita' : 'esquerda', inner = d > 0 ? 'esquerda' : 'direita';
@@ -796,13 +838,28 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
     ];
   }
 
+  function explainTravado(cat) {
+    if (cat === 'reta') return [
+      'Blocante travado em linha reta: nada muda.',
+      'A luva prende o semieixo direito à caixa. Em linha reta as rodas já giravam juntas, então o diferencial travado se comporta igual ao aberto.',
+    ];
+    if (cat === 'gelo') return [
+      'Blocante travado com uma roda no gelo: o carro sai.',
+      'Com a planetária direita presa à caixa, os satélites não giram no pino e as duas rodas giram juntas, na rotação da coroa. A roda do gelo continua sem aguentar força, mas agora a outra pode receber toda a força que tem chão para segurar.',
+    ];
+    return [
+      'Blocante travado na curva: os pneus escorregam.',
+      'As rodas são obrigadas a girar juntas, como no eixo inteiriço, e a curva pede rotações diferentes. Por isso o blocante é para atoleiro e trilha, em baixa velocidade, e se destrava antes de voltar ao asfalto.',
+    ];
+  }
+
   function updateUI() {
     const d = state.d;
     const ring = state.rpm * SPEC.pinion / SPEC.ring;
     const ringR = Math.round(ring);
-    const leftR = Math.round(ring * (1 - d));
+    const leftR = travado ? ringR : Math.round(ring * (1 - d));
     const rightR = 2 * ringR - leftR;
-    const spider = Math.abs(ring * d) * SPEC.side / SPEC.spider;
+    const spider = travado ? 0 : Math.abs(ring * d) * SPEC.side / SPEC.spider;
     const cat = category(d);
 
     $('rpm-out').textContent = `${fmt0.format(state.rpm)} rpm`;
@@ -818,13 +875,17 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
     $('v-left').innerHTML = rpmHTML(leftR);
     $('v-right').innerHTML = rpmHTML(rightR);
     const pct = (n) => ring > 0 ? `${Math.min(100, Math.max(0, n / (2 * ring) * 100))}%` : '0%';
-    $('b-left').style.width = pct(ring * (1 - d));
-    $('b-right').style.width = pct(ring * (1 + d));
+    $('b-left').style.width = pct(travado ? ring : ring * (1 - d));
+    $('b-right').style.width = pct(travado ? ring : ring * (1 + d));
     $('eq').innerHTML =
       `n<sub>esq</sub> + n<sub>dir</sub> = 2 · n<sub>coroa</sub><br>` +
       `<b>${fmt0.format(leftR)}</b> + <b>${fmt0.format(rightR)}</b> = 2 × <b>${fmt0.format(ringR)}</b>`;
 
-    const [title, body] = explain(cat, d);
+    const [title, body] = travado ? explainTravado(cat) : explain(cat, d);
+    $('torque-txt').textContent = travado
+      ? 'Torque: travado, a roda que tem chão pode receber mais força que a outra. É isso que tira o carro do atoleiro.'
+      : 'Torque: cada roda recebe sempre metade do torque da coroa, em qualquer situação.';
+    arrastoLivre = travado && (cat === 'esq' || cat === 'dir');
     $('explain-title').textContent = title;
     $('explain').textContent = body;
 
@@ -856,6 +917,7 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
   $('tgl-carrier').addEventListener('change', (e) => { carrierParts.visible = e.target.checked; });
   $('tgl-housing').addEventListener('change', (e) => { housing.visible = e.target.checked; });
   $('tgl-labels').addEventListener('change', (e) => { labelsEl.hidden = !e.target.checked; });
+  $('tgl-blocante').addEventListener('change', (e) => { travar(e.target.checked); updateUI(); });
 
   state.rpm = Number($('rpm').value);
   state.d = Number($('diff').value) / 100;
@@ -876,6 +938,7 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
     semieixos: [leftSpin, rightSpin].flatMap((s) => [s.userData.partes.semieixo, s.userData.partes.stripe]),
     eixoRigido: [eixoRigido],
     eixoCarroca: [eixoCarroca],
+    blocante: [luva, dentesCaixa],
     carcaca: [housing],
   };
   const COMPLETO = ['cardan', 'coroa', 'caixa', 'satelites', 'planetarias', 'semieixos'];
@@ -939,13 +1002,22 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
         'O diferencial aberto divide a força por igual entre as duas rodas. Se uma delas está no gelo ou no barro, ela só aguenta uma força quase nula, e a outra recebe a mesma força quase nula.',
         'Os satélites rolam sobre a planetária parada, a roda solta gira no dobro da rotação da coroa e o carro não sai do lugar.',
       ],
-      problema: 'O diferencial aberto não consegue mandar mais força para a roda que tem chão. Para isso existem o blocante, que trava as duas rodas juntas quando o motorista pede, e o autoblocante, que limita sozinho a diferença entre elas.',
+      problema: 'O diferencial aberto não consegue mandar mais força para a roda que tem chão. Quando uma roda patina, é preciso fazer as duas voltarem a girar juntas, como no eixo inteiriço, só enquanto durar o atoleiro.',
     },
     {
-      titulo: 'O conjunto completo', modo: 'aberto', d: 0, pecas: [...COMPLETO, 'carcaca'], cam: 'geral',
+      titulo: 'O blocante', modo: 'aberto', d: 1, travado: 'depois', pecas: [...COMPLETO, 'blocante'], cam: 'blocante',
+      texto: [
+        'O blocante é a luva roxa que corre no semieixo direito, com dentes virados para a caixa de satélites. A caixa tem dentes iguais na ponta. Solta, a luva gira com o semieixo e o diferencial funciona como antes. Use o botão abaixo para soltar e travar.',
+        'Quando o motorista aciona o bloqueio, a luva desliza e encaixa nos dentes da caixa. Presa a planetária direita à caixa, os satélites não conseguem girar no pino, e as duas rodas giram juntas, na rotação da coroa. A roda do gelo continua sem segurar força, mas agora a outra recebe a força que o chão aguenta, e o carro sai.',
+        '<span class="nota">O autoblocante faz algo parecido sozinho, sem o motorista acionar: discos de atrito entre a planetária e a caixa deixam as rodas girarem diferente na curva, mas seguram parte da força quando uma delas patina.</span>',
+      ],
+      problema: 'Travado, o diferencial volta a ser o eixo inteiriço do passo 3, e na curva os pneus escorregam de novo. Por isso o blocante é para atoleiro e trilha, em baixa velocidade, e se destrava antes de voltar ao asfalto.',
+    },
+    {
+      titulo: 'O conjunto completo', modo: 'aberto', d: 0, pecas: [...COMPLETO, 'blocante', 'carcaca'], cam: 'geral',
       texto: [
         'No carro, tudo isso fica dentro da carcaça do eixo, banhado em óleo.',
-        'Agora é com você: saia da apresentação e mude a rotação, a curva e a aderência para ver cada peça trabalhar.',
+        'Agora é com você: saia da apresentação e mude a rotação, a curva e a aderência para ver cada peça trabalhar. Para testar o blocante, marque “Travar o blocante” na curva e no gelo.',
       ],
     },
   ];
@@ -955,6 +1027,7 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
     geral: [[11, 7.2, 13.5], [0, -0.3, 1.6]],
     coroa: [[8.5, 4.6, 11], [0, 0, 2.4]],
     caixa: [[-4.2, 3.4, -5.8], [0.3, 0, 0]],
+    blocante: [[-5.5, 4.5, -9.5], [-3.6, -0.4, 0.2]],
     cima: [[-1, 23, -19], [1.5, -2, 4]],
   };
   let voo = null;
@@ -1010,6 +1083,10 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
       L.push(linhaRo('var(--c-steel)', 'As duas rodas', rpmHTML(ringR), d ? `a curva pede ${fmt0.format(esq)} e ${fmt0.format(dir)}` : 'sempre juntas'));
     } else if (p.modo === 'solto') {
       L.push(linhaRo('var(--c-steel)', 'As duas rodas', rpmHTML(0), 'nada empurra as planetárias'));
+    } else if (travado) {
+      L.push(linhaRo('var(--c-spider)', 'Satélites', rpmHTML(0), 'parados: a luva travou a caixa'));
+      L.push(linhaRo('var(--c-left)', 'Roda esquerda', rpmHTML(ringR), 'tem chão: recebe a força'));
+      L.push(linhaRo('var(--c-right)', 'Roda direita', rpmHTML(ringR), 'no gelo'));
     } else {
       L.push(linhaRo('var(--c-spider)', 'Satélites', rpmHTML(Math.abs(ring * d) * SPEC.side / SPEC.spider), 'em torno do próprio pino'));
       L.push(linhaRo('var(--c-left)', 'Roda esquerda', rpmHTML(esq)));
@@ -1019,13 +1096,25 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
     return L.join('');
   }
 
-  const tour = { ativo: false, i: 0 };
+  const tour = { ativo: false, i: 0, timer: 0 };
+  function atualizarLeitura() {
+    const p = TOUR[tour.i];
+    updateUI();
+    $('tour-ro').innerHTML = leituraTour(p);
+    $('tour-acao').hidden = !p.travado;
+    $('tour-acao').textContent = travado ? 'Soltar a luva' : 'Travar a luva';
+  }
+  $('tour-acao').addEventListener('click', () => { clearTimeout(tour.timer); travar(!travado); atualizarLeitura(); });
   $('tour-dots').innerHTML = TOUR.map(() => '<i></i>').join('');
   function irPara(i) {
     tour.i = Math.max(0, Math.min(TOUR.length - 1, i));
     const p = TOUR[tour.i], ultimo = tour.i === TOUR.length - 1;
     if (p.modo !== 'solto') atraso = 0; // devolve as rodas ao passo da coroa, com os dentes engrenados
     modo = p.modo;
+    // no passo do blocante a luva chega solta e trava depois que a câmera chega, para se ver o encaixe
+    clearTimeout(tour.timer);
+    travar(p.travado === true);
+    if (p.travado === 'depois') tour.timer = setTimeout(() => { travar(true); atualizarLeitura(); }, reduceMotion ? 0 : 1600);
     state.d = p.d;
     $('diff').value = String(Math.round(p.d * 100));
     mostrarPecas(p.pecas);
@@ -1037,7 +1126,7 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
     $('tour-step').textContent = `Passo ${tour.i + 1} de ${TOUR.length}`;
     $('tour-title').textContent = p.titulo;
     $('tour-text').innerHTML = p.texto.map((t) => `<p>${t}</p>`).join('');
-    $('tour-ro').innerHTML = leituraTour(p);
+    atualizarLeitura();
     $('tour-problema').hidden = !p.problema;
     $('tour-problema-txt').textContent = p.problema || '';
     $('tour-dots').querySelectorAll('i').forEach((el, k) => el.classList.toggle('on', k <= tour.i));
@@ -1058,13 +1147,15 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
   }
   function sairTour() {
     tour.ativo = false;
+    clearTimeout(tour.timer);
     document.body.classList.remove('touring');
     $('tour').hidden = true;
     $('tour-bar').hidden = true;
     modo = 'aberto';
     atraso = 0;
+    travar($('tgl-blocante').checked);
     mostrarArrasto = false;
-    mostrarPecas(COMPLETO);
+    mostrarPecas([...COMPLETO, 'blocante']);
     carrierParts.visible = $('tgl-carrier').checked;
     housing.visible = $('tgl-housing').checked;
     labelsEl.hidden = !$('tgl-labels').checked;
@@ -1096,7 +1187,7 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
       const wPinion = state.rpm / 60 * 2 * Math.PI * SLOW * Math.sign(kRing);
       const wRing = kRing * wPinion; // positivo: rodas giram para a frente (+Z)
       ringAngle += wRing * dt;
-      if (modo === 'aberto' || modo === 'carroca') beta += state.d * wRing * dt;
+      if ((modo === 'aberto' && !travado) || modo === 'carroca') beta += state.d * wRing * dt;
       if (modo === 'solto') atraso += wRing * dt;
     }
     carrier.rotation.x = ringAngle;
@@ -1105,6 +1196,7 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
     leftSpin.rotation.x = ringAngle - atraso - beta;
     // os satélites engrenam na planetária de +X, que é a esquerda: ela atrasa beta
     for (const s of spiders) s.spin.rotation.z = -s.k * beta;
+    luva.position.x += ((travado ? LUVA_TRAVADA : LUVA_SOLTA) - luva.position.x) * Math.min(1, dt * 6);
     if (voo) {
       voo.k = Math.min(1, voo.k + dt / 1.2);
       const e = voo.k < 0.5 ? 2 * voo.k * voo.k : 1 - Math.pow(-2 * voo.k + 2, 2) / 2;
