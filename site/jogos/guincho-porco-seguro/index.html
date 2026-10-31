@@ -312,7 +312,7 @@ body{background:var(--fundo);color:var(--texto);font-family:var(--f-ui);overflow
       <div class="cartao-corpo">
         <button class="botao" id="btnContinuar" type="button">Continuar turno</button>
         <button class="botao secundario" id="btnGraficosPausa" type="button"><span class="rotulo-graficos">Gráficos: alto</span></button>
-        <p class="nota-graficos">No modo leve as sombras ficam desenhadas no chão e a imagem usa menos pixels. Use se o jogo estiver travando.</p>
+        <p class="nota-graficos">No modo leve as sombras ficam desenhadas no chão e a imagem usa menos pixels. O jogo passa para ele sozinho quando percebe que está travando; escolhendo aqui, vale a sua escolha.</p>
       </div>
     </div>
   </div>
@@ -551,6 +551,21 @@ class Montador {
     g.computeBoundingSphere();
     return g;
   }
+  // a mesma geometria repartida em quadrados de `lado` metros; peça a peça, a câmera e a
+  // sombra deixam de desenhar o que está fora da vista em vez de desenhar a cidade inteira
+  pedacos(lado){
+    const celulas = new Map();
+    for (let t = 0; t < this.p.length / 9; t++){
+      const i = t*9, cx = (this.p[i] + this.p[i+3] + this.p[i+6])/3, cz = (this.p[i+2] + this.p[i+5] + this.p[i+8])/3;
+      const k = Math.floor(cx/lado) + ',' + Math.floor(cz/lado);
+      let m = celulas.get(k); if (!m){ m = new Montador(); celulas.set(k, m); }
+      for (let v = t*3; v < t*3 + 3; v++){
+        m.p.push(this.p[v*3], this.p[v*3+1], this.p[v*3+2]); m.n.push(this.n[v*3], this.n[v*3+1], this.n[v*3+2]);
+        m.c.push(this.c[v*3], this.c[v*3+1], this.c[v*3+2]); m.u.push(this.u[v*2], this.u[v*2+1]);
+      }
+    }
+    return [...celulas.values()].map(m => m.construir());
+  }
 }
 const GBOX = new T.BoxGeometry(1, 1, 1);
 const GCIL = new T.CylinderGeometry(1, 1, 1, 12);
@@ -763,23 +778,54 @@ const ceu = new T.Mesh(new T.SphereGeometry(1500, 24, 12), new T.ShaderMaterial(
 }));
 ceu.renderOrder = -10; ceu.frustumCulled = false; cena.add(ceu);
 
-// qualidade: alto tem sombras reais; leve usa as sombras desenhadas no chão e menos pixels
-let qualidade = 'alto';
-try { if (localStorage.getItem('porcoSeguro.graficos') === 'leve') qualidade = 'leve'; } catch (e){}
+// qualidade: alto tem sombras reais; leve usa as sombras desenhadas no chão e menos pixels.
+// Sem escolha do jogador, o jogo passa sozinho para o leve quando a placa de vídeo não dá conta
+// (a sombra real custa metade do quadro numa placa integrada) e guarda isso para a próxima vez.
+let qualidade = 'alto', escolhaManual = false;
+try {
+  const g = localStorage.getItem('porcoSeguro.graficos');
+  if (g){ escolhaManual = true; qualidade = g === 'leve' ? 'leve' : 'alto'; }
+  else if (localStorage.getItem('porcoSeguro.graficosAuto') === 'leve') qualidade = 'leve';
+} catch (e){}
+// fração da resolução em uso; desce quando o jogo fica abaixo de FPS_MINIMO
+const desempenho = { escala: 1, t: 0, n: 0 };
+const FPS_MINIMO = 48, ESCALA_MINIMA = 0.6;
+function aplicarResolucao(){
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, qualidade === 'alto' ? 2 : 1.25) * desempenho.escala);
+  tamanhoTela();
+}
+function medirDesempenho(seg){
+  // só conta o turno rodando; a troca de aba ou uma pausa longa não entram na conta
+  if (estado.fase !== 'jogando' || estado.pausado || seg > 0.25){ desempenho.t = desempenho.n = 0; return; }
+  desempenho.t += seg; desempenho.n++;
+  if (desempenho.t < 2.5) return;
+  const fps = desempenho.n / desempenho.t;
+  desempenho.t = desempenho.n = 0;
+  if (fps >= FPS_MINIMO) return;
+  if (qualidade === 'alto' && !escolhaManual){
+    qualidade = 'leve';
+    try { localStorage.setItem('porcoSeguro.graficosAuto', 'leve'); } catch (e){}
+    aplicarQualidade();
+    aviso('Gráficos leves, para rodar liso', 'amarelo', 2.2);
+  } else if (desempenho.escala > ESCALA_MINIMA){
+    desempenho.escala = Math.max(ESCALA_MINIMA, desempenho.escala - 0.1);
+    aplicarResolucao();
+  }
+}
 function aplicarQualidade(){
   const alto = qualidade === 'alto';
   renderer.shadowMap.enabled = alto; sol.castShadow = alto;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, alto ? 2 : 1.25));
+  aplicarResolucao();
   cena.traverse(o => {
     if (o.userData.sombraFalsa) o.visible = !alto;
     const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
     for (const m of mats) m.needsUpdate = true;
   });
-  tamanhoTela();
   document.querySelectorAll('.rotulo-graficos').forEach(el => { el.textContent = alto ? 'Gráficos: alto' : 'Gráficos: leve'; });
 }
 function alternarQualidade(){
   qualidade = qualidade === 'alto' ? 'leve' : 'alto';
+  escolhaManual = true; desempenho.escala = 1;
   try { localStorage.setItem('porcoSeguro.graficos', qualidade); } catch (e){}
   aplicarQualidade();
 }
@@ -1250,11 +1296,13 @@ function construirCidade(){
   }
 
   const add = (m, mat, op = {}) => {
-    const mesh = new T.Mesh(m.construir(), mat);
-    if (op.ro) mesh.renderOrder = op.ro;
-    mesh.castShadow = !!op.cast; mesh.receiveShadow = !op.falsa;
-    if (op.falsa){ mesh.userData.sombraFalsa = true; mesh.visible = qualidade === 'leve'; }
-    cena.add(mesh); return mesh;
+    for (const geo of m.pedacos(PITCH)){
+      const mesh = new T.Mesh(geo, mat);
+      if (op.ro) mesh.renderOrder = op.ro;
+      mesh.castShadow = !!op.cast; mesh.receiveShadow = !op.falsa;
+      if (op.falsa){ mesh.userData.sombraFalsa = true; mesh.visible = qualidade === 'leve'; }
+      cena.add(mesh);
+    }
   };
   add(mL, MAT.cor); add(mG, MAT.grama); add(mC, MAT.calcada); add(mM, MAT.cor); add(mS, MAT.sombraPredio, { ro: 1, falsa: true });
   add(mP, MAT.paredes, { cast: true }); add(mLo, MAT.lojas, { cast: true }); add(mLj, MAT.lajes, { cast: true }); add(mTl, MAT.telhas, { cast: true });
@@ -2746,8 +2794,9 @@ function atualizarJogo(dt, t){
 let ultimo = performance.now(), tempoTotal = 0;
 function quadro(agora){
   requestAnimationFrame(quadro);
-  const dt = Math.min(0.05, (agora - ultimo)/1000); ultimo = agora;
+  const seg = (agora - ultimo)/1000, dt = Math.min(0.05, seg); ultimo = agora;
   if (estado.fase === 'carregando') return;
+  medirDesempenho(seg);
   const rodando = !(estado.fase === 'jogando' && estado.pausado);
   if (rodando){
     tempoTotal += dt;
