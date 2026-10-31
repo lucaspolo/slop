@@ -62,7 +62,7 @@ Todo projeto tem um desenho em `site/img/<projeto>.svg` que mostra o que o proje
 
 ### Páginas trazidas de artefatos do Claude
 
-Alguns projetos nasceram como artefato no claude.ai e vieram para cá como página própria (os geradores, o Porquinhos do Roli e o Diferencial Aberto). Na vinda:
+Alguns projetos nasceram como artefato no claude.ai e vieram para cá como página própria (os geradores, o Porquinhos do Roli, o Guincho Porco Seguro e o Diferencial Aberto). Na vinda:
 
 - Troque o cabeçalho que o claude.ai injeta por um `<head>` de verdade, com `lang="pt-BR"`, título `<nome> · slop`, descrição e favicon, e acrescente `[hidden] { display: none !important; }`, que vinha desse cabeçalho.
 - Tire tudo o que usa `window.claude` (salvar no banco do artefato, `downloads`, `hot`) e os textos que mandam falar com o Claude. Progresso fica no `localStorage`; arquivo sai por link `blob:`.
