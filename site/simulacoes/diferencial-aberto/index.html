@@ -227,6 +227,35 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
   .bar i { transition: none; }
 }
 .crumbs { margin: 0 0 14px; font: 12px/1.3 var(--font-mono); color: var(--muted); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+
+/* apresentação: o painel vira o roteiro e o palco ganha uma barra de passos */
+.tour-start { width: 100%; margin-top: 16px; }
+.tour { display: grid; gap: 14px; }
+.tour-dots { display: flex; gap: 4px; }
+.tour-dots i { flex: 1; height: 4px; border-radius: 2px; background: var(--line); }
+.tour-dots i.on { background: var(--accent); }
+.tour-step { margin: 0; font: 500 11px/1.2 var(--font-mono); text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+.tour-title { margin: 0; font: 700 30px/0.95 var(--font-display); text-transform: uppercase; letter-spacing: 0.01em; color: var(--fg); text-wrap: balance; }
+.tour-text p { margin: 0 0 10px; max-width: 62ch; }
+.tour-text p:last-child { margin-bottom: 0; }
+.tour-text .nota { color: var(--muted); font-size: 13px; }
+.tour .eq { margin-top: 0; }
+.tour-problema { border-left: 3px solid var(--accent); background: var(--raised); border-radius: 0 6px 6px 0; padding: 10px 12px; }
+.tour-problema p { margin: 0; max-width: 62ch; }
+.tour-problema-rotulo { margin-bottom: 4px !important; font: 600 11px/1.2 var(--font-mono); text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); }
+.tour-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tour-exit { justify-self: start; background: none; border: 0; padding: 2px 0; color: var(--muted); font: 13px var(--font-body); text-decoration: underline; cursor: pointer; }
+.tour-exit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tour-bar {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 6px; max-width: calc(100% - 28px);
+  background: var(--glass); border: 1px solid var(--line); border-radius: 999px; padding: 4px;
+}
+.tour-bar span { min-width: 0; padding: 0 6px; font: 500 12px/1.2 var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tour-bar .btn { padding: 5px 12px; border-radius: 999px; }
+.touring .panel > section:not(.tour), .touring .intro, .touring .tour-start, .touring .hint { display: none; }
+.lbl.alerta { color: #fff; background: #c8432b; border-color: #c8432b; }
 .crumbs a { color: var(--accent); }
 [hidden] { display: none !important; }
 </style>
@@ -241,6 +270,11 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
     <button class="btn" id="reset-view" type="button">Recentrar</button>
     <span class="chip">Câmera lenta 40×</span>
   </div>
+  <div class="tour-bar" id="tour-bar" hidden>
+    <button class="btn" id="tour-bar-prev" type="button" aria-label="Passo anterior">‹</button>
+    <span id="tour-bar-label"></span>
+    <button class="btn" id="tour-bar-next" type="button" aria-label="Próximo passo">›</button>
+  </div>
 </main>
 
 <aside class="panel">
@@ -249,7 +283,25 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
     <p class="eyebrow">Eixo traseiro · simulação em three.js</p>
     <h1>Diferencial aberto</h1>
     <p class="intro">O cardã gira o pinhão, o pinhão gira a coroa e a coroa leva junto a caixa de satélites. Dentro da caixa, os satélites deixam cada roda girar numa velocidade diferente, sempre com a média igual à rotação da coroa.</p>
+    <button class="btn primary tour-start" id="tour-start" type="button">Apresentação: por que cada peça existe</button>
   </header>
+
+  <section class="tour" id="tour" hidden aria-live="polite">
+    <div class="tour-dots" id="tour-dots" aria-hidden="true"></div>
+    <p class="tour-step" id="tour-step"></p>
+    <h2 class="tour-title" id="tour-title"></h2>
+    <div class="tour-text" id="tour-text"></div>
+    <div class="ro" id="tour-ro"></div>
+    <div class="tour-problema" id="tour-problema">
+      <p class="tour-problema-rotulo">O problema</p>
+      <p id="tour-problema-txt"></p>
+    </div>
+    <div class="tour-nav">
+      <button class="btn" id="tour-prev" type="button">← Anterior</button>
+      <button class="btn primary" id="tour-next" type="button">Próximo →</button>
+    </div>
+    <button class="tour-exit" id="tour-exit" type="button">Sair da apresentação</button>
+  </section>
 
   <section>
     <h2>Situação</h2>
@@ -480,9 +532,10 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
   const A_SIDE = 1.3, F_SIDE = 0.45;
 
   const pRingPinion = X.clone().multiplyScalar(Math.cos(gRing)).add(Z.clone().multiplyScalar(Math.cos(gPin)));
-  const pRight = X.clone().multiplyScalar(Math.cos(gSide)).add(Z.clone().multiplyScalar(Math.cos(gSpider)));
-  const pLeft = X.clone().multiplyScalar(-Math.cos(gSide)).add(Z.clone().multiplyScalar(Math.cos(gSpider)));
-  const pRightLower = X.clone().multiplyScalar(Math.cos(gSide)).add(Z.clone().multiplyScalar(-Math.cos(gSpider)));
+  // contatos dos satélites com a planetária de +X (em cima e embaixo) e com a de −X
+  const pXpos = X.clone().multiplyScalar(Math.cos(gSide)).add(Z.clone().multiplyScalar(Math.cos(gSpider)));
+  const pXneg = X.clone().multiplyScalar(-Math.cos(gSide)).add(Z.clone().multiplyScalar(Math.cos(gSpider)));
+  const pXposLower = X.clone().multiplyScalar(Math.cos(gSide)).add(Z.clone().multiplyScalar(-Math.cos(gSpider)));
 
   // Pinhão + cardã
   const pinionSpin = new THREE.Group();
@@ -508,10 +561,11 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
   // Caixa de satélites (gira com a coroa)
   const carrier = new THREE.Group();
   scene.add(carrier);
-  carrier.add(bevelGear({
+  const ringGear = bevelGear({
     N: SPEC.ring, gamma: gRing, A: A_RING, F: F_RING, hubR: 2.05, back: 0.35,
     material: M.ring, q: qTo(X), contact: pRingPinion, toothAtContact: false,
-  }));
+  });
+  carrier.add(ringGear);
   const carrierParts = new THREE.Group();
   carrier.add(carrierParts);
   const flange = new THREE.Mesh(new THREE.LatheGeometry(
@@ -534,10 +588,11 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
   }
   carrierParts.add(cylinder(0.62, 1.45, 2.4, 'x', M.carrierSolid, true));
   carrierParts.add(cylinder(0.62, -2.4, -1.45, 'x', M.carrierSolid, true));
-  carrier.add(cylinder(0.14, -1.8, 1.8, 'z', M.steel, false, 20));
+  const pino = cylinder(0.14, -1.8, 1.8, 'z', M.steel, false, 20);
+  carrier.add(pino);
 
   const spiders = [];
-  for (const [dir, contact] of [[Z, pRight], [Z.clone().negate(), pRightLower]]) {
+  for (const [dir, contact] of [[Z, pXpos], [Z.clone().negate(), pXposLower]]) {
     const spin = new THREE.Group();
     const gear = bevelGear({
       N: SPEC.spider, gamma: gSpider, A: A_SIDE, F: F_SIDE, hubR: 0.15, back: 0.18,
@@ -582,17 +637,28 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
       N: SPEC.side, gamma: gSide, A: A_SIDE, F: F_SIDE, hubR: 0.3, back: 0.25,
       material, q: qTo(X.clone().multiplyScalar(sign)), contact, toothAtContact: true,
     });
-    spin.add(gear);
-    spin.add(cylinder(0.42, sign * gear.userData.backY, sign * 1.95, 'x', material));
-    spin.add(cylinder(0.22, sign * 1.9, sign * (WHEEL_X - 0.5), 'x', M.steel, false, 24));
+    const cubo = cylinder(0.42, sign * gear.userData.backY, sign * 1.95, 'x', material);
+    const semieixo = cylinder(0.22, sign * 1.9, sign * (WHEEL_X - 0.5), 'x', M.steel, false, 24);
     const stripe = new THREE.Mesh(new THREE.BoxGeometry(WHEEL_X - 2.6, 0.05, 0.12), material);
     stripe.position.set(sign * (WHEEL_X + 1.6) / 2, 0.22, 0);
-    spin.add(stripe);
+    spin.add(gear, cubo, semieixo, stripe);
     spin.add(makeWheel(sign, material));
+    spin.userData.partes = { gear, cubo, semieixo, stripe };
     return spin;
   }
-  const leftSpin = sideShaft(-1, M.left, pLeft);
-  const rightSpin = sideShaft(1, M.right, pRight);
+  // O carro anda para +Z (o cardã vai para a frente, até o motor), então a esquerda dele fica em +X.
+  const leftSpin = sideShaft(1, M.left, pXpos);
+  const rightSpin = sideShaft(-1, M.right, pXneg);
+
+  // Só na apresentação: o eixo inteiriço, que gira com a coroa, e o eixo parado da carroça
+  const eixoRigido = new THREE.Group();
+  eixoRigido.add(cylinder(0.26, -(WHEEL_X - 0.5), WHEEL_X - 0.5, 'x', M.steel, false, 24));
+  eixoRigido.add(cylinder(2.08, 0.85, 1.15, 'x', M.steel, false, 48));
+  eixoRigido.visible = false;
+  carrier.add(eixoRigido);
+  const eixoCarroca = cylinder(0.3, -(WHEEL_X + 0.9), WHEEL_X + 0.9, 'x', mat('#9a6b43', { metalness: 0, roughness: 0.85 }), false, 24);
+  eixoCarroca.visible = false;
+  scene.add(eixoCarroca);
 
   // Carcaça do eixo (fixa)
   const housing = new THREE.Group();
@@ -634,19 +700,24 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
   // ---------- rótulos ----------
   const labelsEl = document.getElementById('labels');
   const labelDefs = [
-    { text: 'Pinhão', color: COL.pinion, at: V(0, 1.25, 2.7) },
-    { text: 'Cardã', color: COL.pinion, at: V(0, 0.95, 10) },
-    { text: 'Coroa', color: COL.ring, at: V(1.1, 3.35, 0) },
-    { text: 'Caixa de satélites', color: COL.carrier, at: V(-0.3, -2.0, 0.6) },
-    { text: 'Satélite', color: COL.spider, obj: spiders[0].gear, local: V(0, 1.5, 0) },
-    { text: 'Planetária esq.', color: COL.left, at: V(-0.9, 1.35, 0) },
-    { text: 'Planetária dir.', color: COL.right, at: V(0.9, 1.35, 0) },
-    { text: 'Semieixo esq.', color: COL.left, at: V(-4.6, 0.45, 0) },
-    { text: 'Semieixo dir.', color: COL.right, at: V(4.6, 0.45, 0) },
+    { text: 'Pinhão', color: COL.pinion, at: V(0, 1.25, 2.7), peca: pinionSpin },
+    { text: 'Cardã', color: COL.pinion, at: V(0, 0.95, 10), peca: pinionSpin },
+    { text: 'Coroa', color: COL.ring, at: V(1.1, 3.35, 0), peca: ringGear },
+    { text: 'Caixa de satélites', color: COL.carrier, at: V(-0.3, -2.0, 0.6), peca: carrierParts },
+    { text: 'Satélite', color: COL.spider, obj: spiders[0].gear, local: V(0, 1.5, 0), peca: spiders[0].spin },
+    { text: 'Planetária esq.', color: COL.left, at: V(0.9, 1.35, 0), peca: leftSpin.userData.partes.gear },
+    { text: 'Planetária dir.', color: COL.right, at: V(-0.9, 1.35, 0), peca: rightSpin.userData.partes.gear },
+    { text: 'Semieixo esq.', color: COL.left, at: V(4.6, 0.45, 0), peca: leftSpin.userData.partes.semieixo },
+    { text: 'Semieixo dir.', color: COL.right, at: V(-4.6, 0.45, 0), peca: rightSpin.userData.partes.semieixo },
+    { text: 'Eixo inteiriço', color: COL.steel, at: V(4.6, 0.55, 0), peca: eixoRigido },
+    { text: 'Eixo parado', color: '#9a6b43', at: V(4.6, 0.6, 0), peca: eixoCarroca },
+    { text: 'O pneu escorrega', color: '#ffffff', at: V(WHEEL_X, GROUND_Y + 0.2, 2.6), alerta: true },
+    { text: 'O pneu escorrega', color: '#ffffff', at: V(-WHEEL_X, GROUND_Y + 0.2, 2.6), alerta: true },
   ];
+  let mostrarArrasto = false;
   for (const def of labelDefs) {
     const el = document.createElement('span');
-    el.className = 'lbl';
+    el.className = def.alerta ? 'lbl alerta' : 'lbl';
     const dot = document.createElement('i');
     dot.style.background = def.color;
     el.append(dot, def.text);
@@ -656,6 +727,7 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
   const tmp = new THREE.Vector3();
   function updateLabels(w, h) {
     for (const def of labelDefs) {
+      if (def.alerta ? !mostrarArrasto : def.peca && !def.peca.visible) { def.el.style.visibility = 'hidden'; continue; }
       if (def.obj) def.obj.localToWorld(tmp.copy(def.local));
       else tmp.copy(def.at);
       tmp.project(camera);
@@ -693,6 +765,10 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
   const kRing = ratio(Z, X, pRingPinion); // ω_coroa / ω_pinhão (negativo: sentidos opostos)
   let ringAngle = 0;  // ângulo da coroa/caixa em torno de X
   let beta = 0;       // quanto a roda direita adiantou em relação à coroa (a esquerda atrasa o mesmo)
+  let atraso = 0;     // quanto as duas rodas ficaram para trás da coroa enquanto ela girava em falso
+  // aberto: o diferencial completo · rigido: rodas presas à coroa · solto: coroa sem satélites,
+  // rodas paradas · carroca: rodas soltas, cada uma no ritmo da curva
+  let modo = 'aberto';
 
   const $ = (id) => document.getElementById(id);
   const fmt0 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
@@ -756,7 +832,7 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
       b.setAttribute('aria-pressed', String(b.dataset.cat === cat));
     }
     ice.visible = cat === 'gelo';
-    ice.position.x = d > 0 ? WHEEL_X : -WHEEL_X;
+    ice.position.x = d > 0 ? -WHEEL_X : WHEEL_X;
   }
 
   const playIcon = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>';
@@ -789,6 +865,229 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
   updateUI();
   updatePlay();
 
+  // ---------- apresentação ----------
+  // Monta o diferencial peça por peça, na ordem em que cada uma resolve o problema da anterior.
+  const PECAS = {
+    cardan: [pinionSpin],
+    coroa: [ringGear],
+    caixa: [carrierParts],
+    satelites: [pino, ...spiders.map((s) => s.spin)],
+    planetarias: [leftSpin, rightSpin].flatMap((s) => [s.userData.partes.gear, s.userData.partes.cubo]),
+    semieixos: [leftSpin, rightSpin].flatMap((s) => [s.userData.partes.semieixo, s.userData.partes.stripe]),
+    eixoRigido: [eixoRigido],
+    eixoCarroca: [eixoCarroca],
+    carcaca: [housing],
+  };
+  const COMPLETO = ['cardan', 'coroa', 'caixa', 'satelites', 'planetarias', 'semieixos'];
+  function mostrarPecas(lista) {
+    for (const [nome, objs] of Object.entries(PECAS)) for (const o of objs) o.visible = lista.includes(nome);
+  }
+
+  const TOUR = [
+    {
+      titulo: 'Rodas soltas', modo: 'carroca', d: 0.25, pecas: ['eixoCarroca'], cam: 'cima', trilhas: true,
+      texto: [
+        'Numa carroça, quem puxa é o cavalo. As rodas giram soltas num eixo parado, e cada uma gira o quanto o chão pede.',
+        'Na curva, a roda de fora percorre um arco maior que a de dentro. Nesta curva de 3,2 m de raio, com as rodas a 1,6 m uma da outra, a de fora anda 4 m para cada 2,4 m da de dentro, e por isso gira 67% mais rápido.',
+      ],
+      problema: 'Rodas soltas não levam ninguém a lugar nenhum: num carro, é o motor que tem de girar as rodas. Como levar o giro do motor até elas?',
+    },
+    {
+      titulo: 'Virar o giro em 90°', modo: 'rigido', d: 0, pecas: ['cardan', 'coroa', 'eixoRigido'], cam: 'coroa',
+      texto: [
+        'Com motor na frente e tração atrás, o motor gira um eixo comprido que corre ao longo do carro: o cardã. Só que as rodas giram atravessadas. Na ponta do cardã, uma engrenagem pequena, o pinhão, encosta numa grande, a coroa, e vira o giro em 90°.',
+        'A coroa tem 41 dentes e o pinhão 11: o cardã dá 3,73 voltas para cada volta da coroa. As rodas giram mais devagar que o cardã e recebem 3,73 vezes mais força, como numa marcha reduzida.',
+      ],
+      problema: 'A coroa está presa num eixo inteiriço, que vai de uma roda à outra, então as duas rodas giram sempre juntas. Em linha reta, tudo bem. E na curva?',
+    },
+    {
+      titulo: 'Eixo rígido na curva', modo: 'rigido', d: 0.25, pecas: ['cardan', 'coroa', 'eixoRigido'], cam: 'cima', trilhas: true, arrasto: true,
+      texto: [
+        'Presas no mesmo eixo, as duas rodas giram sempre juntas, na rotação da coroa. Na curva, a de fora precisaria girar mais e a de dentro menos, e o eixo não deixa.',
+        'Os pneus escorregam no chão: gastam, cantam e fazem o carro resistir a virar, e o esforço todo vai para o eixo. O kart convive com isso porque o chassi flexiona e levanta a roda de dentro na curva. Num carro, não dá.',
+      ],
+      problema: 'As rodas precisam girar em ritmos diferentes sem deixar de receber o giro do motor. E se o eixo fosse cortado ao meio?',
+    },
+    {
+      titulo: 'Cortar o eixo ao meio', modo: 'solto', d: 0, pecas: ['cardan', 'coroa', 'caixa', 'planetarias', 'semieixos'], cam: 'caixa',
+      texto: [
+        'A saída é separar as rodas. Cada uma ganha o seu semieixo, com uma engrenagem na ponta de dentro: a planetária. A coroa passa a carregar uma caixa que envolve as duas planetárias.',
+        'Repare na cena: a coroa e a caixa giram, e as rodas continuam paradas.',
+      ],
+      problema: 'Nada liga a caixa às planetárias, então a coroa gira em falso. Falta uma peça que empurre as duas rodas e ainda deixe uma girar diferente da outra.',
+    },
+    {
+      titulo: 'Os satélites', modo: 'aberto', d: 0, pecas: COMPLETO, cam: 'caixa',
+      texto: [
+        'Dentro da caixa entra um pino atravessado, com duas engrenagens pequenas, os satélites, engrenadas nas duas planetárias ao mesmo tempo. A caixa gira e leva o pino junto.',
+        'Em linha reta, os satélites não giram em volta do pino: funcionam como uma trava e empurram as duas planetárias por igual. O conjunto gira como se fosse o eixo inteiriço.',
+        '<span class="nota">O francês Onésiphore Pecqueur patenteou esse arranjo em 1827, para um carro a vapor.</span>',
+      ],
+      problema: 'Em linha reta, funciona como o eixo inteiriço. Mas o diferencial só existe por causa da curva: o que os satélites fazem quando uma roda precisa girar mais que a outra?',
+    },
+    {
+      titulo: 'Na curva, os satélites giram', modo: 'aberto', d: 0.25, pecas: COMPLETO, cam: 'cima', trilhas: true, conta: true,
+      texto: [
+        'Quando a roda de fora precisa girar mais, os satélites começam a girar no próprio pino. A planetária de fora adianta e a de dentro atrasa, sempre na mesma medida.',
+        'A soma das duas rodas continua igual ao dobro da rotação da coroa. Cada roda gira o quanto a curva pede, e nenhum pneu escorrega.',
+      ],
+      problema: 'Os satélites deixam uma roda girar mais que a outra sempre que ela encontra menos resistência, não só na curva. E se uma roda perde a aderência?',
+    },
+    {
+      titulo: 'O ponto fraco', modo: 'aberto', d: 1, pecas: COMPLETO, cam: 'geral',
+      texto: [
+        'O diferencial aberto divide a força por igual entre as duas rodas. Se uma delas está no gelo ou no barro, ela só aguenta uma força quase nula, e a outra recebe a mesma força quase nula.',
+        'Os satélites rolam sobre a planetária parada, a roda solta gira no dobro da rotação da coroa e o carro não sai do lugar.',
+      ],
+      problema: 'O diferencial aberto não consegue mandar mais força para a roda que tem chão. Para isso existem o blocante, que trava as duas rodas juntas quando o motorista pede, e o autoblocante, que limita sozinho a diferença entre elas.',
+    },
+    {
+      titulo: 'O conjunto completo', modo: 'aberto', d: 0, pecas: [...COMPLETO, 'carcaca'], cam: 'geral',
+      texto: [
+        'No carro, tudo isso fica dentro da carcaça do eixo, banhado em óleo.',
+        'Agora é com você: saia da apresentação e mude a rotação, a curva e a aderência para ver cada peça trabalhar.',
+      ],
+    },
+  ];
+
+  // câmeras de cada passo: [posição, alvo]. As de trás deixam a roda esquerda à esquerda da tela.
+  const CAMS = {
+    geral: [[11, 7.2, 13.5], [0, -0.3, 1.6]],
+    coroa: [[8.5, 4.6, 11], [0, 0, 2.4]],
+    caixa: [[-4.2, 3.4, -5.8], [0.3, 0, 0]],
+    cima: [[-1, 23, -19], [1.5, -2, 4]],
+  };
+  let voo = null;
+  controls.addEventListener('start', () => { voo = null; });
+  function voarPara(nome) {
+    const [p, t] = CAMS[nome];
+    const far = stageW / stageH < 1.1 ? 1.45 : 1;
+    const alvo = V(...t), pos = V(...p).sub(alvo).multiplyScalar(far).add(alvo);
+    if (reduceMotion) { voo = null; camera.position.copy(pos); controls.target.copy(alvo); controls.update(); return; }
+    voo = { p0: camera.position.clone(), t0: controls.target.clone(), p1: pos, t1: alvo, k: 0 };
+  }
+
+  // o caminho de cada roda no chão, durante a curva
+  const trilhas = new THREE.Group();
+  scene.add(trilhas);
+  const matTrilha = (cor) => new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide });
+  const M_TRILHA = { esq: matTrilha(COL.left), dir: matTrilha(COL.right) };
+  function montarTrilhas(d) {
+    for (const c of [...trilhas.children]) { trilhas.remove(c); c.geometry.dispose(); }
+    if (!d || Math.abs(d) >= 1) return;
+    const porMetro = WHEEL_X / (TRACK_M / 2);
+    const lado = Math.sign(d), R = TRACK_M / (2 * Math.abs(d)) * porMetro, cx = lado * R;
+    const y = GROUND_Y + 0.03, meia = 0.16, passos = 48, a0 = -0.25, a1 = 0.6;
+    for (const [x, m] of [[WHEEL_X, M_TRILHA.esq], [-WHEEL_X, M_TRILHA.dir]]) {
+      const r = Math.abs(cx - x), pos = [];
+      const ponto = (rr, a) => [cx - lado * rr * Math.cos(a), y, rr * Math.sin(a)];
+      for (let i = 0; i < passos; i++) {
+        const a = a0 + (a1 - a0) * i / passos, b = a0 + (a1 - a0) * (i + 1) / passos;
+        const p1 = ponto(r - meia, a), p2 = ponto(r + meia, a), p3 = ponto(r + meia, b), p4 = ponto(r - meia, b);
+        pos.push(...p1, ...p2, ...p3, ...p1, ...p3, ...p4);
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      trilhas.add(new THREE.Mesh(g, m));
+    }
+  }
+
+  function linhaRo(cor, nome, valor, nota) {
+    return `<div class="row"><i class="dot" style="background: ${cor}"></i><div class="name">${nome}${nota ? `<small>${nota}</small>` : ''}</div><div class="val">${valor}</div></div>`;
+  }
+  function leituraTour(p) {
+    const ring = state.rpm * SPEC.pinion / SPEC.ring, ringR = Math.round(ring), d = state.d;
+    const esq = Math.round(ring * (1 - d)), dir = 2 * ringR - esq;
+    const L = [];
+    if (p.modo === 'carroca') {
+      L.push(linhaRo('var(--c-left)', 'Roda esquerda', rpmHTML(esq), 'por dentro da curva'));
+      L.push(linhaRo('var(--c-right)', 'Roda direita', rpmHTML(dir), 'por fora da curva'));
+      return L.join('');
+    }
+    L.push(linhaRo('var(--c-pinion)', 'Cardã e pinhão', rpmHTML(state.rpm)));
+    L.push(linhaRo('var(--c-ring)', p.modo === 'rigido' ? 'Coroa e eixo' : 'Coroa e caixa', rpmHTML(ringR)));
+    if (p.modo === 'rigido') {
+      L.push(linhaRo('var(--c-steel)', 'As duas rodas', rpmHTML(ringR), d ? `a curva pede ${fmt0.format(esq)} e ${fmt0.format(dir)}` : 'sempre juntas'));
+    } else if (p.modo === 'solto') {
+      L.push(linhaRo('var(--c-steel)', 'As duas rodas', rpmHTML(0), 'nada empurra as planetárias'));
+    } else {
+      L.push(linhaRo('var(--c-spider)', 'Satélites', rpmHTML(Math.abs(ring * d) * SPEC.side / SPEC.spider), 'em torno do próprio pino'));
+      L.push(linhaRo('var(--c-left)', 'Roda esquerda', rpmHTML(esq)));
+      L.push(linhaRo('var(--c-right)', 'Roda direita', rpmHTML(dir)));
+      if (p.conta) L.push(`<div class="eq">n<sub>esq</sub> + n<sub>dir</sub> = 2 · n<sub>coroa</sub><br><b>${fmt0.format(esq)}</b> + <b>${fmt0.format(dir)}</b> = 2 × <b>${fmt0.format(ringR)}</b></div>`);
+    }
+    return L.join('');
+  }
+
+  const tour = { ativo: false, i: 0 };
+  $('tour-dots').innerHTML = TOUR.map(() => '<i></i>').join('');
+  function irPara(i) {
+    tour.i = Math.max(0, Math.min(TOUR.length - 1, i));
+    const p = TOUR[tour.i], ultimo = tour.i === TOUR.length - 1;
+    if (p.modo !== 'solto') atraso = 0; // devolve as rodas ao passo da coroa, com os dentes engrenados
+    modo = p.modo;
+    state.d = p.d;
+    $('diff').value = String(Math.round(p.d * 100));
+    mostrarPecas(p.pecas);
+    mostrarArrasto = !!p.arrasto;
+    montarTrilhas(p.trilhas ? p.d : 0);
+    updateUI();
+    voarPara(p.cam);
+
+    $('tour-step').textContent = `Passo ${tour.i + 1} de ${TOUR.length}`;
+    $('tour-title').textContent = p.titulo;
+    $('tour-text').innerHTML = p.texto.map((t) => `<p>${t}</p>`).join('');
+    $('tour-ro').innerHTML = leituraTour(p);
+    $('tour-problema').hidden = !p.problema;
+    $('tour-problema-txt').textContent = p.problema || '';
+    $('tour-dots').querySelectorAll('i').forEach((el, k) => el.classList.toggle('on', k <= tour.i));
+    $('tour-prev').disabled = $('tour-bar-prev').disabled = tour.i === 0;
+    $('tour-next').textContent = ultimo ? 'Explorar à vontade' : 'Próximo →';
+    $('tour-bar-next').setAttribute('aria-label', ultimo ? 'Sair da apresentação' : 'Próximo passo');
+    $('tour-bar-label').textContent = `${tour.i + 1}/${TOUR.length} · ${p.titulo}`;
+  }
+  function abrirTour() {
+    tour.ativo = true;
+    document.body.classList.add('touring');
+    $('tour').hidden = false;
+    $('tour-bar').hidden = false;
+    labelsEl.hidden = false;
+    if (!reduceMotion && !state.playing) { state.playing = true; updatePlay(); }
+    irPara(0);
+    $('tour-next').focus({ preventScroll: true });
+  }
+  function sairTour() {
+    tour.ativo = false;
+    document.body.classList.remove('touring');
+    $('tour').hidden = true;
+    $('tour-bar').hidden = true;
+    modo = 'aberto';
+    atraso = 0;
+    mostrarArrasto = false;
+    mostrarPecas(COMPLETO);
+    carrierParts.visible = $('tgl-carrier').checked;
+    housing.visible = $('tgl-housing').checked;
+    labelsEl.hidden = !$('tgl-labels').checked;
+    montarTrilhas(0);
+    updateUI();
+    voarPara('geral');
+    $('tour-start').focus({ preventScroll: true });
+  }
+  const avancar = () => (tour.i === TOUR.length - 1 ? sairTour() : irPara(tour.i + 1));
+  const voltar = () => irPara(tour.i - 1);
+  $('tour-start').addEventListener('click', abrirTour);
+  $('tour-next').addEventListener('click', avancar);
+  $('tour-prev').addEventListener('click', voltar);
+  $('tour-bar-next').addEventListener('click', avancar);
+  $('tour-bar-prev').addEventListener('click', voltar);
+  $('tour-exit').addEventListener('click', sairTour);
+  document.addEventListener('keydown', (e) => {
+    if (!tour.ativo || e.target.closest('input, textarea, select')) return;
+    if (e.key === 'ArrowRight') { e.preventDefault(); avancar(); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); voltar(); }
+    else if (e.key === 'Escape') sairTour();
+  });
+
   // ---------- laço de animação ----------
   const clock = new THREE.Clock();
   function frame() {
@@ -797,13 +1096,22 @@ input[type="range"] { width: 100%; margin: 4px 0; accent-color: var(--accent); }
       const wPinion = state.rpm / 60 * 2 * Math.PI * SLOW * Math.sign(kRing);
       const wRing = kRing * wPinion; // positivo: rodas giram para a frente (+Z)
       ringAngle += wRing * dt;
-      beta += state.d * wRing * dt;
+      if (modo === 'aberto' || modo === 'carroca') beta += state.d * wRing * dt;
+      if (modo === 'solto') atraso += wRing * dt;
     }
     carrier.rotation.x = ringAngle;
     pinionSpin.rotation.z = ringAngle / kRing;
-    rightSpin.rotation.x = ringAngle + beta;
-    leftSpin.rotation.x = ringAngle - beta;
-    for (const s of spiders) s.spin.rotation.z = s.k * beta;
+    rightSpin.rotation.x = ringAngle - atraso + beta;
+    leftSpin.rotation.x = ringAngle - atraso - beta;
+    // os satélites engrenam na planetária de +X, que é a esquerda: ela atrasa beta
+    for (const s of spiders) s.spin.rotation.z = -s.k * beta;
+    if (voo) {
+      voo.k = Math.min(1, voo.k + dt / 1.2);
+      const e = voo.k < 0.5 ? 2 * voo.k * voo.k : 1 - Math.pow(-2 * voo.k + 2, 2) / 2;
+      camera.position.lerpVectors(voo.p0, voo.p1, e);
+      controls.target.lerpVectors(voo.t0, voo.t1, e);
+      if (voo.k >= 1) voo = null;
+    }
 
     controls.update();
     renderer.render(scene, camera);
