@@ -1,0 +1,1580 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Motores, do Vapor ao V8 · slop</title>
+<meta name="description" content="Simulação 3D que explica motores um passo de cada vez: da máquina a vapor oscilante ao 2 tempos, ao 4 tempos e aos motores de 4, 6 e 8 cilindros, com o torque e a vibração de cada um.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: palco 3D fixo (sticky) à esquerda e painel de capítulos, comandos e gráficos à direita; empilha no celular. */
+:root{
+  --bg:#ECEAE6; --panel:#F7F6F3; --ink:#1D1F21; --muted:#5E6266; --line:#CFCBC4; --track:#DAD6CF;
+  --stage:#E3E0DA; --stage-2:#CBC6BE; --dot:rgba(29,31,33,.08);
+  --accent:#B4410F; --accent-fill:#D9541A; --on-accent:#FFFFFF;
+  --ok:#2B7552; --shadow:0 10px 30px rgba(20,20,20,.14);
+  /* gases: iguais ao 3D */
+  --g-fresh:#3D8EE0; --g-comp:#2449A8; --g-burn:#FFB52E; --g-burnt:#8C7A68;
+  --g-transfer:#7DB8F0; --g-steam:#DCE8EE; --g-used:#9AA7AE; --g-closed:#C2BDB5;
+  --f-display:"Barlow Condensed","Arial Narrow","Roboto Condensed",system-ui,sans-serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121314; --panel:#1A1C1E; --ink:#E8E6E2; --muted:#9A9C9E; --line:#2E3134; --track:#2B2E31;
+    --stage:#1C1E20; --stage-2:#0E0F10; --dot:rgba(232,230,226,.06);
+    --accent:#F08A4B; --accent-fill:#E8692A; --on-accent:#161616;
+    --ok:#4DB284; --shadow:0 10px 30px rgba(0,0,0,.45); --g-closed:#4A4744;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121314; --panel:#1A1C1E; --ink:#E8E6E2; --muted:#9A9C9E; --line:#2E3134; --track:#2B2E31;
+  --stage:#1C1E20; --stage-2:#0E0F10; --dot:rgba(232,230,226,.06);
+  --accent:#F08A4B; --accent-fill:#E8692A; --on-accent:#161616;
+  --ok:#4DB284; --shadow:0 10px 30px rgba(0,0,0,.45); --g-closed:#4A4744;
+  color-scheme:dark;
+}
+*{ box-sizing:border-box; }
+[hidden]{ display:none !important; }
+body{ margin:0; background:var(--bg); color:var(--ink); font:400 16px/1.55 var(--f-body); }
+.wrap{ max-width:1340px; margin:0 auto; padding-left:max(16px, env(safe-area-inset-left,0px)); padding-right:max(16px, env(safe-area-inset-right,0px)); }
+button, input{ font:inherit; color:inherit; }
+:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+
+.top{ padding-block:28px 20px; display:grid; gap:10px; }
+.crumbs{ margin:0 0 4px; font:600 14px/1 var(--f-display); letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+.crumbs a{ color:var(--accent); }
+.eyebrow{ margin:0; font:600 13px/1 var(--f-display); letter-spacing:.16em; text-transform:uppercase; color:var(--accent); }
+h1{ margin:0; font:700 clamp(36px, 6.2vw, 64px)/.92 var(--f-display); text-transform:uppercase; text-wrap:balance; }
+.lede{ margin:4px 0 0; max-width:66ch; color:var(--muted); }
+
+.app{ display:grid; grid-template-columns:minmax(0,1fr) 390px; gap:20px; align-items:start; padding-block:0 44px; }
+.stage{
+  position:sticky; top:12px; height:min(calc(100vh - 24px), 760px); min-height:480px;
+  border:1px solid var(--line); border-radius:6px; overflow:hidden; z-index:20;
+  background:
+    radial-gradient(circle, var(--dot) 1px, transparent 1.2px) 0 0/22px 22px,
+    radial-gradient(120% 90% at 50% 40%, var(--stage) 0%, var(--stage-2) 100%);
+  background-color:var(--stage);
+}
+#gl{ position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+.labels{ position:absolute; inset:0; pointer-events:none; }
+.labels.off{ display:none; }
+.mk{ position:absolute; left:0; top:0; padding:4px 7px 3px; border-radius:3px; background:var(--panel); background:color-mix(in srgb, var(--panel) 88%, transparent); border:1px solid var(--line); font:600 12.5px/1 var(--f-display); letter-spacing:.06em; text-transform:uppercase; white-space:nowrap; will-change:transform; }
+.mk.num{ width:24px; height:24px; padding:0; border-radius:50%; display:grid; place-items:center; background:var(--ink); color:var(--panel); border:0; font-size:13px; letter-spacing:0; }
+.stage.narrow .mk:not(.num){ font-size:11px; padding:3px 5px 2px; }
+
+.hud{ position:absolute; top:10px; left:10px; display:grid; gap:7px; pointer-events:none; padding:10px 12px; border-radius:5px; background:var(--panel); background:color-mix(in srgb, var(--panel) 88%, transparent); border:1px solid var(--line); min-width:190px; }
+.chip{ justify-self:start; font:700 14px/1.05 var(--f-display); letter-spacing:.08em; text-transform:uppercase; padding:5px 9px 4px; border-radius:3px; background:var(--muted); color:#fff; max-width:240px; }
+.hud-row{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; font:500 13px/1 var(--f-display); letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+.hud-row b{ font:700 21px/1 var(--f-display); color:var(--ink); font-variant-numeric:tabular-nums; }
+.legend{ position:absolute; top:10px; right:10px; display:grid; gap:5px; padding:9px 11px; border-radius:5px; background:var(--panel); background:color-mix(in srgb, var(--panel) 88%, transparent); border:1px solid var(--line); font:600 12.5px/1.1 var(--f-display); letter-spacing:.05em; text-transform:uppercase; pointer-events:none; }
+.legend span{ display:flex; align-items:center; gap:7px; }
+.sw{ display:inline-block; flex:none; width:11px; height:11px; border-radius:2px; box-shadow:inset 0 0 0 1px rgba(0,0,0,.18); }
+.stage.narrow .legend{ top:auto; bottom:40px; left:10px; right:10px; display:flex; flex-wrap:wrap; gap:6px 14px; padding:6px 10px; font-size:11.5px; }
+.stage.narrow .hud{ min-width:0; padding:8px 10px; }
+.stage-foot{ position:absolute; left:10px; right:10px; bottom:10px; display:flex; justify-content:space-between; gap:12px; pointer-events:none; font:500 12.5px/1.2 var(--f-display); letter-spacing:.05em; text-transform:uppercase; color:var(--muted); }
+.stage.narrow .stage-foot .hint{ display:none; }
+.stage-foot .note{ margin-left:auto; text-align:right; }
+.fail{ position:absolute; inset:0; display:grid; place-items:center; padding:24px; text-align:center; color:var(--muted); }
+
+.panel{ background:var(--panel); border:1px solid var(--line); border-radius:6px; display:grid; min-width:0; }
+.sec{ padding:16px 18px 18px; display:grid; gap:12px; border-top:1px solid var(--line); min-width:0; }
+.sec:first-child{ border-top:0; }
+.sec-h{ margin:0; font:700 13px/1 var(--f-display); letter-spacing:.16em; text-transform:uppercase; color:var(--muted); }
+
+.chapters{ display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:5px; }
+.chap{ display:grid; justify-items:center; gap:3px; padding:7px 2px 6px; border-radius:4px; border:1px solid var(--line); background:var(--bg); cursor:pointer; }
+.chap b{ font:700 19px/1 var(--f-display); font-variant-numeric:tabular-nums; }
+.chap span{ font:600 11px/1 var(--f-display); letter-spacing:.04em; text-transform:uppercase; color:var(--muted); white-space:nowrap; }
+.chap[aria-current="step"]{ background:var(--ink); border-color:var(--ink); color:var(--panel); }
+.chap[aria-current="step"] span{ color:var(--panel); opacity:.8; }
+.kicker{ margin:0; font:600 13px/1 var(--f-display); letter-spacing:.14em; text-transform:uppercase; color:var(--accent); }
+.ch-title{ margin:0; font:700 31px/1 var(--f-display); text-transform:uppercase; text-wrap:balance; }
+.ch-lede{ margin:0; font-size:15.5px; line-height:1.5; }
+
+.btns{ display:flex; gap:8px; }
+.btn{ flex:1 1 auto; min-height:42px; padding:0 12px; border-radius:4px; border:1px solid var(--line); background:var(--bg); cursor:pointer; font:600 15px/1 var(--f-display); letter-spacing:.07em; text-transform:uppercase; }
+.btn.primary{ background:var(--accent-fill); border-color:var(--accent-fill); color:var(--on-accent); }
+.btn.small{ flex:0 0 auto; min-width:64px; }
+.ctl{ display:grid; gap:4px; }
+.ctl-top{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+.ctl label{ font:600 16px/1.1 var(--f-display); letter-spacing:.03em; text-transform:uppercase; }
+.ctl output{ font:600 14px/1 var(--f-display); color:var(--muted); font-variant-numeric:tabular-nums; letter-spacing:.04em; text-transform:uppercase; }
+input[type=range]:disabled{ opacity:.45; cursor:default; }
+input[type=range]{ -webkit-appearance:none; appearance:none; width:100%; height:32px; margin:0; background:transparent; cursor:pointer; --v:0%; }
+input[type=range]::-webkit-slider-runnable-track{ height:10px; border-radius:5px; border:1px solid var(--line); background:linear-gradient(to right, var(--accent-fill) var(--v), var(--track) var(--v)); }
+input[type=range]::-moz-range-track{ height:10px; border-radius:5px; border:1px solid var(--line); background:linear-gradient(to right, var(--accent-fill) var(--v), var(--track) var(--v)); }
+input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:18px; height:28px; margin-top:-10px; border-radius:4px; background:var(--ink); border:3px solid var(--panel); box-shadow:0 0 0 1px var(--line); }
+input[type=range]::-moz-range-thumb{ width:12px; height:22px; border-radius:4px; background:var(--ink); border:3px solid var(--panel); box-shadow:0 0 0 1px var(--line); }
+
+.chart-key{ display:flex; flex-wrap:wrap; gap:6px 14px; font:600 12.5px/1 var(--f-display); letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+.chart-key span{ display:flex; align-items:center; gap:6px; }
+.chart-key i{ display:inline-block; width:16px; height:3px; border-radius:2px; }
+#chart{ width:100%; height:150px; display:block; }
+#rpmChart{ width:100%; height:110px; display:block; }
+.rpm-line{ margin:0; font-size:14.5px; line-height:1.4; }
+.rpm-line.stall{ color:var(--accent); font-weight:600; }
+.hint-txt{ margin:2px 0 0; font-size:13px; line-height:1.4; color:var(--muted); }
+.btn[aria-pressed="true"]{ background:var(--ink); border-color:var(--ink); color:var(--panel); }
+#timeline{ width:100%; display:block; }
+.sub{ margin:6px 0 0; font:700 13px/1 var(--f-display); letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+
+.stats{ margin:0; display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px 16px; }
+.stats > div{ display:grid; gap:4px; min-width:0; }
+.stats dt{ font:600 12px/1.1 var(--f-display); letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+.stats dd{ margin:0; font:600 21px/1 var(--f-display); font-variant-numeric:tabular-nums; }
+.stats dd small{ font-size:14px; color:var(--muted); font-weight:500; }
+.mini{ position:relative; height:6px; border-radius:3px; background:var(--track); overflow:hidden; }
+.mini i{ position:absolute; left:0; top:0; bottom:0; width:0; border-radius:3px; background:var(--accent-fill); }
+
+.how{ margin:0; padding-left:20px; display:grid; gap:8px; font-size:15px; line-height:1.45; }
+.how li::marker{ color:var(--accent); font-weight:600; }
+.note{ margin:0; padding:10px 12px; border-radius:4px; background:var(--bg); border-left:3px solid var(--ok); font-size:14.5px; line-height:1.45; }
+.note b, .problem b{ font:700 13px/1 var(--f-display); letter-spacing:.1em; text-transform:uppercase; display:block; margin-bottom:5px; }
+.note.tempo{ border-left-color:var(--g-fresh); }
+.problem{ margin:0; padding:12px; border-radius:4px; background:var(--bg); border-left:3px solid var(--accent-fill); display:grid; gap:10px; font-size:14.5px; line-height:1.45; }
+.problem p{ margin:0; }
+
+.toggles{ display:flex; flex-wrap:wrap; gap:10px 18px; }
+.tg{ display:flex; align-items:center; gap:9px; cursor:pointer; font:600 15px/1 var(--f-display); letter-spacing:.05em; text-transform:uppercase; }
+.tg input{ appearance:none; -webkit-appearance:none; width:38px; height:22px; border-radius:11px; background:var(--track); border:1px solid var(--line); position:relative; cursor:pointer; margin:0; transition:background .15s; }
+.tg input::after{ content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:var(--ink); transition:transform .15s; }
+.tg input:checked{ background:var(--accent-fill); border-color:var(--accent-fill); }
+.tg input:checked::after{ transform:translateX(16px); background:var(--on-accent); }
+
+.explain{ padding-block:8px 64px; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:0 48px; border-top:1px solid var(--line); }
+.explain h2{ margin:28px 0 10px; font:700 clamp(26px,3.2vw,34px)/1 var(--f-display); text-transform:uppercase; }
+.explain p, .explain li{ max-width:64ch; }
+.explain p{ margin:0 0 12px; }
+.explain ul{ margin:0; padding-left:20px; display:grid; gap:8px; }
+.fine{ font-size:14px; color:var(--muted); }
+
+@media (max-width: 900px){
+  .app{ grid-template-columns:minmax(0,1fr); gap:14px; }
+  .stage{ top:0; height:46vh; height:46svh; min-height:300px; max-height:470px; }
+  .explain{ grid-template-columns:minmax(0,1fr); }
+}
+@media (max-width: 480px){
+  .sec{ padding:14px 14px 16px; }
+  .chap span{ font-size:10px; }
+  .hud-row b{ font-size:18px; }
+}
+@media (prefers-reduced-motion: reduce){
+  .tg input, .tg input::after{ transition:none; }
+}
+</style>
+</head>
+<body>
+
+<header class="wrap top">
+  <nav class="crumbs" aria-label="Caminho"><a href="../../">slop</a> / <a href="../">simulações</a></nav>
+  <p class="eyebrow">Sete motores · cada um resolve o problema do anterior</p>
+  <h1>Motores, do vapor ao V8</h1>
+  <p class="lede">Comece pela máquina a vapor, a mais simples de todas, e avance até o V8. Cada capítulo mostra o motor por dentro em câmera lenta e o torque que ele entrega ao virabrequim, para comparar um com o outro.</p>
+</header>
+
+<main class="wrap app">
+  <section class="stage" id="stage" aria-label="Modelo 3D do motor">
+    <canvas id="gl" aria-label="Motor em 3D. Arraste para girar a vista."></canvas>
+    <div class="labels" id="labels"></div>
+    <div class="hud" aria-hidden="true">
+      <span class="chip" id="chip">Explosão</span>
+      <div class="hud-row"><span>Virabrequim</span><b id="hAng">0°</b></div>
+      <div class="hud-row" id="hCycRow"><span id="hCycLbl">Ciclo</span><b id="hCyc">0°</b></div>
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="stage-foot">
+      <span class="hint">Arraste para girar · roda ou pinça para zoom</span>
+      <span class="note" id="slowNote">Câmera lenta</span>
+    </div>
+  </section>
+
+  <aside class="panel" aria-label="Capítulos, comandos e leituras">
+    <div class="sec">
+      <h2 class="sec-h">Capítulos</h2>
+      <div class="chapters" id="chapters"></div>
+    </div>
+
+    <div class="sec">
+      <p class="kicker" id="kicker"></p>
+      <h2 class="ch-title" id="chTitle"></h2>
+      <p class="ch-lede" id="chLede"></p>
+    </div>
+
+    <div class="sec">
+      <h2 class="sec-h">Animação</h2>
+      <div class="btns">
+        <button class="btn small" id="back" type="button" aria-label="Voltar 15 graus">‹ 15°</button>
+        <button class="btn primary" id="play" type="button">Pausar</button>
+        <button class="btn small" id="fwd" type="button" aria-label="Avançar 15 graus">15° ›</button>
+      </div>
+      <div class="ctl">
+        <div class="ctl-top"><label for="speed">Velocidade</label><output id="speedOut" for="speed"></output></div>
+        <input type="range" id="speed" min="0" max="100" value="45">
+      </div>
+      <div class="btns">
+        <button class="btn" id="sound" type="button" aria-pressed="false">Ouvir o motor</button>
+      </div>
+      <label class="tg"><input type="checkbox" id="tgSync">Som junto com a animação</label>
+      <div class="ctl">
+        <div class="ctl-top"><label for="soundRpm">Rotação do som</label><output id="soundOut" for="soundRpm"></output></div>
+        <input type="range" id="soundRpm" min="0" max="100" value="20">
+        <p class="hint-txt" id="soundHint">O som toca na rotação real, não na câmera lenta. São os pulsos de escape sintetizados, não uma gravação.</p>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2 class="sec-h">Torque no virabrequim</h2>
+      <div class="chart-key" id="chartKey"></div>
+      <canvas id="chart" aria-label="Gráfico do torque no virabrequim ao longo de duas voltas"></canvas>
+      <h3 class="sub">O tempo de cada cilindro</h3>
+      <canvas id="timeline" aria-label="Mapa com o tempo em que cada cilindro está ao longo de duas voltas"></canvas>
+      <div class="chart-key" id="timeKey"></div>
+    </div>
+
+    <div class="sec">
+      <h2 class="sec-h">Volante e rotação</h2>
+      <div class="ctl">
+        <div class="ctl-top"><label for="flyJ">Volante</label><output id="flyOut" for="flyJ"></output></div>
+        <input type="range" id="flyJ" min="0" max="100" value="49">
+      </div>
+      <p class="rpm-line" id="rpmLine"></p>
+      <canvas id="rpmChart" aria-label="Gráfico da rotação do virabrequim ao longo de duas voltas"></canvas>
+    </div>
+
+    <div class="sec">
+      <h2 class="sec-h">Números</h2>
+      <dl class="stats">
+        <div><dt>Cilindrada</dt><dd id="stDisp">—</dd></div>
+        <div><dt id="stFiresLbl">Explosões por volta</dt><dd id="stFires">—</dd></div>
+        <div><dt>Torque médio</dt><dd id="stMean">—</dd></div>
+        <div><dt id="stIntLbl">Intervalo entre explosões</dt><dd id="stInt">—</dd></div>
+        <div><dt>Pico de torque</dt><dd id="stPeak">—</dd></div>
+        <div><dt>Torque mínimo</dt><dd id="stMin">—</dd></div>
+        <div><dt>Pico ÷ média</dt><dd id="stRatio">—</dd></div>
+        <div><dt>Vibração livre</dt><dd id="stVib">—</dd><div class="mini"><i id="mVib"></i></div></div>
+      </dl>
+    </div>
+
+    <div class="sec">
+      <h2 class="sec-h">Como funciona</h2>
+      <p class="note tempo" id="tempo"></p>
+      <ol class="how" id="how"></ol>
+      <p class="note" id="observe"></p>
+      <div class="problem" id="problem">
+        <p id="problemTxt"></p>
+        <button class="btn primary" id="nextCh" type="button">Próximo</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2 class="sec-h">Vista</h2>
+      <div class="toggles">
+        <label class="tg"><input type="checkbox" id="tgBlock" checked>Bloco</label>
+        <label class="tg"><input type="checkbox" id="tgLabels" checked>Nomes</label>
+        <label class="tg"><input type="checkbox" id="tgShake">Mostrar vibração</label>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<section class="wrap explain">
+  <div>
+    <h2>O que é um tempo</h2>
+    <p>Tempo é cada curso do pistão, de um ponto morto ao outro: do ponto mais alto ao mais baixo, ou o contrário. Cada curso é meia volta do virabrequim. O nome do motor diz quantos cursos o pistão faz para completar um ciclo inteiro, da mistura entrando aos gases saindo.</p>
+    <p>No 4 tempos, cada curso tem uma tarefa só (admissão, compressão, explosão e escape), e o ciclo leva duas voltas. No 2 tempos, o ciclo cabe numa volta porque cada curso faz duas tarefas ao mesmo tempo, usando o cárter embaixo do pistão. Nos motores de vários cilindros, cada cilindro faz os mesmos tempos, só que defasados, e é esse revezamento que o mapa de tempos mostra.</p>
+
+    <h2>Como ler os gráficos</h2>
+    <p>O gráfico de torque mostra a força de giro que os gases entregam ao virabrequim em duas voltas completas, 720°, o tempo de um ciclo inteiro do 4 tempos. A linha grossa é a soma; as finas, quando há mais de um cilindro, são a contribuição de cada um. Abaixo de zero, o virabrequim é que está empurrando o pistão, quase sempre para comprimir a mistura, e quem paga essa conta é o embalo do volante.</p>
+    <p>O mapa de tempos mostra uma linha por cilindro e, em cores, o tempo de cada um em cada momento. A linha vertical acompanha a animação. Nos motores de vários cilindros, siga as faixas laranja para ler a ordem de ignição.</p>
+    <p>O gráfico de rotação mostra quanto o virabrequim acelera nas explosões e desacelera nas compressões, a 1.000 rpm de média com o acelerador no fundo (150 rpm na máquina a vapor). Quanto mais pesado o volante, menor a oscilação. Se o embalo acaba antes de o pistão vencer a compressão, o motor para. A animação segue essa mesma variação, em câmera lenta.</p>
+    <p>A vibração livre compara a força que sobra dos pistões subindo e descendo com a que eles fariam se todos se movessem juntos. Com <em>Mostrar vibração</em> ligado, o motor balança na proporção dessa força, exagerada para ficar visível.</p>
+  </div>
+  <div>
+    <h2>O que foi simplificado</h2>
+    <ul>
+      <li>Todos os motores a combustão usam o mesmo cilindro de 500 cm³, com 86 mm de diâmetro e 86 mm de curso, para a comparação ser justa. Por isso o torque cresce com o número de cilindros.</li>
+      <li>A pressão dos gases segue uma curva de forma fixa: compressão, queima perto do ponto morto superior e expansão. Não há termodinâmica de verdade, perdas por atrito nem variação com a rotação.</li>
+      <li>O torque conta só a pressão dos gases, sem a inércia das peças. A vibração conta só as forças dos pistões, sem os balanços de ponta a ponta, que os textos dos capítulos explicam.</li>
+      <li>A máquina a vapor é de simples efeito, com vapor a 3 bar.</li>
+      <li>A rotação considera só a inércia do volante, com uma carga constante igual ao torque médio. O tamanho do volante no 3D muda com o controle, mas não está em escala.</li>
+      <li>O som é sintetizado a partir do momento em que cada escape abre, com um timbre para cada bancada. Não é gravação de motor nenhum.</li>
+      <li>No 3D, tudo gira em câmera lenta, o bloco é transparente e as cores dos gases são só uma forma de mostrar o que há dentro do cilindro.</li>
+    </ul>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+'use strict';
+const $ = (id) => document.getElementById(id);
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const smooth = (t) => { t = clamp(t); return t * t * (3 - 2 * t); };
+const lerp = (a, b, t) => a + (b - a) * t;
+const mod = (x, m) => ((x % m) + m) % m;
+const D2R = Math.PI / 180, TAU = Math.PI * 2;
+const nf0 = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+const nf1 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const nf2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const has3D = !!(window.THREE && THREE.OrbitControls);
+
+/* ===================== Geometria e física ===================== */
+// Unidades da cena: 1 = 100 mm. O cilindro de todos os motores a combustão tem 86 × 86 mm (500 cm³).
+const G = { r: 0.43, l: 1.45, R: 0.43, crown: 0.35, S: 1.05 };
+G.smax = G.l + G.r;
+G.deck = G.smax + G.crown + 0.06;
+const SI = 0.1;                                  // metros por unidade da cena
+const AREA = Math.PI * Math.pow(G.R * SI, 2);
+const VD = AREA * 2 * G.r * SI;
+const CR = 10, VC = VD / (CR - 1), NPOLY = 1.3, K4 = 3.5, K2 = 3.2;
+const volAt = (s) => VC + AREA * (G.smax - s) * SI;
+const VBDC = VC + VD;
+
+// Biela-manivela de um cilindro inclinado de beta (a partir da vertical, sentido horário), com o moente em phi
+function pistonKin(beta, phi, th) {
+  const pa = th + phi;
+  const Px = G.r * Math.sin(pa), Py = G.r * Math.cos(pa);
+  const al = pa - beta;
+  const a = G.r * Math.cos(al), b = G.r * Math.sin(al);
+  const q = Math.sqrt(G.l * G.l - b * b);
+  const s = a + q;
+  const ds = -G.r * Math.sin(al) - (b * G.r * Math.cos(al)) / q;
+  return { Px, Py, s, ds, Qx: s * Math.sin(beta), Qy: s * Math.cos(beta) };
+}
+const crownAt = (deg) => pistonKin(0, 0, deg * D2R).s + G.crown;
+const VEPC = volAt(pistonKin(0, 0, 100 * D2R).s);
+
+// Pressão absoluta (bar) no cilindro. 4 tempos: g em graus de 0 a 720, com 0 no ponto morto da explosão.
+function press4(g, V) {
+  const d = g < 360 ? g : g - 720;
+  if (d < -180 || d >= 180) return 1;
+  let p = Math.pow(VBDC / V, NPOLY) * (1 + (K4 - 1) * smooth((d + 15) / 45));
+  if (d > 140) p = lerp(p, 1, smooth((d - 140) / 40));
+  return p;
+}
+// 2 tempos: d em graus de -180 a 180. Comprime desde que a janela de escape fecha (-100°) e solta a pressão quando ela abre (100°).
+function press2(d, V) {
+  if (d < -100 || d > 125) return 1;
+  let p = Math.max(1, Math.pow(VEPC / V, NPOLY)) * (1 + (K2 - 1) * smooth((d + 15) / 45));
+  if (d > 100) p = lerp(p, 1, smooth((d - 100) / 25));
+  return p;
+}
+
+// Máquina a vapor oscilante: pivô acima do virabrequim, haste rígida presa ao pistão
+const ST = { r: 0.45, Oy: 1.6, rod: 1.6, port: 0.5, bore: 0.38, p: 3 };
+const ST_AREA = Math.PI * Math.pow(ST.bore * SI, 2);
+function steamKin(th) {
+  const Px = ST.r * Math.sin(th), Py = ST.r * Math.cos(th);
+  const dx = Px, dy = Py - ST.Oy, dist = Math.hypot(dx, dy);
+  const psi = Math.atan2(Px, ST.Oy - Py);
+  return { Px, Py, dist, psi, ux: dx / dist, uy: dy / dist };
+}
+const steamIn = (psi) => smooth((psi - 3 * D2R) / (6 * D2R));
+const steamOut = (psi) => smooth((-psi - 3 * D2R) / (6 * D2R));
+
+/* ===================== Motores ===================== */
+// O ângulo de cada moente sai da ordem de ignição: o cilindro tem de estar no ponto morto superior quando chega a vez dele.
+function inline(n, order, cycle) {
+  const step = (cycle === 4 ? 720 : 360) / n;
+  const F = {}; order.forEach((c, k) => { F[c] = k * step * D2R; });
+  const cyl = [];
+  for (let i = 1; i <= n; i++) cyl.push({ n: i, beta: 0, F: F[i], phi: mod(-F[i], TAU), z: ((n - 1) / 2 - (i - 1)) * G.S, bank: 0 });
+  return { banks: [{ beta: 0 }], cyl, order };
+}
+function vee(n, order, oddBeta) {
+  const step = 720 / n, pairs = n / 2;
+  const F = {}; order.forEach((c, k) => { F[c] = k * step * D2R; });
+  const cyl = [];
+  for (let i = 1; i <= n; i++) {
+    const odd = i % 2 === 1, j = Math.floor((i - 1) / 2);
+    const beta = odd ? oddBeta : -oddBeta;
+    cyl.push({ n: i, beta, F: F[i], phi: mod(beta - F[i], TAU), z: ((pairs - 1) / 2 - j) * G.S + (odd ? 0.09 : -0.09), bank: odd ? 0 : 1 });
+  }
+  return { banks: [{ beta: oddBeta }, { beta: -oddBeta }], cyl, order };
+}
+
+const CHAPTERS = [
+  { short: 'Vapor', type: 'steam', title: 'Máquina a vapor oscilante',
+    tempo: 'Um tempo é um curso do pistão, de um ponto morto ao outro: meia volta do virabrequim. Aqui são dois por volta. Descendo, o vapor empurra o pistão; subindo, o pistão expulsa o vapor usado. Ninguém chama a máquina a vapor de 2 tempos, mas o ritmo é esse: um impulso a cada volta.',
+    lede: 'Vapor sob pressão, vindo de uma caldeira, empurra um pistão dentro de um cilindro. A haste e a manivela transformam o vaivém em giro, e o volante guarda o embalo para passar pelos pontos mortos.',
+    how: [
+      'O cilindro balança num pivô. Quando ele inclina para um lado, o furo no alto dele se alinha com a entrada de vapor, e o vapor empurra o pistão para baixo.',
+      'Quando inclina para o outro, o furo se alinha com a saída. O pistão volta subindo, empurrado pelo embalo do volante, e expulsa o vapor usado.',
+      'Não há válvula: o próprio balanço do cilindro abre e fecha a passagem. São só duas peças que se mexem, o cilindro e o virabrequim.'
+    ],
+    observe: 'O torque só aparece em meia volta. Na outra metade, quem mantém o giro é o volante: no gráfico de rotação, a máquina ganha velocidade com o vapor e perde enquanto ele escapa. Diminua o volante e veja a máquina parar.',
+    problem: 'A força vem de fora. A caldeira é pesada, demora para esquentar e perde calor pelo caminho. E se o combustível queimasse dentro do próprio cilindro?' },
+  { short: '2T', type: 'piston', cycle: 2, layout: inline(1, [1], 2), title: 'Motor 2 tempos',
+    tempo: 'Um tempo é um curso do pistão: meia volta do virabrequim. Aqui são só dois, a subida e a descida, então o ciclo inteiro cabe numa volta. Para caber, cada curso faz duas coisas ao mesmo tempo: subindo, o pistão comprime em cima e puxa mistura para o cárter embaixo; descendo, é empurrado pela explosão e, no fim, troca os gases queimados pela mistura nova.',
+    lede: 'O combustível queima dentro do cilindro. Não há válvulas: o próprio pistão abre e fecha janelas na parede do cilindro, e o cárter, embaixo, ajuda a bombear a mistura.',
+    how: [
+      'Subindo, o pistão comprime a mistura em cima e, embaixo, puxa mistura nova para o cárter pela válvula de palheta.',
+      'Perto do alto, a vela solta a faísca e a explosão empurra o pistão para baixo.',
+      'Descendo, o pistão descobre a janela de escape, e os gases queimados saem. Logo depois descobre as janelas de transferência: a mistura que ele espremeu no cárter sobe por elas e empurra o resto dos gases para fora.'
+    ],
+    observe: 'Uma explosão a cada volta: o dobro dos pulsos de um 4 tempos do mesmo tamanho.',
+    problem: 'Escape e transferência ficam abertos juntos, e parte da mistura nova sai direto pelo escapamento sem queimar. E como a mistura passa pelo cárter, o óleo vai misturado no combustível e queima junto: gasta mais e polui.' },
+  { short: '4T', type: 'piston', cycle: 4, layout: inline(1, [1], 4), belt: true, title: 'Motor 4 tempos',
+    tempo: 'Cada tempo é um curso do pistão, meia volta do virabrequim. Quatro tempos são quatro cursos, duas voltas, e cada curso faz uma coisa só: admissão, compressão, explosão e escape. Por isso só um tempo em cada quatro gera força.',
+    lede: 'Válvulas separam as etapas. O pistão faz quatro cursos, duas voltas do virabrequim, para cada explosão: admissão, compressão, explosão e escape.',
+    how: [
+      'Admissão: a válvula de admissão abre e o pistão, descendo, puxa a mistura.',
+      'Compressão: as duas válvulas fecham, e o pistão sobe espremendo a mistura.',
+      'Explosão: a vela faísca perto do alto, e os gases queimando empurram o pistão. É o único tempo que gera força.',
+      'Escape: a válvula de escape abre, e o pistão, subindo, expulsa os gases queimados.',
+      'Os comandos de válvulas giram na metade da rotação do virabrequim, puxados pela correia: a polia deles é o dobro da do virabrequim.'
+    ],
+    observe: 'Um pico de mais de 15 vezes a média e depois quase nada por uma volta e meia. Na compressão o torque fica negativo: é o volante que empurra o pistão. Com um volante de carro, a rotação sobe e desce uns 300 rpm a cada ciclo; com um volante leve, o motor para na compressão.',
+    problem: 'Uma explosão a cada duas voltas: o torque chega em trancos e o motor sacode. Para ter mais força, o pistão teria de crescer, e pistão grande e pesado não aguenta girar rápido.' },
+  { short: '4L', type: 'piston', cycle: 4, layout: inline(4, [1, 3, 4, 2], 4), belt: true, title: '4 cilindros em linha',
+    tempo: 'Cada cilindro continua sendo de 4 tempos. A diferença é que os quatro se revezam: a qualquer momento há um cilindro em cada tempo. No mapa de tempos, cada coluna tem as quatro cores.',
+    lede: 'Quatro cilindros pequenos num virabrequim só, com explosões a cada 180°: sempre há um cilindro no tempo de explosão.',
+    how: [
+      'Os pistões 1 e 4 sobem juntos, e os 2 e 3 descem juntos, então a força de um par anula a do outro.',
+      'A ordem de ignição 1-3-4-2 espalha as explosões pelo bloco, em vez de concentrá-las numa ponta.',
+      'Um comando de válvulas de cada lado serve os quatro cilindros, com um ressalto para cada válvula.'
+    ],
+    observe: 'Os pulsos ficam mais perto uns dos outros, e o pico cai para menos de 4 vezes a média. O torque ainda passa abaixo de zero perto de cada ponto morto, quando um cilindro termina a compressão e o que explodiu já perdeu força. Ligue Mostrar vibração: o motor ainda balança, agora para cima e para baixo, duas vezes por volta.',
+    problem: 'Essa vibração sobra porque o pistão anda mais rápido na metade de cima do curso do que na de baixo, e os pares não se anulam por completo. E para ter mais força, mais cilindros em linha deixam o motor comprido.' },
+  { short: '6L', type: 'piston', cycle: 4, layout: inline(6, [1, 5, 3, 6, 2, 4], 4), belt: true, title: '6 cilindros em linha',
+    tempo: 'Os seis cilindros fazem os mesmos quatro tempos, defasados de 120°. Como cada tempo dura 180°, durante um trecho dois cilindros estão no tempo de explosão ao mesmo tempo: é essa sobreposição que deixa o torque mais liso.',
+    lede: 'Seis cilindros com explosões a cada 120°: uma explosão começa antes de a anterior acabar.',
+    how: [
+      'Os pares 1 e 6, 2 e 5, 3 e 4 sobem e descem juntos, com os moentes a 120° uns dos outros.',
+      'As forças dos pistões se anulam por completo, e o balanço da metade da frente cancela o da metade de trás. É um dos motores mais lisos que existem.',
+      'A ordem de ignição 1-5-3-6-2-4 alterna explosões entre as duas metades do motor.'
+    ],
+    observe: 'O pico cai para 2,6 vezes a média, e o torque mal passa abaixo de zero. A vibração livre vai a zero.',
+    problem: 'Seis cilindros enfileirados fazem um motor longo: difícil de pôr atravessado no cofre, e com um virabrequim comprido que torce sob carga.' },
+  { short: 'V6', type: 'piston', cycle: 4, layout: vee(6, [1, 2, 3, 4, 5, 6], -30 * D2R), belt: true, title: 'V6',
+    tempo: 'Igual ao 6 em linha: seis cilindros de 4 tempos, com uma explosão começando a cada 120°. Estar numa bancada ou na outra não muda os tempos, só o lugar do cilindro.',
+    lede: 'Duas bancadas de três cilindros a 60°, num virabrequim só: os mesmos seis cilindros num motor com metade do comprimento.',
+    how: [
+      'Cada par de bielas, uma de cada bancada, fica lado a lado no virabrequim.',
+      'Para manter uma explosão a cada 120°, os dois moentes de cada par são separados por 60°: repare nos moentes desencontrados.',
+      'Cada bancada tem os seus próprios comandos, e uma correia só move os quatro.'
+    ],
+    observe: 'O torque é igual ao do 6 em linha, num motor bem mais curto.',
+    problem: 'Sobra um balanço de ponta a ponta que o 6 em linha não tem, e alguns V6 usam um eixo balanceador para cancelá-lo. E para ainda mais força, mais cilindros.' },
+  { short: 'V8', type: 'piston', cycle: 4, layout: vee(8, [1, 8, 4, 3, 6, 5, 7, 2], 45 * D2R), belt: true, title: 'V8',
+    tempo: 'Oito cilindros de 4 tempos, com uma explosão começando a cada 90°. Como cada tempo dura 180°, há sempre dois cilindros no tempo de explosão.',
+    lede: 'Duas bancadas de quatro cilindros a 90°. Com o virabrequim em cruz, há uma explosão a cada 90°: quatro por volta.',
+    how: [
+      'Cada moente recebe duas bielas, uma de cada bancada.',
+      'Os quatro moentes ficam a 90° uns dos outros: olhando o virabrequim de frente, eles formam uma cruz.',
+      'A ordem 1-8-4-3-6-5-7-2 alterna as bancadas de forma irregular. Os pulsos de escape de cada lado ficam desiguais, e é isso que dá o ronco de batida irregular dos V8 com virabrequim em cruz, como os americanos. Ligue o som para ouvir.',
+      'Muitos V8 americanos têm um comando só, no meio do V, que move as válvulas por varetas. Aqui o modelo usa comandos no cabeçote, como os V8 mais modernos, para mostrar as válvulas do mesmo jeito que nos outros capítulos.'
+    ],
+    observe: 'Oito pulsos em duas voltas. O torque não fica negativo em momento nenhum, e o pico é menos de 2 vezes a média.',
+    problem: 'Fim da linha. Os contrapesos do virabrequim em cruz cancelam o balanço que sobra, e o V8 fica liso e curto. Em troca, é pesado, gasta mais e custa caro, e por isso a maioria dos carros fica no 4 cilindros.' }
+];
+
+/* ===================== Tempos e cores ===================== */
+const STROKE = {
+  explosao: { label: 'Explosão', css: '--g-burn', dark: true },
+  escape: { label: 'Escape', css: '--g-burnt' },
+  admissao: { label: 'Admissão', css: '--g-fresh' },
+  compressao: { label: 'Compressão', css: '--g-comp' },
+  transf: { label: 'Transferência e escape', css: '--g-transfer', dark: true },
+  comp2: { label: 'Compressão em cima, admissão no cárter', css: '--g-comp' },
+  vapor: { label: 'Admissão de vapor', css: '--g-steam', dark: true },
+  vaporOut: { label: 'Escape do vapor', css: '--g-used', dark: true },
+  fechado: { label: 'Janelas fechadas', css: '--g-closed', dark: true }
+};
+const stroke4 = (g) => g < 180 ? 'explosao' : g < 360 ? 'escape' : g < 540 ? 'admissao' : 'compressao';
+const stroke2 = (d) => d < 100 ? 'explosao' : d < 120 ? 'escape' : d < 240 ? 'transf' : d < 260 ? 'escape' : 'comp2';
+function strokeAt(ch, c, th) {
+  if (ch.type === 'steam') {
+    const k = steamKin(th);
+    return steamIn(k.psi) > 0.5 ? 'vapor' : steamOut(k.psi) > 0.5 ? 'vaporOut' : 'fechado';
+  }
+  if (ch.cycle === 4) return stroke4(mod((th - c.F) / D2R, 720));
+  return stroke2(mod((th - c.F) / D2R, 360));
+}
+const TIME_KEYS = {
+  steam: ['vapor', 'vaporOut', 'fechado'],
+  2: ['explosao', 'escape', 'transf', 'comp2'],
+  4: ['admissao', 'compressao', 'explosao', 'escape']
+};
+const LEGENDS = {
+  steam: [['--g-steam', 'Vapor da caldeira'], ['--g-used', 'Vapor usado']],
+  piston: [['--g-fresh', 'Mistura nova'], ['--g-comp', 'Mistura comprimida'], ['--g-burn', 'Queimando'], ['--g-burnt', 'Gases queimados']]
+};
+
+const GAS = { fresh: 0x3d8ee0, comp: 0x2449a8, burn: 0xffc23a, hot: 0xff6a1a, burnt: 0x8c7a68, steam: 0xdce8ee, used: 0x9aa7ae };
+
+/* ===================== Análise: torque e vibração em duas voltas ===================== */
+const N720 = 720;
+const REF_ACC = (() => {
+  let m = 0; const h = D2R;
+  for (let k = 0; k < 360; k++) {
+    const th = k * D2R;
+    const a = pistonKin(0, 0, th - h).s, b = pistonKin(0, 0, th).s, c = pistonKin(0, 0, th + h).s;
+    m = Math.max(m, Math.abs((a - 2 * b + c) / (h * h)));
+  }
+  return m;
+})();
+
+function cylTorque(ch, c, th) {
+  if (ch.type === 'steam') {
+    const k = steamKin(th);
+    const p = ST.p * 1e5 * steamIn(k.psi);
+    return p * ST_AREA * (k.ux * ST.r * Math.cos(th) - k.uy * ST.r * Math.sin(th)) * SI;
+  }
+  const k = pistonKin(c.beta, c.phi, th);
+  const V = volAt(k.s);
+  const p = ch.cycle === 4 ? press4(mod((th - c.F) / D2R, 720), V) : press2(mod((th - c.F) / D2R + 180, 360) - 180, V);
+  return (p - 1) * 1e5 * AREA * (-k.ds * SI);
+}
+function pistonPos(ch, c, th) {
+  if (ch.type === 'steam') {
+    const k = steamKin(th), d = k.dist - ST.rod;
+    return [k.ux * d, ST.Oy + k.uy * d];
+  }
+  const k = pistonKin(c.beta, c.phi, th);
+  return [k.Qx, k.Qy];
+}
+function analyze(ch) {
+  const cyls = ch.type === 'steam' ? [{ n: 1, F: 0 }] : ch.layout.cyl;
+  const n = cyls.length, h = D2R;
+  const tot = new Float32Array(N720), per = cyls.map(() => new Float32Array(N720));
+  const fx = new Float32Array(N720), fy = new Float32Array(N720);
+  let amp = 0;
+  for (let k = 0; k < N720; k++) {
+    const th = k * D2R; let ax = 0, ay = 0;
+    cyls.forEach((c, i) => {
+      const t = cylTorque(ch, c, th); per[i][k] = t; tot[k] += t;
+      const a = pistonPos(ch, c, th - h), b = pistonPos(ch, c, th), d = pistonPos(ch, c, th + h);
+      ax += (a[0] - 2 * b[0] + d[0]) / (h * h); ay += (a[1] - 2 * b[1] + d[1]) / (h * h);
+    });
+    fx[k] = ax; fy[k] = ay; amp = Math.max(amp, Math.hypot(ax, ay));
+  }
+  // Referência: todos os pistões subindo e descendo juntos. Na máquina a vapor, o próprio pistão.
+  const ref = ch.type === 'steam' ? amp : REF_ACC * n;
+  for (let k = 0; k < N720; k++) { fx[k] /= ref; fy[k] /= ref; }
+  let mean = 0, peak = -Infinity, min = Infinity;
+  for (let k = 0; k < N720; k++) { mean += tot[k]; peak = Math.max(peak, tot[k]); min = Math.min(min, tot[k]); }
+  mean /= N720;
+  // Energia acumulada acima da média: é ela que acelera e freia o volante
+  const E = new Float64Array(N720); let e = 0, eMean = 0;
+  for (let k = 0; k < N720; k++) { E[k] = e; e += (tot[k] - mean) * D2R; eMean += E[k]; }
+  eMean /= N720;
+  for (let k = 0; k < N720; k++) E[k] -= eMean;
+  return { cyls, tot, per, fx, fy, vib: amp / ref, mean, peak, min, E };
+}
+
+/* ===================== Interface ===================== */
+const ui = {
+  stage: $('stage'), labels: $('labels'), chip: $('chip'), hAng: $('hAng'), hCyc: $('hCyc'), hCycLbl: $('hCycLbl'), hCycRow: $('hCycRow'),
+  legend: $('legend'), chapters: $('chapters'), kicker: $('kicker'), title: $('chTitle'), lede: $('chLede'),
+  play: $('play'), back: $('back'), fwd: $('fwd'), speed: $('speed'), speedOut: $('speedOut'), slowNote: $('slowNote'),
+  chart: $('chart'), chartKey: $('chartKey'), timeline: $('timeline'), timeKey: $('timeKey'),
+  how: $('how'), tempo: $('tempo'), observe: $('observe'), problemTxt: $('problemTxt'), next: $('nextCh'),
+  stDisp: $('stDisp'), stFires: $('stFires'), stFiresLbl: $('stFiresLbl'), stMean: $('stMean'), stInt: $('stInt'), stIntLbl: $('stIntLbl'),
+  stPeak: $('stPeak'), stMin: $('stMin'), stRatio: $('stRatio'),
+  flyJ: $('flyJ'), flyOut: $('flyOut'), rpmLine: $('rpmLine'), rpmChart: $('rpmChart'),
+  sound: $('sound'), soundRpm: $('soundRpm'), soundOut: $('soundOut'), sync: $('tgSync'), soundHint: $('soundHint'), stVib: $('stVib'), mVib: $('mVib')
+};
+
+let colors = {};
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  ['ink', 'muted', 'line', 'accent', 'accent-fill', 'panel', 'g-fresh', 'g-comp', 'g-burn', 'g-burnt', 'g-transfer', 'g-steam', 'g-used', 'g-closed']
+    .forEach((k) => { colors[k] = cs.getPropertyValue('--' + k).trim(); });
+  timeCache = null;
+}
+
+let cur = -1, chap = null, info = null;
+let th = 0, playing = !reduceMotion, revPerSec = 0.2;
+
+CHAPTERS.forEach((c, i) => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'chap';
+  b.innerHTML = '<b>' + (i + 1) + '</b><span>' + c.short + '</span>';
+  b.setAttribute('aria-label', 'Capítulo ' + (i + 1) + ': ' + c.title);
+  b.addEventListener('click', () => setChapter(i));
+  ui.chapters.appendChild(b);
+});
+
+function speedFromSlider(v) { return 0.03 * Math.pow(1.2 / 0.03, v / 100); }
+function setSpeed(v) {
+  revPerSec = speedFromSlider(v);
+  ui.speed.style.setProperty('--v', v + '%');
+  ui.speedOut.textContent = nf0.format(revPerSec * 60) + ' rpm';
+  ui.slowNote.textContent = 'Câmera lenta · ' + nf0.format(revPerSec * 60) + ' rpm';
+}
+ui.speed.addEventListener('input', () => setSpeed(+ui.speed.value));
+function setPlaying(p) { playing = p; ui.play.textContent = p ? 'Pausar' : 'Girar'; }
+ui.play.addEventListener('click', () => setPlaying(!playing));
+ui.back.addEventListener('click', () => { setPlaying(false); th -= 15 * D2R; });
+ui.fwd.addEventListener('click', () => { setPlaying(false); th += 15 * D2R; });
+ui.next.addEventListener('click', () => setChapter((cur + 1) % CHAPTERS.length));
+$('tgLabels').addEventListener('change', (e) => ui.labels.classList.toggle('off', !e.target.checked));
+$('tgBlock').addEventListener('change', () => applyBlock());
+let shakeOn = false;
+$('tgShake').addEventListener('change', (e) => { shakeOn = e.target.checked; });
+
+function sw(css) { return '<i class="sw" style="background:var(' + css + ')"></i>'; }
+
+function fillTexts(i) {
+  const c = CHAPTERS[i];
+  ui.chapters.querySelectorAll('.chap').forEach((b, k) => { if (k === i) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); });
+  ui.kicker.textContent = 'Capítulo ' + (i + 1) + ' de ' + CHAPTERS.length;
+  ui.title.textContent = c.title;
+  ui.lede.textContent = c.lede;
+  ui.how.innerHTML = '';
+  c.how.forEach((t) => { const li = document.createElement('li'); li.textContent = t; ui.how.appendChild(li); });
+  ui.tempo.innerHTML = '<b>O que é um tempo aqui</b>';
+  ui.tempo.appendChild(document.createTextNode(c.tempo));
+  ui.observe.innerHTML = '<b>Repare</b>';
+  ui.observe.appendChild(document.createTextNode(c.observe));
+  const last = i === CHAPTERS.length - 1;
+  ui.problemTxt.innerHTML = '<b>' + (last ? 'E agora' : 'O que falta resolver') + '</b>';
+  ui.problemTxt.appendChild(document.createTextNode(c.problem));
+  ui.next.textContent = last ? 'Voltar ao começo' : 'Próximo: ' + CHAPTERS[i + 1].title + ' →';
+
+  const L = c.type === 'steam' ? LEGENDS.steam : LEGENDS.piston;
+  ui.legend.innerHTML = L.map((x) => '<span>' + sw(x[0]) + x[1] + '</span>').join('');
+  const keys = TIME_KEYS[c.type === 'steam' ? 'steam' : c.cycle];
+  ui.timeKey.innerHTML = keys.map((k) => '<span>' + sw(STROKE[k].css) + STROKE[k].label + '</span>').join('');
+  const n = c.type === 'steam' ? 1 : c.layout.cyl.length;
+  ui.chartKey.innerHTML = '<span><i style="background:var(--accent-fill)"></i>' + (n > 1 ? 'Soma no virabrequim' : 'Torque') + '</span>'
+    + (n > 1 ? '<span><i style="background:var(--muted);opacity:.5"></i>Cada cilindro</span>' : '')
+    + '<span><i style="background:var(--ink);opacity:.6;height:0;border-top:2px dashed var(--ink)"></i>Média</span>';
+  ui.hCycRow.hidden = !(c.type === 'piston' && c.cycle === 4);
+
+  // Números
+  const a = info;
+  if (c.type === 'steam') {
+    ui.stDisp.innerHTML = '0,3 <small>L · vapor a 3 bar</small>';
+    ui.stFiresLbl.textContent = 'Impulsos por volta'; ui.stFires.textContent = '1';
+    ui.stIntLbl.textContent = 'Intervalo entre impulsos'; ui.stInt.textContent = '360°';
+  } else {
+    ui.stDisp.innerHTML = nf1.format(n * 0.5) + ' <small>L · ' + n + (n > 1 ? ' cilindros' : ' cilindro') + '</small>';
+    ui.stFiresLbl.textContent = 'Explosões por volta';
+    ui.stFires.textContent = c.cycle === 4 ? (n % 2 ? nf1.format(n / 2) : nf0.format(n / 2)) : nf0.format(n);
+    ui.stIntLbl.textContent = 'Intervalo entre explosões';
+    ui.stInt.textContent = nf0.format((c.cycle === 4 ? 720 : 360) / n) + '°';
+  }
+  ui.stMean.innerHTML = nf0.format(a.mean) + ' <small>N·m</small>';
+  ui.stPeak.innerHTML = nf0.format(a.peak) + ' <small>N·m</small>';
+  ui.stMin.innerHTML = nf0.format(Math.abs(a.min) < 0.5 ? 0 : a.min) + ' <small>N·m</small>';
+  ui.stRatio.innerHTML = nf1.format(a.peak / a.mean) + ' <small>×</small>';
+  const vib = a.vib < 0.01 ? 0 : a.vib;
+  ui.stVib.innerHTML = nf0.format(vib * 100) + ' <small>%</small>';
+  ui.mVib.style.width = clamp(vib) * 100 + '%';
+}
+
+/* ===================== Volante e rotação ===================== */
+// Uma configuração para os motores a combustão, compartilhada entre os capítulos para a comparação ser justa, e outra para o vapor.
+const FLY = {
+  comb: { min: 0.03, max: 0.8, def: 0.15, v: 49, ref: 1000, sMin: 600, sMax: 4500, sv: 20 },
+  steam: { min: 0.2, max: 4, def: 1.0, v: 54, ref: 150, sMin: 60, sMax: 300, sv: 30 }
+};
+const flyKind = () => (chap && chap.def.type === 'steam' ? FLY.steam : FLY.comb);
+const jFrom = (f, v) => f.min * Math.pow(f.max / f.min, v / 100);
+let prof = null, soundPlan = null;
+// Rotação em cada grau: a energia acima da média acelera o volante, a de baixo freia.
+// Se a rotação chegaria a zero, o motor para; a animação então só se arrasta naquele trecho.
+function speedProfile(a, J, rpm) {
+  const w = rpm * Math.PI / 30, floor2 = Math.pow(0.06 * w, 2);
+  const out = new Float32Array(N720), tc = new Float64Array(N720 + 1);
+  let lo = Infinity, hi = -Infinity, stall = false;
+  for (let k = 0; k < N720; k++) {
+    const w2 = w * w + 2 * a.E[k] / J;
+    if (w2 <= floor2) stall = true;
+    const wk = Math.sqrt(Math.max(w2, floor2));
+    out[k] = wk * 30 / Math.PI; lo = Math.min(lo, out[k]); hi = Math.max(hi, out[k]);
+    tc[k + 1] = tc[k] + D2R / wk;
+  }
+  return { rpm: out, lo, hi, stall, tc, ref: rpm };
+}
+function updateFly() {
+  const f = flyKind(), J = jFrom(f, f.v);
+  ui.flyJ.value = f.v; ui.flyJ.style.setProperty('--v', f.v + '%');
+  ui.flyOut.textContent = nf2.format(J) + ' kg·m²';
+  prof = speedProfile(info, J, f.ref);
+  if (prof.stall) {
+    ui.rpmLine.textContent = 'Leve demais: o embalo acaba antes de o pistão vencer a compressão, e o motor para.';
+    ui.rpmLine.classList.add('stall');
+  } else {
+    ui.rpmLine.textContent = 'A rotação oscila entre ' + nf0.format(prof.lo) + ' e ' + nf0.format(prof.hi) + ' rpm, em torno de ' + nf0.format(f.ref) + ' rpm.';
+    ui.rpmLine.classList.remove('stall');
+  }
+  if (engine && engine.fly) { const sc = Math.pow(J / f.def, 0.25); engine.fly.scale.set(sc, sc, 1); }
+  soundPlan = null;
+}
+ui.flyJ.addEventListener('input', () => { flyKind().v = +ui.flyJ.value; updateFly(); drawRpm(); });
+const speedFactor = () => (prof ? prof.rpm[Math.floor(mod(th / D2R, 720)) % N720] / prof.ref : 1);
+
+/* ===================== Som ===================== */
+// Um pulso de ruído filtrado, com uma batida grave, cada vez que um escape abre. No V, cada bancada tem o seu timbre e o seu lado.
+const audio = { ctx: null, comp: null, hp: null, master: null, noise: null, on: false, timer: 0, next: 0 };
+const soundRpmNow = () => { const f = flyKind(); return f.sMin * Math.pow(f.sMax / f.sMin, f.sv / 100); };
+function setSoundRpm() {
+  const f = flyKind();
+  ui.soundRpm.value = f.sv; ui.soundRpm.style.setProperty('--v', f.sv + '%');
+  ui.soundRpm.disabled = syncOn;
+  ui.soundOut.textContent = syncOn ? 'Igual à animação' : nf0.format(soundRpmNow()) + ' rpm';
+  ui.soundHint.textContent = syncOn
+    ? (chap && chap.def.type === 'steam' ? 'Cada baforada de escape soa na hora em que acontece, em câmera lenta.' : 'Cada explosão soa na hora em que o cilindro acende, em câmera lenta.')
+    : 'O som toca na rotação real, não na câmera lenta. São os pulsos de escape sintetizados, não uma gravação.';
+  soundPlan = null;
+}
+ui.soundRpm.addEventListener('input', () => { flyKind().sv = +ui.soundRpm.value; setSoundRpm(); });
+function buildPlan() {
+  const def = chap.def, rpm = soundRpmNow(), f = flyKind();
+  const pr = speedProfile(info, jFrom(f, f.v), rpm);
+  const evs = [], isV = def.type === 'piston' && def.layout.banks.length > 1;
+  const push = (deg, bank, kind) => { evs.push({ t: pr.tc[Math.floor(mod(deg, 720))], bank, kind }); };
+  if (def.type === 'steam') { push(195, -1, 'steam'); push(555, -1, 'steam'); }
+  else def.layout.cyl.forEach((c) => {
+    const fd = c.F / D2R;
+    if (def.cycle === 4) push(fd + 140, isV ? c.bank : -1, 'ice4');
+    else { push(fd + 100, -1, 'ice2'); push(fd + 460, -1, 'ice2'); }
+  });
+  evs.sort((a, b) => a.t - b.t);
+  return { T: pr.tc[N720], evs, rpm, dur: def.type === 'steam' ? 0.2 : clamp(0.55 * 60 / rpm, 0.016, 0.09) };
+}
+// Graves puros somem em alto-falante de notebook: o corpo do som fica entre 150 Hz e 3 kHz, com ressonância no filtro e batida triangular.
+const VOICES = {
+  steam: { type: 'highpass', cut: 700, q: 0.7, amp: 0.6, thump: 0, pan: 0 },
+  ice2: { type: 'bandpass', cut: 2600, q: 1.4, amp: 0.8, thump: 220, pan: 0 },
+  mono: { type: 'lowpass', cut: 1700, q: 2.2, amp: 0.9, thump: 150, pan: 0 },
+  bank0: { type: 'lowpass', cut: 1400, q: 2.2, amp: 0.9, thump: 135, pan: -0.45 },
+  bank1: { type: 'lowpass', cut: 2100, q: 2.2, amp: 0.65, thump: 165, pan: 0.45 }
+};
+function playPulse(ev, when, plan) {
+  const ctx = audio.ctx, dur = plan.dur;
+  const v = ev.kind === 'steam' ? VOICES.steam : ev.kind === 'ice2' ? VOICES.ice2 : ev.bank === 0 ? VOICES.bank0 : ev.bank === 1 ? VOICES.bank1 : VOICES.mono;
+  let dest = audio.master;
+  if (v.pan && ctx.createStereoPanner) { const pn = ctx.createStereoPanner(); pn.pan.value = v.pan; pn.connect(audio.master); dest = pn; }
+  const src = ctx.createBufferSource(); src.buffer = audio.noise;
+  const fl = ctx.createBiquadFilter(); fl.type = v.type; fl.Q.value = v.q;
+  fl.frequency.value = v.cut * (ev.kind === 'steam' ? 1 : 0.75 + plan.rpm / 3600);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, when); g.gain.exponentialRampToValueAtTime(v.amp, when + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+  src.connect(fl); fl.connect(g); g.connect(dest);
+  src.start(when, Math.random() * 1.5, dur + 0.02);
+  if (v.thump) {
+    const o = ctx.createOscillator(), og = ctx.createGain(); o.type = 'triangle';
+    o.frequency.setValueAtTime(v.thump, when); o.frequency.exponentialRampToValueAtTime(v.thump * 0.6, when + dur);
+    og.gain.setValueAtTime(0.0001, when); og.gain.exponentialRampToValueAtTime(v.amp * 0.55, when + 0.004); og.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+    o.connect(og); og.connect(dest); o.start(when); o.stop(when + dur + 0.03);
+  }
+}
+// Agenda um ciclo inteiro de cada vez, um pouco à frente do relógio do áudio
+function schedule() {
+  if (!audio.on || !chap || syncOn) return;
+  const now = audio.ctx.currentTime;
+  if (audio.next < now) audio.next = now + 0.03;
+  while (audio.next < now + 0.2) {
+    if (!soundPlan) soundPlan = buildPlan();
+    const pl = soundPlan;
+    pl.evs.forEach((ev) => playPulse(ev, audio.next + ev.t, pl));
+    audio.next += pl.T;
+  }
+}
+// Com o som junto com a animação, cada explosão toca quando o virabrequim da animação passa pelo ângulo dela.
+let syncOn = false, lastSyncTh = 0;
+function syncEvents() {
+  const def = chap.def, evs = [], isV = def.type === 'piston' && def.layout.banks.length > 1;
+  if (def.type === 'steam') { evs.push({ a: 195, bank: -1, kind: 'steam' }, { a: 555, bank: -1, kind: 'steam' }); return evs; }
+  def.layout.cyl.forEach((c) => {
+    const a = mod(c.F / D2R - 10, 720), kind = def.cycle === 4 ? 'ice4' : 'ice2', bank = isV ? c.bank : -1;
+    evs.push({ a, bank, kind });
+    if (def.cycle === 2) evs.push({ a: mod(a + 360, 720), bank, kind });
+  });
+  return evs;
+}
+function syncTick() {
+  const prev = lastSyncTh / D2R, cur = th / D2R; lastSyncTh = th;
+  if (!syncOn || !audio.on || !chap || cur <= prev || cur - prev > 720) return;
+  const evs = chap.syncEvs || (chap.syncEvs = syncEvents());
+  const plan = { dur: chap.def.type === 'steam' ? 0.35 : 0.16, rpm: revPerSec * 60 * speedFactor() };
+  const when = audio.ctx.currentTime + 0.01;
+  evs.forEach((e) => { const n = e.a + 720 * Math.ceil((prev - e.a) / 720); if (n > prev && n <= cur) playPulse(e, when, plan); });
+}
+ui.sync.addEventListener('change', (e) => {
+  syncOn = e.target.checked; lastSyncTh = th; audio.next = 0;
+  if (syncOn && !audio.on) soundStart();
+  setSoundRpm();
+});
+
+function soundStart() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) { ui.sound.disabled = true; ui.sound.textContent = 'Sem som neste navegador'; return; }
+  if (!audio.ctx) {
+    audio.ctx = new AC();
+    const n = audio.ctx.sampleRate * 2, b = audio.ctx.createBuffer(1, n, audio.ctx.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    audio.noise = b;
+    audio.comp = audio.ctx.createDynamicsCompressor(); audio.comp.connect(audio.ctx.destination);
+    audio.hp = audio.ctx.createBiquadFilter(); audio.hp.type = 'highpass'; audio.hp.frequency.value = 100; audio.hp.connect(audio.comp);
+  }
+  audio.master = audio.ctx.createGain(); audio.master.gain.value = 0.55; audio.master.connect(audio.hp);
+  audio.ctx.resume();
+  audio.on = true; audio.next = 0; soundPlan = null;
+  clearInterval(audio.timer); audio.timer = setInterval(schedule, 25); schedule();
+  ui.sound.setAttribute('aria-pressed', 'true'); ui.sound.textContent = 'Silenciar';
+}
+function soundStop() {
+  audio.on = false; clearInterval(audio.timer);
+  if (audio.master) { const m = audio.master; m.gain.setTargetAtTime(0, audio.ctx.currentTime, 0.02); setTimeout(() => m.disconnect(), 300); audio.master = null; }
+  ui.sound.setAttribute('aria-pressed', 'false'); ui.sound.textContent = 'Ouvir o motor';
+}
+ui.sound.addEventListener('click', () => { if (audio.on) soundStop(); else soundStart(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && audio.on) soundStop(); });
+
+/* ===================== Gráficos ===================== */
+function fitCanvas(cv, cssH) {
+  const w = cv.clientWidth; if (!w) return null;
+  if (cssH) cv.style.height = cssH + 'px';
+  const h = cv.clientHeight;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, h);
+  return { c, w, h };
+}
+function niceStep(range) {
+  const raw = range / 4, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p;
+  return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p;
+}
+const PLOT = { L: 44, R: 6 };
+function drawChart() {
+  const f = fitCanvas(ui.chart); if (!f || !info) return;
+  const { c, w, h } = f, a = info;
+  const T = 8, B = 20, pw = w - PLOT.L - PLOT.R, ph = h - T - B;
+  let lo = Math.min(0, a.min), hi = a.peak;
+  a.per.forEach((p) => { for (let k = 0; k < N720; k += 4) { lo = Math.min(lo, p[k]); hi = Math.max(hi, p[k]); } });
+  const step = niceStep(hi - lo); lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+  const X = (d) => PLOT.L + pw * d / 720, Y = (v) => T + ph * (1 - (v - lo) / (hi - lo));
+  c.font = '500 12px "Barlow Condensed", "Arial Narrow", sans-serif';
+  c.lineWidth = 1; c.strokeStyle = colors.line; c.fillStyle = colors.muted; c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let v = lo; v <= hi + 1e-6; v += step) {
+    const y = Math.round(Y(v)) + 0.5;
+    c.globalAlpha = Math.abs(v) < 1e-6 ? 1 : 0.6;
+    c.beginPath(); c.moveTo(PLOT.L, y); c.lineTo(w - PLOT.R, y); c.stroke();
+    c.fillText(nf0.format(Math.abs(v) < 1e-6 ? 0 : v), PLOT.L - 6, y);
+  }
+  c.globalAlpha = 1; c.textBaseline = 'alphabetic';
+  [0, 180, 360, 540, 720].forEach((d) => { c.textAlign = d === 0 ? 'left' : d === 720 ? 'right' : 'center'; c.fillText(d + '°', X(d), h - 4); });
+  c.textAlign = 'left'; c.fillText('N·m', 0, T + 8);
+  const line = (arr, col, lw, alpha) => {
+    c.strokeStyle = col; c.lineWidth = lw; c.globalAlpha = alpha; c.lineJoin = 'round'; c.beginPath();
+    for (let k = 0; k <= N720; k += 2) { const v = arr[k % N720], x = X(k), y = Y(v); if (k) c.lineTo(x, y); else c.moveTo(x, y); }
+    c.stroke(); c.globalAlpha = 1;
+  };
+  if (a.per.length > 1) a.per.forEach((p) => line(p, colors.muted, 1, 0.45));
+  line(a.tot, colors['accent-fill'], 2.2, 1);
+  c.setLineDash([5, 4]); c.strokeStyle = colors.ink; c.globalAlpha = 0.6; c.lineWidth = 1.2;
+  c.beginPath(); c.moveTo(PLOT.L, Y(a.mean)); c.lineTo(w - PLOT.R, Y(a.mean)); c.stroke(); c.setLineDash([]); c.globalAlpha = 1;
+  const d = mod(th / D2R, 720), x = X(d);
+  c.strokeStyle = colors.ink; c.lineWidth = 1; c.beginPath(); c.moveTo(x, T); c.lineTo(x, T + ph); c.stroke();
+  const k = Math.floor(d) % N720;
+  c.fillStyle = colors['accent-fill']; c.beginPath(); c.arc(x, Y(a.tot[k]), 4, 0, TAU); c.fill();
+}
+
+function drawRpm() {
+  const f = fitCanvas(ui.rpmChart); if (!f || !prof) return;
+  const { c, w, h } = f, T = 6, B = 18, pw = w - PLOT.L - PLOT.R, ph = h - T - B;
+  const pad = Math.max(prof.ref * 0.02, (prof.hi - prof.lo) * 0.12);
+  let lo = Math.max(0, prof.lo - pad), hi = prof.hi + pad;
+  const step = niceStep(hi - lo); lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+  const X = (d) => PLOT.L + pw * d / 720, Y = (v) => T + ph * (1 - (v - lo) / (hi - lo));
+  c.font = '500 12px "Barlow Condensed", "Arial Narrow", sans-serif';
+  c.lineWidth = 1; c.strokeStyle = colors.line; c.fillStyle = colors.muted; c.textAlign = 'right'; c.textBaseline = 'middle';
+  for (let v = lo; v <= hi + 1e-6; v += step) {
+    const y = Math.round(Y(v)) + 0.5; c.globalAlpha = 0.6;
+    c.beginPath(); c.moveTo(PLOT.L, y); c.lineTo(w - PLOT.R, y); c.stroke();
+    c.globalAlpha = 1; c.fillText(nf0.format(v), PLOT.L - 6, y);
+  }
+  c.textBaseline = 'alphabetic';
+  [0, 180, 360, 540, 720].forEach((d) => { c.textAlign = d === 0 ? 'left' : d === 720 ? 'right' : 'center'; c.fillText(d + '°', X(d), h - 4); });
+  c.textAlign = 'left'; c.fillText('rpm', 0, T + 8);
+  c.setLineDash([5, 4]); c.strokeStyle = colors.ink; c.globalAlpha = 0.6; c.lineWidth = 1.2;
+  c.beginPath(); c.moveTo(PLOT.L, Y(prof.ref)); c.lineTo(w - PLOT.R, Y(prof.ref)); c.stroke(); c.setLineDash([]); c.globalAlpha = 1;
+  c.strokeStyle = prof.stall ? colors.accent : colors['g-comp']; c.lineWidth = 2.2; c.lineJoin = 'round'; c.beginPath();
+  for (let k = 0; k <= N720; k += 2) { const x = X(k), y = Y(prof.rpm[k % N720]); if (k) c.lineTo(x, y); else c.moveTo(x, y); }
+  c.stroke();
+  const d = mod(th / D2R, 720), x = X(d);
+  c.strokeStyle = colors.ink; c.lineWidth = 1; c.beginPath(); c.moveTo(x, T); c.lineTo(x, T + ph); c.stroke();
+}
+
+let timeCache = null;
+function buildTimeCache(w, h, rowH, top) {
+  const cv = document.createElement('canvas');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const pw = w - PLOT.L - PLOT.R, cyls = info.cyls;
+  c.font = '600 12px "Barlow Condensed", "Arial Narrow", sans-serif'; c.textAlign = 'right'; c.textBaseline = 'middle';
+  cyls.forEach((cy, i) => {
+    const y = top + i * rowH;
+    c.fillStyle = colors.muted; c.fillText(cyls.length > 1 ? 'Cil. ' + cy.n : (chap.def.type === 'steam' ? 'Vapor' : 'Cil. 1'), PLOT.L - 6, y + (rowH - 3) / 2);
+    let prev = null, x0 = 0;
+    for (let d = 0; d <= 720; d++) {
+      const key = d < 720 ? strokeAt(chap.def, cy, d * D2R) : null;
+      if (key !== prev) {
+        if (prev) { c.fillStyle = colors[STROKE[prev].css.slice(2)]; c.fillRect(PLOT.L + pw * x0 / 720, y, pw * (d - x0) / 720 + 0.6, rowH - 3); }
+        prev = key; x0 = d;
+      }
+    }
+  });
+  return { cv, w, h };
+}
+function drawTimeline() {
+  if (!info) return;
+  const n = info.cyls.length, rowH = n > 4 ? 13 : 16, top = 4;
+  const f = fitCanvas(ui.timeline, top + n * rowH + 18); if (!f) return;
+  const { c, w, h } = f;
+  if (!timeCache || timeCache.w !== w || timeCache.h !== h) timeCache = buildTimeCache(w, h, rowH, top);
+  c.drawImage(timeCache.cv, 0, 0, w, h);
+  const pw = w - PLOT.L - PLOT.R, X = (d) => PLOT.L + pw * d / 720;
+  c.font = '500 12px "Barlow Condensed", "Arial Narrow", sans-serif'; c.fillStyle = colors.muted; c.textBaseline = 'alphabetic';
+  [0, 180, 360, 540, 720].forEach((d) => { c.textAlign = d === 0 ? 'left' : d === 720 ? 'right' : 'center'; c.fillText(d + '°', X(d), h - 3); });
+  const x = X(mod(th / D2R, 720));
+  c.strokeStyle = colors.ink; c.lineWidth = 2; c.beginPath(); c.moveTo(x, top - 2); c.lineTo(x, top + n * rowH); c.stroke();
+}
+
+/* ===================== 3D ===================== */
+let renderer, scene, camera, controls, MAT, engine = null, autoFit = true;
+const blockParts = [];
+function applyBlock() { const on = $('tgBlock').checked; blockParts.forEach((o) => { o.visible = on; }); }
+
+function initGL() {
+  const canvas = $('gl');
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(32, 1, 0.1, 300);
+  camera.position.set(6, 4, 8);
+  controls = new THREE.OrbitControls(camera, canvas);
+  controls.enableDamping = true; controls.dampingFactor = 0.08;
+  controls.minDistance = 2; controls.maxDistance = 80; controls.screenSpacePanning = true;
+  controls.addEventListener('start', () => { autoFit = false; });
+
+  const ec = document.createElement('canvas'); ec.width = 512; ec.height = 256;
+  const g = ec.getContext('2d');
+  const grd = g.createLinearGradient(0, 0, 0, 256);
+  grd.addColorStop(0, '#f4f3f1'); grd.addColorStop(0.42, '#b3b0ab'); grd.addColorStop(0.55, '#64615d'); grd.addColorStop(1, '#232220');
+  g.fillStyle = grd; g.fillRect(0, 0, 512, 256);
+  g.fillStyle = 'rgba(255,255,255,0.95)'; g.fillRect(50, 34, 130, 46); g.fillRect(320, 26, 96, 64);
+  const etex = new THREE.CanvasTexture(ec);
+  etex.mapping = THREE.EquirectangularReflectionMapping; etex.encoding = THREE.sRGBEncoding;
+  const pm = new THREE.PMREMGenerator(renderer);
+  scene.environment = pm.fromEquirectangular(etex).texture;
+  etex.dispose(); pm.dispose();
+  scene.add(new THREE.HemisphereLight(0xf6f4f0, 0x34322f, 0.55));
+  const key = new THREE.DirectionalLight(0xffffff, 1.4); key.position.set(5, 8, 7); scene.add(key);
+  const rim = new THREE.DirectionalLight(0xe2e8ff, 0.55); rim.position.set(-6, 3, -6); scene.add(rim);
+
+  const std = (o) => new THREE.MeshStandardMaterial(o);
+  MAT = {
+    steel: std({ color: 0xa7aeb3, metalness: 0.85, roughness: 0.3 }),
+    forged: std({ color: 0x858c92, metalness: 0.85, roughness: 0.36 }),
+    alu: std({ color: 0xcfd3d6, metalness: 0.7, roughness: 0.3 }),
+    rod: std({ color: 0x939ba1, metalness: 0.85, roughness: 0.3 }),
+    dark: std({ color: 0x3a3e42, metalness: 0.6, roughness: 0.45 }),
+    valve: std({ color: 0xdadee1, metalness: 0.9, roughness: 0.18 }),
+    spring: std({ color: 0x3c5a7a, metalness: 0.7, roughness: 0.35 }),
+    cam: std({ color: 0x6c747a, metalness: 0.85, roughness: 0.3 }),
+    belt: std({ color: 0x24282b, metalness: 0.1, roughness: 0.85 }),
+    ceramic: std({ color: 0xf1efe9, metalness: 0, roughness: 0.5 }),
+    brass: std({ color: 0xc9a24a, metalness: 0.9, roughness: 0.28 }),
+    brassGlass: std({ color: 0xd6b45a, metalness: 0.5, roughness: 0.25, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide }),
+    copper: std({ color: 0xb87342, metalness: 0.9, roughness: 0.3 }),
+    paint: std({ color: 0x2f5a49, metalness: 0.3, roughness: 0.55 }),
+    iron: std({ color: 0x4a4e52, metalness: 0.5, roughness: 0.6 }),
+    glass: std({ color: 0xb4bec6, metalness: 0.1, roughness: 0.15, transparent: true, opacity: 0.13, depthWrite: false, side: THREE.DoubleSide }),
+    glassHead: std({ color: 0xc8c0ae, metalness: 0.1, roughness: 0.15, transparent: true, opacity: 0.15, depthWrite: false, side: THREE.DoubleSide }),
+    mark: std({ color: 0xf2c230, metalness: 0.1, roughness: 0.5 }),
+    fire: std({ color: 0xff7a1a, emissive: 0xff5a00, emissiveIntensity: 1.2, roughness: 0.6 }),
+    edge: new THREE.LineBasicMaterial({ color: 0x6a6660, transparent: true, opacity: 0.45 })
+  };
+  new ResizeObserver(resize).observe(ui.stage);
+  resize();
+}
+
+function resize() {
+  if (!renderer) return;
+  const w = ui.stage.clientWidth, h = ui.stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix();
+  ui.stage.classList.toggle('narrow', w < 640);
+  timeCache = null;
+}
+
+// Ajudantes de geometria
+function mesh(geo, mat, parent, x, y, z) { const m = new THREE.Mesh(geo, mat); m.position.set(x || 0, y || 0, z || 0); parent.add(m); return m; }
+function zCyl(r, len, mat, parent, x, y, z, seg) { const g = new THREE.CylinderGeometry(r, r, len, seg || 28); g.rotateX(Math.PI / 2); return mesh(g, mat, parent, x, y, z); }
+function glassBox(w, h, d, parent, x, y, z, mat) {
+  const g = new THREE.BoxGeometry(w, h, d);
+  const m = mesh(g, mat || MAT.glass, parent, x, y, z); m.renderOrder = 3;
+  const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), MAT.edge); e.position.set(x, y, z); parent.add(e);
+  blockParts.push(m, e);
+  return m;
+}
+function gasMat(hex, op) { return new THREE.MeshStandardMaterial({ color: hex, emissive: 0x000000, metalness: 0, roughness: 0.9, transparent: true, opacity: op, depthWrite: false }); }
+function gasBox(w, h, d, parent, x, y, z, hex, op) { const m = mesh(new THREE.BoxGeometry(w, h, d), gasMat(hex, op), parent, x, y, z); m.renderOrder = 1; return m; }
+// Envoltória convexa de vários círculos (para braços do virabrequim e para a correia)
+function hullOf(circles, n) {
+  const pts = [];
+  circles.forEach(([cx, cy, r]) => { for (let i = 0; i < (n || 40); i++) { const a = i / (n || 40) * TAU; pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); } });
+  pts.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], up = [];
+  for (const p of pts) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (let i = pts.length - 1; i >= 0; i--) { const p = pts[i]; while (up.length >= 2 && cross(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+  up.pop(); lo.pop();
+  return lo.concat(up).map((p) => new THREE.Vector2(p[0], p[1]));
+}
+function extrude(shape, depth, mat, parent, z) {
+  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: 24 });
+  g.translate(0, 0, -depth / 2);
+  return mesh(g, mat, parent, 0, 0, z);
+}
+const pinXY = (phi, r) => [r * Math.sin(phi), r * Math.cos(phi)];
+class Helix extends THREE.Curve {
+  constructor(rad, turns) { super(); this.rad = rad; this.turns = turns; }
+  getPoint(t, tg) { tg = tg || new THREE.Vector3(); const a = t * this.turns * TAU; return tg.set(this.rad * Math.cos(a), t, this.rad * Math.sin(a)); }
+}
+
+// Virabrequim montado a partir dos moentes de cada cilindro
+function buildCrank(parent, cyls, o) {
+  const crank = new THREE.Group(); parent.add(crank);
+  const sorted = cyls.slice().sort((a, b) => b.z - a.z);
+  const slots = [];
+  sorted.forEach((c) => { const last = slots[slots.length - 1]; if (last && Math.abs(last[last.length - 1].z - c.z) < 0.3) last.push(c); else slots.push([c]); });
+  const webT = 0.14, pinR = 0.15, mainR = 0.21, w = o.w;
+  const web = (phi, z) => {
+    const [x, y] = pinXY(phi, G.r);
+    extrude(new THREE.Shape(hullOf([[x, y, 0.25], [0, 0, 0.28]])), webT, MAT.forged, crank, z);
+    const mid = Math.PI / 2 - phi + Math.PI;
+    const cw = new THREE.Shape(); cw.moveTo(0, 0); cw.absarc(0, 0, o.cw, mid - 1.05, mid + 1.05, false); cw.closePath();
+    extrude(cw, webT, MAT.forged, crank, z);
+  };
+  let prevBack = o.nose;
+  slots.forEach((sl) => {
+    const front = sl[0], back = sl[sl.length - 1];
+    const z1 = front.z + w / 2, z0 = back.z - w / 2;
+    sl.forEach((c) => { const [x, y] = pinXY(c.phi, G.r); zCyl(pinR, w, MAT.steel, crank, x, y, c.z, 20); });
+    web(front.phi, z1 + webT / 2); web(back.phi, z0 - webT / 2);
+    for (let i = 0; i < sl.length - 1; i++) {
+      const a = sl[i], b = sl[i + 1];
+      if (Math.abs(Math.sin((a.phi - b.phi) / 2)) > 0.01) {
+        const pa = pinXY(a.phi, G.r), pb = pinXY(b.phi, G.r);
+        extrude(new THREE.Shape(hullOf([[pa[0], pa[1], 0.21], [pb[0], pb[1], 0.21]])), 0.05, MAT.forged, crank, (a.z + b.z) / 2);
+      }
+    }
+    const ff = z1 + webT;
+    zCyl(mainR, prevBack - ff, MAT.forged, crank, 0, 0, (prevBack + ff) / 2, 20);
+    prevBack = z0 - webT;
+  });
+  const flyZ = prevBack - o.tail;
+  zCyl(mainR, o.tail, MAT.forged, crank, 0, 0, prevBack - o.tail / 2, 20);
+  const flyG = new THREE.Group(); flyG.position.z = flyZ; crank.add(flyG);
+  zCyl(o.flyR, 0.14, MAT.iron, flyG, 0, 0, 0, 56);
+  for (let i = 0; i < 4; i++) { const a = i / 4 * TAU + 0.4; zCyl(o.flyR * 0.12, 0.15, MAT.dark, flyG, o.flyR * 0.55 * Math.cos(a), o.flyR * 0.55 * Math.sin(a), 0, 16); }
+  mesh(new THREE.BoxGeometry(0.06, o.flyR * 0.3, 0.16), MAT.mark, flyG, 0, o.flyR * 0.82, 0);
+  if (o.timing != null) {
+    zCyl(0.2, 0.14, MAT.steel, crank, 0, 0, o.timing, 32);
+    mesh(new THREE.BoxGeometry(0.04, 0.12, 0.15), MAT.mark, crank, 0, 0.12, o.timing);
+  }
+  return { crank, flyZ, flyG };
+}
+
+function makeRod(parent, thick) {
+  const g = new THREE.Group(); parent.add(g);
+  mesh(new THREE.BoxGeometry(0.12, G.l - 0.3, thick * 0.6), MAT.rod, g, 0, G.l / 2, 0);
+  zCyl(0.2, thick, MAT.rod, g, 0, 0, 0, 24);
+  zCyl(0.11, thick * 0.8, MAT.rod, g, 0, G.l, 0, 16);
+  return g;
+}
+function makePiston(parent, z) {
+  const g = new THREE.Group(); g.position.z = z; parent.add(g);
+  mesh(new THREE.CylinderGeometry(G.R - 0.012, G.R - 0.012, 0.75, 36), MAT.alu, g, 0, G.crown - 0.375, 0);
+  [0.3, 0.25, 0.2].forEach((y) => { const t = mesh(new THREE.TorusGeometry(G.R - 0.01, 0.012, 6, 40), MAT.dark, g, 0, y, 0); t.rotation.x = Math.PI / 2; });
+  return g;
+}
+
+// Válvulas e comandos do 4 tempos
+const VT = 12 * D2R, SEATX = 0.2, VL = 0.82, LMAX = 0.11, VSPAN = 230;
+const VALVE = { in: { side: -1, open: 350 }, ex: { side: 1, open: 140 } };
+const liftAt = (g, open) => { const x = mod(g - open, 720); return x < VSPAN ? LMAX * Math.pow(Math.sin(Math.PI * x / VSPAN), 2) : 0; };
+let lobeGeo = null, helixGeo = null;
+function getLobeGeo() {
+  if (lobeGeo) return lobeGeo;
+  const s = new THREE.Shape(), span = VSPAN * D2R;
+  for (let i = 0; i <= 96; i++) {
+    const a = -Math.PI + i / 96 * TAU;
+    const r = 0.16 + (Math.abs(a) < span / 4 ? LMAX * Math.pow(Math.cos(TAU * a / span), 2) : 0);
+    const x = r * Math.sin(a), y = r * Math.cos(a);
+    if (i) s.lineTo(x, y); else s.moveTo(x, y);
+  }
+  lobeGeo = new THREE.ExtrudeGeometry(s, { depth: 0.1, bevelEnabled: false }); lobeGeo.translate(0, 0, -0.05);
+  return lobeGeo;
+}
+function getHelixGeo() { if (!helixGeo) helixGeo = new THREE.TubeGeometry(new Helix(0.075, 6), 140, 0.012, 6, false); return helixGeo; }
+function makeValve(parent, side, z) {
+  const grp = new THREE.Group(); grp.rotation.z = -side * VT; parent.add(grp);
+  mesh(new THREE.CylinderGeometry(0.1, 0.17, 0.05, 24), MAT.valve, grp, 0, 0.025, 0);
+  mesh(new THREE.CylinderGeometry(0.03, 0.03, VL, 10), MAT.valve, grp, 0, VL / 2, 0);
+  const sp = mesh(getHelixGeo(), MAT.spring, grp, 0, 0.45, 0);
+  mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.03, 16), MAT.valve, grp, 0, 0.775, 0);
+  const dir = new THREE.Vector3(side * Math.sin(VT), Math.cos(VT), 0);
+  const seat = new THREE.Vector3(side * SEATX, G.deck + 0.005, z);
+  return { grp, sp, dir, seat };
+}
+const camPos = (side) => [side * (SEATX + Math.sin(VT) * (VL + 0.165)), G.deck + Math.cos(VT) * (VL + 0.165)];
+
+function bankToWorld(beta, x, y) { return [x * Math.cos(beta) + y * Math.sin(beta), -x * Math.sin(beta) + y * Math.cos(beta)]; }
+
+/* ---------- Motor de pistão (2 e 4 tempos, qualquer número de cilindros) ---------- */
+function buildPiston(def) {
+  const root = new THREE.Group();
+  const { cyl, banks } = def.layout;
+  const n = cyl.length, is4 = def.cycle === 4, isV = banks.length > 1;
+  const zs = cyl.map((c) => c.z);
+  const zFront = Math.max(...zs) + G.S / 2, zBack = Math.min(...zs) - G.S / 2;
+  const zT = zFront + 0.25;
+  const labels = [];
+
+  const cr = buildCrank(root, cyl, { w: isV ? 0.17 : 0.26, cw: is4 ? 0.58 : 0.55, tail: is4 ? 0.32 : 0.62, flyR: n === 1 ? 1.45 : 1.25, timing: def.belt ? zT : null, nose: def.belt ? zT + 0.07 : zFront });
+  if (is4) glassBox(isV ? 2.5 : 2.0, 2.15, zFront - zBack, root, 0, 0.03, (zFront + zBack) / 2);
+
+  cyl.forEach((c) => { c.rod = makeRod(root, isV ? 0.15 : 0.2); });
+
+  const camPulleys = [];
+  banks.forEach((b, bi) => {
+    const g = new THREE.Group(); g.rotation.z = -b.beta; root.add(g); b.g = g;
+    const cs = cyl.filter((c) => c.bank === bi);
+    const bz = cs.map((c) => c.z), z0 = Math.min(...bz) - G.S / 2, z1 = Math.max(...bz) + G.S / 2, zc = (z0 + z1) / 2, len = z1 - z0;
+    glassBox(G.R * 2 + 0.36, G.deck - 1.1, len, g, 0, (G.deck + 1.1) / 2, zc);
+    if (is4) {
+      glassBox(1.5, 1.32, len, g, 0, G.deck + 0.66, zc, MAT.glassHead);
+      [-1, 1].forEach((side) => {
+        const [x, y] = camPos(side);
+        const zEnd = def.belt ? zT : z1;
+        zCyl(0.07, zEnd - z0 + 0.1, MAT.cam, g, x, y, (zEnd + z0 - 0.1) / 2, 14);
+        if (def.belt) {
+          const p = new THREE.Group(); p.position.set(x, y, zT); g.add(p);
+          mesh(new THREE.TorusGeometry(0.36, 0.05, 10, 48), MAT.steel, p, 0, 0, 0);
+          zCyl(0.09, 0.16, MAT.steel, p, 0, 0, 0, 18);
+          for (let k = 0; k < 3; k++) { const sp = mesh(new THREE.BoxGeometry(0.05, 0.3, 0.06), MAT.steel, p, 0, 0, 0); sp.rotation.z = k / 3 * TAU; sp.translateY(0.2); }
+          mesh(new THREE.BoxGeometry(0.06, 0.12, 0.12), MAT.mark, p, 0, 0.36, 0);
+          camPulleys.push({ m: p, world: bankToWorld(b.beta, x, y) });
+        }
+      });
+    } else {
+      glassBox(G.R * 2 + 0.36, 0.42, len, g, 0, G.deck + 0.21, zc, MAT.glassHead);
+    }
+    cs.forEach((c) => {
+      c.piston = makePiston(g, c.z);
+      c.gas = mesh(new THREE.CylinderGeometry(G.R - 0.016, G.R - 0.016, 1, 32), gasMat(GAS.fresh, 0.7), g, 0, 0, c.z); c.gas.renderOrder = 1;
+      const plugLen = is4 ? 1.45 : 0.62;
+      const plug = mesh(new THREE.CylinderGeometry(0.06, 0.06, plugLen, 14), MAT.ceramic, g, 0, G.deck + plugLen / 2, c.z);
+      mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.12, 6), MAT.steel, g, 0, G.deck + plugLen - 0.25, c.z);
+      c.spark = mesh(new THREE.SphereGeometry(0.08, 14, 10), new THREE.MeshBasicMaterial({ color: 0xfff1a0, transparent: true, opacity: 0, depthWrite: false }), g, 0, G.deck - 0.03, c.z);
+      c.plug = plug;
+      if (is4) {
+        c.valves = {};
+        ['in', 'ex'].forEach((k) => {
+          const side = VALVE[k].side;
+          const v = makeValve(g, side, c.z);
+          const [cx, cy] = camPos(side);
+          v.lobe = mesh(getLobeGeo(), MAT.cam, g, cx, cy, c.z);
+          v.port = gasBox(0.5, 0.16, 0.3, g, side * 0.405, G.deck + 0.2, c.z, k === 'in' ? GAS.fresh : GAS.burnt, 0.15);
+          v.port.rotation.z = side * 35 * D2R;
+          c.valves[k] = v;
+        });
+      }
+      if (n > 1) labels.push({ num: true, t: String(c.n), o: g, p: [0, G.deck + (is4 ? 1.62 : 0.85), c.z] });
+    });
+  });
+
+  let beltMesh = null;
+  if (def.belt) {
+    const circles = [[0, 0, 0.2]].concat(camPulleys.map((p) => [p.world[0], p.world[1], 0.4]));
+    const outer = new THREE.Shape(hullOf(circles.map(([x, y, r]) => [x, y, r + 0.05]), 56));
+    outer.holes.push(new THREE.Path(hullOf(circles, 56)));
+    beltMesh = extrude(outer, 0.12, MAT.belt, root, zT);
+  }
+
+  // Peças do 2 tempos: janelas, dutos e cárter
+  let two = null;
+  if (!is4) {
+    const g = banks[0].g;
+    const exTop = crownAt(100), exLow = exTop - 0.34, trTop = crownAt(120), trLow = trTop - 0.2;
+    zCyl(0.98, 1.3, MAT.glass, root, 0, 0, 0, 48).renderOrder = 3;
+    blockParts.push(root.children[root.children.length - 1]);
+    const caseGas = zCyl(0.93, 1.2, gasMat(GAS.fresh, 0.3), root, 0, 0, 0, 40); caseGas.renderOrder = 1;
+    const exGas = gasBox(1.1, 0.32, 0.4, g, G.R + 0.55, (exTop + exLow) / 2, 0, GAS.burnt, 0.2);
+    const exDown = gasBox(0.26, exLow - 0.55, 0.4, g, G.R + 0.97, (exLow + 0.55) / 2, 0, GAS.burnt, 0.2);
+    glassBox(1.16, 0.4, 0.46, g, G.R + 0.55, (exTop + exLow) / 2, 0);
+    const trs = [-1, 1].map((sz) => {
+      const zz = sz * (G.R + 0.14);
+      const up = gasBox(0.36, trTop - 0.72, 0.14, g, 0, (trTop + 0.72) / 2, zz, GAS.fresh, 0.35);
+      const mouth = gasBox(0.36, 0.2, 0.2, g, 0, (trTop + trLow) / 2, sz * (G.R + 0.02), GAS.fresh, 0.35);
+      glassBox(0.42, trTop - 0.72 + 0.04, 0.2, g, 0, (trTop + 0.72) / 2, zz);
+      return [up, mouth];
+    });
+    const inGas = gasBox(0.8, 0.36, 0.5, root, -1.35, 0, 0, GAS.fresh, 0.2);
+    glassBox(0.86, 0.42, 0.56, root, -1.35, 0, 0);
+    mesh(new THREE.BoxGeometry(0.34, 0.6, 0.66), MAT.dark, root, -1.9, 0, 0);
+    const reedPivot = new THREE.Group(); reedPivot.position.set(-1.0, 0, 0); root.add(reedPivot);
+    mesh(new THREE.BoxGeometry(0.06, 0.42, 0.56), MAT.iron, root, -1.0, 0, 0);
+    const reeds = [1, -1].map((sy) => {
+      const hinge = new THREE.Group(); hinge.position.set(-1.0, sy * 0.17, 0); root.add(hinge);
+      mesh(new THREE.BoxGeometry(0.3, 0.012, 0.44), MAT.spring, hinge, 0.15, 0, 0);
+      return { hinge, sy };
+    });
+    two = { caseGas, exGas, exDown, trs, inGas, reeds };
+    labels.push({ t: 'Escape', o: g, p: [G.R + 1.0, exTop + 0.1, 0] });
+    labels.push({ t: 'Transferência', o: g, p: [0.25, trTop - 0.35, G.R + 0.22] });
+    labels.push({ t: 'Válvula de palheta', o: root, p: [-1.35, -0.32, 0.3] });
+    labels.push({ t: 'Cárter', o: root, p: [0.55, -0.85, 0.66] });
+  }
+
+  const c1 = cyl.find((c) => c.n === 1);
+  if (n === 1) {
+    labels.push({ t: 'Vela', o: banks[0].g, p: [0.1, G.deck + (is4 ? 1.45 : 0.62), 0] });
+    labels.push({ t: 'Pistão', o: c1.piston, p: [G.R, 0.1, 0.2] });
+    labels.push({ t: 'Biela', o: c1.rod, p: [0.1, G.l * 0.45, 0.12] });
+    labels.push({ t: 'Volante', o: root, p: [1.0, -1.05, cr.flyZ] });
+    if (is4) {
+      labels.push({ t: 'Válvula de admissão', o: c1.valves.in.grp, p: [0, 0.6, 0], al: 'l' });
+      labels.push({ t: 'Válvula de escape', o: c1.valves.ex.grp, p: [0, 0.45, 0] });
+      labels.push({ t: 'Comando', o: banks[0].g, p: [camPos(1)[0] + 0.2, camPos(1)[1] + 0.25, 0.4] });
+      labels.push({ t: 'Correia', o: root, p: [0.55, 1.6, zT + 0.06] });
+    }
+  } else {
+    labels.push({ t: 'Virabrequim', o: root, p: [0, -0.6, zFront - 0.1] });
+    labels.push({ t: 'Volante', o: root, p: [0.9, -0.9, cr.flyZ] });
+  }
+  labels.push({ t: 'Virabrequim', o: root, p: [0.62, -0.55, 0.3], only: n === 1 });
+
+  const camRot = camPulleys.map((p) => p.m);
+  const gc = new THREE.Color(), ge = new THREE.Color(), tmp = new THREE.Color();
+  function setGas(m, hex1, hex2, t, emisHex, emis, op) {
+    gc.setHex(hex1); if (hex2 != null) gc.lerp(tmp.setHex(hex2), t);
+    m.material.color.copy(gc);
+    if (emisHex != null) m.material.emissive.setHex(emisHex).multiplyScalar(emis); else m.material.emissive.setHex(0);
+    m.material.opacity = op;
+  }
+  function gas4(m, g) {
+    const d = g < 360 ? g : g - 720;
+    if (d >= -15 && d < 35) { const t = (d + 15) / 50; setGas(m, GAS.burn, GAS.hot, t, 0xff9a20, 1 - t * 0.7, 0.92); }
+    else if (d >= 35 && d < 180) { const t = smooth((d - 35) / 145); setGas(m, GAS.hot, GAS.burnt, t, 0xff5a10, 0.3 * (1 - t), 0.85); }
+    else if (g >= 180 && g < 360) setGas(m, GAS.burnt, null, 0, null, 0, lerp(0.8, 0.45, (g - 180) / 180));
+    else if (g >= 360 && g < 540) setGas(m, GAS.fresh, null, 0, null, 0, lerp(0.4, 0.75, (g - 360) / 180));
+    else setGas(m, GAS.fresh, GAS.comp, (g - 540) / 165, null, 0, 0.8);
+  }
+  function gas2(m, d) {
+    if (d >= -15 && d < 35) { const t = (d + 15) / 50; setGas(m, GAS.burn, GAS.hot, t, 0xff9a20, 1 - t * 0.7, 0.92); }
+    else if (d >= 35 && d < 100) { const t = smooth((d - 35) / 65); setGas(m, GAS.hot, GAS.burnt, t, 0xff5a10, 0.3 * (1 - t), 0.85); }
+    else if (d >= 100 && d < 120) setGas(m, GAS.burnt, null, 0, null, 0, 0.8);
+    else if (d >= 120 || d < -120) { const u = d >= 120 ? d - 120 : d + 240; setGas(m, GAS.burnt, GAS.fresh, smooth(u / 100), null, 0, 0.75); }
+    else setGas(m, GAS.fresh, GAS.comp, (d + 120) / 105, null, 0, 0.8);
+  }
+
+  function update(t) {
+    cr.crank.rotation.z = -t;
+    camRot.forEach((m) => { m.rotation.z = -t / 2; });
+    cyl.forEach((c) => {
+      const k = pistonKin(c.beta, c.phi, t);
+      c.piston.position.y = k.s;
+      c.rod.position.set(k.Px, k.Py, c.z);
+      c.rod.rotation.z = -Math.atan2(k.Qx - k.Px, k.Qy - k.Py);
+      const crown = k.s + G.crown;
+      c.gas.position.y = (crown + G.deck) / 2; c.gas.scale.y = Math.max(0.01, G.deck - crown);
+      let sparkOn;
+      if (is4) {
+        const g = mod((t - c.F) / D2R, 720);
+        gas4(c.gas, g);
+        const d = g < 360 ? g : g - 720;
+        sparkOn = d >= -15 && d < -3;
+        ['in', 'ex'].forEach((key) => {
+          const v = c.valves[key], cfg = VALVE[key];
+          const lift = liftAt(g, cfg.open);
+          v.grp.position.copy(v.seat).addScaledVector(v.dir, -lift);
+          v.sp.position.y = 0.45 + lift; v.sp.scale.y = 0.3 - lift;
+          const peak = cfg.open + VSPAN / 2;
+          const psi = Math.PI + cfg.side * VT + (t - c.F - peak * D2R) / 2;
+          v.lobe.rotation.z = -psi;
+          const f = lift / LMAX;
+          v.port.material.opacity = 0.12 + 0.65 * Math.min(1, f * 1.6);
+        });
+      } else {
+        const d = mod((t - c.F) / D2R + 180, 360) - 180;
+        gas2(c.gas, d);
+        sparkOn = d >= -15 && d < -3;
+        const ad = Math.abs(d);
+        const exF = smooth((ad - 100) / 15), trF = smooth((ad - 120) / 15);
+        const reedF = smooth((d + 110) / 15) * smooth((20 - d) / 15);
+        let cc;
+        if (d >= -110 && d < 20) cc = 0.25 + 0.2 * (d + 110) / 130;
+        else if (d >= 20 && d < 120) cc = 0.45 + 0.25 * (d - 20) / 100;
+        else { const u = d >= 120 ? d - 120 : d + 240; cc = 0.7 - 0.45 * clamp(u / 130); }
+        setGas(two.caseGas, GAS.fresh, GAS.comp, clamp((cc - 0.25) / 0.45), null, 0, cc * 0.6);
+        two.trs.forEach(([up, mouth]) => {
+          setGas(up, GAS.fresh, GAS.comp, clamp((cc - 0.25) / 0.45), null, 0, clamp(cc + 0.25 * trF));
+          setGas(mouth, GAS.fresh, null, 0, null, 0, 0.1 + 0.75 * trF);
+        });
+        setGas(two.exGas, GAS.burnt, GAS.fresh, 0.35 * trF, null, 0, 0.12 + 0.65 * exF);
+        setGas(two.exDown, GAS.burnt, GAS.fresh, 0.35 * trF, null, 0, 0.12 + 0.55 * exF);
+        setGas(two.inGas, GAS.fresh, null, 0, null, 0, 0.12 + 0.6 * reedF);
+        two.reeds.forEach((r) => { r.hinge.rotation.z = r.sy * reedF * 0.45; });
+      }
+      c.spark.material.opacity = sparkOn ? 1 : 0;
+      c.spark.scale.setScalar(sparkOn ? 1 + 0.4 * Math.sin(t * 90) : 1);
+    });
+  }
+
+  const cam = n === 1 ? (is4 ? [6.4, 2.6, 3.6] : [4.6, 2.4, 6.4]) : isV ? [7.2, 3.8, 4.4] : [7.6, 3.4, 3.8];
+  return { root, update, labels, camDir: new THREE.Vector3(...cam).normalize(), cyl, fly: cr.flyG };
+}
+
+/* ---------- Máquina a vapor oscilante ---------- */
+function buildSteam() {
+  const root = new THREE.Group();
+  const labels = [];
+  const Oy = ST.Oy;
+  mesh(new THREE.BoxGeometry(5.4, 0.16, 2.4), MAT.iron, root, -0.95, -1.52, -0.45);
+  mesh(new THREE.BoxGeometry(0.9, 3.8, 0.12), MAT.paint, root, 0, 0.46, -0.56);
+  zCyl(0.17, 0.16, MAT.paint, root, 0, 0, -0.56, 24);
+  // Furos de entrada e saída na placa, um de cada lado do pivô
+  const psiP = 8 * D2R;
+  const holeIn = zCyl(0.055, 0.02, new THREE.MeshBasicMaterial({ color: 0x222222 }), root, -ST.port * Math.sin(psiP), Oy + ST.port * Math.cos(psiP), -0.495, 16);
+  const holeOut = zCyl(0.055, 0.02, new THREE.MeshBasicMaterial({ color: 0x222222 }), root, ST.port * Math.sin(psiP), Oy + ST.port * Math.cos(psiP), -0.495, 16);
+  // Pivô, mola e porca atrás da placa
+  zCyl(0.05, 0.6, MAT.steel, root, 0, Oy, -0.55, 12);
+  const sp = new THREE.Mesh(new THREE.TubeGeometry(new Helix(0.09, 5), 100, 0.014, 6, false), MAT.spring);
+  sp.rotation.x = -Math.PI / 2; sp.position.set(0, Oy, -0.64); sp.scale.y = 0.18; root.add(sp);
+  zCyl(0.08, 0.06, MAT.steel, root, 0, Oy, -0.86, 6);
+
+  // Cilindro oscilante
+  const cylG = new THREE.Group(); cylG.position.set(0, Oy, 0); root.add(cylG);
+  const body = mesh(new THREE.CylinderGeometry(ST.bore, ST.bore, 1.3, 40, 1, true), MAT.brassGlass, cylG, 0, 0, 0); body.renderOrder = 3;
+  mesh(new THREE.CylinderGeometry(ST.bore + 0.03, ST.bore + 0.03, 0.08, 40), MAT.brass, cylG, 0, 0.69, 0);
+  mesh(new THREE.TorusGeometry(ST.bore, 0.03, 8, 40), MAT.brass, cylG, 0, -0.65, 0).rotation.x = Math.PI / 2;
+  mesh(new THREE.BoxGeometry(0.36, 0.5, 0.1), MAT.brass, cylG, 0, 0.42, -0.44);
+  const steamGas = mesh(new THREE.CylinderGeometry(ST.bore - 0.02, ST.bore - 0.02, 1, 32), gasMat(GAS.steam, 0.7), cylG, 0, 0, 0); steamGas.renderOrder = 1;
+  const piston = mesh(new THREE.CylinderGeometry(ST.bore - 0.01, ST.bore - 0.01, 0.26, 36), MAT.alu, cylG, 0, 0, 0);
+  const rod = mesh(new THREE.CylinderGeometry(0.05, 0.05, ST.rod, 12), MAT.steel, cylG, 0, 0, 0);
+  const eye = zCyl(0.1, 0.12, MAT.steel, cylG, 0, 0, 0, 18);
+
+  // Virabrequim de disco e volante
+  const crank = new THREE.Group(); root.add(crank);
+  zCyl(0.62, 0.1, MAT.iron, crank, 0, 0, -0.33, 48);
+  zCyl(0.07, 0.36, MAT.steel, crank, 0, ST.r, -0.12, 14);
+  mesh(new THREE.BoxGeometry(0.06, 0.2, 0.11), MAT.mark, crank, 0, -0.45, -0.33);
+  zCyl(0.09, 0.95, MAT.steel, crank, 0, 0, -0.75, 14);
+  const fly = new THREE.Group(); fly.position.z = -1.05; crank.add(fly);
+  mesh(new THREE.TorusGeometry(1.15, 0.12, 12, 64), MAT.iron, fly, 0, 0, 0);
+  zCyl(0.2, 0.2, MAT.iron, fly, 0, 0, 0, 20);
+  for (let i = 0; i < 6; i++) { const s = mesh(new THREE.BoxGeometry(0.07, 1.1, 0.07), MAT.iron, fly, 0, 0, 0); s.rotation.z = i / 6 * TAU; s.translateY(0.6); }
+  mesh(new THREE.BoxGeometry(0.1, 0.22, 0.26), MAT.mark, fly, 0, 1.15, 0);
+
+  // Caldeira, fornalha e canos
+  const boiler = new THREE.Group(); boiler.position.set(-2.75, -0.55, -0.4); root.add(boiler);
+  zCyl(0.6, 1.5, MAT.copper, boiler, 0, 0.35, 0, 40);
+  mesh(new THREE.BoxGeometry(1.3, 0.55, 1.5), MAT.iron, boiler, 0, -0.6, 0);
+  const fire = mesh(new THREE.BoxGeometry(0.9, 0.3, 0.05), MAT.fire, boiler, 0, -0.62, 0.76);
+  mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.3, 10), MAT.brass, boiler, 0.3, 1.05, 0.3);
+  const tube = (pts, mat) => mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p)), false, 'catmullrom', 0.05), 120, 0.06, 10, false), mat, root, 0, 0, 0);
+  const xin = -ST.port * Math.sin(psiP), yin = Oy + ST.port * Math.cos(psiP);
+  tube([[-2.75, 0.4, -0.4], [-2.75, 1.4, -0.4], [-2.6, 2.35, -0.75], [-0.6, 2.35, -0.75], [xin - 0.15, yin + 0.05, -0.75], [xin, yin, -0.68], [xin, yin, -0.6]], MAT.copper);
+  tube([[-xin, yin, -0.6], [-xin, yin, -0.68], [-xin + 0.2, yin, -0.78], [1.1, yin + 0.05, -0.78], [1.4, yin + 0.4, -0.78], [1.45, 3.05, -0.78]], MAT.copper);
+  // Baforadas de vapor no fim do cano de saída
+  const puffs = [];
+  for (let i = 0; i < 14; i++) { const m = mesh(new THREE.SphereGeometry(0.16, 12, 8), new THREE.MeshBasicMaterial({ color: 0xeef3f5, transparent: true, opacity: 0, depthWrite: false }), root, 1.45, 3.05, -0.78); m.visible = false; puffs.push({ m, t: 0, on: false }); }
+  let puffClock = 0;
+
+  labels.push({ t: 'Caldeira', o: boiler, p: [0, 0.95, 0.4] });
+  labels.push({ t: 'Entrada de vapor', o: root, p: [-1.5, 2.35, -0.75] });
+  labels.push({ t: 'Saída', o: root, p: [1.45, 3.2, -0.78] });
+  labels.push({ t: 'Cilindro', o: cylG, p: [-ST.bore - 0.05, -0.35, 0.25], al: 'l' });
+  labels.push({ t: 'Pistão', o: piston, p: [ST.bore, 0, 0.2] });
+  labels.push({ t: 'Pivô', o: root, p: [0.12, Oy, 0.05] });
+  labels.push({ t: 'Manivela', o: crank, p: [0, ST.r, 0.1] });
+  labels.push({ t: 'Volante', o: root, p: [0.85, -0.9, -1.05] });
+
+  const cA = new THREE.Color(), cB = new THREE.Color();
+  let lastT = null, time = 0;
+  function update(t, dt) {
+    time += dt;
+    crank.rotation.z = -t;
+    const k = steamKin(t);
+    cylG.rotation.z = k.psi;
+    const pc = -(k.dist - ST.rod);
+    piston.position.y = pc; rod.position.y = pc - ST.rod / 2; eye.position.y = pc - ST.rod;
+    const top = 0.65, bot = pc + 0.13;
+    steamGas.position.y = (top + bot) / 2; steamGas.scale.y = Math.max(0.01, top - bot);
+    const fi = steamIn(k.psi), fo = steamOut(k.psi);
+    cA.setHex(k.psi >= 0 ? GAS.steam : GAS.used);
+    steamGas.material.color.copy(cA);
+    steamGas.material.opacity = 0.35 + 0.5 * Math.max(fi, fo);
+    holeIn.material.color.copy(cB.setHex(0x222222).lerp(cA.setHex(GAS.steam), fi));
+    holeOut.material.color.copy(cB.setHex(0x222222).lerp(cA.setHex(GAS.used), fo));
+    fire.material.emissiveIntensity = 1.1 + 0.25 * Math.sin(time * 13) + 0.15 * Math.sin(time * 7.3);
+    // Uma baforada a cada pedaço do escape; o avanço é pelo ângulo para acompanhar a câmera lenta
+    const dth = lastT == null ? 0 : t - lastT; lastT = t;
+    puffClock += Math.abs(dth);
+    if (fo > 0.5 && puffClock > 0.35) {
+      puffClock = 0;
+      const p = puffs.find((x) => !x.on); if (p) { p.on = true; p.t = 0; p.m.visible = true; }
+    }
+    puffs.forEach((p) => {
+      if (!p.on) return;
+      p.t += Math.abs(dth) / 2.4;
+      if (p.t >= 1) { p.on = false; p.m.visible = false; return; }
+      p.m.position.set(1.45 + 0.4 * p.t, 3.1 + 1.3 * p.t, -0.78);
+      p.m.scale.setScalar(0.6 + 2.2 * p.t);
+      p.m.material.opacity = 0.75 * (1 - p.t);
+    });
+  }
+  return { root, update, labels, camDir: new THREE.Vector3(1.6, 1.1, 6).normalize(), fly };
+}
+
+/* ---------- Troca de capítulo ---------- */
+const markers = [];
+function disposeEngine() {
+  if (!engine) return;
+  scene.remove(engine.root);
+  engine.root.traverse((o) => {
+    if (o.geometry && o.geometry !== lobeGeo && o.geometry !== helixGeo) o.geometry.dispose();
+    const ms = Array.isArray(o.material) ? o.material : [o.material];
+    ms.forEach((m) => { if (m && !Object.values(MAT).includes(m)) m.dispose(); });
+  });
+  engine = null;
+  blockParts.length = 0;
+  markers.forEach((m) => m.el.remove()); markers.length = 0;
+}
+const fitSphere = new THREE.Sphere(), fitBox = new THREE.Box3();
+let camGoal = null;
+function computeFit() {
+  if (!engine) return;
+  fitBox.setFromObject(engine.root); fitBox.getBoundingSphere(fitSphere);
+  const vf = camera.fov * D2R, hf = 2 * Math.atan(Math.tan(vf / 2) * camera.aspect);
+  const d = fitSphere.radius / Math.sin(Math.min(vf, hf) / 2) * 0.92;
+  camGoal = { target: fitSphere.center.clone(), pos: fitSphere.center.clone().addScaledVector(engine.camDir, d) };
+}
+
+function setChapter(i) {
+  if (i === cur) return;
+  cur = i;
+  const def = CHAPTERS[i];
+  def.info = def.info || analyze(def);
+  info = def.info;
+  chap = { def };
+  timeCache = null;
+  if (has3D) {
+    disposeEngine();
+    engine = def.type === 'steam' ? buildSteam() : buildPiston(def);
+    scene.add(engine.root);
+    engine.update(th, 0);
+    applyBlock();
+    engine.labels.forEach((L) => {
+      if (L.only === false) return;
+      const el = document.createElement('span');
+      el.className = 'mk' + (L.num ? ' num' : '');
+      el.textContent = L.t;
+      ui.labels.appendChild(el);
+      markers.push({ el, L, v: new THREE.Vector3() });
+    });
+    autoFit = true;
+    computeFit();
+    if (camGoal && !reduceMotion) {
+      // Começa já na direção do capítulo, um pouco afastado, e aproxima
+      camera.position.copy(camGoal.pos).sub(camGoal.target).multiplyScalar(1.25).add(camGoal.target);
+      controls.target.copy(camGoal.target);
+    }
+  }
+  fillTexts(i);
+  updateFly(); setSoundRpm();
+  updateHud();
+  drawChart(); drawTimeline(); drawRpm();
+  try { history.replaceState(null, '', '#' + (i + 1)); } catch (e) { /* sem histórico */ }
+}
+
+/* ===================== Laço ===================== */
+function updateHud() {
+  if (!chap) return;
+  const def = chap.def;
+  const c1 = def.type === 'steam' ? { n: 1, F: 0 } : def.layout.cyl.find((c) => c.n === 1);
+  const key = strokeAt(def, c1, th), s = STROKE[key];
+  const n = def.type === 'steam' ? 1 : def.layout.cyl.length;
+  ui.chip.textContent = (n > 1 ? 'Cilindro 1 · ' : '') + s.label;
+  ui.chip.style.background = 'var(' + s.css + ')';
+  ui.chip.style.color = s.dark ? '#1d1f21' : '#fff';
+  ui.hAng.textContent = nf0.format(mod(th / D2R, 360)) + '°';
+  if (def.type === 'piston' && def.cycle === 4) { ui.hCycLbl.textContent = 'Ciclo do cil. 1'; ui.hCyc.textContent = nf0.format(mod((th - c1.F) / D2R, 720)) + '°'; }
+}
+
+let last = performance.now(), uiClock = 0;
+const shakeV = has3D ? new THREE.Vector3() : null;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (playing) th += revPerSec * TAU * dt * speedFactor();
+  syncTick();
+  if (engine) {
+    engine.update(th, dt);
+    if (shakeOn && info) {
+      const k = Math.floor(mod(th / D2R, 720)) % N720;
+      engine.root.position.set(info.fx[k] * 0.12, info.fy[k] * 0.12, 0);
+    } else engine.root.position.set(0, 0, 0);
+    if (autoFit && camGoal) {
+      const kk = reduceMotion ? 1 : Math.min(1, dt * 4);
+      controls.target.lerp(camGoal.target, kk);
+      camera.position.lerp(camGoal.pos, kk);
+    }
+    controls.update();
+    renderer.render(scene, camera);
+    const W = ui.stage.clientWidth, H = ui.stage.clientHeight;
+    markers.forEach((m) => {
+      m.v.set(m.L.p[0], m.L.p[1], m.L.p[2]); m.L.o.localToWorld(m.v); m.v.project(camera);
+      if (m.v.z > 1) { m.el.style.visibility = 'hidden'; return; }
+      m.el.style.visibility = '';
+      const half = m.L.num ? 12 : 0, left = m.L.al === 'l' ? ' translateX(-100%)' : '';
+      m.el.style.transform = 'translate(' + ((m.v.x + 1) / 2 * W - half).toFixed(1) + 'px,' + ((1 - m.v.y) / 2 * H - (m.L.num ? 12 : 10)).toFixed(1) + 'px)' + left;
+    });
+  }
+  uiClock += dt;
+  if (uiClock >= 0.08) { uiClock = 0; updateHud(); drawChart(); drawTimeline(); drawRpm(); }
+  requestAnimationFrame(frame);
+}
+
+readColors();
+if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readColors);
+new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+new ResizeObserver(() => { timeCache = null; drawChart(); drawTimeline(); drawRpm(); }).observe(ui.chart);
+
+if (has3D) {
+  initGL();
+  window.addEventListener('resize', () => { if (autoFit) computeFit(); });
+  new ResizeObserver(() => { if (autoFit) computeFit(); }).observe(ui.stage);
+} else {
+  const f = document.createElement('div'); f.className = 'fail';
+  f.textContent = 'Não foi possível carregar o three.js. Recarregue a página para ver o motor em 3D; os gráficos continuam funcionando.';
+  ui.stage.appendChild(f);
+}
+setSpeed(+ui.speed.value);
+setPlaying(playing);
+const h0 = parseInt((location.hash || '').slice(1), 10);
+setChapter(h0 >= 1 && h0 <= CHAPTERS.length ? h0 - 1 : 0);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
