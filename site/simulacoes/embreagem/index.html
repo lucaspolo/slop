@@ -356,6 +356,8 @@ input[type=range]::-moz-range-thumb{ width:14px; height:24px; border-radius:4px;
       <li>Tente trocar de marcha sem pisar no pedal.</li>
       <li>Ligue <em>Cores por grupo</em> e arraste <em>Vista explodida</em> para ver o que gira com o motor e o que gira com o câmbio.</li>
       <li>Com a vista explodida, pise e solte o pedal devagar. Mesmo separadas, as peças continuam se mexendo: o rolamento avança, a mola diafragma tomba como uma alavanca e a placa de pressão recua, soltando o disco.</li>
+      <li>Na vista explodida, as linhas tracejadas mostram onde cada um dos seis parafusos da carcaça entra no volante e onde cada lâmina de aço se prende na orelha da placa. Com tudo montado, pise o pedal e veja as lâminas dobrarem enquanto a placa recua.</li>
+      <li>Na vista explodida, a faixa azul mostra por onde o eixo piloto passa até entrar no cubo do disco. As estrias do eixo encaixam nas do cubo: o disco desliza para a frente e para trás, mas gira sempre junto com o câmbio, nunca preso ao virabrequim.</li>
     </ul>
 
     <h3>O que gasta a embreagem</h3>
@@ -387,11 +389,11 @@ const PARTS = [
   { id: 'disc', n: 3, name: 'Disco de embreagem', short: 'Disco', grp: 'cambio',
     text: 'A única peça que liga o motor ao câmbio. Tem lonas de atrito nas duas faces e um cubo estriado que desliza no eixo piloto. As molas helicoidais do cubo absorvem os trancos de torção, e a mola ondulada entre as lonas deixa o acoplamento progressivo.' },
   { id: 'plate', n: 4, name: 'Placa de pressão', short: 'Placa', grp: 'motor',
-    text: 'Anel de ferro fundido que gira junto com o volante. Empurrado pela mola diafragma, prensa o disco contra o volante. Ao pisar no pedal, lâminas de aço puxam a placa para trás e o disco fica livre.' },
+    text: 'Anel de ferro fundido, sem parafuso nenhum. Três lâminas de aço rebitadas nas orelhas da borda a prendem à carcaça: puxam a placa para girar com o motor e dobram para ela avançar e recuar. Empurrada pela mola diafragma, a placa prensa o disco contra o volante. Ao pisar no pedal, a mola deixa de empurrar e as lâminas, que também são molas, puxam a placa para trás e soltam o disco.' },
   { id: 'diaph', n: 5, name: 'Mola diafragma', short: 'Mola diafragma', grp: 'motor',
     text: 'Também chamada de chapéu chinês. É uma mola cônica com dedos radiais que trabalha como alavanca: apoiada nos anéis de pivô da carcaça, a borda externa empurra a placa. Quando o rolamento empurra a ponta dos dedos, a mola achata e a borda recua.' },
   { id: 'cover', n: 6, name: 'Carcaça do platô', short: 'Carcaça', grp: 'motor',
-    text: 'Tampa de aço estampado parafusada no volante. Segura a mola e a placa, e o conjunto dos três é o que a oficina chama de platô. Gira sempre junto com o motor.' },
+    text: 'Tampa de aço estampado presa ao volante por seis parafusos na borda, por isso gira sempre com o motor. Por dentro, segura a mola diafragma entre os anéis de pivô e carrega as três lâminas de aço que puxam a placa. Carcaça, mola e placa vêm montadas juntas: é o que a oficina chama de platô.' },
   { id: 'bearing', n: 7, name: 'Rolamento de embreagem', short: 'Rolamento', grp: 'fixo',
     text: 'Também chamado de colar. Faz a ponte entre o garfo, que não gira, e os dedos da mola, que giram com o motor. Desliza sobre a bucha guia do câmbio e empurra os dedos quando o pedal desce.' },
   { id: 'fork', n: 8, name: 'Garfo', short: 'Garfo', grp: 'fixo',
@@ -705,7 +707,47 @@ const VIS = 40;
 // Deslocamento de cada grupo ao longo do eixo na vista explodida. Os vãos entre volante, disco, placa e mola
 // são maiores que os outros porque é ali que se vê como o sanduíche se encaixa.
 const EX = { crank: -3.0, fly: -2.2, disc: -0.6, plate: 0.9, diaph: 2.2, cover: 3.7, rel: 4.9, box: 6.1 };
-let axisLine = null, orbited = false;
+let axisLine = null, shaftPath = null, links = null, orbited = false;
+// Lâminas: raio, altura do rebite da carcaça (no referencial dela) e ângulo entre os dois rebites
+const STRAP = { r: 1.12, y: 0.30, da: 0.5 };
+// Parafusos da carcaça no volante: 6 na mesma coroa
+const BOLT = { n: 6, r: 1.26, a0: 0.26 };
+const _p = has3D ? new THREE.Vector3() : null, _c = has3D ? new THREE.Vector3() : null;
+const _bx = has3D ? new THREE.Vector3() : null, _by = has3D ? new THREE.Vector3() : null, _bz = has3D ? new THREE.Vector3() : null;
+const _m4 = has3D ? new THREE.Matrix4() : null;
+
+// A ponta da lâmina na placa acompanha o recuo da placa; a da carcaça fica parada
+function placeStraps(lift) {
+  for (const s of G.straps) {
+    _p.set(STRAP.r * Math.cos(s.phi), STRAP.y + lift, STRAP.r * Math.sin(s.phi));
+    _c.set(STRAP.r * Math.cos(s.phi + STRAP.da), STRAP.y, STRAP.r * Math.sin(s.phi + STRAP.da));
+    _bx.subVectors(_c, _p); const len = _bx.length(); _bx.divideScalar(len);
+    s.leaf.position.addVectors(_p, _c).multiplyScalar(0.5);
+    _bz.set(s.leaf.position.x, 0, s.leaf.position.z).normalize();
+    _by.crossVectors(_bz, _bx).normalize(); _bz.crossVectors(_bx, _by);
+    s.leaf.quaternion.setFromRotationMatrix(_m4.makeBasis(_bx, _by, _bz));
+    s.leaf.scale.x = len;
+    s.rivP.position.copy(_p); s.rivC.position.copy(_c);
+  }
+}
+
+// Linhas de montagem da vista explodida: parafusos da carcaça até os furos do volante
+// e ponta de cada lâmina até a orelha da placa
+function placeLinks(lift) {
+  const pos = links.geometry.attributes.position;
+  const fy = G.fly.position.y, cy = G.cover.position.y, py = G.plate.position.y;
+  let k = 0;
+  for (let i = 0; i < BOLT.n; i++) {
+    const a = i / BOLT.n * Math.PI * 2 + BOLT.a0, x = BOLT.r * Math.cos(a), z = BOLT.r * Math.sin(a);
+    pos.setXYZ(k++, x, cy + 0.045, z); pos.setXYZ(k++, x, fy, z);
+  }
+  for (const s of G.straps) {
+    pos.setXYZ(k++, STRAP.r * Math.cos(s.phi), cy + STRAP.y + lift - 0.011, STRAP.r * Math.sin(s.phi));
+    pos.setXYZ(k++, 1.1 * Math.cos(s.phi), py + 0.14, 1.1 * Math.sin(s.phi));
+  }
+  pos.needsUpdate = true;
+  links.computeLineDistances();
+}
 
 
 function build() {
@@ -866,7 +908,11 @@ function build() {
     mk(ann(0.28, 0.60, 0.03, { windows: wins }), hubMat, G.disc, 0.03);
     const wins2 = []; for (let i = 0; i < 6; i++) wins2.push(win(0.40, 0.53, i / 6 * Math.PI * 2, 0.2));
     mk(ann(0.28, 0.60, 0.03, { windows: wins2 }), hubMat, G.disc, 0.095);
-    mk(ann(0.15, 0.28, 0.36), M.dark(), G.disc, 0.0);
+    const hubM = M.dark();
+    mk(ann(0.175, 0.28, 0.36), hubM, G.disc, 0.0);
+    // Estrias internas do cubo: meio passo defasadas das do eixo piloto, para os dentes se intercalarem
+    const hubTeeth = new THREE.Group(); hubTeeth.rotation.y = Math.PI / 14; G.disc.add(hubTeeth);
+    ring(14, new THREE.BoxGeometry(0.036, 0.36, 0.018), hubM, 0.159, 0.18, hubTeeth);
     class Helix extends THREE.Curve { getPoint(t, tg) { tg = tg || new THREE.Vector3(); const a = t * 6 * Math.PI * 2; return tg.set(0.05 * Math.cos(a), (t - 0.5) * 0.22, 0.05 * Math.sin(a)); } }
     const hg = new THREE.TubeGeometry(new Helix(), 160, 0.011, 6, false);
     const sm = M.spring();
@@ -916,6 +962,21 @@ function build() {
     const pr = M.bright();
     const t1 = mk(new THREE.TorusGeometry(0.86, 0.018, 8, 96), pr, G.cover, YF + 0.02); t1.rotation.x = Math.PI / 2;
     const t2 = mk(new THREE.TorusGeometry(0.86, 0.018, 8, 96), pr, G.cover, YF - MECH.t - 0.02); t2.rotation.x = Math.PI / 2;
+
+    // Lâminas de acionamento: rebitadas num ressalto da carcaça e nas orelhas da placa. Puxam a placa
+    // para girar junto e dobram quando ela recua. Ficam na carcaça e são posicionadas a cada quadro.
+    G.straps = [];
+    const lm = M.steel(), rv = M.bright(), bossM = M.zincSolid();
+    for (let i = 0; i < 3; i++) {
+      const phi = i / 3 * Math.PI * 2 + 0.5;
+      const leaf = mk(new THREE.BoxGeometry(1, 0.022, 0.08), lm, G.cover, 0);
+      const rivP = mk(new THREE.CylinderGeometry(0.026, 0.026, 0.05, 10), rv, G.cover, 0);
+      const rivC = mk(new THREE.CylinderGeometry(0.026, 0.026, 0.05, 10), rv, G.cover, 0);
+      const boss = mk(new THREE.BoxGeometry(0.09, 0.1, 0.12), bossM, G.cover, STRAP.y + 0.06);
+      boss.position.x = 1.17 * Math.cos(phi + STRAP.da); boss.position.z = 1.17 * Math.sin(phi + STRAP.da);
+      boss.rotation.y = -(phi + STRAP.da);
+      G.straps.push({ phi, leaf, rivP, rivC });
+    }
   }
   // 7, 8, 9 Acionamento
   G.rel = grp('rel');
@@ -997,6 +1058,18 @@ function build() {
     }
     o.userData.grpMat = grpCache[key];
   });
+
+  // Caminho do eixo piloto na vista explodida: liga as estrias do eixo ao cubo do disco.
+  // Criado depois da lista de peças para não entrar no clique nem nas cores por grupo.
+  shaftPath = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 1, 32, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0x24719b, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+  shaftPath.visible = false; asm.add(shaftPath);
+
+  G.links = new THREE.Group(); asm.add(G.links);
+  const lg = new THREE.BufferGeometry();
+  lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array((BOLT.n + 3) * 2 * 3), 3));
+  links = new THREE.LineSegments(lg, new THREE.LineDashedMaterial({ color: 0x58646a, dashSize: 0.08, gapSize: 0.06, transparent: true, opacity: 0 }));
+  links.frustumCulled = false; links.visible = false; G.links.add(links);
 
   $('tgGroups').addEventListener('change', (e) => {
     const on = e.target.checked;
@@ -1171,6 +1244,20 @@ function frame(now) {
     axisLine.visible = E > 0.02;
     axisLine.material.opacity = 0.75 * smooth(clamp(E * 2.5));
     if (colors.muted) axisLine.material.color.set(colors.muted);
+    // Da ponta do eixo (1,35 − 1,6 abaixo do grupo do câmbio) até o fundo do cubo do disco
+    const pathA = G.disc.position.y, pathB = G.box.position.y - 0.25, pathL = pathB - pathA;
+    shaftPath.visible = pathL > 0.4;
+    shaftPath.position.y = (pathA + pathB) / 2; shaftPath.scale.y = Math.max(0.01, pathL);
+    shaftPath.material.opacity = 0.28 * smooth(clamp(E * 2.5));
+    if (colors.cambio) shaftPath.material.color.set(colors.cambio);
+    placeStraps(m.lift);
+    links.visible = E > 0.02;
+    if (links.visible) {
+      G.links.rotation.y = angE;
+      placeLinks(m.lift);
+      links.material.opacity = 0.85 * smooth(clamp(E * 2.5));
+      if (colors.ink) links.material.color.set(colors.ink);
+    }
 
     // Calor nas lonas e destaque da peça escolhida
     const heat = clamp((S.temp - 140) / 260);
