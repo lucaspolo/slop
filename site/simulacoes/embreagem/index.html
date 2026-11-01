@@ -313,7 +313,7 @@ input[type=range]::-moz-range-thumb{ width:14px; height:24px; border-radius:4px;
     <div class="sec">
       <h2 class="sec-h">Vista</h2>
       <div class="ctl">
-        <div class="ctl-top"><label for="explode">Desmontar</label><output id="expOut" for="explode">Montada</output></div>
+        <div class="ctl-top"><label for="explode">Vista explodida</label><output id="expOut" for="explode">Montada</output></div>
         <input type="range" id="explode" min="0" max="1000" value="0">
       </div>
       <div class="toggles">
@@ -354,7 +354,8 @@ input[type=range]::-moz-range-thumb{ width:14px; height:24px; border-radius:4px;
       <li>Acelere forte e segure o pedal no meio. A temperatura do disco sobe rápido: é assim que se queima uma embreagem.</li>
       <li>Puxe o freio de mão e solte a embreagem engatado. Ou ela patina, ou o motor morre.</li>
       <li>Tente trocar de marcha sem pisar no pedal.</li>
-      <li>Ligue <em>Cores por grupo</em> e arraste <em>Desmontar</em> para ver o que gira com o motor e o que gira com o câmbio.</li>
+      <li>Ligue <em>Cores por grupo</em> e arraste <em>Vista explodida</em> para ver o que gira com o motor e o que gira com o câmbio.</li>
+      <li>Com a vista explodida, pise e solte o pedal devagar. Mesmo separadas, as peças continuam se mexendo: o rolamento avança, a mola diafragma tomba como uma alavanca e a placa de pressão recua, soltando o disco.</li>
     </ul>
 
     <h3>O que gasta a embreagem</h3>
@@ -552,7 +553,7 @@ let Etarget = 0, E = 0, autoFit = true;
 function setExplode(v) {
   Etarget = clamp(v);
   ui.exp.style.setProperty('--v', (Etarget * 100).toFixed(1) + '%');
-  ui.expOut.textContent = Etarget < 0.01 ? 'Montada' : Etarget > 0.99 ? 'Peças separadas' : nf0.format(Etarget * 100) + '%';
+  ui.expOut.textContent = Etarget < 0.01 ? 'Montada' : Etarget > 0.99 ? 'Explodida' : nf0.format(Etarget * 100) + '%';
   autoFit = true;
   if (reduceMotion) E = Etarget;
 }
@@ -701,7 +702,10 @@ const has3D = !!(window.THREE && THREE.OrbitControls);
 let renderer, scene, camera, controls, asm, G = {}, pivots = [], rod, partMats = {}, frictionMats = [], meshes = [];
 let angE = 0, angS = 0;
 const VIS = 40;
-const EX = { crank: -2.0, fly: -1.4, disc: -0.4, plate: 0.45, diaph: 1.15, cover: 1.85, rel: 2.6, box: 3.4 };
+// Deslocamento de cada grupo ao longo do eixo na vista explodida. Os vãos entre volante, disco, placa e mola
+// são maiores que os outros porque é ali que se vê como o sanduíche se encaixa.
+const EX = { crank: -3.0, fly: -2.2, disc: -0.6, plate: 0.9, diaph: 2.2, cover: 3.7, rel: 4.9, box: 6.1 };
+let axisLine = null, orbited = false;
 
 
 function build() {
@@ -719,7 +723,7 @@ function build() {
   controls.minDistance = 2.5; controls.maxDistance = 45;
   controls.screenSpacePanning = true;
   controls.target.set(0.7, 0.2, 0);
-  controls.addEventListener('start', () => { autoFit = false; });
+  controls.addEventListener('start', () => { autoFit = false; orbited = true; });
 
   // Ambiente de reflexo gerado (sem arquivos externos)
   const ec = document.createElement('canvas'); ec.width = 512; ec.height = 256;
@@ -955,6 +959,11 @@ function build() {
     const mark = mk(new THREE.BoxGeometry(0.12, 0.012, 0.06), M.mark(), G.shaft, 2.355); mark.position.x = 0.3;
   }
 
+  // Linha de centro da vista explodida: some dentro das peças montadas e aparece nos vãos
+  const axGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -1.8 + EX.crank, 0), new THREE.Vector3(0, 3.2 + EX.box, 0)]);
+  axisLine = new THREE.Line(axGeo, new THREE.LineDashedMaterial({ color: 0x58646a, dashSize: 0.22, gapSize: 0.12, transparent: true, opacity: 0 }));
+  axisLine.computeLineDistances(); axisLine.visible = false; asm.add(axisLine);
+
   // Identificação das peças para clique, destaque e cores por grupo
   const ownerMap = { crank: 'crank', fly: 'fly', disc: 'disc', plate: 'plate', diaph: 'diaph', cover: 'cover' };
   asm.traverse((o) => {
@@ -1035,9 +1044,13 @@ function resize() {
 // Enquadramento automático: calcula a distância que mantém todas as peças na tela
 const _v = has3D ? new THREE.Vector3() : null;
 function desiredView(e) {
-  const xmin = -1.62 - 2.0 * e, xmax = 3.0 + 3.4 * e;
+  const xmin = -1.62 + EX.crank * e, xmax = 3.0 + EX.box * e;
   const target = new THREE.Vector3((xmin + xmax) / 2, 0.28, 0);
-  const dir = camera.position.clone().sub(controls.target).normalize();
+  // Enquanto ninguém girou a cena, a câmera passa para uma vista mais de lado ao explodir,
+  // senão o eixo fica encurtado em perspectiva e as peças parecem empilhadas.
+  const dir = orbited
+    ? camera.position.clone().sub(controls.target).normalize()
+    : DIR0.clone().lerp(DIR_EXP, smooth(e)).normalize();
   const f = dir.clone().negate();
   const right = new THREE.Vector3().crossVectors(f, camera.up).normalize();
   const up = new THREE.Vector3().crossVectors(right, f).normalize();
@@ -1048,15 +1061,18 @@ function desiredView(e) {
     const px = _v.dot(right), py = _v.dot(up), pz = _v.dot(dir);
     d = Math.max(d, pz + Math.abs(px) / tanH, pz + Math.abs(py) / tanV);
   }
-  return { target, d: d * 1.04 };
+  return { target, dir, d: d * 1.04 };
 }
+const DIR0 = has3D ? new THREE.Vector3(5.5, 3.4, 7.6).normalize() : null;
+const DIR_EXP = has3D ? new THREE.Vector3(3.2, 2.6, 8.2).normalize() : null;
 function fitView(instant, dt) {
   const v = desiredView(E);
   const k = instant ? 1 : Math.min(1, (dt || 0.016) * 5);
   controls.target.lerp(v.target, k);
-  const dir = camera.position.clone().sub(controls.target);
-  const d = dir.length() + (v.d - dir.length()) * k;
-  camera.position.copy(controls.target).add(dir.normalize().multiplyScalar(d));
+  const cur = camera.position.clone().sub(controls.target);
+  const d = cur.length() + (v.d - cur.length()) * k;
+  const dir = cur.normalize().lerp(v.dir, k).normalize();
+  camera.position.copy(controls.target).add(dir.multiplyScalar(d));
 }
 
 /* ===================== Gráfico ===================== */
@@ -1152,6 +1168,9 @@ function frame(now) {
     const endY = PIVOT_Y - Math.sin(phi) * 1.0 - 0.05, topY = PIVOT_Y - 0.37;
     rod.scale.y = Math.max(0.01, endY - topY); rod.position.y = (endY + topY) / 2;
     G.box.position.y = EX.box * E; G.shaft.rotation.y = angS;
+    axisLine.visible = E > 0.02;
+    axisLine.material.opacity = 0.75 * smooth(clamp(E * 2.5));
+    if (colors.muted) axisLine.material.color.set(colors.muted);
 
     // Calor nas lonas e destaque da peça escolhida
     const heat = clamp((S.temp - 140) / 260);
