@@ -93,6 +93,10 @@ h1{ margin:0; font:700 clamp(36px, 6.2vw, 64px)/.92 var(--f-display); text-trans
 .chap span{ font:600 11px/1 var(--f-display); letter-spacing:.04em; text-transform:uppercase; color:var(--muted); white-space:nowrap; }
 .chap[aria-current="step"]{ background:var(--ink); border-color:var(--ink); color:var(--panel); }
 .chap[aria-current="step"] span{ color:var(--panel); opacity:.8; }
+.seg{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.seg > span{ font:600 13px/1 var(--f-display); letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-right:4px; }
+.seg button{ min-height:36px; padding:0 14px; border-radius:4px; border:1px solid var(--line); background:var(--bg); cursor:pointer; font:600 14px/1 var(--f-display); letter-spacing:.07em; text-transform:uppercase; }
+.seg button[aria-pressed="true"]{ background:var(--ink); border-color:var(--ink); color:var(--panel); }
 .kicker{ margin:0; font:600 13px/1 var(--f-display); letter-spacing:.14em; text-transform:uppercase; color:var(--accent); }
 .ch-title{ margin:0; font:700 31px/1 var(--f-display); text-transform:uppercase; text-wrap:balance; }
 .ch-lede{ margin:0; font-size:15.5px; line-height:1.5; }
@@ -204,6 +208,7 @@ input[type=range]::-moz-range-thumb{ width:12px; height:22px; border-radius:4px;
       <p class="kicker" id="kicker"></p>
       <h2 class="ch-title" id="chTitle"></h2>
       <p class="ch-lede" id="chLede"></p>
+      <div class="seg" id="variant" role="group" aria-label="Virabrequim" hidden></div>
     </div>
 
     <div class="sec">
@@ -474,6 +479,17 @@ const CHAPTERS = [
       'Muitos V8 americanos têm um comando só, no meio do V, que move as válvulas por varetas. Aqui o modelo usa comandos no cabeçote, como os V8 mais modernos, para mostrar as válvulas do mesmo jeito que nos outros capítulos.'
     ],
     observe: 'Oito pulsos em duas voltas. O torque não fica negativo em momento nenhum, e o pico é menos de 2 vezes a média.',
+    variants: [
+      { label: 'Em cruz' },
+      { label: 'Plano', layout: vee(8, [1, 4, 5, 2, 7, 6, 3, 8], 45 * D2R),
+        lede: 'As mesmas duas bancadas a 90°, agora com o virabrequim plano: os moentes ficam a 180° uns dos outros, como dois motores de 4 em linha num virabrequim só.',
+        how: [
+          'Cada moente continua recebendo duas bielas, uma de cada bancada, mas os quatro moentes ficam no mesmo plano: dois de um lado, dois do outro.',
+          'A ordem 1-4-5-2-7-6-3-8 alterna as bancadas a cada explosão. Cada lado solta um pulso de escape a cada 180°, regular como um 4 em linha, e o som fica liso e agudo, como o dos V8 de Ferrari. Ligue o som e compare com o virabrequim em cruz.',
+          'O preço é a vibração. Cada bancada é um 4 em linha, com a mesma sobra de segunda ordem, e as duas juntas sacodem o motor de lado.'
+        ],
+        observe: 'O torque é idêntico ao do virabrequim em cruz, porque continua havendo uma explosão a cada 90°. O que muda é o som e a vibração livre, que deixa de ser zero: ligue Mostrar vibração e veja o motor balançar de lado, duas vezes por volta.' }
+    ],
     problem: 'Fim da linha. Os contrapesos do virabrequim em cruz cancelam o balanço que sobra, e o V8 fica liso e curto. Em troca, é pesado, gasta mais e custa caro, e por isso a maioria dos carros fica no 4 cilindros.' }
 ];
 
@@ -574,7 +590,7 @@ function analyze(ch) {
 /* ===================== Interface ===================== */
 const ui = {
   stage: $('stage'), labels: $('labels'), chip: $('chip'), hAng: $('hAng'), hCyc: $('hCyc'), hCycLbl: $('hCycLbl'), hCycRow: $('hCycRow'),
-  legend: $('legend'), chapters: $('chapters'), kicker: $('kicker'), title: $('chTitle'), lede: $('chLede'),
+  legend: $('legend'), chapters: $('chapters'), variant: $('variant'), kicker: $('kicker'), title: $('chTitle'), lede: $('chLede'),
   play: $('play'), back: $('back'), fwd: $('fwd'), speed: $('speed'), speedOut: $('speedOut'), slowNote: $('slowNote'),
   chart: $('chart'), chartKey: $('chartKey'), timeline: $('timeline'), timeKey: $('timeKey'),
   how: $('how'), tempo: $('tempo'), observe: $('observe'), problemTxt: $('problemTxt'), next: $('nextCh'),
@@ -624,8 +640,20 @@ $('tgShake').addEventListener('change', (e) => { shakeOn = e.target.checked; });
 
 function sw(css) { return '<i class="sw" style="background:var(' + css + ')"></i>'; }
 
+const eff = (def) => (def.variants ? Object.assign({}, def, def.variants[def.v || 0]) : def);
 function fillTexts(i) {
-  const c = CHAPTERS[i];
+  const c = eff(CHAPTERS[i]);
+  const base = CHAPTERS[i];
+  ui.variant.hidden = !base.variants;
+  if (base.variants) {
+    ui.variant.innerHTML = '<span>Virabrequim</span>';
+    base.variants.forEach((v, k) => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = v.label;
+      b.setAttribute('aria-pressed', (base.v || 0) === k ? 'true' : 'false');
+      b.addEventListener('click', () => setVariant(i, k));
+      ui.variant.appendChild(b);
+    });
+  }
   ui.chapters.querySelectorAll('.chap').forEach((b, k) => { if (k === i) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); });
   ui.kicker.textContent = 'Capítulo ' + (i + 1) + ' de ' + CHAPTERS.length;
   ui.title.textContent = c.title;
@@ -1472,10 +1500,23 @@ function computeFit() {
   camGoal = { target: fitSphere.center.clone(), pos: fitSphere.center.clone().addScaledVector(engine.camDir, d) };
 }
 
-function setChapter(i) {
-  if (i === cur) return;
+function setVariant(i, k) {
+  const def = CHAPTERS[i];
+  if ((def.v || 0) === k) return;
+  def.v = k;
+  setChapter(i, true);
+}
+function setChapter(i, force) {
+  if (i === cur && !force) return;
   cur = i;
   const def = CHAPTERS[i];
+  if (def.variants) {
+    def.baseLayout = def.baseLayout || def.layout;
+    def.layout = def.variants[def.v || 0].layout || def.baseLayout;
+    def.infos = def.infos || [];
+    def.infos[def.v || 0] = def.infos[def.v || 0] || analyze(def);
+    def.info = def.infos[def.v || 0];
+  }
   def.info = def.info || analyze(def);
   info = def.info;
   chap = { def };
@@ -1494,9 +1535,9 @@ function setChapter(i) {
       ui.labels.appendChild(el);
       markers.push({ el, L, v: new THREE.Vector3() });
     });
-    autoFit = true;
+    if (!force) autoFit = true;
     computeFit();
-    if (camGoal && !reduceMotion) {
+    if (camGoal && !reduceMotion && !force) {
       // Começa já na direção do capítulo, um pouco afastado, e aproxima
       camera.position.copy(camGoal.pos).sub(camGoal.target).multiplyScalar(1.25).add(camGoal.target);
       controls.target.copy(camGoal.target);
