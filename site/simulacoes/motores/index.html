@@ -128,6 +128,13 @@ input[type=range]::-moz-range-thumb{ width:12px; height:22px; border-radius:4px;
 .chart-key i{ display:inline-block; width:16px; height:3px; border-radius:2px; }
 #chart{ width:100%; height:150px; display:block; }
 #rpmChart{ width:100%; height:110px; display:block; }
+#valveChart{ width:100%; height:130px; display:block; }
+.events{ margin:0; display:grid; grid-template-columns:auto minmax(0,1fr); gap:5px 12px; font-size:14px; line-height:1.35; }
+.events dt{ font:700 12.5px/1.35 var(--f-display); letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+.events dd{ margin:0; }
+.vtext{ display:grid; gap:8px; font-size:14.5px; line-height:1.5; }
+.vtext p{ margin:0; }
+.vtext b{ font-weight:600; }
 .rpm-line{ margin:0; font-size:14.5px; line-height:1.4; }
 .rpm-line.stall{ color:var(--accent); font-weight:600; }
 .hint-txt{ margin:2px 0 0; font-size:13px; line-height:1.4; color:var(--muted); }
@@ -252,6 +259,20 @@ input[type=range]::-moz-range-thumb{ width:12px; height:22px; border-radius:4px;
       <h3 class="sub">O tempo de cada cilindro</h3>
       <canvas id="timeline" aria-label="Mapa com o tempo em que cada cilindro está ao longo de duas voltas"></canvas>
       <div class="chart-key" id="timeKey"></div>
+    </div>
+
+    <div class="sec" id="secValves" hidden>
+      <h2 class="sec-h">Sincronismo das válvulas</h2>
+      <div class="chart-key"><span><i style="background:var(--g-fresh)"></i>Admissão</span><span><i style="background:var(--g-burnt)"></i>Escape</span><span><i style="background:var(--accent-fill);opacity:.35;height:10px"></i>Cruzamento</span></div>
+      <canvas id="valveChart" aria-label="Gráfico da abertura das válvulas de admissão e de escape do cilindro 1 ao longo do ciclo"></canvas>
+      <dl class="events" id="valveEvents"></dl>
+      <div class="vtext">
+        <p><b>Meia rotação.</b> O comando é puxado pela correia dentada, e a polia dele tem o dobro do tamanho da polia do virabrequim. Assim o comando dá uma volta a cada duas do virabrequim, e cada ressalto empurra a sua válvula uma vez por ciclo.</p>
+        <p><b>O ponto do motor.</b> O ângulo de cada ressalto no comando define quando a sua válvula abre. Na montagem, as marcas nas polias do virabrequim e dos comandos são alinhadas com marcas no bloco, com o cilindro 1 no ponto morto superior da explosão. Se a correia pular um dente, as válvulas abrem fora de hora, e em muitos motores elas chegam a bater no pistão.</p>
+        <p><b>Antes e depois dos pontos mortos.</b> A válvula de escape abre antes de o pistão chegar embaixo: a pressão que sobrou da explosão já começa a empurrar os gases para fora. A de admissão fecha depois de o pistão passar por baixo, porque a mistura, embalada, continua entrando mesmo com o pistão começando a subir.</p>
+        <p><b>Cruzamento.</b> Perto do ponto morto superior entre o escape e a admissão, as duas válvulas ficam abertas ao mesmo tempo. Os gases que saem puxam a mistura nova para dentro e ajudam a limpar o cilindro.</p>
+        <p><b>Comando variável.</b> Esses ângulos funcionam melhor numa rotação do que em outra. Muitos motores modernos giram o comando alguns graus enquanto funcionam, para adiantar ou atrasar as válvulas conforme a rotação.</p>
+      </div>
     </div>
 
     <div class="sec">
@@ -762,7 +783,8 @@ const ui = {
   how: $('how'), tempo: $('tempo'), observe: $('observe'), problemTxt: $('problemTxt'), next: $('nextCh'),
   stDisp: $('stDisp'), stFires: $('stFires'), stFiresLbl: $('stFiresLbl'), stMean: $('stMean'), stInt: $('stInt'), stIntLbl: $('stIntLbl'),
   stPeak: $('stPeak'), stMin: $('stMin'), stRatio: $('stRatio'),
-  flyJ: $('flyJ'), flyOut: $('flyOut'), flyReset: $('flyReset'), rpmLine: $('rpmLine'), rpmChart: $('rpmChart'),
+  flyJ: $('flyJ'), flyOut: $('flyOut'), flyReset: $('flyReset'),
+  secValves: $('secValves'), valveChart: $('valveChart'), valveEvents: $('valveEvents'), rpmLine: $('rpmLine'), rpmChart: $('rpmChart'),
   sound: $('sound'), soundRpm: $('soundRpm'), soundOut: $('soundOut'), sync: $('tgSync'), soundHint: $('soundHint'), stVib: $('stVib'), mVib: $('mVib'), stRock: $('stRock'), mRock: $('mRock')
 };
 
@@ -844,6 +866,8 @@ function fillTexts(i) {
     + (n > 1 ? '<span><i style="background:var(--muted);opacity:.5"></i>' + (c.slide ? 'Cada lado do pistão' : 'Cada cilindro') + '</span>' : '')
     + '<span><i style="background:var(--ink);opacity:.6;height:0;border-top:2px dashed var(--ink)"></i>Média</span>';
   ui.hCycRow.hidden = !(c.type === 'piston' && c.cycle === 4);
+  ui.secValves.hidden = !(c.type === 'piston' && c.cycle === 4);
+  if (!ui.secValves.hidden) fillValveEvents();
 
   // Números
   const a = info;
@@ -1086,6 +1110,57 @@ function drawChart() {
   c.strokeStyle = colors.ink; c.lineWidth = 1; c.beginPath(); c.moveTo(x, T); c.lineTo(x, T + ph); c.stroke();
   const k = Math.floor(d) % N720;
   c.fillStyle = colors['accent-fill']; c.beginPath(); c.arc(x, Y(a.tot[k]), 4, 0, TAU); c.fill();
+}
+
+// Ângulos de abertura e fechamento em relação ao ponto morto mais próximo (0, 180, 360, 540 e 720 no ciclo)
+function deadRel(deg) {
+  const d = mod(deg, 720), pts = [[0, 'PMS'], [180, 'PMI'], [360, 'PMS'], [540, 'PMI'], [720, 'PMS']];
+  let best = pts[0]; pts.forEach((q) => { if (Math.abs(d - q[0]) < Math.abs(d - best[0])) best = q; });
+  const off = Math.round(d - best[0]);
+  return off === 0 ? 'no ' + best[1] : Math.abs(off) + '° ' + (off < 0 ? 'antes' : 'depois') + ' do ' + best[1];
+}
+function fillValveEvents() {
+  const ex = VALVE.ex.open, inn = VALVE.in.open, overlap = mod(ex + VSPAN - inn, 720);
+  ui.valveEvents.innerHTML =
+    '<dt>Escape</dt><dd>abre ' + deadRel(ex) + ', fecha ' + deadRel(ex + VSPAN) + '</dd>' +
+    '<dt>Admissão</dt><dd>abre ' + deadRel(inn) + ', fecha ' + deadRel(inn + VSPAN) + '</dd>' +
+    '<dt>Cruzamento</dt><dd>' + overlap + '° com as duas abertas, em volta do PMS entre o escape e a admissão</dd>';
+}
+function drawValves() {
+  if (ui.secValves.hidden || !chap) return;
+  const f = fitCanvas(ui.valveChart); if (!f) return;
+  const { c, w, h } = f, T = 16, B = 20, pw = w - PLOT.L - PLOT.R, ph = h - T - B;
+  const X = (d) => PLOT.L + pw * d / 720, Y = (v) => T + ph * (1 - v);
+  c.font = '500 12px "Barlow Condensed", "Arial Narrow", sans-serif';
+  // Cruzamento
+  const inn = VALVE.in.open, exClose = VALVE.ex.open + VSPAN;
+  c.fillStyle = colors['accent-fill']; c.globalAlpha = 0.18; c.fillRect(X(inn), T, X(exClose) - X(inn), ph); c.globalAlpha = 1;
+  // Pontos mortos
+  c.strokeStyle = colors.line; c.lineWidth = 1; c.fillStyle = colors.muted; c.textBaseline = 'alphabetic';
+  [[0, 'PMS'], [180, 'PMI'], [360, 'PMS'], [540, 'PMI'], [720, 'PMS']].forEach(([d, lb]) => {
+    const x = Math.round(X(d)) + 0.5;
+    c.beginPath(); c.moveTo(x, T); c.lineTo(x, T + ph); c.stroke();
+    c.textAlign = d === 0 ? 'left' : d === 720 ? 'right' : 'center';
+    c.fillText(lb + ' ' + d + '°', x, h - 4);
+  });
+  c.beginPath(); c.moveTo(PLOT.L, Y(0) + 0.5); c.lineTo(w - PLOT.R, Y(0) + 0.5); c.stroke();
+  c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillText('aberta', PLOT.L - 6, Y(1)); c.fillText('fechada', PLOT.L - 6, Y(0));
+  // Nomes dos tempos acima das curvas
+  c.textAlign = 'center'; c.textBaseline = 'alphabetic'; c.fillStyle = colors.muted;
+  ['Explosão', 'Escape', 'Admissão', 'Compressão'].forEach((t, i) => c.fillText(t.toUpperCase(), X(90 + 180 * i), T - 4));
+  const curve = (open, col) => {
+    c.beginPath(); c.moveTo(X(0), Y(0));
+    for (let d = 0; d <= 720; d += 2) c.lineTo(X(d), Y(liftAt(d, open) / LMAX));
+    c.lineTo(X(720), Y(0)); c.closePath();
+    c.fillStyle = col; c.globalAlpha = 0.25; c.fill(); c.globalAlpha = 1;
+    c.strokeStyle = col; c.lineWidth = 2; c.beginPath();
+    for (let d = 0; d <= 720; d += 2) { const x = X(d), y = Y(liftAt(d, open) / LMAX); if (d) c.lineTo(x, y); else c.moveTo(x, y); }
+    c.stroke();
+  };
+  curve(VALVE.in.open, colors['g-fresh']); curve(VALVE.ex.open, colors['g-burnt']);
+  // Cursor no ciclo do cilindro 1
+  const c1 = chap.def.layout.cyl.find((q) => q.n === 1), g = mod((th - c1.F) / D2R, 720), x = X(g);
+  c.strokeStyle = colors.ink; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x, T); c.lineTo(x, T + ph); c.stroke();
 }
 
 function drawRpm() {
@@ -1871,7 +1946,7 @@ function setChapter(i, force) {
   fillTexts(i);
   updateFly(); setSoundRpm();
   updateHud();
-  drawChart(); drawTimeline(); drawRpm();
+  drawChart(); drawTimeline(); drawRpm(); drawValves();
   try { history.replaceState(null, '', '#' + (i + 1)); } catch (e) { /* sem histórico */ }
 }
 
@@ -2029,14 +2104,14 @@ function frame(now) {
     placeMarkers();
   }
   uiClock += dt;
-  if (uiClock >= 0.08) { uiClock = 0; updateHud(); drawChart(); drawTimeline(); drawRpm(); }
+  if (uiClock >= 0.08) { uiClock = 0; updateHud(); drawChart(); drawTimeline(); drawRpm(); drawValves(); }
   requestAnimationFrame(frame);
 }
 
 readColors();
 if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readColors);
 new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-new ResizeObserver(() => { timeCache = null; drawChart(); drawTimeline(); drawRpm(); }).observe(ui.chart);
+new ResizeObserver(() => { timeCache = null; drawChart(); drawTimeline(); drawRpm(); drawValves(); }).observe(ui.chart);
 
 if (has3D) {
   initGL();
