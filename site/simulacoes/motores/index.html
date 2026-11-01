@@ -18,7 +18,7 @@
   --ok:#2B7552; --shadow:0 10px 30px rgba(20,20,20,.14);
   /* gases: iguais ao 3D */
   --g-fresh:#3D8EE0; --g-comp:#2449A8; --g-burn:#FFB52E; --g-burnt:#8C7A68;
-  --g-transfer:#7DB8F0; --g-steam:#DCE8EE; --g-used:#9AA7AE; --g-closed:#C2BDB5;
+  --g-transfer:#7DB8F0; --g-air:#BCD7E8; --g-aircomp:#7F9FC0; --g-steam:#DCE8EE; --g-used:#9AA7AE; --g-closed:#C2BDB5;
   --f-display:"Barlow Condensed","Arial Narrow","Roboto Condensed",system-ui,sans-serif;
   --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
 }
@@ -220,7 +220,7 @@ input[type=range]::-moz-range-thumb{ width:12px; height:22px; border-radius:4px;
       <p class="kicker" id="kicker"></p>
       <h2 class="ch-title" id="chTitle"></h2>
       <p class="ch-lede" id="chLede"></p>
-      <div class="seg" id="variant" role="group" aria-label="Virabrequim" hidden></div>
+      <div class="seg" id="variant" role="group" aria-label="Variante do motor" hidden></div>
     </div>
 
     <div class="sec">
@@ -354,7 +354,7 @@ const SI = 0.1;                                  // metros por unidade da cena
 const AREA = Math.PI * Math.pow(G.R * SI, 2);
 const VD = AREA * 2 * G.r * SI;
 const CR = 10, VC = VD / (CR - 1), NPOLY = 1.3, K4 = 3.5, K2 = 3.2;
-const volAt = (s) => VC + AREA * (G.smax - s) * SI;
+const volAt = (s, vc = VC) => vc + AREA * (G.smax - s) * SI;
 const VBDC = VC + VD;
 
 // Biela-manivela de um cilindro inclinado de beta (a partir da vertical, sentido horário), com o moente em phi
@@ -371,11 +371,17 @@ function pistonKin(beta, phi, th) {
 const crownAt = (deg) => pistonKin(0, 0, deg * D2R).s + G.crown;
 const VEPC = volAt(pistonKin(0, 0, 100 * D2R).s);
 
+// Gasolina: faísca 15° antes do alto e queima rápida. Diesel: compressão de 18:1, injeção perto do alto e queima mais longa e menos explosiva.
+const FUEL = {
+  gas: { vc: VC, k: K4, ign: -15, dur: 45 },
+  diesel: { vc: VD / 17, k: 3.0, ign: -5, dur: 55 }
+};
 // Pressão absoluta (bar) no cilindro. 4 tempos: g em graus de 0 a 720, com 0 no ponto morto da explosão.
-function press4(g, V) {
+function press4(g, V, f) {
+  f = f || FUEL.gas;
   const d = g < 360 ? g : g - 720;
   if (d < -180 || d >= 180) return 1;
-  let p = Math.pow(VBDC / V, NPOLY) * (1 + (K4 - 1) * smooth((d + 15) / 45));
+  let p = Math.pow((f.vc + VD) / V, NPOLY) * (1 + (f.k - 1) * smooth((d - f.ign) / f.dur));
   if (d > 140) p = lerp(p, 1, smooth((d - 140) / 40));
   return p;
 }
@@ -420,6 +426,18 @@ function vee(n, order, oddBeta) {
   return { banks: [{ beta: oddBeta }, { beta: -oddBeta }], cyl, order };
 }
 
+// Boxer: bancadas opostas a 180°, cada cilindro com o seu moente; os ímpares de um lado, os pares do outro
+function boxer(n, order) {
+  const step = 720 / n, pairs = n / 2;
+  const F = {}; order.forEach((c, k) => { F[c] = k * step * D2R; });
+  const cyl = [];
+  for (let i = 1; i <= n; i++) {
+    const right = i % 2 === 1, j = Math.floor((i - 1) / 2), beta = (right ? 90 : -90) * D2R;
+    cyl.push({ n: i, beta, F: F[i], phi: mod(beta - F[i], TAU), z: ((pairs - 1) / 2 - j) * G.S + (right ? 0.27 : -0.27), bank: right ? 0 : 1 });
+  }
+  return { banks: [{ beta: 90 * D2R }, { beta: -90 * D2R }], cyl, order, cam: [4.2, 6.6, 5.6] };
+}
+
 const CHAPTERS = [
   { short: 'Vapor', type: 'steam', title: 'Máquina a vapor oscilante',
     tempo: 'Um tempo é um curso do pistão, de um ponto morto ao outro: meia volta do virabrequim. Aqui são dois por volta. Descendo, o vapor empurra o pistão; subindo, o pistão expulsa o vapor usado. Ninguém chama a máquina a vapor de 2 tempos, mas o ritmo é esse: um impulso a cada volta.',
@@ -452,6 +470,20 @@ const CHAPTERS = [
       'Os comandos de válvulas giram na metade da rotação do virabrequim, puxados pela correia: a polia deles é o dobro da do virabrequim.'
     ],
     observe: 'Um pico de mais de 15 vezes a média e depois quase nada por uma volta e meia. Na compressão o torque fica negativo: é o volante que empurra o pistão. Com um volante de carro, a rotação sobe e desce uns 300 rpm a cada ciclo; com um volante leve, o motor para na compressão.',
+    variantLabel: 'Combustível',
+    variants: [
+      { label: 'Gasolina' },
+      { label: 'Diesel', fuel: 'diesel', title: 'Motor 4 tempos a diesel',
+        lede: 'O mesmo ciclo de quatro tempos, sem vela. Na admissão entra só ar; a compressão é tão forte que o ar passa de 500 °C, e o diesel, borrifado perto do alto, pega fogo sozinho.',
+        how: [
+          'Admissão: a válvula abre e o pistão puxa só ar, sem combustível.',
+          'Compressão: o pistão espreme o ar a 1/18 do volume, quase o dobro da gasolina, e o ar esquenta acima de 500 °C.',
+          'Explosão: o injetor borrifa diesel no ar quente, e ele se inflama sozinho. A queima é mais lenta e continua enquanto o injetor borrifa.',
+          'Escape: igual ao da gasolina.',
+          'Comprimir mais tira mais trabalho de cada gota, e por isso o diesel gasta menos. Em troca, o motor tem de ser mais pesado para aguentar a pressão.'
+        ],
+        observe: 'Compare com a gasolina. O torque médio fica em uns 80% do dela: sem turbo, o diesel queima menos combustível por ciclo, porque precisa de ar sobrando para queimar tudo. E a compressão cobra mais: antes do alto, o torque fica bem mais negativo. A vantagem do diesel não aparece no gráfico: é gastar menos combustível para o mesmo trabalho.' }
+    ],
     problem: 'Uma explosão a cada duas voltas: o torque chega em trancos e o motor sacode. Para ter mais força, o pistão teria de crescer, e pistão grande e pesado não aguenta girar rápido.' },
   { short: '4L', type: 'piston', cycle: 4, layout: inline(4, [1, 3, 4, 2], 4), belt: true, title: '4 cilindros em linha',
     tempo: 'Cada cilindro continua sendo de 4 tempos. A diferença é que os quatro se revezam: a qualquer momento há um cilindro em cada tempo. No mapa de tempos, cada coluna tem as quatro cores.',
@@ -462,6 +494,18 @@ const CHAPTERS = [
       'Um comando de válvulas de cada lado serve os quatro cilindros, com um ressalto para cada válvula.'
     ],
     observe: 'Os pulsos ficam mais perto uns dos outros, e o pico cai para menos de 4 vezes a média. O torque ainda passa abaixo de zero perto de cada ponto morto, quando um cilindro termina a compressão e o que explodiu já perdeu força. Ligue Mostrar vibração: o motor ainda balança, agora para cima e para baixo, duas vezes por volta.',
+    variantLabel: 'Cilindros',
+    variants: [
+      { label: 'Em linha' },
+      { label: 'Boxer', layout: boxer(4, [1, 3, 2, 4]), title: '4 cilindros boxer',
+        lede: 'Os mesmos quatro cilindros deitados, dois de cada lado, em bancadas opostas a 180°: o motor boxer, da Subaru e da Porsche.',
+        how: [
+          'Cada pistão tem o seu moente, e os pistões opostos ficam em moentes a 180°: os dois vão para fora e voltam para dentro ao mesmo tempo, como dois boxeadores batendo luvas. Daí o nome.',
+          'Como os pistões opostos andam sempre em sentidos contrários, a força de um anula a do outro, inclusive a de segunda ordem que sobra no 4 em linha.',
+          'A ordem de ignição 1-3-2-4 alterna os lados, e o motor fica baixo e largo, com o centro de gravidade lá embaixo.'
+        ],
+        observe: 'O torque é igual ao do 4 em linha, porque as explosões continuam a cada 180°. Mas a força livre vai a zero. Sobra só um balanço pequeno, porque os pistões opostos não ficam exatamente na mesma posição ao longo do virabrequim.' }
+    ],
     problem: 'Essa vibração sobra porque o pistão anda mais rápido na metade de cima do curso do que na de baixo, e os pares não se anulam por completo. E para ter mais força, mais cilindros em linha deixam o motor comprido.' },
   { short: '6L', type: 'piston', cycle: 4, layout: inline(6, [1, 5, 3, 6, 2, 4], 4), belt: true, title: '6 cilindros em linha',
     tempo: 'Os seis cilindros fazem os mesmos quatro tempos, defasados de 120°. Como cada tempo dura 180°, durante um trecho dois cilindros estão no tempo de explosão ao mesmo tempo: é essa sobreposição que deixa o torque mais liso.',
@@ -517,7 +561,9 @@ const STROKE = {
   comp2: { label: 'Compressão em cima, admissão no cárter', css: '--g-comp' },
   vapor: { label: 'Admissão de vapor', css: '--g-steam', dark: true },
   vaporOut: { label: 'Escape do vapor', css: '--g-used', dark: true },
-  fechado: { label: 'Janelas fechadas', css: '--g-closed', dark: true }
+  fechado: { label: 'Janelas fechadas', css: '--g-closed', dark: true },
+  admAr: { label: 'Admissão de ar', css: '--g-air', dark: true },
+  compAr: { label: 'Compressão', css: '--g-aircomp' }
 };
 const stroke4 = (g) => g < 180 ? 'explosao' : g < 360 ? 'escape' : g < 540 ? 'admissao' : 'compressao';
 const stroke2 = (d) => d < 100 ? 'explosao' : d < 120 ? 'escape' : d < 240 ? 'transf' : d < 260 ? 'escape' : 'comp2';
@@ -526,20 +572,22 @@ function strokeAt(ch, c, th) {
     const k = steamKin(th);
     return steamIn(k.psi) > 0.5 ? 'vapor' : steamOut(k.psi) > 0.5 ? 'vaporOut' : 'fechado';
   }
-  if (ch.cycle === 4) return stroke4(mod((th - c.F) / D2R, 720));
+  if (ch.cycle === 4) { const k = stroke4(mod((th - c.F) / D2R, 720)); return ch.fuel === 'diesel' ? (k === 'admissao' ? 'admAr' : k === 'compressao' ? 'compAr' : k) : k; }
   return stroke2(mod((th - c.F) / D2R, 360));
 }
 const TIME_KEYS = {
   steam: ['vapor', 'vaporOut', 'fechado'],
   2: ['explosao', 'escape', 'transf', 'comp2'],
-  4: ['admissao', 'compressao', 'explosao', 'escape']
+  4: ['admissao', 'compressao', 'explosao', 'escape'],
+  diesel: ['admAr', 'compAr', 'explosao', 'escape']
 };
 const LEGENDS = {
   steam: [['--g-steam', 'Vapor da caldeira'], ['--g-used', 'Vapor usado']],
-  piston: [['--g-fresh', 'Mistura nova'], ['--g-comp', 'Mistura comprimida'], ['--g-burn', 'Queimando'], ['--g-burnt', 'Gases queimados']]
+  piston: [['--g-fresh', 'Mistura nova'], ['--g-comp', 'Mistura comprimida'], ['--g-burn', 'Queimando'], ['--g-burnt', 'Gases queimados']],
+  diesel: [['--g-air', 'Ar'], ['--g-aircomp', 'Ar comprimido'], ['--g-burn', 'Diesel queimando'], ['--g-burnt', 'Gases queimados']]
 };
 
-const GAS = { fresh: 0x3d8ee0, comp: 0x2449a8, burn: 0xffc23a, hot: 0xff6a1a, burnt: 0x8c7a68, steam: 0xdce8ee, used: 0x9aa7ae };
+const GAS = { air: 0xbcd7e8, aircomp: 0x7f9fc0, fresh: 0x3d8ee0, comp: 0x2449a8, burn: 0xffc23a, hot: 0xff6a1a, burnt: 0x8c7a68, steam: 0xdce8ee, used: 0x9aa7ae };
 
 /* ===================== Análise: torque e vibração em duas voltas ===================== */
 const N720 = 720;
@@ -560,8 +608,8 @@ function cylTorque(ch, c, th) {
     return p * ST_AREA * (k.ux * ST.r * Math.cos(th) - k.uy * ST.r * Math.sin(th)) * SI;
   }
   const k = pistonKin(c.beta, c.phi, th);
-  const V = volAt(k.s);
-  const p = ch.cycle === 4 ? press4(mod((th - c.F) / D2R, 720), V) : press2(mod((th - c.F) / D2R + 180, 360) - 180, V);
+  const f = FUEL[ch.fuel || 'gas'];
+  const p = ch.cycle === 4 ? press4(mod((th - c.F) / D2R, 720), volAt(k.s, f.vc), f) : press2(mod((th - c.F) / D2R + 180, 360) - 180, volAt(k.s));
   return (p - 1) * 1e5 * AREA * (-k.ds * SI);
 }
 function pistonPos(ch, c, th) {
@@ -674,7 +722,7 @@ function fillTexts(i) {
   const base = CHAPTERS[i];
   ui.variant.hidden = !base.variants;
   if (base.variants) {
-    ui.variant.innerHTML = '<span>Virabrequim</span>';
+    ui.variant.innerHTML = '<span>' + (base.variantLabel || 'Virabrequim') + '</span>';
     base.variants.forEach((v, k) => {
       const b = document.createElement('button'); b.type = 'button'; b.textContent = v.label;
       b.setAttribute('aria-pressed', (base.v || 0) === k ? 'true' : 'false');
@@ -697,9 +745,9 @@ function fillTexts(i) {
   ui.problemTxt.appendChild(document.createTextNode(c.problem));
   ui.next.textContent = last ? 'Voltar ao começo' : 'Próximo: ' + CHAPTERS[i + 1].title + ' →';
 
-  const L = c.type === 'steam' ? LEGENDS.steam : LEGENDS.piston;
+  const L = c.type === 'steam' ? LEGENDS.steam : c.fuel === 'diesel' ? LEGENDS.diesel : LEGENDS.piston;
   ui.legend.innerHTML = L.map((x) => '<span>' + sw(x[0]) + x[1] + '</span>').join('');
-  const keys = TIME_KEYS[c.type === 'steam' ? 'steam' : c.cycle];
+  const keys = TIME_KEYS[c.type === 'steam' ? 'steam' : c.fuel === 'diesel' ? 'diesel' : c.cycle];
   ui.timeKey.innerHTML = keys.map((k) => '<span>' + sw(STROKE[k].css) + STROKE[k].label + '</span>').join('');
   const n = c.type === 'steam' ? 1 : c.layout.cyl.length;
   ui.chartKey.innerHTML = '<span><i style="background:var(--accent-fill)"></i>' + (n > 1 ? 'Soma no virabrequim' : 'Torque') + '</span>'
@@ -1151,7 +1199,7 @@ function buildCrank(parent, cyls, o) {
       }
     }
     const ff = z1 + webT;
-    zCyl(mainR, prevBack - ff, MAT.forged, crank, 0, 0, (prevBack + ff) / 2, 20);
+    if (prevBack - ff > 0.005) zCyl(mainR, prevBack - ff, MAT.forged, crank, 0, 0, (prevBack + ff) / 2, 20);
     prevBack = z0 - webT;
   });
   const flyZ = prevBack - o.tail;
@@ -1217,7 +1265,8 @@ function bankToWorld(beta, x, y) { return [x * Math.cos(beta) + y * Math.sin(bet
 function buildPiston(def) {
   const root = new THREE.Group();
   const { cyl, banks } = def.layout;
-  const n = cyl.length, is4 = def.cycle === 4, isV = banks.length > 1;
+  const n = cyl.length, is4 = def.cycle === 4, isV = banks.length > 1, diesel = def.fuel === 'diesel';
+  const FRESH = diesel ? GAS.air : GAS.fresh, COMP = diesel ? GAS.aircomp : GAS.comp;
   const zs = cyl.map((c) => c.z);
   const zFront = Math.max(...zs) + G.S / 2, zBack = Math.min(...zs) - G.S / 2;
   const zT = zFront + 0.25;
@@ -1256,8 +1305,15 @@ function buildPiston(def) {
       c.piston = makePiston(g, c.z);
       c.gas = mesh(new THREE.CylinderGeometry(G.R - 0.016, G.R - 0.016, 1, 32), gasMat(GAS.fresh, 0.7), g, 0, 0, c.z); c.gas.renderOrder = 1;
       const plugLen = is4 ? 1.45 : 0.62;
-      const plug = tag(mesh(new THREE.CylinderGeometry(0.06, 0.06, plugLen, 14), MAT.ceramic, g, 0, G.deck + plugLen / 2, c.z), 'vela');
-      tag(mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.12, 6), MAT.steel, g, 0, G.deck + plugLen - 0.25, c.z), 'vela');
+      const plugKey = diesel ? 'injetor' : 'vela';
+      const plug = tag(mesh(new THREE.CylinderGeometry(diesel ? 0.08 : 0.06, diesel ? 0.05 : 0.06, plugLen, 14), diesel ? MAT.dark : MAT.ceramic, g, 0, G.deck + plugLen / 2, c.z), plugKey);
+      tag(mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.12, 6), MAT.steel, g, 0, G.deck + plugLen - 0.25, c.z), plugKey);
+      if (diesel) {
+        // Borrifo do injetor: um cone que aparece só enquanto ele injeta
+        const sg = new THREE.ConeGeometry(0.2, 0.32, 20, 1, true); sg.rotateX(Math.PI); sg.translate(0, -0.16, 0);
+        c.spray = mesh(sg, new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }), g, 0, G.deck, c.z);
+        c.spray.userData.noPick = true;
+      }
       c.spark = mesh(new THREE.SphereGeometry(0.08, 14, 10), new THREE.MeshBasicMaterial({ color: 0xfff1a0, transparent: true, opacity: 0, depthWrite: false }), g, 0, G.deck - 0.03, c.z);
       c.spark.userData.noPick = true;
       c.plug = plug;
@@ -1322,7 +1378,7 @@ function buildPiston(def) {
 
   const c1 = cyl.find((c) => c.n === 1);
   if (n === 1) {
-    labels.push({ t: 'Vela', o: banks[0].g, p: [0.1, G.deck + (is4 ? 1.45 : 0.62), 0] });
+    labels.push({ t: diesel ? 'Injetor' : 'Vela', o: banks[0].g, p: [0.1, G.deck + (is4 ? 1.45 : 0.62), 0] });
     labels.push({ t: 'Pistão', o: c1.piston, p: [G.R, 0.1, 0.2] });
     labels.push({ t: 'Biela', o: c1.rod, p: [0.1, G.l * 0.45, 0.12] });
     labels.push({ t: 'Volante', o: root, p: [1.0, -1.05, cr.flyZ] });
@@ -1351,8 +1407,8 @@ function buildPiston(def) {
     if (d >= -15 && d < 35) { const t = (d + 15) / 50; setGas(m, GAS.burn, GAS.hot, t, 0xff9a20, 1 - t * 0.7, 0.92); }
     else if (d >= 35 && d < 180) { const t = smooth((d - 35) / 145); setGas(m, GAS.hot, GAS.burnt, t, 0xff5a10, 0.3 * (1 - t), 0.85); }
     else if (g >= 180 && g < 360) setGas(m, GAS.burnt, null, 0, null, 0, lerp(0.8, 0.45, (g - 180) / 180));
-    else if (g >= 360 && g < 540) setGas(m, GAS.fresh, null, 0, null, 0, lerp(0.4, 0.75, (g - 360) / 180));
-    else setGas(m, GAS.fresh, GAS.comp, (g - 540) / 165, null, 0, 0.8);
+    else if (g >= 360 && g < 540) setGas(m, FRESH, null, 0, null, 0, lerp(0.4, 0.75, (g - 360) / 180));
+    else setGas(m, FRESH, COMP, (g - 540) / 165, null, 0, 0.8);
   }
   function gas2(m, d) {
     if (d >= -15 && d < 35) { const t = (d + 15) / 50; setGas(m, GAS.burn, GAS.hot, t, 0xff9a20, 1 - t * 0.7, 0.92); }
@@ -1377,7 +1433,8 @@ function buildPiston(def) {
         const g = mod((t - c.F) / D2R, 720);
         gas4(c.gas, g);
         const d = g < 360 ? g : g - 720;
-        sparkOn = d >= -15 && d < -3;
+        sparkOn = !diesel && d >= -15 && d < -3;
+        if (c.spray) { const on = d >= -8 && d < 30; c.spray.material.opacity = on ? 0.75 * (1 - smooth((d - 15) / 15)) : 0; c.spray.scale.set(1, on ? 0.6 + 0.4 * smooth((d + 8) / 10) : 1, 1); }
         ['in', 'ex'].forEach((key) => {
           const v = c.valves[key], cfg = VALVE[key];
           const lift = liftAt(g, cfg.open);
@@ -1415,7 +1472,7 @@ function buildPiston(def) {
     });
   }
 
-  const cam = n === 1 ? (is4 ? [6.4, 2.6, 3.6] : [4.6, 2.4, 6.4]) : isV ? [7.2, 3.8, 4.4] : [7.6, 3.4, 3.8];
+  const cam = def.layout.cam || (n === 1 ? (is4 ? [6.4, 2.6, 3.6] : [4.6, 2.4, 6.4]) : isV ? [7.2, 3.8, 4.4] : [7.6, 3.4, 3.8]);
   return { root, update, labels, camDir: new THREE.Vector3(...cam).normalize(), cyl, fly: cr.flyG };
 }
 
@@ -1555,16 +1612,10 @@ function setVariant(i, k) {
 function setChapter(i, force) {
   if (i === cur && !force) return;
   cur = i;
-  const def = CHAPTERS[i];
-  if (def.variants) {
-    def.baseLayout = def.baseLayout || def.layout;
-    def.layout = def.variants[def.v || 0].layout || def.baseLayout;
-    def.infos = def.infos || [];
-    def.infos[def.v || 0] = def.infos[def.v || 0] || analyze(def);
-    def.info = def.infos[def.v || 0];
-  }
-  def.info = def.info || analyze(def);
-  info = def.info;
+  // A variante escolhida (virabrequim, cilindros, combustível) sobrepõe os campos do capítulo
+  const base = CHAPTERS[i], vi = base.v || 0, def = eff(base);
+  base.infos = base.infos || [];
+  info = base.infos[vi] = base.infos[vi] || analyze(def);
   chap = { def };
   timeCache = null;
   if (has3D) {
@@ -1608,6 +1659,7 @@ const PART_INFO = {
   comando: ['Comando de válvulas', 'Eixo com um ressalto para cada válvula. A cada volta, cada ressalto abre a sua válvula uma vez, e o comando gira na metade da rotação do virabrequim, porque o ciclo de 4 tempos leva duas voltas.'],
   polia: ['Polia', 'A polia do virabrequim tem metade do diâmetro da polia do comando, e por isso o comando dá meia volta para cada volta do virabrequim. As marcas amarelas mostram a diferença de velocidade.'],
   correia: ['Correia dentada', 'Liga o virabrequim aos comandos e mantém os dois em sincronia. Se ela pular um dente, as válvulas abrem fora de hora.'],
+  injetor: ['Injetor', 'Borrifa diesel em gotas finíssimas no ar quente, perto do fim da compressão. O diesel pega fogo sozinho ao encontrar o ar, e a queima segue enquanto o injetor borrifa: é ele que controla a explosão, não uma faísca.'],
   vela: ['Vela de ignição', 'Solta a faísca que começa a queima, um pouco antes do ponto morto superior. A queima leva alguns graus de virabrequim para se espalhar, e a pressão máxima chega logo depois do ponto morto.'],
   bloco: ['Bloco', 'Corpo do motor, onde ficam os cilindros. Aqui ele é transparente para mostrar o que acontece dentro; desligue Bloco, na seção Vista, para escondê-lo.'],
   cabecote: ['Cabeçote', 'Tampa de cima dos cilindros. Forma a câmara de combustão e guarda as velas e, no 4 tempos, as válvulas, as molas e os comandos.'],
