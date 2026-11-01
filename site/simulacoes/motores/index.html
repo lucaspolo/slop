@@ -1012,6 +1012,7 @@ function resize() {
   renderer.setSize(w, h, false);
   camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix();
   ui.stage.classList.toggle('narrow', w < 640);
+  markers.forEach((m) => { m.w = null; });
   timeCache = null;
 }
 
@@ -1508,6 +1509,29 @@ function setChapter(i) {
   try { history.replaceState(null, '', '#' + (i + 1)); } catch (e) { /* sem histórico */ }
 }
 
+/* ===================== Nomes das peças ===================== */
+// Um nome que encostaria num mais importante (os primeiros da lista), no painel de leitura ou na legenda fica escondido naquele quadro.
+const hudEl = document.querySelector('.hud');
+const overlaps = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+function placeMarkers() {
+  if (!markers.length || ui.labels.classList.contains('off')) return;
+  const W = ui.stage.clientWidth, H = ui.stage.clientHeight, sr = ui.stage.getBoundingClientRect();
+  const rel = (el) => { const r = el.getBoundingClientRect(); return [r.left - sr.left - 4, r.top - sr.top - 4, r.right - sr.left + 4, r.bottom - sr.top + 4]; };
+  const placed = [rel(hudEl), rel(ui.legend)];
+  markers.forEach((m) => {
+    if (m.w == null) { m.w = m.el.offsetWidth; m.h = m.el.offsetHeight; }
+    m.v.set(m.L.p[0], m.L.p[1], m.L.p[2]); m.L.o.localToWorld(m.v); m.v.project(camera);
+    let x = (m.v.x + 1) / 2 * W - (m.L.num ? 12 : 0), y = (1 - m.v.y) / 2 * H - (m.L.num ? 12 : 10);
+    if (m.L.al === 'l') x -= m.w;
+    const box = [x - 2, y - 2, x + m.w + 2, y + m.h + 2];
+    const hide = m.v.z > 1 || placed.some((b) => overlaps(b, box));
+    m.el.style.visibility = hide ? 'hidden' : '';
+    if (hide) return;
+    placed.push(box);
+    m.el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)';
+  });
+}
+
 /* ===================== Laço ===================== */
 function updateHud() {
   if (!chap) return;
@@ -1541,14 +1565,7 @@ function frame(now) {
     }
     controls.update();
     renderer.render(scene, camera);
-    const W = ui.stage.clientWidth, H = ui.stage.clientHeight;
-    markers.forEach((m) => {
-      m.v.set(m.L.p[0], m.L.p[1], m.L.p[2]); m.L.o.localToWorld(m.v); m.v.project(camera);
-      if (m.v.z > 1) { m.el.style.visibility = 'hidden'; return; }
-      m.el.style.visibility = '';
-      const half = m.L.num ? 12 : 0, left = m.L.al === 'l' ? ' translateX(-100%)' : '';
-      m.el.style.transform = 'translate(' + ((m.v.x + 1) / 2 * W - half).toFixed(1) + 'px,' + ((1 - m.v.y) / 2 * H - (m.L.num ? 12 : 10)).toFixed(1) + 'px)' + left;
-    });
+    placeMarkers();
   }
   uiClock += dt;
   if (uiClock >= 0.08) { uiClock = 0; updateHud(); drawChart(); drawTimeline(); drawRpm(); }
