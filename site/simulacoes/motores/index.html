@@ -80,6 +80,13 @@ h1{ margin:0; font:700 clamp(36px, 6.2vw, 64px)/.92 var(--f-display); text-trans
 .stage-foot{ position:absolute; left:10px; right:10px; bottom:10px; display:flex; justify-content:space-between; gap:12px; pointer-events:none; font:500 12.5px/1.2 var(--f-display); letter-spacing:.05em; text-transform:uppercase; color:var(--muted); }
 .stage.narrow .stage-foot .hint{ display:none; }
 .stage-foot .note{ margin-left:auto; text-align:right; }
+.info{ position:absolute; left:10px; bottom:40px; width:min(380px, calc(100% - 20px)); max-height:calc(100% - 60px); overflow:auto; padding:13px 15px 14px; border-radius:6px; background:var(--panel); border:1px solid var(--line); box-shadow:var(--shadow); z-index:3; }
+.info-head{ display:flex; align-items:center; gap:10px; }
+.info h3{ margin:0; flex:1; font:700 21px/1.05 var(--f-display); text-transform:uppercase; letter-spacing:.02em; }
+.x{ border:1px solid var(--line); background:transparent; width:32px; height:32px; border-radius:4px; cursor:pointer; font-size:20px; line-height:1; color:var(--muted); flex:none; }
+.info-sub{ margin:6px 0 4px; font:600 12.5px/1 var(--f-display); letter-spacing:.1em; text-transform:uppercase; color:var(--accent); }
+.info-sub:empty{ display:none; }
+.info-txt{ margin:0; font-size:15px; line-height:1.5; }
 .fail{ position:absolute; inset:0; display:grid; place-items:center; padding:24px; text-align:center; color:var(--muted); }
 
 .panel{ background:var(--panel); border:1px solid var(--line); border-radius:6px; display:grid; min-width:0; }
@@ -192,8 +199,13 @@ input[type=range]::-moz-range-thumb{ width:12px; height:22px; border-radius:4px;
       <div class="hud-row" id="hCycRow"><span id="hCycLbl">Ciclo</span><b id="hCyc">0°</b></div>
     </div>
     <div class="legend" id="legend"></div>
+    <div class="info" id="info" hidden>
+      <div class="info-head"><h3 id="infoTitle"></h3><button class="x" id="infoClose" type="button" aria-label="Fechar descrição">×</button></div>
+      <p class="info-sub" id="infoSub"></p>
+      <p class="info-txt" id="infoText"></p>
+    </div>
     <div class="stage-foot">
-      <span class="hint">Arraste para girar · roda ou pinça para zoom</span>
+      <span class="hint">Arraste para girar · roda ou pinça para zoom · toque numa peça</span>
       <span class="note" id="slowNote">Câmera lenta</span>
     </div>
   </section>
@@ -1009,6 +1021,14 @@ function initGL() {
   controls.enableDamping = true; controls.dampingFactor = 0.08;
   controls.minDistance = 2; controls.maxDistance = 80; controls.screenSpacePanning = true;
   controls.addEventListener('start', () => { autoFit = false; });
+  let down = null;
+  canvas.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+  canvas.addEventListener('pointerup', (e) => {
+    if (!down) return;
+    const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t;
+    down = null;
+    if (moved < 6 && dt < 600) pickAt(e.clientX, e.clientY);
+  });
 
   const ec = document.createElement('canvas'); ec.width = 512; ec.height = 256;
   const g = ec.getContext('2d');
@@ -1067,12 +1087,13 @@ function mesh(geo, mat, parent, x, y, z) { const m = new THREE.Mesh(geo, mat); m
 function zCyl(r, len, mat, parent, x, y, z, seg) { const g = new THREE.CylinderGeometry(r, r, len, seg || 28); g.rotateX(Math.PI / 2); return mesh(g, mat, parent, x, y, z); }
 function glassBox(w, h, d, parent, x, y, z, mat) {
   const g = new THREE.BoxGeometry(w, h, d);
-  const m = mesh(g, mat || MAT.glass, parent, x, y, z); m.renderOrder = 3;
+  const m = mesh(g, mat || MAT.glass, parent, x, y, z); m.renderOrder = 3; m.userData.glass = true;
   const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), MAT.edge); e.position.set(x, y, z); parent.add(e);
   blockParts.push(m, e);
   return m;
 }
-function gasMat(hex, op) { return new THREE.MeshStandardMaterial({ color: hex, emissive: 0x000000, metalness: 0, roughness: 0.9, transparent: true, opacity: op, depthWrite: false }); }
+function gasMat(hex, op) { const m = new THREE.MeshStandardMaterial({ color: hex, emissive: 0x000000, metalness: 0, roughness: 0.9, transparent: true, opacity: op, depthWrite: false }); m.userData.gas = true; return m; }
+const tag = (o, key) => { o.userData.part = key; return o; };
 function gasBox(w, h, d, parent, x, y, z, hex, op) { const m = mesh(new THREE.BoxGeometry(w, h, d), gasMat(hex, op), parent, x, y, z); m.renderOrder = 1; return m; }
 // Envoltória convexa de vários círculos (para braços do virabrequim e para a correia)
 function hullOf(circles, n) {
@@ -1099,7 +1120,7 @@ class Helix extends THREE.Curve {
 
 // Virabrequim montado a partir dos moentes de cada cilindro
 function buildCrank(parent, cyls, o) {
-  const crank = new THREE.Group(); parent.add(crank);
+  const crank = new THREE.Group(); parent.add(crank); tag(crank, 'virabrequim');
   const sorted = cyls.slice().sort((a, b) => b.z - a.z);
   const slots = [];
   sorted.forEach((c) => { const last = slots[slots.length - 1]; if (last && Math.abs(last[last.length - 1].z - c.z) < 0.3) last.push(c); else slots.push([c]); });
@@ -1130,26 +1151,26 @@ function buildCrank(parent, cyls, o) {
   });
   const flyZ = prevBack - o.tail;
   zCyl(mainR, o.tail, MAT.forged, crank, 0, 0, prevBack - o.tail / 2, 20);
-  const flyG = new THREE.Group(); flyG.position.z = flyZ; crank.add(flyG);
+  const flyG = new THREE.Group(); flyG.position.z = flyZ; crank.add(flyG); tag(flyG, 'volante');
   zCyl(o.flyR, 0.14, MAT.iron, flyG, 0, 0, 0, 56);
   for (let i = 0; i < 4; i++) { const a = i / 4 * TAU + 0.4; zCyl(o.flyR * 0.12, 0.15, MAT.dark, flyG, o.flyR * 0.55 * Math.cos(a), o.flyR * 0.55 * Math.sin(a), 0, 16); }
   mesh(new THREE.BoxGeometry(0.06, o.flyR * 0.3, 0.16), MAT.mark, flyG, 0, o.flyR * 0.82, 0);
   if (o.timing != null) {
-    zCyl(0.2, 0.14, MAT.steel, crank, 0, 0, o.timing, 32);
-    mesh(new THREE.BoxGeometry(0.04, 0.12, 0.15), MAT.mark, crank, 0, 0.12, o.timing);
+    tag(zCyl(0.2, 0.14, MAT.steel, crank, 0, 0, o.timing, 32), 'polia');
+    tag(mesh(new THREE.BoxGeometry(0.04, 0.12, 0.15), MAT.mark, crank, 0, 0.12, o.timing), 'polia');
   }
   return { crank, flyZ, flyG };
 }
 
 function makeRod(parent, thick) {
-  const g = new THREE.Group(); parent.add(g);
+  const g = new THREE.Group(); parent.add(g); tag(g, 'biela');
   mesh(new THREE.BoxGeometry(0.12, G.l - 0.3, thick * 0.6), MAT.rod, g, 0, G.l / 2, 0);
   zCyl(0.2, thick, MAT.rod, g, 0, 0, 0, 24);
   zCyl(0.11, thick * 0.8, MAT.rod, g, 0, G.l, 0, 16);
   return g;
 }
 function makePiston(parent, z) {
-  const g = new THREE.Group(); g.position.z = z; parent.add(g);
+  const g = new THREE.Group(); g.position.z = z; parent.add(g); tag(g, 'pistao');
   mesh(new THREE.CylinderGeometry(G.R - 0.012, G.R - 0.012, 0.75, 36), MAT.alu, g, 0, G.crown - 0.375, 0);
   [0.3, 0.25, 0.2].forEach((y) => { const t = mesh(new THREE.TorusGeometry(G.R - 0.01, 0.012, 6, 40), MAT.dark, g, 0, y, 0); t.rotation.x = Math.PI / 2; });
   return g;
@@ -1174,10 +1195,10 @@ function getLobeGeo() {
 }
 function getHelixGeo() { if (!helixGeo) helixGeo = new THREE.TubeGeometry(new Helix(0.075, 6), 140, 0.012, 6, false); return helixGeo; }
 function makeValve(parent, side, z) {
-  const grp = new THREE.Group(); grp.rotation.z = -side * VT; parent.add(grp);
+  const grp = new THREE.Group(); grp.rotation.z = -side * VT; parent.add(grp); tag(grp, side < 0 ? 'valvula_adm' : 'valvula_esc');
   mesh(new THREE.CylinderGeometry(0.1, 0.17, 0.05, 24), MAT.valve, grp, 0, 0.025, 0);
   mesh(new THREE.CylinderGeometry(0.03, 0.03, VL, 10), MAT.valve, grp, 0, VL / 2, 0);
-  const sp = mesh(getHelixGeo(), MAT.spring, grp, 0, 0.45, 0);
+  const sp = tag(mesh(getHelixGeo(), MAT.spring, grp, 0, 0.45, 0), 'mola_valvula');
   mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.03, 16), MAT.valve, grp, 0, 0.775, 0);
   const dir = new THREE.Vector3(side * Math.sin(VT), Math.cos(VT), 0);
   const seat = new THREE.Vector3(side * SEATX, G.deck + 0.005, z);
@@ -1198,7 +1219,7 @@ function buildPiston(def) {
   const labels = [];
 
   const cr = buildCrank(root, cyl, { w: isV ? 0.17 : 0.26, cw: is4 ? 0.58 : 0.55, tail: is4 ? 0.32 : 0.62, flyR: n === 1 ? 1.45 : 1.25, timing: def.belt ? zT : null, nose: def.belt ? zT + 0.07 : zFront });
-  if (is4) glassBox(isV ? 2.5 : 2.0, 2.15, zFront - zBack, root, 0, 0.03, (zFront + zBack) / 2);
+  if (is4) tag(glassBox(isV ? 2.5 : 2.0, 2.15, zFront - zBack, root, 0, 0.03, (zFront + zBack) / 2), 'carter4');
 
   cyl.forEach((c) => { c.rod = makeRod(root, isV ? 0.15 : 0.2); });
 
@@ -1207,15 +1228,15 @@ function buildPiston(def) {
     const g = new THREE.Group(); g.rotation.z = -b.beta; root.add(g); b.g = g;
     const cs = cyl.filter((c) => c.bank === bi);
     const bz = cs.map((c) => c.z), z0 = Math.min(...bz) - G.S / 2, z1 = Math.max(...bz) + G.S / 2, zc = (z0 + z1) / 2, len = z1 - z0;
-    glassBox(G.R * 2 + 0.36, G.deck - 1.1, len, g, 0, (G.deck + 1.1) / 2, zc);
+    tag(glassBox(G.R * 2 + 0.36, G.deck - 1.1, len, g, 0, (G.deck + 1.1) / 2, zc), 'bloco');
     if (is4) {
-      glassBox(1.5, 1.32, len, g, 0, G.deck + 0.66, zc, MAT.glassHead);
+      tag(glassBox(1.5, 1.32, len, g, 0, G.deck + 0.66, zc, MAT.glassHead), 'cabecote');
       [-1, 1].forEach((side) => {
         const [x, y] = camPos(side);
         const zEnd = def.belt ? zT : z1;
-        zCyl(0.07, zEnd - z0 + 0.1, MAT.cam, g, x, y, (zEnd + z0 - 0.1) / 2, 14);
+        tag(zCyl(0.07, zEnd - z0 + 0.1, MAT.cam, g, x, y, (zEnd + z0 - 0.1) / 2, 14), 'comando');
         if (def.belt) {
-          const p = new THREE.Group(); p.position.set(x, y, zT); g.add(p);
+          const p = new THREE.Group(); p.position.set(x, y, zT); g.add(p); tag(p, 'polia');
           mesh(new THREE.TorusGeometry(0.36, 0.05, 10, 48), MAT.steel, p, 0, 0, 0);
           zCyl(0.09, 0.16, MAT.steel, p, 0, 0, 0, 18);
           for (let k = 0; k < 3; k++) { const sp = mesh(new THREE.BoxGeometry(0.05, 0.3, 0.06), MAT.steel, p, 0, 0, 0); sp.rotation.z = k / 3 * TAU; sp.translateY(0.2); }
@@ -1224,15 +1245,16 @@ function buildPiston(def) {
         }
       });
     } else {
-      glassBox(G.R * 2 + 0.36, 0.42, len, g, 0, G.deck + 0.21, zc, MAT.glassHead);
+      tag(glassBox(G.R * 2 + 0.36, 0.42, len, g, 0, G.deck + 0.21, zc, MAT.glassHead), 'cabecote');
     }
     cs.forEach((c) => {
       c.piston = makePiston(g, c.z);
       c.gas = mesh(new THREE.CylinderGeometry(G.R - 0.016, G.R - 0.016, 1, 32), gasMat(GAS.fresh, 0.7), g, 0, 0, c.z); c.gas.renderOrder = 1;
       const plugLen = is4 ? 1.45 : 0.62;
-      const plug = mesh(new THREE.CylinderGeometry(0.06, 0.06, plugLen, 14), MAT.ceramic, g, 0, G.deck + plugLen / 2, c.z);
-      mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.12, 6), MAT.steel, g, 0, G.deck + plugLen - 0.25, c.z);
+      const plug = tag(mesh(new THREE.CylinderGeometry(0.06, 0.06, plugLen, 14), MAT.ceramic, g, 0, G.deck + plugLen / 2, c.z), 'vela');
+      tag(mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.12, 6), MAT.steel, g, 0, G.deck + plugLen - 0.25, c.z), 'vela');
       c.spark = mesh(new THREE.SphereGeometry(0.08, 14, 10), new THREE.MeshBasicMaterial({ color: 0xfff1a0, transparent: true, opacity: 0, depthWrite: false }), g, 0, G.deck - 0.03, c.z);
+      c.spark.userData.noPick = true;
       c.plug = plug;
       if (is4) {
         c.valves = {};
@@ -1240,7 +1262,7 @@ function buildPiston(def) {
           const side = VALVE[k].side;
           const v = makeValve(g, side, c.z);
           const [cx, cy] = camPos(side);
-          v.lobe = mesh(getLobeGeo(), MAT.cam, g, cx, cy, c.z);
+          v.lobe = tag(mesh(getLobeGeo(), MAT.cam, g, cx, cy, c.z), 'comando');
           v.port = gasBox(0.5, 0.16, 0.3, g, side * 0.405, G.deck + 0.2, c.z, k === 'in' ? GAS.fresh : GAS.burnt, 0.15);
           v.port.rotation.z = side * 35 * D2R;
           c.valves[k] = v;
@@ -1255,7 +1277,7 @@ function buildPiston(def) {
     const circles = [[0, 0, 0.2]].concat(camPulleys.map((p) => [p.world[0], p.world[1], 0.4]));
     const outer = new THREE.Shape(hullOf(circles.map(([x, y, r]) => [x, y, r + 0.05]), 56));
     outer.holes.push(new THREE.Path(hullOf(circles, 56)));
-    beltMesh = extrude(outer, 0.12, MAT.belt, root, zT);
+    beltMesh = tag(extrude(outer, 0.12, MAT.belt, root, zT), 'correia');
   }
 
   // Peças do 2 tempos: janelas, dutos e cárter
@@ -1263,26 +1285,26 @@ function buildPiston(def) {
   if (!is4) {
     const g = banks[0].g;
     const exTop = crownAt(100), exLow = exTop - 0.34, trTop = crownAt(120), trLow = trTop - 0.2;
-    zCyl(0.98, 1.3, MAT.glass, root, 0, 0, 0, 48).renderOrder = 3;
-    blockParts.push(root.children[root.children.length - 1]);
+    const cc = tag(zCyl(0.98, 1.3, MAT.glass, root, 0, 0, 0, 48), 'carter2'); cc.renderOrder = 3; cc.userData.glass = true;
+    blockParts.push(cc);
     const caseGas = zCyl(0.93, 1.2, gasMat(GAS.fresh, 0.3), root, 0, 0, 0, 40); caseGas.renderOrder = 1;
     const exGas = gasBox(1.1, 0.32, 0.4, g, G.R + 0.55, (exTop + exLow) / 2, 0, GAS.burnt, 0.2);
     const exDown = gasBox(0.26, exLow - 0.55, 0.4, g, G.R + 0.97, (exLow + 0.55) / 2, 0, GAS.burnt, 0.2);
-    glassBox(1.16, 0.4, 0.46, g, G.R + 0.55, (exTop + exLow) / 2, 0);
+    tag(glassBox(1.16, 0.4, 0.46, g, G.R + 0.55, (exTop + exLow) / 2, 0), 'escape2');
     const trs = [-1, 1].map((sz) => {
       const zz = sz * (G.R + 0.14);
       const up = gasBox(0.36, trTop - 0.72, 0.14, g, 0, (trTop + 0.72) / 2, zz, GAS.fresh, 0.35);
       const mouth = gasBox(0.36, 0.2, 0.2, g, 0, (trTop + trLow) / 2, sz * (G.R + 0.02), GAS.fresh, 0.35);
-      glassBox(0.42, trTop - 0.72 + 0.04, 0.2, g, 0, (trTop + 0.72) / 2, zz);
+      tag(glassBox(0.42, trTop - 0.72 + 0.04, 0.2, g, 0, (trTop + 0.72) / 2, zz), 'transferencia');
       return [up, mouth];
     });
     const inGas = gasBox(0.8, 0.36, 0.5, root, -1.35, 0, 0, GAS.fresh, 0.2);
-    glassBox(0.86, 0.42, 0.56, root, -1.35, 0, 0);
-    mesh(new THREE.BoxGeometry(0.34, 0.6, 0.66), MAT.dark, root, -1.9, 0, 0);
+    tag(glassBox(0.86, 0.42, 0.56, root, -1.35, 0, 0), 'palheta');
+    tag(mesh(new THREE.BoxGeometry(0.34, 0.6, 0.66), MAT.dark, root, -1.9, 0, 0), 'carburador');
     const reedPivot = new THREE.Group(); reedPivot.position.set(-1.0, 0, 0); root.add(reedPivot);
-    mesh(new THREE.BoxGeometry(0.06, 0.42, 0.56), MAT.iron, root, -1.0, 0, 0);
+    tag(mesh(new THREE.BoxGeometry(0.06, 0.42, 0.56), MAT.iron, root, -1.0, 0, 0), 'palheta');
     const reeds = [1, -1].map((sy) => {
-      const hinge = new THREE.Group(); hinge.position.set(-1.0, sy * 0.17, 0); root.add(hinge);
+      const hinge = new THREE.Group(); hinge.position.set(-1.0, sy * 0.17, 0); root.add(hinge); tag(hinge, 'palheta');
       mesh(new THREE.BoxGeometry(0.3, 0.012, 0.44), MAT.spring, hinge, 0.15, 0, 0);
       return { hinge, sy };
     });
@@ -1398,51 +1420,51 @@ function buildSteam() {
   const labels = [];
   const Oy = ST.Oy;
   mesh(new THREE.BoxGeometry(5.4, 0.16, 2.4), MAT.iron, root, -0.95, -1.52, -0.45);
-  mesh(new THREE.BoxGeometry(0.9, 3.8, 0.12), MAT.paint, root, 0, 0.46, -0.56);
+  tag(mesh(new THREE.BoxGeometry(0.9, 3.8, 0.12), MAT.paint, root, 0, 0.46, -0.56), 'placa');
   zCyl(0.17, 0.16, MAT.paint, root, 0, 0, -0.56, 24);
   // Furos de entrada e saída na placa, um de cada lado do pivô
   const psiP = 8 * D2R;
-  const holeIn = zCyl(0.055, 0.02, new THREE.MeshBasicMaterial({ color: 0x222222 }), root, -ST.port * Math.sin(psiP), Oy + ST.port * Math.cos(psiP), -0.495, 16);
-  const holeOut = zCyl(0.055, 0.02, new THREE.MeshBasicMaterial({ color: 0x222222 }), root, ST.port * Math.sin(psiP), Oy + ST.port * Math.cos(psiP), -0.495, 16);
+  const holeIn = tag(zCyl(0.055, 0.02, new THREE.MeshBasicMaterial({ color: 0x222222 }), root, -ST.port * Math.sin(psiP), Oy + ST.port * Math.cos(psiP), -0.495, 16), 'placa');
+  const holeOut = tag(zCyl(0.055, 0.02, new THREE.MeshBasicMaterial({ color: 0x222222 }), root, ST.port * Math.sin(psiP), Oy + ST.port * Math.cos(psiP), -0.495, 16), 'placa');
   // Pivô, mola e porca atrás da placa
-  zCyl(0.05, 0.6, MAT.steel, root, 0, Oy, -0.55, 12);
+  tag(zCyl(0.05, 0.6, MAT.steel, root, 0, Oy, -0.55, 12), 'pivo');
   const sp = new THREE.Mesh(new THREE.TubeGeometry(new Helix(0.09, 5), 100, 0.014, 6, false), MAT.spring);
-  sp.rotation.x = -Math.PI / 2; sp.position.set(0, Oy, -0.64); sp.scale.y = 0.18; root.add(sp);
-  zCyl(0.08, 0.06, MAT.steel, root, 0, Oy, -0.86, 6);
+  sp.rotation.x = -Math.PI / 2; sp.position.set(0, Oy, -0.64); sp.scale.y = 0.18; root.add(sp); tag(sp, 'pivo');
+  tag(zCyl(0.08, 0.06, MAT.steel, root, 0, Oy, -0.86, 6), 'pivo');
 
   // Cilindro oscilante
-  const cylG = new THREE.Group(); cylG.position.set(0, Oy, 0); root.add(cylG);
+  const cylG = new THREE.Group(); cylG.position.set(0, Oy, 0); root.add(cylG); tag(cylG, 'cilindro_osc');
   const body = mesh(new THREE.CylinderGeometry(ST.bore, ST.bore, 1.3, 40, 1, true), MAT.brassGlass, cylG, 0, 0, 0); body.renderOrder = 3;
   mesh(new THREE.CylinderGeometry(ST.bore + 0.03, ST.bore + 0.03, 0.08, 40), MAT.brass, cylG, 0, 0.69, 0);
   mesh(new THREE.TorusGeometry(ST.bore, 0.03, 8, 40), MAT.brass, cylG, 0, -0.65, 0).rotation.x = Math.PI / 2;
   mesh(new THREE.BoxGeometry(0.36, 0.5, 0.1), MAT.brass, cylG, 0, 0.42, -0.44);
   const steamGas = mesh(new THREE.CylinderGeometry(ST.bore - 0.02, ST.bore - 0.02, 1, 32), gasMat(GAS.steam, 0.7), cylG, 0, 0, 0); steamGas.renderOrder = 1;
-  const piston = mesh(new THREE.CylinderGeometry(ST.bore - 0.01, ST.bore - 0.01, 0.26, 36), MAT.alu, cylG, 0, 0, 0);
-  const rod = mesh(new THREE.CylinderGeometry(0.05, 0.05, ST.rod, 12), MAT.steel, cylG, 0, 0, 0);
-  const eye = zCyl(0.1, 0.12, MAT.steel, cylG, 0, 0, 0, 18);
+  const piston = tag(mesh(new THREE.CylinderGeometry(ST.bore - 0.01, ST.bore - 0.01, 0.26, 36), MAT.alu, cylG, 0, 0, 0), 'pistao_vapor');
+  const rod = tag(mesh(new THREE.CylinderGeometry(0.05, 0.05, ST.rod, 12), MAT.steel, cylG, 0, 0, 0), 'pistao_vapor');
+  const eye = tag(zCyl(0.1, 0.12, MAT.steel, cylG, 0, 0, 0, 18), 'pistao_vapor');
 
   // Virabrequim de disco e volante
-  const crank = new THREE.Group(); root.add(crank);
+  const crank = new THREE.Group(); root.add(crank); tag(crank, 'manivela');
   zCyl(0.62, 0.1, MAT.iron, crank, 0, 0, -0.33, 48);
   zCyl(0.07, 0.36, MAT.steel, crank, 0, ST.r, -0.12, 14);
   mesh(new THREE.BoxGeometry(0.06, 0.2, 0.11), MAT.mark, crank, 0, -0.45, -0.33);
   zCyl(0.09, 0.95, MAT.steel, crank, 0, 0, -0.75, 14);
-  const fly = new THREE.Group(); fly.position.z = -1.05; crank.add(fly);
+  const fly = new THREE.Group(); fly.position.z = -1.05; crank.add(fly); tag(fly, 'volante_vapor');
   mesh(new THREE.TorusGeometry(1.15, 0.12, 12, 64), MAT.iron, fly, 0, 0, 0);
   zCyl(0.2, 0.2, MAT.iron, fly, 0, 0, 0, 20);
   for (let i = 0; i < 6; i++) { const s = mesh(new THREE.BoxGeometry(0.07, 1.1, 0.07), MAT.iron, fly, 0, 0, 0); s.rotation.z = i / 6 * TAU; s.translateY(0.6); }
   mesh(new THREE.BoxGeometry(0.1, 0.22, 0.26), MAT.mark, fly, 0, 1.15, 0);
 
   // Caldeira, fornalha e canos
-  const boiler = new THREE.Group(); boiler.position.set(-2.75, -0.55, -0.4); root.add(boiler);
+  const boiler = new THREE.Group(); boiler.position.set(-2.75, -0.55, -0.4); root.add(boiler); tag(boiler, 'caldeira');
   zCyl(0.6, 1.5, MAT.copper, boiler, 0, 0.35, 0, 40);
   mesh(new THREE.BoxGeometry(1.3, 0.55, 1.5), MAT.iron, boiler, 0, -0.6, 0);
   const fire = mesh(new THREE.BoxGeometry(0.9, 0.3, 0.05), MAT.fire, boiler, 0, -0.62, 0.76);
   mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.3, 10), MAT.brass, boiler, 0.3, 1.05, 0.3);
   const tube = (pts, mat) => mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p)), false, 'catmullrom', 0.05), 120, 0.06, 10, false), mat, root, 0, 0, 0);
   const xin = -ST.port * Math.sin(psiP), yin = Oy + ST.port * Math.cos(psiP);
-  tube([[-2.75, 0.4, -0.4], [-2.75, 1.4, -0.4], [-2.6, 2.35, -0.75], [-0.6, 2.35, -0.75], [xin - 0.15, yin + 0.05, -0.75], [xin, yin, -0.68], [xin, yin, -0.6]], MAT.copper);
-  tube([[-xin, yin, -0.6], [-xin, yin, -0.68], [-xin + 0.2, yin, -0.78], [1.1, yin + 0.05, -0.78], [1.4, yin + 0.4, -0.78], [1.45, 3.05, -0.78]], MAT.copper);
+  tag(tube([[-2.75, 0.4, -0.4], [-2.75, 1.4, -0.4], [-2.6, 2.35, -0.75], [-0.6, 2.35, -0.75], [xin - 0.15, yin + 0.05, -0.75], [xin, yin, -0.68], [xin, yin, -0.6]], MAT.copper), 'cano_vapor');
+  tag(tube([[-xin, yin, -0.6], [-xin, yin, -0.68], [-xin + 0.2, yin, -0.78], [1.1, yin + 0.05, -0.78], [1.4, yin + 0.4, -0.78], [1.45, 3.05, -0.78]], MAT.copper), 'cano_escape');
   // Baforadas de vapor no fim do cano de saída
   const puffs = [];
   for (let i = 0; i < 14; i++) { const m = mesh(new THREE.SphereGeometry(0.16, 12, 8), new THREE.MeshBasicMaterial({ color: 0xeef3f5, transparent: true, opacity: 0, depthWrite: false }), root, 1.45, 3.05, -0.78); m.visible = false; puffs.push({ m, t: 0, on: false }); }
@@ -1498,6 +1520,7 @@ function buildSteam() {
 const markers = [];
 function disposeEngine() {
   if (!engine) return;
+  clearSelection();
   scene.remove(engine.root);
   engine.root.traverse((o) => {
     if (o.geometry && o.geometry !== lobeGeo && o.geometry !== helixGeo) o.geometry.dispose();
@@ -1568,6 +1591,90 @@ function setChapter(i, force) {
   try { history.replaceState(null, '', '#' + (i + 1)); } catch (e) { /* sem histórico */ }
 }
 
+/* ===================== Descrição das peças ===================== */
+const PART_INFO = {
+  pistao: ['Pistão', 'Copo de alumínio que corre dentro do cilindro. Recebe a força dos gases na cabeça e a passa para a biela pelo pino. Os anéis nas canaletas vedam a folga com a parede, para os gases não escaparem para o cárter.'],
+  biela: ['Biela', 'Haste que liga o pistão ao virabrequim. A ponta de cima só balança em volta do pino do pistão; a de baixo gira em volta do moente. É ela que transforma o vaivém em giro.'],
+  virabrequim: ['Virabrequim', 'Eixo com manivelas, os moentes, onde as bielas se prendem. Os braços ligam cada moente ao eixo, e os contrapesos do lado oposto equilibram parte da massa que se mexe. A posição dos moentes decide a ordem em que os cilindros explodem.'],
+  volante: ['Volante', 'Disco pesado na ponta do virabrequim. Guarda energia nas explosões e a devolve nas compressões, para o motor não perder rotação entre um impulso e outro. Mude o tamanho dele na seção Volante e rotação.'],
+  valvula_adm: ['Válvula de admissão', 'Abre para a mistura nova entrar no cilindro durante a admissão e fecha antes da compressão. O ressalto do comando a empurra para baixo, e a mola a traz de volta.'],
+  valvula_esc: ['Válvula de escape', 'Abre perto do fim da explosão, para os gases queimados saírem, e fecha logo depois do ponto morto superior. Trabalha mais quente que a de admissão, porque fica no caminho dos gases.'],
+  mola_valvula: ['Mola de válvula', 'Mantém a válvula fechada contra a sede e a faz seguir o ressalto do comando quando ele se afasta. Repare como ela encolhe quando a válvula abre.'],
+  comando: ['Comando de válvulas', 'Eixo com um ressalto para cada válvula. A cada volta, cada ressalto abre a sua válvula uma vez, e o comando gira na metade da rotação do virabrequim, porque o ciclo de 4 tempos leva duas voltas.'],
+  polia: ['Polia', 'A polia do virabrequim tem metade do diâmetro da polia do comando, e por isso o comando dá meia volta para cada volta do virabrequim. As marcas amarelas mostram a diferença de velocidade.'],
+  correia: ['Correia dentada', 'Liga o virabrequim aos comandos e mantém os dois em sincronia. Se ela pular um dente, as válvulas abrem fora de hora.'],
+  vela: ['Vela de ignição', 'Solta a faísca que começa a queima, um pouco antes do ponto morto superior. A queima leva alguns graus de virabrequim para se espalhar, e a pressão máxima chega logo depois do ponto morto.'],
+  bloco: ['Bloco', 'Corpo do motor, onde ficam os cilindros. Aqui ele é transparente para mostrar o que acontece dentro; desligue Bloco, na seção Vista, para escondê-lo.'],
+  cabecote: ['Cabeçote', 'Tampa de cima dos cilindros. Forma a câmara de combustão e guarda as velas e, no 4 tempos, as válvulas, as molas e os comandos.'],
+  carter4: ['Cárter', 'A parte de baixo do motor, em volta do virabrequim. No 4 tempos ele guarda o óleo que lubrifica as peças.'],
+  carter2: ['Cárter', 'No 2 tempos, o cárter é fechado e trabalha como bomba: o pistão, descendo, espreme a mistura que entrou ali e a manda para cima pelas transferências.'],
+  escape2: ['Janela de escape', 'Abertura na parede do cilindro. O pistão a descobre perto do fim da descida, e os gases queimados saem por ela. É a mais alta das janelas, por isso abre antes das transferências.'],
+  transferencia: ['Transferência', 'Canais que levam a mistura do cárter até o cilindro. A janela deles fica um pouco abaixo da de escape: abre logo depois, quando a pressão no cilindro já caiu.'],
+  palheta: ['Válvula de palheta', 'Lâminas finas que só deixam a mistura entrar no cárter. Abrem quando o pistão sobe e a pressão no cárter cai, e fecham quando ele desce e começa a espremer a mistura.'],
+  carburador: ['Carburador', 'Mistura o combustível no ar que entra. No 2 tempos, o óleo vai junto no combustível, para lubrificar o virabrequim e o pistão no caminho pelo cárter.'],
+  caldeira: ['Caldeira', 'Recipiente de cobre com água, aquecido pela fornalha embaixo. O vapor fica preso e a pressão sobe, até a válvula de segurança, em cima, deixar sair o excesso.'],
+  cilindro_osc: ['Cilindro oscilante', 'O cilindro gira num pivô e balança conforme a manivela gira. O furo na face de trás passa em frente à entrada de vapor de um lado e à saída do outro: o balanço é a própria válvula.'],
+  pistao_vapor: ['Pistão e haste', 'Recebem a pressão do vapor e empurram a manivela. A haste é rígida, presa ao pistão: é o cilindro inteiro que balança para acompanhar a manivela.'],
+  manivela: ['Manivela', 'Disco com um pino fora do centro, onde a haste se prende. Transforma o vaivém do pistão em giro do eixo.'],
+  volante_vapor: ['Volante', 'Roda pesada que mantém a máquina girando na meia volta em que o vapor não empurra. Numa máquina de simples efeito, é ele que faz o pistão subir.'],
+  placa: ['Placa de distribuição', 'Placa fixa com dois furos, um de cada lado do pivô: um traz vapor da caldeira, o outro leva o vapor usado para fora. Os furos se acendem quando o vapor passa.'],
+  pivo: ['Pivô e mola', 'Eixo em que o cilindro balança. A mola atrás da placa aperta o cilindro contra ela, para o vapor não vazar entre as duas faces.'],
+  cano_vapor: ['Entrada de vapor', 'Cano que traz o vapor da caldeira até o furo de entrada da placa de distribuição.'],
+  cano_escape: ['Saída de vapor', 'Leva o vapor usado para fora. Cada baforada sai quando o furo do cilindro passa em frente à saída.']
+};
+const infoEl = $('info');
+let selected = null;
+// Destaque: troca o material das malhas da peça por cópias com brilho, sem descer em subpeças que têm nome próprio
+function partMeshes(obj) {
+  const out = [];
+  (function walk(o) { if (o.isMesh) out.push(o); o.children.forEach((ch) => { if (!ch.userData.part) walk(ch); }); })(obj);
+  return out;
+}
+function clearSelection() {
+  if (selected) selected.meshes.forEach((m) => { const c = m.material; m.material = m.userData.origMat; delete m.userData.origMat; c.dispose(); });
+  selected = null; infoEl.hidden = true;
+}
+function selectPart(obj) {
+  clearSelection();
+  if (!obj) return;
+  const meshes = partMeshes(obj);
+  meshes.forEach((m) => {
+    m.userData.origMat = m.material;
+    const c = m.material.clone();
+    if (c.emissive) { c.emissive.setHex(0xff9a2e); c.emissiveIntensity = 0.45; }
+    if (c.transparent && c.opacity < 0.3) c.opacity = 0.3;
+    m.material = c;
+  });
+  selected = { obj, meshes };
+  const [t, d] = PART_INFO[obj.userData.part];
+  $('infoTitle').textContent = t;
+  const cyl = findCylinder(obj);
+  $('infoSub').textContent = cyl ? 'Cilindro ' + cyl : '';
+  $('infoText').textContent = d;
+  infoEl.hidden = false;
+}
+function findCylinder(obj) {
+  if (!engine || !engine.cyl || engine.cyl.length < 2) return null;
+  const c = engine.cyl.find((x) => x.piston === obj || x.rod === obj || (x.valves && (x.valves.in.grp === obj || x.valves.ex.grp === obj || x.valves.in.lobe === obj || x.valves.ex.lobe === obj)) || x.plug === obj);
+  return c ? c.n : null;
+}
+$('infoClose').addEventListener('click', () => clearSelection());
+function partOf(o) { while (o && o !== scene) { if (o.userData.part) return o; o = o.parent; } return null; }
+// O clique só conta se o ponteiro quase não andou, para não confundir com girar a vista
+function pickAt(cx, cy) {
+  if (!engine) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  const ndc = new THREE.Vector2((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+  const ray = new THREE.Raycaster(); ray.setFromCamera(ndc, camera);
+  const hits = ray.intersectObject(engine.root, true).filter((h) => h.object.isMesh && h.object.visible && !h.object.userData.noPick && !(h.object.material && h.object.material.userData && h.object.material.userData.gas));
+  const solid = hits.find((h) => !h.object.userData.glass && partOf(h.object));
+  const glass = hits.find((h) => h.object.userData.glass && partOf(h.object));
+  const pick = solid || glass;
+  const obj = pick ? partOf(pick.object) : null;
+  if (!obj || (selected && selected.obj === obj)) { clearSelection(); return; }
+  selectPart(obj);
+}
+
 /* ===================== Nomes das peças ===================== */
 // Um nome que encostaria num mais importante (os primeiros da lista), no painel de leitura ou na legenda fica escondido naquele quadro.
 const hudEl = document.querySelector('.hud');
@@ -1577,6 +1684,7 @@ function placeMarkers() {
   const W = ui.stage.clientWidth, H = ui.stage.clientHeight, sr = ui.stage.getBoundingClientRect();
   const rel = (el) => { const r = el.getBoundingClientRect(); return [r.left - sr.left - 4, r.top - sr.top - 4, r.right - sr.left + 4, r.bottom - sr.top + 4]; };
   const placed = [rel(hudEl), rel(ui.legend)];
+  if (!infoEl.hidden) placed.push(rel(infoEl));
   markers.forEach((m) => {
     if (m.w == null) { m.w = m.el.offsetWidth; m.h = m.el.offsetHeight; }
     m.v.set(m.L.p[0], m.L.p[1], m.L.p[2]); m.L.o.localToWorld(m.v); m.v.project(camera);
