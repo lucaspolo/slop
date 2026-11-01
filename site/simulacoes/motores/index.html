@@ -260,6 +260,7 @@ input[type=range]::-moz-range-thumb{ width:12px; height:22px; border-radius:4px;
         <div class="ctl-top"><label for="flyJ">Volante</label><output id="flyOut" for="flyJ"></output></div>
         <input type="range" id="flyJ" min="0" max="100" value="49">
       </div>
+      <button class="btn" id="flyReset" type="button" hidden>Voltar ao volante padrão</button>
       <p class="rpm-line" id="rpmLine"></p>
       <canvas id="rpmChart" aria-label="Gráfico da rotação do virabrequim ao longo de duas voltas"></canvas>
     </div>
@@ -623,7 +624,7 @@ const ui = {
   how: $('how'), tempo: $('tempo'), observe: $('observe'), problemTxt: $('problemTxt'), next: $('nextCh'),
   stDisp: $('stDisp'), stFires: $('stFires'), stFiresLbl: $('stFiresLbl'), stMean: $('stMean'), stInt: $('stInt'), stIntLbl: $('stIntLbl'),
   stPeak: $('stPeak'), stMin: $('stMin'), stRatio: $('stRatio'),
-  flyJ: $('flyJ'), flyOut: $('flyOut'), rpmLine: $('rpmLine'), rpmChart: $('rpmChart'),
+  flyJ: $('flyJ'), flyOut: $('flyOut'), flyReset: $('flyReset'), rpmLine: $('rpmLine'), rpmChart: $('rpmChart'),
   sound: $('sound'), soundRpm: $('soundRpm'), soundOut: $('soundOut'), sync: $('tgSync'), soundHint: $('soundHint'), stVib: $('stVib'), mVib: $('mVib'), stRock: $('stRock'), mRock: $('mRock')
 };
 
@@ -737,6 +738,8 @@ const FLY = {
   comb: { min: 0.03, max: 0.8, def: 0.15, v: 49, ref: 1000, sMin: 600, sMax: 4500, sv: 20 },
   steam: { min: 0.2, max: 4, def: 1.0, v: 54, ref: 150, sMin: 60, sMax: 300, sv: 30 }
 };
+// Posição do controle que dá o volante padrão
+Object.values(FLY).forEach((f) => { f.v0 = Math.round(Math.log(f.def / f.min) / Math.log(f.max / f.min) * 100); f.v = f.v0; });
 const flyKind = () => (chap && chap.def.type === 'steam' ? FLY.steam : FLY.comb);
 const jFrom = (f, v) => f.min * Math.pow(f.max / f.min, v / 100);
 let prof = null, soundPlan = null;
@@ -758,7 +761,8 @@ function speedProfile(a, J, rpm) {
 function updateFly() {
   const f = flyKind(), J = jFrom(f, f.v);
   ui.flyJ.value = f.v; ui.flyJ.style.setProperty('--v', f.v + '%');
-  ui.flyOut.textContent = nf2.format(J) + ' kg·m²';
+  ui.flyOut.textContent = nf2.format(J) + ' kg·m²' + (f.v === f.v0 ? ' · padrão' : '');
+  ui.flyReset.hidden = f.v === f.v0;
   prof = speedProfile(info, J, f.ref);
   if (prof.stall) {
     ui.rpmLine.textContent = 'Leve demais: o embalo acaba antes de o pistão vencer a compressão, e o motor para.';
@@ -771,6 +775,7 @@ function updateFly() {
   soundPlan = null;
 }
 ui.flyJ.addEventListener('input', () => { flyKind().v = +ui.flyJ.value; updateFly(); drawRpm(); });
+ui.flyReset.addEventListener('click', () => { const f = flyKind(); f.v = f.v0; updateFly(); drawRpm(); });
 const speedFactor = () => (prof ? prof.rpm[Math.floor(mod(th / D2R, 720)) % N720] / prof.ref : 1);
 
 /* ===================== Som ===================== */
