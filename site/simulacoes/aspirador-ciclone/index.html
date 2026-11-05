@@ -1,0 +1,1802 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dentro do Aspirador Ciclone · slop</title>
+<meta name="description" content="Simulação de um aspirador ciclone, com um passo a passo que mostra como o giro do ar separa a poeira sem peneira: grão a grão, em unidades reais e em câmera lenta.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,300..700&family=Spline+Sans+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: bancada de ensaio. Câmara escura com o ciclone em perspectiva e a vista de cima,
+   barra de controles que acompanha a leitura, e a física em texto ao lado de telas ligadas aos mesmos controles. */
+:root {
+  /* papel e tinta da página */
+  --paper: #E8EEF1; --ink: #12232C; --muted: #4C606B; --rule: #C3CFD5;
+  --air-text: #0A6A86; --grain-text: #AE440D;
+  /* câmara escura: a mesma nos dois temas */
+  --stage: #0A161D; --stage-2: #12232D; --stage-3: #1D3440;
+  --stage-ink: #DDE9EE; --stage-muted: #93AAB6; --stage-line: #2E4855;
+  /* o ar é frio, o grão é quente */
+  --air: #2E9FD6; --air-up: #1FAF79; --grain: #DB7A30;
+  /* tamanho do grão: rampa de calor do fino ao grosso */
+  --g1: #6E63F0; --g2: #B65AD8; --g3: #EE6792; --g4: #FF9E4F; --g5: #FFE66B;
+  --display: "Archivo", "Arial Narrow", Helvetica, Arial, sans-serif;
+  --body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --mono: "Spline Sans Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --s-1: 0.78rem; --s0: 0.875rem; --s1: 1.0625rem; --s2: 1.3rem; --s3: 1.9rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #101E26; --ink: #E4EDF1; --muted: #9DB2BD; --rule: #2B4150;
+    --air-text: #72CDE8; --grain-text: #FFAE6B; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #101E26; --ink: #E4EDF1; --muted: #9DB2BD; --rule: #2B4150;
+  --air-text: #72CDE8; --grain-text: #FFAE6B; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper); color: var(--ink);
+  font-family: var(--body); font-size: var(--s1); line-height: 1.58;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 56px;
+  overflow-x: clip;
+}
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+  z-index: 10; background: var(--paper);
+}
+.wrap { max-width: 1280px; margin-inline: auto; }
+.sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+a { color: var(--air-text); text-underline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--air-text); outline-offset: 2px; }
+.bancada :focus-visible, .controles :focus-visible, .tela :focus-visible { outline-color: var(--stage-ink); }
+
+/* Abertura: o título faz o que diz */
+.abre {
+  display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 32px; align-items: end; padding-block: 28px 22px;
+}
+.titulo svg { display: block; width: 100%; max-width: 800px; height: auto; overflow: visible; }
+.titulo text { font-family: var(--display); font-weight: 800; font-stretch: 108%; font-size: 66px; letter-spacing: -0.012em; }
+.t-ar { fill: var(--air-text); }
+.t-grao { fill: var(--grain-text); }
+.t-reta { stroke: var(--grain-text); stroke-width: 2.5; fill: none; }
+.lead { margin: 0; max-width: 46ch; font-size: 1.12rem; line-height: 1.5; min-width: 0; }
+
+/* Câmara escura */
+.bancada {
+  background: var(--stage); color: var(--stage-ink);
+  display: grid; grid-template-columns: minmax(0, 1.22fr) minmax(0, 1fr);
+  border-bottom: 1px solid var(--stage-line);
+}
+.c-3d { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; border-right: 1px solid var(--stage-line); }
+.c-lado { display: grid; grid-template-rows: auto auto; align-content: start; min-width: 0; }
+.barra {
+  display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border-bottom: 1px solid var(--stage-line);
+  font-family: var(--mono); font-size: var(--s-1); color: var(--stage-muted);
+}
+.barra b { font-weight: 500; color: var(--stage-ink); }
+.grupo { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip {
+  appearance: none; background: transparent; color: var(--stage-muted);
+  border: 1px solid var(--stage-line); padding: 5px 9px; min-height: 30px;
+  font: 500 var(--s-1)/1 var(--mono); cursor: pointer; border-radius: 2px;
+}
+.chip:hover { color: var(--stage-ink); border-color: var(--stage-muted); }
+.chip[aria-pressed="true"] { background: var(--stage-ink); color: var(--stage); border-color: var(--stage-ink); }
+.quadro { position: relative; height: clamp(540px, 68vh, 780px); min-width: 0; }
+.quadro canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: pan-y; cursor: grab; }
+.quadro canvas:active { cursor: grabbing; }
+.chave { display: inline-flex; align-items: center; gap: 6px; }
+.chave i { display: inline-block; width: 16px; height: 2px; }
+.planta { position: relative; height: 300px; border-bottom: 1px solid var(--stage-line); }
+.planta canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.planta p {
+  position: absolute; left: 14px; top: 10px; margin: 0;
+  font: 400 var(--s-1)/1.35 var(--mono); color: var(--stage-muted); max-width: 26ch; pointer-events: none;
+}
+.planta p b { color: var(--stage-ink); font-weight: 500; display: block; }
+
+/* Tabela de tamanhos: é também a legenda */
+.tamanhos { padding: 12px 14px 14px; }
+.tamanhos h2 { margin: 0 0 2px; font: 700 var(--s1)/1.25 var(--display); font-stretch: 100%; }
+.tamanhos > p { margin: 0 0 10px; font: 400 var(--s-1)/1.4 var(--mono); color: var(--stage-muted); }
+.linha {
+  appearance: none; width: 100%; background: transparent; color: inherit; border: 0;
+  border-top: 1px solid var(--stage-line); cursor: pointer; text-align: left;
+  display: grid; grid-template-columns: 112px minmax(0, 1fr) 54px; gap: 10px; align-items: center;
+  padding: 7px 4px; font-family: var(--mono); font-size: var(--s-1);
+}
+.linha:hover { background: var(--stage-2); }
+.linha[aria-pressed="true"] { background: var(--stage-3); }
+.linha .nome { display: grid; grid-template-columns: 14px 1fr; column-gap: 7px; line-height: 1.25; }
+.linha .pt { width: 10px; height: 10px; border-radius: 50%; margin-top: 2px; }
+.linha .ex { grid-column: 2; color: var(--stage-muted); font-size: 0.7rem; }
+.linha .pct { text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+.tug { position: relative; height: 12px; background: var(--stage-2); }
+.tug::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--stage-muted); }
+.tug i { position: absolute; top: 2px; bottom: 2px; display: block; }
+.eixo-tug {
+  display: grid; grid-template-columns: 112px minmax(0, 1fr) 54px; gap: 10px;
+  padding: 0 4px 5px; font: 400 0.7rem/1.2 var(--mono); color: var(--stage-muted);
+}
+.eixo-tug span:nth-child(2) { display: flex; justify-content: space-between; }
+.eixo-tug span:last-child { text-align: right; }
+
+/* Controles: ficam presos ao topo enquanto se lê a física */
+.controles {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 6;
+  background: var(--stage-2); color: var(--stage-ink);
+  display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 1.6fr);
+  gap: 12px 26px; padding: 12px 14px; border-bottom: 1px solid var(--stage-line);
+}
+.ctl { min-width: 0; display: grid; gap: 6px; align-content: start; }
+.ctl label, .ctl .rot {
+  display: flex; justify-content: space-between; gap: 8px;
+  font: 400 var(--s-1)/1.2 var(--mono); color: var(--stage-muted);
+}
+.ctl output { color: var(--stage-ink); font-weight: 500; }
+input[type="range"] {
+  appearance: none; -webkit-appearance: none; width: 100%; height: 24px; background: transparent; margin: 0; cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track { height: 2px; background: var(--stage-muted); }
+input[type="range"]::-moz-range-track { height: 2px; background: var(--stage-muted); }
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 12px; height: 22px; margin-top: -10px;
+  background: var(--stage-ink); border: 2px solid var(--stage-2); border-radius: 2px;
+}
+input[type="range"]::-moz-range-thumb { width: 10px; height: 20px; background: var(--stage-ink); border: 2px solid var(--stage-2); border-radius: 2px; }
+
+/* Leituras */
+.leituras {
+  background: var(--stage); color: var(--stage-ink);
+  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.leit { padding: 12px 14px 14px; border-right: 1px solid var(--stage-line); min-width: 0; }
+.leit:last-child { border-right: 0; }
+.leit span { display: block; font: 400 var(--s-1)/1.25 var(--mono); color: var(--stage-muted); }
+.leit strong { display: block; font: 700 1.6rem/1.15 var(--display); font-stretch: 96%; margin-block: 3px; white-space: nowrap; }
+.leit small { display: block; font: 400 0.7rem/1.3 var(--mono); color: var(--stage-muted); }
+
+/* O caminho, em seis etapas */
+.caminho { padding-block: 42px 8px; }
+.caminho h2, .secao h2 {
+  font: 800 var(--s3)/1.12 var(--display); font-stretch: 104%; letter-spacing: -0.008em;
+  margin: 0; text-wrap: balance;
+}
+.etapas {
+  list-style: none; padding: 0; margin: 18px 0 0; counter-reset: e;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px 32px;
+}
+.etapas li { counter-increment: e; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 2px 10px; }
+.etapas li::before {
+  content: counter(e); grid-row: 1 / span 2; width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--ink); color: var(--paper);
+  font: 500 var(--s-1)/1 var(--mono);
+}
+.etapas b { font: 700 var(--s1)/1.3 var(--display); }
+.etapas p { margin: 0; font-size: 1rem; line-height: 1.48; color: var(--muted); }
+
+/* Física: texto ao lado das telas */
+.secao {
+  display: grid; grid-template-columns: minmax(0, 62ch) minmax(0, 1fr); gap: 20px 44px;
+  padding-block: 40px 8px; border-top: 1px solid var(--rule); margin-top: 34px; align-items: start;
+}
+.secao .txt { min-width: 0; display: grid; gap: 14px; }
+.secao .txt p { margin: 0; }
+.secao .txt ul { margin: 0; padding-left: 1.1em; display: grid; gap: 7px; }
+.eq {
+  font-size: 1.28rem; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px;
+  padding-block: 4px;
+}
+.frac { display: inline-grid; text-align: center; line-height: 1.3; }
+.frac > span:first-child { border-bottom: 1px solid currentColor; padding: 0 6px 1px; }
+.frac > span:last-child { padding: 1px 6px 0; }
+.ar { color: var(--air-text); font-weight: 600; }
+.gr { color: var(--grain-text); font-weight: 600; }
+.nota { font-size: 0.95rem; color: var(--muted); }
+
+.tela { background: var(--stage); color: var(--stage-ink); margin: 0; padding: 12px 14px 12px; min-width: 0; }
+.tela figcaption { display: grid; gap: 3px; margin-bottom: 8px; }
+.tela figcaption b { font: 700 var(--s1)/1.25 var(--display); }
+.tela figcaption span { font: 400 var(--s-1)/1.4 var(--mono); color: var(--stage-muted); }
+.legenda { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 4px; font: 400 var(--s-1)/1.3 var(--mono); color: var(--stage-muted); }
+.legenda span { display: inline-flex; align-items: center; gap: 6px; }
+.legenda i { display: inline-block; width: 16px; height: 2px; }
+.legenda i.bola { width: 9px; height: 9px; border-radius: 50%; }
+.plot { position: relative; width: 100%; }
+.plot svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+.plot text { font: 400 11px var(--mono); fill: var(--stage-muted); }
+.plot text.forte { fill: var(--stage-ink); font-weight: 500; }
+.grade { stroke: var(--stage-3); stroke-width: 1; fill: none; }
+.eixo { stroke: var(--stage-line); stroke-width: 1; fill: none; }
+.l-ar { stroke: var(--air); stroke-width: 2; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.l-gr { stroke: var(--grain); stroke-width: 2; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.l-teo { stroke: var(--stage-ink); stroke-width: 2; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.a-ar { fill: var(--air); fill-opacity: 0.1; stroke: none; }
+.cruz { stroke: var(--stage-muted); stroke-width: 1; fill: none; }
+.anel { stroke: var(--stage); stroke-width: 2; }
+.anel-ink { stroke: var(--stage-ink); stroke-width: 2; fill: var(--stage); }
+.dot-gr { fill: var(--grain); }
+.dot-ar { fill: var(--air); }
+.dot-ink { fill: var(--stage-ink); }
+.dg1 { fill: var(--g1); } .dg2 { fill: var(--g2); } .dg3 { fill: var(--g3); } .dg4 { fill: var(--g4); } .dg5 { fill: var(--g5); }
+.dica {
+  position: absolute; pointer-events: none; background: var(--stage-3); color: var(--stage-ink);
+  padding: 5px 8px; font: 400 var(--s-1)/1.35 var(--mono); white-space: nowrap; z-index: 2; border-radius: 2px;
+}
+.rodape-fig { margin: 8px 0 0; font: 400 var(--s-1)/1.45 var(--mono); color: var(--stage-muted); }
+.rodape-fig b { color: var(--stage-ink); font-weight: 500; }
+
+.tab-wrap { overflow-x: auto; min-width: 0; }
+table.escala { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: var(--s0); font-variant-numeric: tabular-nums; }
+.escala caption { text-align: left; font: 700 var(--s1)/1.3 var(--display); padding-bottom: 8px; }
+.escala caption small { display: block; font: 400 var(--s-1)/1.35 var(--mono); color: var(--muted); margin-top: 2px; }
+.escala th, .escala td { padding: 7px 10px 7px 0; border-top: 1px solid var(--rule); text-align: right; white-space: nowrap; }
+.escala th { font-weight: 500; color: var(--muted); font-size: var(--s-1); vertical-align: bottom; white-space: normal; }
+.escala th:first-child, .escala td:first-child { text-align: left; }
+
+.fim { padding-block: 30px 0; border-top: 1px solid var(--rule); margin-top: 40px; font-size: 0.95rem; color: var(--muted); display: grid; gap: 8px; max-width: 86ch; }
+.fim h2 { font: 700 var(--s1)/1.3 var(--display); color: var(--ink); margin: 0; }
+.fim p, .fim ul { margin: 0; }
+.fim ul { padding-left: 1.1em; display: grid; gap: 5px; }
+
+@media (max-width: 1080px) {
+  .controles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .leituras { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .leit:nth-child(3n) { border-right: 0; }
+  .leit:nth-child(n+4) { border-top: 1px solid var(--stage-line); }
+  .secao { grid-template-columns: minmax(0, 1fr); }
+  .secao .txt { max-width: 66ch; }
+}
+@media (max-width: 860px) {
+  .abre { grid-template-columns: minmax(0, 1fr); gap: 14px; padding-block: 18px 16px; }
+  .bancada { grid-template-columns: minmax(0, 1fr); }
+  .c-3d { border-right: 0; border-bottom: 1px solid var(--stage-line); }
+  .quadro { height: 520px; }
+  .planta { height: 280px; }
+  .controles { position: static; }
+  .etapas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .controles { grid-template-columns: minmax(0, 1fr); }
+  .leituras { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .leit:nth-child(3n) { border-right: 1px solid var(--stage-line); }
+  .leit:nth-child(2n) { border-right: 0; }
+  .leit:nth-child(n+3) { border-top: 1px solid var(--stage-line); }
+  .etapas { grid-template-columns: minmax(0, 1fr); }
+  .linha, .eixo-tug { grid-template-columns: 104px minmax(0, 1fr) 46px; }
+  .caminho h2, .secao h2 { font-size: 1.55rem; }
+}
+/* Vindo do cabeçalho que o claude.ai injetava */
+[hidden] { display: none !important; }
+body { margin: 0; }
+
+/* Caminho de volta ao site */
+.crumbs { margin: 0; padding-top: 22px; font: 500 var(--s-1)/1.2 var(--mono); color: var(--muted); }
+.crumbs a { color: var(--air-text); }
+.abre { padding-top: 14px; }
+.abre-dir { display: grid; gap: 16px; justify-items: start; min-width: 0; }
+.bt-forte {
+  appearance: none; border: 0; cursor: pointer; border-radius: 2px;
+  background: var(--ink); color: var(--paper); padding: 11px 16px;
+  font: 700 var(--s1)/1.1 var(--display); font-stretch: 100%;
+}
+.bt-forte:hover { background: var(--air-text); }
+
+/* Passo a passo: o painel ao lado vira o roteiro e o palco ganha uma barra de passos */
+.passo { padding: 14px 14px 16px; border-bottom: 1px solid var(--stage-line); display: grid; gap: 10px; align-content: start; }
+.passo-dots { display: flex; gap: 4px; }
+.passo-dots i { flex: 1; height: 3px; background: var(--stage-3); }
+.passo-dots i.on { background: var(--g5); }
+.passo-n { margin: 0; font: 400 var(--s-1)/1.2 var(--mono); color: var(--stage-muted); }
+.passo h2 { margin: 0; font: 800 1.55rem/1.1 var(--display); font-stretch: 104%; text-wrap: balance; }
+.passo-txt p { margin: 0 0 8px; font-size: 1rem; line-height: 1.5; }
+.passo-txt p:last-child { margin-bottom: 0; }
+.passo-leit { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--stage-line); border: 1px solid var(--stage-line); }
+.passo-leit:empty { display: none; }
+.passo-leit div { background: var(--stage-2); padding: 7px 9px; min-width: 0; }
+.passo-leit div:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.passo-leit span { display: flex; align-items: center; gap: 6px; font: 400 0.72rem/1.25 var(--mono); color: var(--stage-muted); }
+.passo-leit strong { display: block; font: 700 1.12rem/1.2 var(--display); font-stretch: 96%; white-space: nowrap; }
+.passo-leit .pt { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.passo-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.passo .chip { min-height: 38px; font-size: var(--s0); }
+.passo .chip.forte { background: var(--stage-ink); color: var(--stage); border-color: var(--stage-ink); }
+.passo .chip:disabled { opacity: 0.4; cursor: default; }
+.passo-sair {
+  justify-self: start; appearance: none; background: none; border: 0; padding: 2px 0; cursor: pointer;
+  font: 400 var(--s-1)/1.2 var(--mono); color: var(--stage-muted); text-decoration: underline; text-underline-offset: 2px;
+}
+.passo-bar { display: flex; align-items: center; gap: 6px; width: 100%; }
+.passo-bar span { flex: 1; min-width: 0; text-align: center; color: var(--stage-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.passo-bar .chip { min-width: 38px; }
+.passo-bar .chip:disabled { opacity: 0.4; cursor: default; }
+/* no desktop o roteiro fica ao lado do palco; a barra só faz falta quando ele vai para baixo */
+@media (min-width: 861px) { .passo-bar { display: none; } }
+.touring .tamanhos { display: none; }
+
+/* As etapas do texto abrem o passo a passo no ponto certo */
+.caminho > p { margin: 6px 0 0; color: var(--muted); font-size: 1rem; }
+.etapas .ir {
+  appearance: none; background: none; border: 0; padding: 0; margin: 0; text-align: left; cursor: pointer; color: inherit;
+  font: 700 var(--s1)/1.3 var(--display);
+  text-decoration: underline dotted; text-decoration-thickness: 1px; text-underline-offset: 3px;
+}
+.etapas .ir:hover { color: var(--air-text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="crumbs" aria-label="Caminho"><a href="../../">slop</a> / <a href="../">simulações</a></nav>
+  <header class="abre">
+    <h1 class="sr">O ar faz a curva. O grão não.</h1>
+    <div class="titulo" aria-hidden="true">
+      <svg viewBox="0 48 880 136">
+        <defs><path id="trilha" d="M0,172 L322,172 A196,196 0 0 0 511,27"></path></defs>
+        <text class="t-ar"><textPath href="#trilha">O ar faz a curva.</textPath></text>
+        <path class="t-reta" d="M322,172 L478,172"></path>
+        <text class="t-grao" x="486" y="172">O grão não.</text>
+      </svg>
+    </div>
+    <div class="abre-dir">
+      <p class="lead">Um aspirador ciclone tira a poeira do ar sem usar peneira. Ele obriga a mistura a girar em alta velocidade, e a inércia joga os grãos contra a parede. Abaixo, cada grão é calculado em unidades reais e mostrado em câmera lenta.</p>
+      <button class="bt-forte" id="bt-passo-topo" type="button">Ver o passo a passo</button>
+    </div>
+  </header>
+
+  <section class="bancada" aria-label="Simulação do ciclone">
+    <div class="c-3d">
+      <div class="barra">
+        <div class="grupo">
+          <button class="chip" id="bt-pausa" type="button" aria-pressed="false">Pausar</button>
+          <span>Ritmo</span>
+          <button class="chip" id="rt-05" type="button" data-ritmo="0.5" aria-pressed="false">½×</button>
+          <button class="chip" id="rt-1" type="button" data-ritmo="1" aria-pressed="true">1×</button>
+          <button class="chip" id="rt-2" type="button" data-ritmo="2" aria-pressed="false">2×</button>
+        </div>
+        <div class="grupo">
+          <button class="chip" id="vw-ar" type="button" aria-pressed="true">Ar</button>
+          <button class="chip" id="vw-graos" type="button" aria-pressed="true">Grãos</button>
+          <button class="chip" id="vw-rot" type="button" aria-pressed="true">Rótulos</button>
+          <button class="chip" id="bt-esvaziar" type="button">Esvaziar</button>
+          <button class="chip" id="bt-passo" type="button">Passo a passo</button>
+        </div>
+        <div class="grupo" style="width:100%;justify-content:space-between">
+          <span><b id="hud-lenta">Câmera lenta 30×</b> · <span id="hud-volta">uma volta na parede leva 29 ms</span></span>
+          <span class="grupo">
+            <span class="chave"><i style="background:var(--air)"></i>ar descendo</span>
+            <span class="chave"><i style="background:var(--air-up)"></i>ar subindo</span>
+          </span>
+        </div>
+        <div class="passo-bar" id="passo-bar" hidden>
+          <button class="chip" id="bar-ant" type="button" aria-label="Passo anterior">‹</button>
+          <span id="bar-rot"></span>
+          <button class="chip" id="bar-prox" type="button" aria-label="Próximo passo">›</button>
+        </div>
+      </div>
+      <div class="quadro">
+        <canvas id="cv3d" tabindex="0" role="img" aria-label="Ciclone em perspectiva com grãos de cinco tamanhos. Os grãos grandes vão para a parede e descem até o reservatório. Os pequenos seguem o ar, que desce, inverte no fundo e sobe pelo centro. Arraste ou use as setas para girar."></canvas>
+      </div>
+    </div>
+    <div class="c-lado">
+      <section class="passo" id="passo" hidden aria-live="polite" aria-label="Passo a passo">
+        <div class="passo-dots" id="passo-dots" aria-hidden="true"></div>
+        <p class="passo-n" id="passo-n"></p>
+        <h2 id="passo-titulo"></h2>
+        <div class="passo-txt" id="passo-txt"></div>
+        <div class="passo-leit" id="passo-leit"></div>
+        <button class="chip" id="passo-acao" type="button" hidden></button>
+        <div class="passo-nav">
+          <button class="chip" id="passo-ant" type="button">← Anterior</button>
+          <button class="chip forte" id="passo-prox" type="button">Próximo →</button>
+        </div>
+        <button class="passo-sair" id="passo-sair" type="button">Sair do passo a passo</button>
+      </section>
+      <div class="planta">
+        <canvas id="cvPlan" role="img" aria-label="Vista de cima do ciclone. Os grãos grandes atravessam o giro quase em linha reta e formam um anel na parede. Os pequenos enchem o interior."></canvas>
+        <p><b>Vista de cima</b>Grão grande vai reto.</p>
+      </div>
+      <div class="tamanhos">
+        <h2>Cabo de guerra, por tamanho</h2>
+        <p>A inércia empurra o grão para fora. O ar que entra no vórtice central puxa para dentro. Toque em uma linha para isolar o tamanho.</p>
+        <div class="eixo-tug" aria-hidden="true"><span>Grão</span><span><span>← ar</span><span>inércia →</span></span><span>Fica</span></div>
+        <div id="linhas"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="controles" aria-label="Controles">
+    <div class="ctl">
+      <span class="rot">Cenário</span>
+      <div class="grupo">
+        <button class="chip" id="pr-grande" type="button" data-p="15,20,1500" aria-pressed="true">Ciclone grande</button>
+        <button class="chip" id="pr-multi" type="button" data-p="3,20,1500" aria-pressed="false">Multiciclone</button>
+        <button class="chip" id="pr-fraco" type="button" data-p="15,8,1500" aria-pressed="false">Motor fraco</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <label for="in-d">Diâmetro do ciclone <output id="out-d" for="in-d">15 cm</output></label>
+      <input id="in-d" type="range" min="2" max="30" step="0.5" value="15">
+    </div>
+    <div class="ctl">
+      <label for="in-v">Velocidade de entrada <output id="out-v" for="in-v">20 m/s</output></label>
+      <input id="in-v" type="range" min="6" max="35" step="1" value="20">
+    </div>
+    <div class="ctl">
+      <span class="rot">Material do grão <output id="out-r">1.500 kg/m³</output></span>
+      <div class="grupo">
+        <button class="chip" id="mt-serragem" type="button" data-r="600" aria-pressed="false">Serragem</button>
+        <button class="chip" id="mt-poeira" type="button" data-r="1500" aria-pressed="true">Poeira</button>
+        <button class="chip" id="mt-areia" type="button" data-r="2650" aria-pressed="false">Areia</button>
+        <button class="chip" id="mt-ferro" type="button" data-r="7800" aria-pressed="false">Limalha de ferro</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="leituras" aria-label="Resultados">
+    <div class="leit"><span>Aceleração no pico</span><strong id="r-g"></strong><small id="r-g2"></small></div>
+    <div class="leit"><span>Diâmetro de corte</span><strong id="r-c"></strong><small id="r-c2"></small></div>
+    <div class="leit"><span>Pico do giro</span><strong id="r-u"></strong><small id="r-u2"></small></div>
+    <div class="leit"><span>Vazão de ar</span><strong id="r-q"></strong><small id="r-q2"></small></div>
+    <div class="leit"><span>Perda de pressão</span><strong id="r-p"></strong><small id="r-p2"></small></div>
+    <div class="leit"><span>Potência gasta no ar</span><strong id="r-w"></strong><small id="r-w2"></small></div>
+  </section>
+
+  <section class="caminho">
+    <h2>O caminho, na ordem em que acontece</h2>
+    <p>Toque numa etapa para vê-la isolada na simulação.</p>
+    <ol class="etapas">
+      <li><button class="ir" type="button" data-passo="1">Entrada tangencial</button><p>O ar chega pela lateral, encostado na parede. A parede curva o obriga a girar. Nada no ciclone se move: o giro vem só da velocidade de entrada.</p></li>
+      <li><button class="ir" type="button" data-passo="2">O ar desce</button><p>A mistura desce em espiral junto à parede. É o vórtice externo.</p></li>
+      <li><button class="ir" type="button" data-passo="4">Os grãos vão para a parede</button><p>O ar faz a curva e os grãos pesados ficam para fora. Na parede, eles param de ser levados pelo giro rápido e escorrem para baixo na camada de ar que desce ali.</p></li>
+      <li><button class="ir" type="button" data-passo="6">Reservatório</button><p>O cone termina em uma câmara sem saída para o ar. Sem vazão líquida ali, a poeira assenta.</p></li>
+      <li><button class="ir" type="button" data-passo="7">O ar sobe</button><p>O ar não tem como sair por baixo. Ele vai cruzando para o centro e sobe, ainda girando no mesmo sentido. É o vórtice interno.</p></li>
+      <li><button class="ir" type="button" data-passo="8">Para o filtro</button><p>O tubo central leva o ar ao filtro fino e ao motor. Só seguem junto os grãos pequenos demais para escapar do arraste.</p></li>
+    </ol>
+  </section>
+
+  <section class="secao">
+    <div class="txt">
+      <h2>Por que o ar consegue fazer a curva</h2>
+      <p>Para andar em círculo, qualquer coisa precisa de uma aceleração para o centro de valor <i>v</i>²/<i>r</i>. No ar, quem fornece essa aceleração é a pressão. O giro monta um gradiente radial, com pressão alta na parede e baixa no eixo:</p>
+      <p class="eq"><span class="frac"><span>d<i>p</i></span><span>d<i>r</i></span></span> = <span class="frac"><span><i>ρ</i><sub>ar</sub> <i>v</i>²</span><span><i>r</i></span></span></p>
+      <p>Neste ciclone, a pressão no eixo fica <span data-v="dpCore"></span> abaixo da pressão na parede.</p>
+      <p>O formato do perfil vem da conservação do momento angular. Ao se aproximar do eixo, o ar acelera, como uma patinadora que fecha os braços. Sem atrito, <i>v</i>·<i>r</i> seria constante. Na prática, o atrito faz <i>v</i> crescer mais devagar, perto de <i>r</i><sup>−0,5</sup>. Junto ao eixo a turbulência domina e o ar gira como um corpo sólido, com <i>v</i> proporcional a <i>r</i>.</p>
+      <p>O pico fica na fronteira entre as duas regiões: <span data-v="uPeak"></span> a <span data-v="rPeak"></span> do eixo. Ali a aceleração chega a <span data-v="gPeak"></span>.</p>
+    </div>
+    <figure class="tela" id="f1">
+      <figcaption><b>Giro e pressão ao longo do raio</b><span>Do eixo (esquerda) até a parede (direita), na parte cilíndrica</span></figcaption>
+      <div class="plot" tabindex="0" role="img" aria-label="Velocidade de giro cresce do eixo até o pico e cai até a parede. A pressão cresce do eixo até a parede."></div>
+    </figure>
+  </section>
+
+  <section class="secao">
+    <div class="txt">
+      <h2>Por que o grão não consegue</h2>
+      <p>O mesmo gradiente de pressão também age sobre o grão, mas a aceleração que ele causa é dividida pela densidade. O grão é <span data-v="razao"></span> vezes mais denso que o ar, então a pressão lhe dá 1/<span data-v="razao"></span> da aceleração que ele precisaria para acompanhar a curva.</p>
+      <p>Por inércia, ele tenta seguir em linha reta. Quem gira junto com o ar descreve isso como força centrífuga. Enquanto escorrega para fora, o grão sofre arrasto, que cresce com a velocidade relativa <i>w</i>. O equilíbrio entre os dois dá a velocidade de deriva:</p>
+      <p class="eq"><span class="gr">m v²/r</span> = <span class="ar">3π μ d w</span> &nbsp;⟹&nbsp; <i>w</i> = <span class="frac"><span><i>ρ</i><sub>g</sub> <i>d</i>² <i>v</i>²</span><span>18 <i>μ</i> <i>r</i></span></span></p>
+      <p>A massa cresce com <i>d</i>³ e o arrasto de Stokes com <i>d</i>. Sobra <i>d</i>²: <strong>um grão 10 vezes maior deriva 100 vezes mais rápido.</strong> Essa é a regra que faz o ciclone separar por tamanho. Acima de umas dezenas de micrômetros o arrasto deixa de ser linear, e por isso a curva da tela dobra.</p>
+      <p>A deriva disputa com o ar. O ar que entrou precisa chegar ao vórtice interno, e por isso atravessa para dentro com velocidade <i>Q</i>/(2π<i>r</i><i>h</i>), aqui <span data-v="urCs"></span>. O tamanho em que a deriva empata com esse fluxo é o diâmetro de corte de Barth: <span data-v="d50B"></span>.</p>
+    </div>
+    <figure class="tela" id="f2">
+      <figcaption><b>A deriva contra o ar que entra</b><span>Na fronteira do vórtice interno, escalas logarítmicas</span></figcaption>
+      <div class="legenda"><span><i style="background:var(--grain)"></i>deriva do grão, para fora</span><span><i style="background:var(--air)"></i>ar entrando, para dentro</span></div>
+      <div class="plot" tabindex="0" role="img" aria-label="A deriva cresce com o quadrado do diâmetro e cruza a velocidade do ar no diâmetro de corte."></div>
+    </figure>
+  </section>
+
+  <section class="secao">
+    <div class="txt">
+      <h2>Quanto fica e quanto passa</h2>
+      <p>O ciclone não tem um limite exato de tamanho. Um grão perto do corte pode cair de qualquer lado, conforme onde entrou e o que a turbulência fez com ele. Por isso o resultado é uma curva de captura. A correlação clássica de Lapple resume o corte em uma fórmula:</p>
+      <p class="eq"><i>d</i><sub>50</sub> = <span style="font-size:1.5em;line-height:1">√</span><span class="frac"><span>9 <i>μ</i> <i>b</i></span><span>2π <i>N</i><sub>e</sub> <i>v</i> (<i>ρ</i><sub>g</sub> − <i>ρ</i><sub>ar</sub>)</span></span></p>
+      <p>Aqui <i>b</i> é a largura da entrada e <i>N</i><sub>e</sub> é o número de voltas efetivas, <span data-v="Ne"></span> nesta geometria. A fórmula resume o que a simulação mostra: entrar mais rápido, encolher o ciclone ou usar material mais denso reduz o corte.</p>
+      <p>Os pontos da tela vêm da própria simulação, grão a grão. Eles sobem mais de repente que a curva de Lapple, que é uma estimativa larga.</p>
+      <p>Em massa, o corte quase não aparece. Um grão de 100 µm pesa 8 milhões de vezes mais que um de 0,5 µm, então quase toda a massa de uma poeira comum fica no reservatório, mesmo quando muitos grãos finos escapam em número.</p>
+    </div>
+    <figure class="tela" id="f3">
+      <figcaption><b>Curva de captura</b><span>Fração de grãos de cada tamanho que fica no reservatório</span></figcaption>
+      <div class="legenda"><span><i style="background:var(--stage-ink)"></i>correlação de Lapple</span><span><i class="bola" style="background:var(--grain)"></i>simulação</span></div>
+      <div class="plot" tabindex="0" role="img" aria-label="A captura sobe de perto de zero em grãos abaixo de um micrômetro para quase cem por cento acima de dez micrômetros."></div>
+      <p class="rodape-fig" id="f3-rod"></p>
+    </figure>
+  </section>
+
+  <section class="secao">
+    <div class="txt">
+      <h2>Por que cone, e por que vários ciclones pequenos</h2>
+      <p>O cone estreita o caminho conforme o ar vai saindo para o vórtice interno. Com o raio menor, o giro acelera e <i>v</i>²/<i>r</i> sobe exatamente na região onde sobrou a poeira mais difícil. Ele também conduz o pó até a boca do reservatório.</p>
+      <p>A aceleração depende de <i>v</i>²/<i>r</i>. Na mesma velocidade, reduzir o diâmetro 5 vezes multiplica a aceleração por 5. O problema é que a vazão de cada ciclone cai com <i>D</i>², e um aspirador precisa de muito ar. A solução é ligar vários ciclones pequenos em paralelo, depois de um ciclone maior que tira o grosso.</p>
+      <p>Na correlação de Shepherd e Lapple, a perda de pressão depende de <i>v</i> e das proporções do ciclone. O diâmetro em si não entra. Dividir a vazão entre muitos ciclones pequenos melhora o corte sem perda extra, desde que a velocidade de entrada seja a mesma. Na prática, ciclones pequenos costumam receber o ar mais rápido para cortar ainda mais fino, e aí a perda de pressão sobe.</p>
+      <p>A gravidade quase não participa da separação. No pico, a aceleração é <span data-v="gPeakN"></span> vezes maior. Ela ajuda a assentar o pó no reservatório. Existem ciclones montados na horizontal, mas eles precisam de cuidado extra para descarregar o pó. Na parede do cone, quem conduz a poeira para baixo é principalmente a camada de ar que desce ali.</p>
+    </div>
+    <div class="tab-wrap">
+      <table class="escala">
+        <caption>Mesma velocidade, diâmetros diferentes<small id="tab-sub"></small></caption>
+        <thead><tr><th scope="col">Diâmetro</th><th scope="col">Vazão de cada um</th><th scope="col">Ciclones para 30 L/s</th><th scope="col">Pico de aceleração</th><th scope="col">Corte (Lapple)</th><th scope="col">Perda de pressão</th></tr></thead>
+        <tbody id="tab-esc"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="secao">
+    <div class="txt">
+      <h2>O preço, e a vantagem sobre o saco</h2>
+      <p>Girar o ar custa pressão. A perda é medida em cargas de velocidade, e na correlação de Shepherd e Lapple depende da geometria:</p>
+      <p class="eq">Δ<i>p</i> = ½ <i>ρ</i><sub>ar</sub> <i>v</i>² · <span class="frac"><span>16 <i>a</i> <i>b</i></span><span><i>D</i><sub>e</sub>²</span></span></p>
+      <p>Aqui são <span data-v="dP"></span>. A potência gasta no ar é <i>Q</i>·Δ<i>p</i>, ou <span data-v="pw"></span>. Com o diâmetro fixo ela cresce com <i>v</i>³, o que limita o quanto dá para acelerar a entrada.</p>
+      <p>A diferença para um saco ou filtro é que esse custo não cresce com a sujeira. No saco, todo o pó vira uma camada no caminho do ar, e a resistência sobe conforme ele enche. No ciclone, o pó sai do caminho do ar e a vazão se mantém.</p>
+      <p>Sem saco não quer dizer sem filtro. O que passa do corte segue para um filtro fino, que entope muito mais devagar porque recebe só uma pequena fração do pó. E a linha de máximo do reservatório tem motivo: com o pó alto demais, o fim do vórtice alcança o que já estava depositado e o levanta de volta.</p>
+    </div>
+    <div class="txt">
+      <h2 style="font-size:var(--s2)">O que este modelo simplifica</h2>
+      <ul class="nota">
+        <li>A geometria é a de Stairmand, de alta eficiência, usada na indústria. Aspiradores reais têm proporções próprias.</li>
+        <li>O ar vem de um campo analítico, sem CFD: vórtice combinado para o giro e função de corrente para o movimento axial e radial, o que garante a conservação da massa. A vazão foi conferida numericamente: o que desce em cada seção é igual ao que sobe.</li>
+        <li>Cada grão resolve inércia e arrasto em coordenadas cilíndricas, com correções de Schiller-Naumann para grãos grandes e de Cunningham para os muito finos.</li>
+        <li>A turbulência é um passeio aleatório de 8% do giro local, atenuado junto à parede. Esse valor foi ajustado para dar uma curva plausível.</li>
+        <li>Grão que toca a parede fica capturado, com até três quiques nos grossos. A descida na parede usa um valor fixo, 14% da velocidade de entrada.</li>
+        <li>Ficam de fora: reentrada de pó, vórtice precessante, eletricidade estática, fibras, cabelos e aglomeração.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer class="fim">
+    <h2>Fontes</h2>
+    <p>Correlações: C. E. Lapple (1951), corte e curva de captura. C. B. Stairmand (1951), proporções. C. B. Shepherd e C. E. Lapple (1939), perda de pressão. W. Barth (1956), órbita de equilíbrio.</p>
+    <ul>
+      <li><a href="https://www.mdsjprocess.com/de/ingenieur-tools/zyklon-design-simulator">MDSJ Process, simulador de ciclones</a>: fórmulas de Lapple, proporções de Stairmand e Δp conferidas aqui.</li>
+      <li><a href="https://en.wikipedia.org/wiki/Cyclonic_separation">Wikipedia, Cyclonic separation</a>: visão geral do princípio e o custo dos ciclones pequenos.</li>
+      <li><a href="https://www.oneida-air.com/blog/drawbacks-of-horizontal-cyclone-dust-collectors">Oneida Air Systems, coletores horizontais</a>: exemplo de ciclone deitado e o que muda.</li>
+    </ul>
+  </footer>
+</div>
+
+<script>
+/* Modelo físico do ciclone. Unidades SI em todo o código.
+   Geometria Stairmand de alta eficiência. Campo de ar analítico:
+   giro = vórtice combinado (núcleo sólido + vórtice quase livre)
+   meridional = função de corrente, logo a massa se conserva por construção.
+   Grão = inércia + arrasto (Stokes, Schiller-Naumann, Cunningham) em coordenadas cilíndricas. */
+const AIR = { rho: 1.2, mu: 1.81e-5, lambda: 68e-9, g: 9.81 };
+
+const CLASSES = [
+  { d: 0.5e-6, nome: "0,5 µm", ex: "fumaça" },
+  { d: 2e-6,   nome: "2 µm",   ex: "bactérias, fuligem" },
+  { d: 5e-6,   nome: "5 µm",   ex: "esporos de mofo" },
+  { d: 20e-6,  nome: "20 µm",  ex: "pólen" },
+  { d: 100e-6, nome: "100 µm", ex: "areia fina" },
+];
+
+function makeModel(D, vin, rhoP) {
+  const R = D / 2;
+  const geo = {
+    D, R,
+    a: 0.5 * D, b: 0.2 * D,        // entrada: altura e largura
+    re: 0.25 * D, S: 0.5 * D,      // tubo central: raio e penetração
+    Lb: 1.5 * D, Lc: 2.5 * D,      // cilindro e cone
+    Rd: 0.1875 * D,                // boca inferior do cone
+    zTop: 4 * D, zLip: 3.5 * D, zShoulder: 2.5 * D,
+    binH: 0.9 * D, binR: 0.62 * D,
+    zExit: 4.45 * D,
+  };
+  const Q = vin * geo.a * geo.b;
+  const n = 0.5;                   // expoente do vórtice quase livre
+  const Uw = 0.8 * vin;            // velocidade tangencial junto à parede
+  const rc = 0.6 * geo.re;         // raio do núcleo
+  const xiS = geo.re / R;          // superfície de velocidade axial nula
+  const psi0 = Q / (2 * Math.PI);
+  const coneSlope = (R - geo.Rd) / geo.zShoulder;
+  const LBar = R / rc;
+  // Vortice de Vatistas: suave, r no núcleo e r^-n fora dele
+  const m = 2;
+  const h = (x) => x / Math.pow(1 + Math.pow(x, 2 * m), (1 + n) / (2 * m));
+  const hWall = h(LBar);
+  const Ut = Uw / hWall;           // escala: vale Uw em r=R
+
+  const wallR = (z) => (z >= geo.zShoulder ? R : z >= 0 ? geo.Rd + coneSlope * z : geo.binR);
+  const wallSlope = (z) => (z >= geo.zShoulder || z < 0 ? 0 : coneSlope);
+  const uTheta = (r) => Ut * h(r / rc);
+
+  // perfil de corrente: f(0)=0, f(xiS)=1, f(1)=0, C1 em xiS
+  function fAndDf(xi) {
+    if (xi <= xiS) {
+      const t = xi / xiS;
+      return [t * t * (3 - 2 * t), (6 * t * (1 - t)) / xiS];
+    }
+    const t = (xi - xiS) / (1 - xiS);
+    return [1 - t * t, (-2 * t) / (1 - xiS)];
+  }
+
+  function airMeridional(r, z, out) {
+    if (z <= 0) { out[0] = 0; out[1] = 0; return; }
+    const Rz = wallR(z);
+    const dRz = wallSlope(z);
+    const xi = Math.min(1, r / Rz);
+    const g = z >= geo.zLip ? 1 : z / geo.zLip;
+    const dg = z >= geo.zLip ? 0 : 1 / geo.zLip;
+    const fd = fAndDf(xi);
+    const rr = Math.max(r, 1e-5);
+    // u_z = (1/r) dpsi/dr ; u_r = -(1/r) dpsi/dz
+    out[1] = (psi0 / rr) * g * fd[1] / Rz;
+    out[0] = -(psi0 / rr) * (dg * fd[0] - g * fd[1] * xi * dRz / Rz);
+  }
+
+  // Tempo de resposta de Stokes com correção de Cunningham
+  function tauStokes(d) {
+    const Kn = (2 * AIR.lambda) / d;
+    const Cc = 1 + Kn * (1.257 + 0.4 * Math.exp(-1.1 / Kn));
+    return (rhoP * d * d * Cc) / (18 * AIR.mu);
+  }
+
+  // Correlações clássicas
+  const Ne = (geo.Lb + geo.Lc / 2) / geo.a;
+  const d50Lapple = Math.sqrt((9 * AIR.mu * geo.b) / (2 * Math.PI * Ne * vin * (rhoP - AIR.rho)));
+  const lapple = (d) => 1 / (1 + Math.pow(d50Lapple / d, 2));
+  const dP = 0.5 * AIR.rho * vin * vin * (16 * geo.a * geo.b) / Math.pow(2 * geo.re, 2);
+  const Ucs = uTheta(geo.re);
+  const urCs = Q / (2 * Math.PI * geo.re * geo.zLip);
+
+  // Deriva radial terminal na superfície r = re, com arrasto corrigido
+  function drift(d, r = geo.re) {
+    const U = uTheta(r);
+    const ac = (U * U) / r;
+    const t0 = tauStokes(d);
+    let v = t0 * ac;
+    for (let i = 0; i < 12; i++) {
+      const Re = (AIR.rho * Math.abs(v) * d) / AIR.mu;
+      const f = 1 + 0.15 * Math.pow(Re, 0.687);
+      v = (t0 / f) * ac;
+    }
+    return v;
+  }
+  // diâmetro de equilíbrio (Barth): deriva = ar entrando
+  function d50Barth() {
+    let lo = 1e-8, hi = 1e-2;
+    for (let i = 0; i < 60; i++) {
+      const mid = Math.sqrt(lo * hi);
+      if (drift(mid) > urCs) hi = mid; else lo = mid;
+    }
+    return Math.sqrt(lo * hi);
+  }
+  // Pressão relativa à parede: integração de dp/dr = rho u^2 / r
+  function pressureProfile(N = 80) {
+    const rs = [], ps = [];
+    let p = 0;
+    const dr = R / N;
+    rs[N] = R; ps[N] = 0;
+    for (let i = N - 1; i >= 0; i--) {
+      const r = (i + 0.5) * dr;
+      const u = uTheta(r);
+      p -= (AIR.rho * u * u / r) * dr;
+      rs[i] = i * dr; ps[i] = p;
+    }
+    return { rs, ps };
+  }
+  // pico do vórtice
+  let rPeak = rc, uPeak = 0;
+  for (let i = 1; i <= 400; i++) {
+    const r = (i / 400) * R;
+    const u = uTheta(r);
+    if (u > uPeak) { uPeak = u; rPeak = r; }
+  }
+
+  return {
+    D, vin, rhoP, geo, Q, n, Uw, rc, xiS, wallR, wallSlope, uTheta, airMeridional, tauStokes,
+    Ne, d50Lapple, lapple, dP, Ucs, urCs, drift, d50Barth: d50Barth(), pressureProfile,
+    rPeak, uPeak,
+    gWall: (Uw * Uw) / R / AIR.g,
+    gPeak: (uPeak * uPeak) / rPeak / AIR.g,
+    power: Q * dP,
+    rc0: rc,
+  };
+}
+
+/* Estados: 0 duto | 1 livre | 2 parede | 3 reservatório | 4 saída | 5 fora */
+const ST = { DUCT: 0, FREE: 1, WALL: 2, BIN: 3, EXIT: 4, GONE: 5 };
+
+function gaussian(rng) {
+  const u = Math.max(1e-9, rng());
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rng());
+}
+
+function spawn(p, model, d, rng, x0Frac) {
+  const g = model.geo;
+  p.d = d;
+  p.outcome = undefined;
+  p.inFinder = undefined;
+  p.state = ST.DUCT;
+  p.x = -(x0Frac === undefined ? rng() : x0Frac) * 1.6 * g.D;
+  p.y = -g.R + rng() * g.b * 0.96 + 0.02 * g.b;
+  p.z = g.zTop - (0.02 + 0.96 * rng()) * g.a;
+  p.r = 0; p.th = 0;
+  p.vr = 0; p.vt = model.vin; p.vz = 0;
+  p.fr = 0; p.fz = 0;
+  p.t = 0; p.bounces = 0;
+  p.k = 0.65 + 0.7 * rng();
+}
+
+const TUNE = { TURB: 0.08, WALL_DAMP: 0.08, SLIDE_K: 0.14, TL_COEF: 0.1 };
+
+function stepParticle(p, model, dt, rng, buf, massless) {
+  const g = model.geo;
+  if (p.state === ST.DUCT) {
+    p.x += model.vin * dt;
+    if (p.x >= 0) {
+      p.r = Math.hypot(p.x, p.y);
+      p.th = Math.atan2(p.y, p.x);
+      p.vt = model.vin; p.vr = 0; p.vz = 0;
+      p.state = ST.FREE;
+    }
+    return;
+  }
+  if (p.state === ST.WALL) {
+    const zNew = p.z - TUNE.SLIDE_K * model.vin * p.k * dt;
+    p.z = zNew;
+    p.r = model.wallR(Math.max(zNew, 0)) - 1e-4;
+    p.th += (0.45 * model.uTheta(p.r) / p.r) * dt;
+    if (p.z <= 0) { p.state = ST.BIN; p.vz = -0.3 * model.vin; p.r *= 0.98; p.vt = 0.3 * model.uTheta(p.r); p.vr = 0.04 * model.vin; }
+    return;
+  }
+  if (p.state === ST.BIN) {
+        p.z += p.vz * dt;
+    p.r = Math.min(p.r + p.vr * dt, g.binR * 0.92);
+    p.th += (p.vt / Math.max(p.r, 1e-4)) * dt;
+    if (p.z <= -g.binH) p.state = ST.GONE;
+    return;
+  }
+  if (p.state === ST.EXIT) {
+    p.z += p.vz * dt;
+    p.th += (p.vt / Math.max(p.r, 1e-4)) * dt;
+    if (p.z >= g.zExit) p.state = ST.GONE;
+    return;
+  }
+
+  // Livre: ar + turbulência
+  model.airMeridional(p.r, p.z, buf);
+  let ur = buf[0], uz = buf[1];
+  const ut = model.uTheta(p.r);
+  const Rz = model.wallR(p.z);
+  if (!massless) {
+    const TL = TUNE.TL_COEF * g.D / model.vin;
+    const a = Math.exp(-dt / TL);
+    const s = Math.sqrt(1 - a * a);
+    const y = Math.max(0, Rz - p.r);
+    const damp = 1 - Math.exp(-y / (TUNE.WALL_DAMP * g.D));
+    const sig = TUNE.TURB * Math.abs(ut);
+    p.fr = a * p.fr + s * sig * gaussian(rng);
+    p.fz = a * p.fz + s * sig * gaussian(rng);
+    ur += p.fr * damp;
+    uz += p.fz * damp;
+  }
+
+  if (massless) {
+    p.vr = ur; p.vt = ut; p.vz = uz;
+  } else {
+    const d = p.d;
+    const t0 = model.tauStokes(d);
+    const dvr = ur - p.vr, dvt = ut - p.vt, dvz = uz - p.vz;
+    const slip = Math.sqrt(dvr * dvr + dvt * dvt + dvz * dvz);
+    const Re = (AIR.rho * slip * d) / AIR.mu;
+    const tau = t0 / (1 + 0.15 * Math.pow(Re, 0.687));
+    const E = Math.exp(-dt / tau);
+    const rSafe = Math.max(p.r, 1e-4);
+    const ar = (p.vt * p.vt) / rSafe;
+    const at = -(p.vr * p.vt) / rSafe;
+    const eqR = ur + tau * ar;
+    const eqT = ut + tau * at;
+    const eqZ = uz - tau * AIR.g;
+    p.vr = eqR + (p.vr - eqR) * E;
+    p.vt = eqT + (p.vt - eqT) * E;
+    p.vz = eqZ + (p.vz - eqZ) * E;
+  }
+  p.r += p.vr * dt;
+  p.th += (p.vt / Math.max(p.r, 1e-4)) * dt;
+  p.z += p.vz * dt;
+
+  if (p.r < 1e-4) { p.r = 1e-4; p.vr = Math.abs(p.vr); }
+  if (p.z >= g.zTop && p.r > g.re) { p.z = g.zTop - 1e-4; p.vz = -Math.abs(p.vz); }
+
+  const above = p.z >= g.zLip;
+  if (above) {
+    const wasInside = p.inFinder;
+    if (wasInside === undefined) p.inFinder = p.r < g.re;
+    if (p.inFinder && p.r >= g.re * 0.985) { p.r = g.re * 0.985; p.vr = -Math.abs(p.vr) * 0.2; }
+    if (!p.inFinder && p.r <= g.re * 1.015) { p.r = g.re * 1.015; p.vr = Math.abs(p.vr) * 0.3; }
+    if (p.z >= g.zTop && p.inFinder) {
+      p.state = ST.EXIT; p.vz = Math.max(uz, 0.4 * model.vin);
+      p.outcome = -1;
+      return;
+    }
+  } else {
+    p.inFinder = undefined;
+  }
+
+  const RzNew = model.wallR(p.z);
+  if (p.z > 0 && p.r >= RzNew - 1e-4) {
+    if (massless) { p.r = RzNew * 0.995; return; }
+    // Grãos grandes quicam antes de aderir à camada da parede
+    if (p.vr > 0.06 * model.vin && p.bounces < 3 && p.d > 15e-6) {
+      p.bounces++;
+      p.r = RzNew - 2e-4;
+      p.vr = -0.45 * p.vr;
+    } else {
+      p.state = ST.WALL;
+      p.r = RzNew - 1e-4;
+      p.outcome = 1;
+    }
+    return;
+  }
+  if (p.z <= 0) {
+    // Atravessou a boca do cone sem tocar a parede: cai no reservatório
+    p.state = ST.BIN;
+    p.vz = -0.3 * model.vin;
+    p.vr = 0.03 * model.vin;
+    p.vt = 0.3 * model.uTheta(Math.max(p.r, 1e-3));
+    p.outcome = 1;
+  }
+}
+
+
+</script>
+<script>
+(() => {
+  "use strict";
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => [...document.querySelectorAll(s)];
+  const rootCss = getComputedStyle(document.documentElement);
+  const tok = (n) => rootCss.getPropertyValue(n).trim();
+  const C = {
+    g: [tok("--g1"), tok("--g2"), tok("--g3"), tok("--g4"), tok("--g5")],
+    air: tok("--air"), airUp: tok("--air-up"), ink: tok("--stage-ink"), muted: tok("--stage-muted"),
+    line: tok("--stage-line"), stage: tok("--stage"), stage2: tok("--stage-2"), stage3: tok("--stage-3"),
+  };
+  const MONO = tok("--mono");
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const fmt = (x, dec = 0) => x.toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  const fmtSig = (x) => fmt(x, x >= 100 ? 0 : x >= 10 ? 1 : x >= 1 ? 2 : 3);
+  const um = (d) => { const v = d * 1e6; return fmt(v, v >= 10 ? 0 : 1) + " µm"; };
+  const pa = (p) => { const a = Math.abs(p); return a >= 1000 ? fmt(a / 1000, 1) + " kPa" : fmt(a, 0) + " Pa"; };
+
+  const small = innerWidth < 700;
+  const PER_CLASS = small ? 26 : 44, TN = small ? 22 : 34, AIR_N = small ? 14 : 24, AIR_TN = small ? 90 : 150;
+
+  const S = { D: 0.15, v: 20, rho: 1500, running: !reduced, ritmo: 1, showAir: true, showGrain: true, labels: true, iso: -1, airFocus: -1, focusLabel: 0, tourOn: false };
+  let model = makeModel(S.D, S.v, S.rho);
+  const buf = [0, 0];
+
+  /* ---------- Partículas visíveis ---------- */
+  function newP(cls, tn) { return { cls, tn, tx: new Float32Array(tn), ty: new Float32Array(tn), tz: new Float32Array(tn), ti: 0, tc: 0, t: 0, state: ST.GONE }; }
+  const grains = [];
+  for (let c = 0; c < CLASSES.length; c++) for (let i = 0; i < PER_CLASS; i++) grains.push(newP(c, TN));
+  const tracers = [];
+  for (let i = 0; i < AIR_N; i++) tracers.push(newP(-1, AIR_TN));
+  const respawn = (p) => {
+    spawn(p, model, p.cls >= 0 ? CLASSES[p.cls].d : 1e-6, Math.random);
+    p.tc = 0; p.ti = 0; p.t = 0; p.slot = undefined;
+  };
+  // Começam escalonados, para os grãos não andarem em bloco
+  for (const p of grains.concat(tracers)) { p.state = ST.GONE; p.wait = (Math.random() * 30 * model.D) / model.vin; }
+  function rec(p) {
+    const D = model.D, i = p.ti;
+    if (p.state === ST.DUCT) { p.tx[i] = p.x / D; p.ty[i] = p.y / D; }
+    else { p.tx[i] = (p.r * Math.cos(p.th)) / D; p.ty[i] = (p.r * Math.sin(p.th)) / D; }
+    p.tz[i] = p.z / D;
+    p.ti = (i + 1) % p.tn;
+    if (p.tc < p.tn) p.tc++;
+  }
+
+  /* Pilha de pó no reservatório, em unidades de D */
+  const PN = small ? 520 : 1000, BIN_R = 0.62, BIN_H = 0.9, MAX_Z = -0.27;
+  const pile = { r: new Float32Array(PN), th: new Float32Array(PN), z: new Float32Array(PN), col: new Int8Array(PN).fill(-1), i: 0, nBin: 0, nFiltro: 0 };
+  (() => {
+    const tmp = [];
+    for (let i = 0; i < PN; i++) {
+      const r = BIN_R * 0.93 * Math.sqrt(Math.random());
+      const top = 0.5 * (1 - 0.6 * Math.pow(r / BIN_R, 1.6));
+      tmp.push([r, Math.random() * 6.2832, -BIN_H + 0.01 + top * Math.pow(Math.random(), 0.75)]);
+    }
+    tmp.sort((a, b) => a[2] - b[2]);
+    tmp.forEach((t, i) => { pile.r[i] = t[0]; pile.th[i] = t[1]; pile.z[i] = t[2]; });
+  })();
+  function nextSlot() {
+    const s = pile.i; pile.i++;
+    if (pile.i >= PN) pile.i = Math.floor(PN * 0.45);
+    return s;
+  }
+
+  // Pausa aleatória entre um grão e o próximo do mesmo lugar na fila
+  function ready(p, dt) {
+    if (p.wait === undefined) p.wait = (Math.random() * 8 * model.D) / model.vin;
+    p.wait -= dt;
+    if (p.wait > 0) return false;
+    p.wait = undefined;
+    respawn(p);
+    return true;
+  }
+  function advance(simDt) {
+    const D = model.D;
+    const nsub = Math.max(1, Math.ceil(simDt / ((0.03 * D) / model.vin)));
+    const dt = simDt / nsub;
+    const tMax = (50 * D) / model.vin;
+    for (let s = 0; s < nsub; s++) {
+      for (const p of grains) {
+        if (p.state === ST.GONE && !ready(p, dt)) continue;
+        const was = p.state;
+        stepParticle(p, model, dt, Math.random, buf, false);
+        if (p.state === ST.BIN) {
+          if (p.slot === undefined) p.slot = nextSlot();
+          const sl = p.slot;
+          p.r += (pile.r[sl] * D - p.r) * 0.1;
+          if (p.z <= pile.z[sl] * D) { pile.col[sl] = p.cls; pile.nBin++; p.state = ST.GONE; }
+        } else if (was === ST.EXIT && p.state === ST.GONE) pile.nFiltro++;
+        rec(p);
+      }
+      for (const p of tracers) {
+        if (p.state === ST.GONE && !ready(p, dt)) continue;
+        stepParticle(p, model, dt, Math.random, buf, true);
+        p.t += dt;
+        if (p.state === ST.BIN || p.state === ST.WALL || p.t > tMax) p.state = ST.GONE;
+        rec(p);
+      }
+    }
+  }
+  const simPerSec = () => (4.4 * model.D) / model.vin;
+
+  /* ---------- Censo: mede a captura por tamanho, em segundo plano ---------- */
+  const CENSUS_UM = [0.3, 0.5, 0.7, 1, 1.4, 2, 2.8, 4, 5, 7, 10, 14, 20, 40, 100];
+  const CLASS_IDX = CLASSES.map((c) => CENSUS_UM.indexOf(c.d * 1e6));
+  const census = { cap: new Int32Array(CENSUS_UM.length), tot: new Int32Array(CENSUS_UM.length), target: 300, cur: null, curI: 0, next: 0, dirty: true };
+  function censusReset() { census.cap.fill(0); census.tot.fill(0); census.cur = null; census.next = 0; census.dirty = true; }
+  function censusWork(ms) {
+    const t0 = performance.now();
+    const m = model, dt = (0.03 * m.D) / m.vin, tMax = (400 * m.D) / m.vin;
+    while (performance.now() - t0 < ms) {
+      if (!census.cur) {
+        let i = census.next, tries = 0;
+        while (census.tot[i] >= census.target && tries < CENSUS_UM.length) { i = (i + 1) % CENSUS_UM.length; tries++; }
+        if (census.tot[i] >= census.target) return;
+        census.curI = i; census.next = (i + 1) % CENSUS_UM.length;
+        const p = {}; spawn(p, m, CENSUS_UM[i] * 1e-6, Math.random, 0.02); p.t = 0;
+        census.cur = p;
+      }
+      const p = census.cur;
+      for (let k = 0; k < 150 && p.outcome === undefined && p.t < tMax; k++) { stepParticle(p, m, dt, Math.random, buf, false); p.t += dt; }
+      if (p.outcome !== undefined || p.t >= tMax) {
+        census.tot[census.curI]++;
+        if (p.outcome === 1) census.cap[census.curI]++;
+        census.cur = null; census.dirty = true;
+      }
+    }
+  }
+  const capOf = (i) => (census.tot[i] ? census.cap[i] / census.tot[i] : NaN);
+  function d50Measured() {
+    if (census.tot.some((t) => t < 40)) return NaN;
+    for (let i = 0; i < CENSUS_UM.length - 1; i++) {
+      const a = capOf(i), b = capOf(i + 1);
+      if (a < 0.5 && b >= 0.5) {
+        const la = Math.log10(CENSUS_UM[i]), lb = Math.log10(CENSUS_UM[i + 1]);
+        return Math.pow(10, la + ((0.5 - a) / Math.max(b - a, 1e-3)) * (lb - la)) * 1e-6;
+      }
+    }
+    return NaN;
+  }
+
+  /* ---------- Vista 3D ---------- */
+  const cv = $("#cv3d"), ctx = cv.getContext("2d");
+  const cvP = $("#cvPlan"), ctxP = cvP.getContext("2d");
+  const cam = { yaw: -0.38, pitch: 0.2, s: 100, cx: 0, cy: 0, cyaw: 1, syaw: 0, cp: 1, sp: 0 };
+  let W = 0, H = 0, WP = 0, HP = 0, dpr = 1;
+  const ZC = 1.86, L = 9;
+  function setCam() {
+    cam.cyaw = Math.cos(cam.yaw); cam.syaw = Math.sin(cam.yaw);
+    cam.cp = Math.cos(cam.pitch); cam.sp = Math.sin(cam.pitch);
+    cam.s = Math.min((H * 0.93) / 5.9, (W * 0.92) / 3.1);
+    cam.cx = W * 0.5 + cam.s * 0.32;
+    cam.cy = H * 0.5;
+  }
+  const P = [0, 0, 0];
+  function proj(x, y, z) {
+    const x1 = x * cam.cyaw + y * cam.syaw;
+    const y1 = -x * cam.syaw + y * cam.cyaw;
+    const zr = z - ZC;
+    const z2 = zr * cam.cp + y1 * cam.sp;
+    const dep = y1 * cam.cp - zr * cam.sp;
+    const f = 1 / (1 + dep / L);
+    P[0] = cam.cx + cam.s * x1 * f;
+    P[1] = cam.cy - cam.s * z2 * f;
+    P[2] = dep;
+  }
+  function ringPaths(z, r, back, front) {
+    const N = 56;
+    let prev = null;
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      proj(r * Math.cos(a), r * Math.sin(a), z);
+      const x = P[0], y = P[1];
+      const depRing = -r * Math.cos(a) * cam.syaw + r * Math.sin(a) * cam.cyaw;
+      if (prev) {
+        const t = depRing > 0 ? back : front;
+        t.moveTo(prev[0], prev[1]); t.lineTo(x, y);
+      }
+      prev = [x, y];
+    }
+  }
+  function seg(path, a, b) {
+    proj(a[0], a[1], a[2]); path.moveTo(P[0], P[1]);
+    proj(b[0], b[1], b[2]); path.lineTo(P[0], P[1]);
+  }
+  function drawGlass() {
+    // Silhueta translúcida do corpo, para ler como policarbonato
+    const a = cam.yaw;
+    const edge = (r, z, sgn) => { proj(sgn * r * Math.cos(a), sgn * r * Math.sin(a), z); return [P[0], P[1]]; };
+    const pts = [[0.5, 4], [0.5, 2.5], [0.1875, 0], [BIN_R, 0], [BIN_R, -BIN_H]];
+    ctx.beginPath();
+    pts.forEach((q, i) => { const e = edge(q[0], q[1], 1); i ? ctx.lineTo(e[0], e[1]) : ctx.moveTo(e[0], e[1]); });
+    pts.slice().reverse().forEach((q) => { const e = edge(q[0], q[1], -1); ctx.lineTo(e[0], e[1]); });
+    ctx.closePath();
+    proj(-0.62 * Math.cos(a), -0.62 * Math.sin(a), 2); const gx0 = P[0];
+    proj(0.62 * Math.cos(a), 0.62 * Math.sin(a), 2); const gx1 = P[0];
+    const g = ctx.createLinearGradient(gx0, 0, gx1, 0);
+    g.addColorStop(0, "rgba(120,190,220,0.10)");
+    g.addColorStop(0.18, "rgba(150,210,235,0.05)");
+    g.addColorStop(0.3, "rgba(190,230,245,0.085)");
+    g.addColorStop(0.42, "rgba(120,190,220,0.02)");
+    g.addColorStop(0.85, "rgba(120,190,220,0.03)");
+    g.addColorStop(1, "rgba(120,190,220,0.09)");
+    ctx.fillStyle = g; ctx.fill();
+  }
+  function shell(which) {
+    const back = new Path2D(), front = new Path2D();
+    const R = 0.5, Rd = 0.1875, re = 0.25, b = 0.2, aH = 0.5;
+    [[4, R], [2.5, R], [0, Rd], [0, BIN_R], [-BIN_H, BIN_R], [3.5, re], [4, re], [4.45, re]].forEach((q) => ringPaths(q[0], q[1], back, front));
+    const fc = new Path2D();
+    const a = cam.yaw, ca = Math.cos(a), sa = Math.sin(a);
+    const sil = (r0, z0, r1, z1, rawR) => {
+      for (const sg of [1, -1]) seg(fc, [sg * r0 * ca, sg * r0 * sa, z0], [sg * r1 * ca, sg * r1 * sa, z1]);
+    };
+    sil(R, 4, R, 2.5); sil(R, 2.5, Rd, 0); sil(BIN_R, 0, BIN_R, -BIN_H); sil(re, 4, re, 3.5); sil(re, 4, re, 4.45);
+    // Duto de entrada
+    const x0 = -1.6, y0 = -R, y1 = -R + b, zt = 4, zb = 4 - aH;
+    const duct = [[[x0, y0, zt], [0, y0, zt]], [[x0, y1, zt], [0, y1, zt]], [[x0, y0, zb], [0, y0, zb]], [[x0, y1, zb], [0, y1, zb]],
+      [[x0, y0, zt], [x0, y1, zt]], [[x0, y0, zb], [x0, y1, zb]], [[x0, y0, zt], [x0, y0, zb]], [[x0, y1, zt], [x0, y1, zb]],
+      [[0, y0, zt], [0, y0, zb]], [[0, y1, zt], [0, y1, zb]]];
+    duct.forEach((d) => seg(fc, d[0], d[1]));
+    if (which === "back") { ctx.strokeStyle = C.muted; ctx.globalAlpha = 0.35; ctx.lineWidth = 1; ctx.stroke(back); ctx.globalAlpha = 1; return; }
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 1; ctx.globalAlpha = 0.72; ctx.stroke(front); ctx.stroke(fc); ctx.globalAlpha = 1;
+    // Linha de máximo do reservatório
+    const mx = new Path2D(), mxb = new Path2D();
+    ringPaths(MAX_Z, BIN_R, mxb, mx);
+    ctx.strokeStyle = C.g[3]; ctx.globalAlpha = 0.65; ctx.stroke(mx); ctx.globalAlpha = 1;
+    // Filtro fino: pregas no alto do tubo
+    const z0 = 4.45, z1 = 4.6, rf = 0.42, N = 40;
+    const pl = new Path2D();
+    for (let i = 0; i < N; i++) {
+      const a0 = (i / N) * 6.2832, a1 = ((i + 1) / N) * 6.2832;
+      const z = i % 2 ? z1 : z0, zn = i % 2 ? z0 : z1;
+      seg(pl, [rf * Math.cos(a0), rf * Math.sin(a0), z], [rf * Math.cos(a1), rf * Math.sin(a1), zn]);
+    }
+    ctx.strokeStyle = C.muted; ctx.globalAlpha = 0.8; ctx.stroke(pl); ctx.globalAlpha = 1;
+  }
+
+  const AGE = [0.14, 0.34, 0.75];
+  const WIDTH = [0.9, 1.05, 1.25, 1.55, 1.9];
+  const HEAD = [1.1, 1.4, 1.8, 2.4, 3.3];
+  function drawTrails(list, mode) {
+    // mode 'air' separa por sentido axial; 'grain' por classe
+    const nC = mode === "air" ? 2 : CLASSES.length;
+    const paths = [];
+    for (let c = 0; c < nC; c++) { paths[c] = []; for (let a = 0; a < 3; a++) paths[c][a] = [new Path2D(), new Path2D()]; }
+    for (const p of list) {
+      if (p.tc < 2 || p.state === ST.GONE) continue;
+      const start = (p.ti - p.tc + p.tn) % p.tn;
+      let px = 0, py = 0, pz = 0;
+      for (let k = 0; k < p.tc; k++) {
+        const j = (start + k) % p.tn;
+        proj(p.tx[j], p.ty[j], p.tz[j]);
+        const sx = P[0], sy = P[1];
+        if (k > 0) {
+          const age = Math.min(2, Math.floor((k / p.tc) * 3));
+          const depth = P[2] > 0 ? 0 : 1;
+          const c = mode === "air" ? (p.tz[j] > pz ? 1 : 0) : p.cls;
+          const pth = paths[c][age][depth];
+          pth.moveTo(px, py); pth.lineTo(sx, sy);
+        }
+        px = sx; py = sy; pz = p.tz[j];
+      }
+    }
+    for (let c = 0; c < nC; c++) {
+      let fade = 1;
+      if (mode === "grain" && S.iso >= 0 && S.iso !== c) fade = 0.07;
+      if (mode === "air" && S.airFocus >= 0 && S.airFocus !== c) fade = 0.1;
+      ctx.strokeStyle = mode === "air" ? (c ? C.airUp : C.air) : C.g[c];
+      ctx.lineWidth = mode === "air" ? 1.1 : WIDTH[c];
+      for (let a = 0; a < 3; a++) for (let d = 0; d < 2; d++) {
+        ctx.globalAlpha = AGE[a] * (d ? 1 : 0.5) * fade * (mode === "air" ? 0.8 : 1);
+        ctx.stroke(paths[c][a][d]);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawHeads() {
+    for (let c = 0; c < CLASSES.length; c++) {
+      const fade = S.iso >= 0 && S.iso !== c ? 0.08 : 1;
+      ctx.fillStyle = C.g[c]; ctx.globalAlpha = fade;
+      ctx.beginPath();
+      for (const p of grains) {
+        if (p.cls !== c || p.state === ST.GONE || p.tc < 1) continue;
+        const j = (p.ti - 1 + p.tn) % p.tn;
+        proj(p.tx[j], p.ty[j], p.tz[j]);
+        const f = P[2] > 0 ? 0.8 : 1, r = HEAD[c] * f;
+        ctx.moveTo(P[0] + r, P[1]); ctx.arc(P[0], P[1], r, 0, 6.2832);
+      }
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawPile() {
+    const sz = [1.3, 1.5, 1.8, 2.1, 2.6];
+    for (let c = 0; c < CLASSES.length; c++) {
+      ctx.fillStyle = C.g[c];
+      ctx.globalAlpha = S.iso >= 0 && S.iso !== c ? 0.12 : 0.88;
+      ctx.beginPath();
+      const s = sz[c];
+      for (let i = 0; i < PN; i++) {
+        if (pile.col[i] !== c) continue;
+        proj(pile.r[i] * Math.cos(pile.th[i]), pile.r[i] * Math.sin(pile.th[i]), pile.z[i]);
+        ctx.rect(P[0] - s / 2, P[1] - s / 2, s, s);
+      }
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawLabels() {
+    const a = cam.yaw, ca = Math.cos(a), sa = Math.sin(a), narrow = W < 460;
+    const side = (r, z, sg) => [sg * r * ca, sg * r * sa, z];
+    const items = [
+      { n: 1, t: "Entrada", at: [-1.15, -0.4, 4.0], dx: -8, dy: -26 },
+      { n: 2, t: "Ar desce", at: side(0.5, 3.1, 1), dx: 34, dy: 0 },
+      { n: 3, t: "Grãos na parede", at: side(0.3, 1.0, 1), dx: 42, dy: 0 },
+      { n: 4, t: "Reservatório", at: side(BIN_R, -0.55, 1), dx: 30, dy: 0 },
+      { n: 5, t: "Ar sobe", at: [0, 0, 1.85], dx: -96, dy: 0 },
+      { n: 6, t: "Para o filtro", at: side(0.42, 4.53, 1), dx: 28, dy: -4 },
+    ];
+    ctx.font = `500 11px ${MONO}`;
+    ctx.textBaseline = "middle";
+    for (const it of items) {
+      proj(it.at[0], it.at[1], it.at[2]);
+      const ax = P[0], ay = P[1];
+      let bx = ax + it.dx, by = ay + it.dy;
+      bx = Math.max(12, Math.min(W - 12, bx));
+      const foco = S.focusLabel === it.n;
+      ctx.globalAlpha = !S.focusLabel || foco ? 1 : 0.28;
+      ctx.strokeStyle = foco ? C.g[4] : C.muted; ctx.lineWidth = foco ? 1.5 : 1; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      ctx.fillStyle = foco ? C.g[4] : C.ink; ctx.beginPath(); ctx.arc(ax, ay, foco ? 3 : 2, 0, 6.2832); ctx.fill();
+      ctx.beginPath(); ctx.arc(bx, by, foco ? 11 : 9, 0, 6.2832); ctx.fillStyle = foco ? C.g[4] : C.ink; ctx.fill();
+      ctx.fillStyle = C.stage; ctx.textAlign = "center"; ctx.fillText(String(it.n), bx, by + 0.5);
+      if (!narrow) {
+        const tw = ctx.measureText(it.t).width;
+        ctx.fillStyle = C.ink;
+        const leftSide = it.dx < 0 && it.n !== 1;
+        if (leftSide) { ctx.textAlign = "right"; ctx.fillText(it.t, bx - 13, by + 0.5); }
+        else if (it.n === 1) { ctx.textAlign = "left"; ctx.fillText(it.t, bx + 13, by + 0.5); }
+        else { ctx.textAlign = bx + 13 + tw > W - 6 ? "right" : "left"; if (ctx.textAlign === "right") ctx.fillText(it.t, W - 6, by + 15); else ctx.fillText(it.t, bx + 13, by + 0.5); }
+      }
+    }
+    ctx.textAlign = "left"; ctx.globalAlpha = 1;
+  }
+  function niceCm(cm) { const opts = [0.5, 1, 2, 5, 10, 20]; let best = opts[0]; for (const o of opts) if (o <= cm) best = o; return best; }
+  function drawScale() {
+    const cm = niceCm(model.D * 100 * 0.8);
+    const px = (cm / (model.D * 100)) * cam.s;
+    const x = 14, y = H - 16;
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, y - 4); ctx.lineTo(x, y); ctx.lineTo(x + px, y); ctx.lineTo(x + px, y - 4); ctx.stroke();
+    ctx.font = `400 11px ${MONO}`; ctx.fillStyle = C.ink; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    ctx.fillText(`${fmt(cm, cm < 1 ? 1 : 0)} cm`, x, y - 7);
+    ctx.fillStyle = C.muted;
+    ctx.fillText(`altura do ciclone ${fmt(model.D * 400, 0)} cm`, x, y - 22);
+    const ry = H - 16;
+    ctx.textAlign = "right"; ctx.fillStyle = C.muted;
+    ctx.fillText(`reservatório ${fmt(pile.nBin)} grãos · filtro ${fmt(pile.nFiltro)}`, W - 12, ry);
+    ctx.textAlign = "left";
+  }
+  function draw3D() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = C.stage; ctx.fillRect(0, 0, W, H);
+    setCam();
+    drawGlass();
+    shell("back");
+    drawPile();
+    if (S.showAir) drawTrails(tracers, "air");
+    if (S.showGrain) { drawTrails(grains, "grain"); drawHeads(); }
+    shell("front");
+    if (S.labels || S.tourOn) drawLabels();
+    drawScale();
+  }
+  function drawPlan() {
+    const c = ctxP, w = WP, h = HP;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.fillStyle = C.stage; c.fillRect(0, 0, w, h);
+    const s = (Math.min(w, h) * 0.43) / 0.5, cx = w / 2 + (w > h * 1.3 ? s * 0.12 : 0), cy = h / 2 + 4;
+    const X = (x) => cx + x * s, Y = (y) => cy - y * s;
+    const circ = (r) => { c.beginPath(); c.arc(cx, cy, r * s, 0, 6.2832); };
+    c.fillStyle = C.stage2; circ(0.5); c.fill();
+    if (S.showAir) {
+      c.lineWidth = 1;
+      for (const p of tracers) {
+        if (p.tc < 2 || p.state === ST.GONE) continue;
+        const n = Math.min(p.tc, 40), st = (p.ti - n + p.tn) % p.tn;
+        c.beginPath();
+        for (let k = 0; k < n; k++) { const j = (st + k) % p.tn; const q = X(p.tx[j]), r = Y(p.ty[j]); k ? c.lineTo(q, r) : c.moveTo(q, r); }
+        c.strokeStyle = C.air; c.globalAlpha = 0.28; c.stroke();
+      }
+      c.globalAlpha = 1;
+    }
+    c.strokeStyle = C.ink; c.lineWidth = 1.2; c.globalAlpha = 0.8; circ(0.5); c.stroke();
+    c.lineWidth = 1; c.globalAlpha = 0.65; circ(0.25); c.stroke(); c.globalAlpha = 1;
+    // duto
+    c.strokeStyle = C.ink; c.globalAlpha = 0.6;
+    c.beginPath(); c.moveTo(X(-2), Y(-0.5)); c.lineTo(X(0), Y(-0.5)); c.moveTo(X(-2), Y(-0.3)); c.lineTo(X(-0.4), Y(-0.3)); c.stroke();
+    c.globalAlpha = 1;
+    if (S.showGrain) {
+      for (let g = 0; g < CLASSES.length; g++) {
+        const fade = S.iso >= 0 && S.iso !== g ? 0.07 : 1;
+        c.strokeStyle = C.g[g]; c.fillStyle = C.g[g]; c.lineWidth = WIDTH[g];
+        const tr = new Path2D(), hd = new Path2D();
+        for (const p of grains) {
+          if (p.cls !== g || p.state === ST.GONE || p.state === ST.BIN || p.state === ST.EXIT || p.tc < 2) continue;
+          const n = Math.min(p.tc, 14), st = (p.ti - n + p.tn) % p.tn;
+          for (let k = 0; k < n; k++) { const j = (st + k) % p.tn; const q = X(p.tx[j]), r = Y(p.ty[j]); k ? tr.lineTo(q, r) : tr.moveTo(q, r); }
+          const j = (p.ti - 1 + p.tn) % p.tn;
+          const q = X(p.tx[j]), r = Y(p.ty[j]), rd = HEAD[g];
+          hd.moveTo(q + rd, r); hd.arc(q, r, rd, 0, 6.2832);
+        }
+        c.globalAlpha = 0.4 * fade; c.stroke(tr);
+        c.globalAlpha = 0.95 * fade; c.fill(hd);
+      }
+      c.globalAlpha = 1;
+    }
+    c.font = `400 11px ${MONO}`; c.fillStyle = C.muted; c.textAlign = "center"; c.textBaseline = "alphabetic";
+    if (w > 300) { c.fillText("tubo central", cx, cy - 0.25 * s - 5); }
+    c.textAlign = "left";
+  }
+  function resize() {
+    dpr = Math.min(devicePixelRatio || 1, 2);
+    const r = cv.getBoundingClientRect(); W = r.width; H = r.height;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    const q = cvP.getBoundingClientRect(); WP = q.width; HP = q.height;
+    cvP.width = Math.round(WP * dpr); cvP.height = Math.round(HP * dpr);
+    setCam();
+    draw3D(); drawPlan();
+  }
+
+  /* ---------- Tabela por tamanho ---------- */
+  const linhas = $("#linhas");
+  const rows = CLASSES.map((c, i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "linha"; b.id = "lin-" + i; b.setAttribute("aria-pressed", "false");
+    b.innerHTML = `<span class="nome"><span class="pt" style="background:${C.g[i]}"></span><span>${c.nome}</span><span class="ex">${c.ex}</span></span><span class="tug"><i></i></span><span class="pct">…</span>`;
+    b.addEventListener("click", () => {
+      S.iso = S.iso === i ? -1 : i;
+      rows.forEach((r, j) => r.el.setAttribute("aria-pressed", String(S.iso === j)));
+      if (!S.running) { draw3D(); drawPlan(); }
+    });
+    linhas.appendChild(b);
+    return { el: b, tug: b.querySelector(".tug i"), pct: b.querySelector(".pct") };
+  });
+  function syncTug() {
+    CLASSES.forEach((c, i) => {
+      const ratio = Math.log10(model.drift(c.d) / model.urCs);
+      const k = Math.max(-2.2, Math.min(2.2, ratio)) / 2.2;
+      const el = rows[i].tug;
+      el.style.background = k >= 0 ? C.g[i] : C.g[i];
+      el.style.left = k >= 0 ? "50%" : 50 + k * 50 + "%";
+      el.style.width = Math.abs(k) * 50 + "%";
+    });
+  }
+  function syncCensusUi() {
+    CLASSES.forEach((c, i) => {
+      const idx = CLASS_IDX[i];
+      rows[i].pct.textContent = census.tot[idx] >= 10 ? fmt(100 * capOf(idx), 0) + "%" : "…";
+    });
+    const d = d50Measured();
+    $("#r-c").textContent = isNaN(d) ? um(model.d50Barth) : "≈ " + um(d);
+    $("#r-c2").textContent = `Lapple ${fmt(model.d50Lapple * 1e6, 1)} · Barth ${um(model.d50Barth)}`;
+    const nT = Math.min(...census.tot);
+    $("#f3-rod").innerHTML = (isNaN(d) ? "Medindo…" : `Corte simulado <b>${um(d)}</b>. Lapple <b>${um(model.d50Lapple)}</b>.`) + ` ${fmt(nT)} grãos simulados por tamanho até agora.`;
+    chart3();
+  }
+
+  /* ---------- Gráficos ---------- */
+  const lin = (d0, d1, r0, r1) => (v) => r0 + ((v - d0) * (r1 - r0)) / (d1 - d0);
+  const logS = (d0, d1, r0, r1) => { const a = Math.log10(d0), b = Math.log10(d1); return (v) => r0 + ((Math.log10(v) - a) * (r1 - r0)) / (b - a); };
+  function ticks(max, n = 4) {
+    const raw = max / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const st = [1, 2, 2.5, 5, 10].map((k) => k * mag).find((k) => k >= raw);
+    const out = []; for (let v = 0; v <= max + st * 0.001; v += st) out.push(+v.toFixed(6));
+    return out;
+  }
+  const plotOf = (id) => $(`#${id} .plot`);
+  const sizeOf = (el) => Math.max(260, el.clientWidth || 300);
+  function mountHover(el, fn) {
+    // fn(xPx) => {x, html, marks:[{x,y,cl}]}
+    let posX = null;
+    const show = (x) => {
+      const r = fn(x);
+      if (!r) return hide();
+      posX = r.x;
+      const g = el.querySelector(".hov");
+      if (g) g.innerHTML = `<line class="cruz" x1="${r.x}" x2="${r.x}" y1="${r.y0}" y2="${r.y1}"></line>` + r.marks.map((m) => `<circle cx="${m.x}" cy="${m.y}" r="5" class="${m.cl} anel"></circle>`).join("");
+      let tip = el.querySelector(".dica");
+      if (!tip) { tip = document.createElement("div"); tip.className = "dica"; el.appendChild(tip); }
+      tip.hidden = false; tip.innerHTML = r.html;
+      const tw = tip.offsetWidth, w = el.clientWidth;
+      tip.style.left = Math.max(0, Math.min(w - tw, r.x + (r.x + tw + 14 > w ? -tw - 10 : 10))) + "px";
+      tip.style.top = (r.tipY || 8) + "px";
+    };
+    const hide = () => { posX = null; const g = el.querySelector(".hov"); if (g) g.innerHTML = ""; const t = el.querySelector(".dica"); if (t) t.hidden = true; };
+    el.addEventListener("pointermove", (e) => { const b = el.getBoundingClientRect(); show(e.clientX - b.left); });
+    el.addEventListener("pointerleave", hide);
+    el.addEventListener("focus", () => show(el.clientWidth / 2));
+    el.addEventListener("blur", hide);
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      show((posX === null ? el.clientWidth / 2 : posX) + (e.key === "ArrowLeft" ? -12 : 12));
+    });
+  }
+  const setSvg = (el, w, h, inner) => {
+    let host = el.querySelector("svg");
+    const svg = `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">${inner}<g class="hov"></g></svg>`;
+    if (host) host.outerHTML = svg; else el.insertAdjacentHTML("afterbegin", svg);
+  };
+
+  function chart1() {
+    const el = plotOf("f1"), w = sizeOf(el), h = 330;
+    const ml = 52, mr = 14, t1 = 22, b1 = 142, t2 = 186, b2 = 296;
+    const R = model.geo.R, N = 80, prof = model.pressureProfile(N);
+    const x = lin(0, R, ml, w - mr);
+    const us = prof.rs.map((r) => model.uTheta(Math.max(r, 1e-6)));
+    const uMax = Math.max(...us) * 1.08, pMin = Math.min(...prof.ps) * 1.08;
+    const yu = lin(0, uMax, b1, t1), yp = lin(pMin, 0, b2, t2);
+    let s = "";
+    const tu = ticks(uMax, 3), tp = ticks(-pMin, 3);
+    tu.forEach((v) => { s += `<line class="grade" x1="${ml}" x2="${w - mr}" y1="${yu(v)}" y2="${yu(v)}"></line><text x="${ml - 7}" y="${yu(v) + 4}" text-anchor="end">${fmt(v)}</text>`; });
+    tp.forEach((v) => { s += `<line class="grade" x1="${ml}" x2="${w - mr}" y1="${yp(-v)}" y2="${yp(-v)}"></line><text x="${ml - 7}" y="${yp(-v) + 4}" text-anchor="end">${v ? "−" + fmt(v) : "0"}</text>`; });
+    s += `<text x="${ml}" y="${t1 - 8}" class="forte">Giro do ar, m/s</text><text x="${ml}" y="${t2 - 8}" class="forte">Pressão em relação à parede, Pa</text>`;
+    const cm = R * 100, st = [0.2, 0.5, 1, 2, 5, 10].find((k) => cm / k <= 6);
+    for (let v = 0; v <= cm + 1e-6; v += st) {
+      const px = x(v / 100);
+      s += `<line class="grade" x1="${px}" x2="${px}" y1="${b2}" y2="${b2 + 4}"></line><text x="${px}" y="${b2 + 18}" text-anchor="middle">${fmt(v, st < 1 ? 1 : 0)}</text>`;
+    }
+    s += `<text x="${w - mr}" y="${b2 + 32}" text-anchor="end">raio, cm</text>`;
+    const pxRe = x(model.geo.re);
+    s += `<line class="eixo" x1="${pxRe}" x2="${pxRe}" y1="${t1}" y2="${b2}"></line><text x="${pxRe + 5}" y="${b1 - 6}">tubo central</text>`;
+    const dU = prof.rs.map((r, i) => `${i ? "L" : "M"}${x(r).toFixed(1)},${yu(us[i]).toFixed(1)}`).join("");
+    s += `<path class="a-ar" d="${dU}L${x(R)},${b1}L${x(0)},${b1}Z"></path><path class="l-ar" d="${dU}"></path>`;
+    const dP = prof.rs.map((r, i) => `${i ? "L" : "M"}${x(r).toFixed(1)},${yp(prof.ps[i]).toFixed(1)}`).join("");
+    s += `<path class="l-ar" d="${dP}"></path>`;
+    const kx = x(model.rPeak), ky = yu(model.uPeak);
+    s += `<circle cx="${kx}" cy="${ky}" r="4.5" class="dot-ar anel"></circle><text x="${kx + 9}" y="${ky - 7}" class="forte">pico ${fmt(model.uPeak, 0)} m/s</text>`;
+    const py0 = yp(prof.ps[0]);
+    s += `<circle cx="${x(0)}" cy="${py0}" r="4.5" class="dot-ar anel"></circle><text x="${x(0) + 9}" y="${py0 - 11}" class="forte">eixo ${pa(prof.ps[0]).replace(/^/, "−")}</text>`;
+    setSvg(el, w, h, s);
+    el._hv = (px) => {
+      const r = Math.max(0, Math.min(R, ((px - ml) / (w - mr - ml)) * R));
+      const i = Math.round((r / R) * N);
+      return { x: x(r), y0: t1, y1: b2, tipY: 150, html: `r = ${fmt(r * 100, 1)} cm<br>giro ${fmt(us[i], 1)} m/s<br>pressão −${fmt(-prof.ps[i], 0)} Pa`,
+        marks: [{ x: x(r), y: yu(us[i]), cl: "dot-ar" }, { x: x(r), y: yp(prof.ps[i]), cl: "dot-ar" }] };
+    };
+  }
+  function chart2() {
+    const el = plotOf("f2"), w = sizeOf(el), h = 320;
+    const ml = 54, mr = 14, t = 14, b = 276;
+    const x = logS(0.1, 200, ml, w - mr), y = logS(1e-4, 100, b, t);
+    let s = "";
+    [1e-4, 1e-3, 1e-2, 0.1, 1, 10, 100].forEach((v) => {
+      s += `<line class="grade" x1="${ml}" x2="${w - mr}" y1="${y(v)}" y2="${y(v)}"></line>`;
+      if ([1e-4, 1e-2, 1, 100].includes(v)) s += `<text x="${ml - 7}" y="${y(v) + 4}" text-anchor="end">${v < 1 ? fmt(v, Math.round(-Math.log10(v))) : fmt(v)}</text>`;
+    });
+    [0.1, 1, 10, 100].forEach((v) => { s += `<line class="grade" x1="${x(v)}" x2="${x(v)}" y1="${t}" y2="${b}"></line><text x="${x(v)}" y="${b + 17}" text-anchor="middle">${fmt(v, v < 1 ? 1 : 0)}</text>`; });
+    s += `<text x="${w - mr}" y="${b + 33}" text-anchor="end">diâmetro do grão, µm</text><text x="${ml}" y="${b + 33}">m/s</text>`;
+    const pts = [];
+    for (let i = 0; i <= 80; i++) {
+      const d = 0.1 * Math.pow(2000, i / 80);
+      const vv = model.drift(d * 1e-6);
+      pts.push([d, vv]);
+    }
+    const clip = (v) => Math.max(1e-4, Math.min(100, v));
+    const dG = pts.map((q, i) => `${i ? "L" : "M"}${x(q[0]).toFixed(1)},${y(clip(q[1])).toFixed(1)}`).join("");
+    s += `<path class="l-ar" d="M${ml},${y(model.urCs)}L${w - mr},${y(model.urCs)}"></path><path class="l-gr" d="${dG}"></path>`;
+    const cu = model.d50Barth * 1e6, cx = x(cu), cy = y(model.urCs);
+    CLASSES.forEach((c, i) => { const du = c.d * 1e6, v = model.drift(c.d); s += `<circle cx="${x(du)}" cy="${y(clip(v))}" r="4" class="dg${i + 1} anel"></circle>`; });
+    s += `<circle cx="${cx}" cy="${cy}" r="6" class="anel-ink"></circle>`;
+    const leftLab = cx > w * 0.55;
+    s += `<text x="${cx + (leftLab ? -11 : 11)}" y="${cy - 10}" class="forte" text-anchor="${leftLab ? "end" : "start"}">corte ${um(model.d50Barth)}</text>`;
+    s += `<text x="${ml + 8}" y="${t + 16}">o ar leva o grão</text><text x="${w - mr - 8}" y="${b - 8}" text-anchor="end">o grão vai para a parede</text>`;
+    setSvg(el, w, h, s);
+    const dom = Math.log10(2000);
+    el._hv = (px) => {
+      const fr = Math.max(0, Math.min(1, (px - ml) / (w - mr - ml)));
+      const d = 0.1 * Math.pow(10, fr * dom);
+      const v = model.drift(d * 1e-6);
+      return { x: x(d), y0: t, y1: b, tipY: 22, html: `${fmtSig(d)} µm<br>deriva ${fmtSig(v)} m/s<br>ar ${fmtSig(model.urCs)} m/s`, marks: [{ x: x(d), y: y(clip(v)), cl: "dot-gr" }, { x: x(d), y: y(model.urCs), cl: "dot-ar" }] };
+    };
+  }
+  function chart3() {
+    const el = plotOf("f3"), w = sizeOf(el), h = 280;
+    const ml = 44, mr = 14, t = 12, b = 240;
+    const x = logS(0.1, 200, ml, w - mr), y = lin(0, 100, b, t);
+    let s = "";
+    [0, 25, 50, 75, 100].forEach((v) => { s += `<line class="grade" x1="${ml}" x2="${w - mr}" y1="${y(v)}" y2="${y(v)}"></line><text x="${ml - 7}" y="${y(v) + 4}" text-anchor="end">${v}%</text>`; });
+    [0.1, 1, 10, 100].forEach((v) => { s += `<line class="grade" x1="${x(v)}" x2="${x(v)}" y1="${t}" y2="${b}"></line><text x="${x(v)}" y="${b + 17}" text-anchor="middle">${fmt(v, v < 1 ? 1 : 0)}</text>`; });
+    s += `<text x="${w - mr}" y="${b + 33}" text-anchor="end">diâmetro do grão, µm</text>`;
+    let d = "";
+    for (let i = 0; i <= 80; i++) { const du = 0.1 * Math.pow(2000, i / 80); d += `${i ? "L" : "M"}${x(du).toFixed(1)},${y(100 * model.lapple(du * 1e-6)).toFixed(1)}`; }
+    s += `<path class="l-teo" d="${d}"></path>`;
+    CENSUS_UM.forEach((du, i) => { if (census.tot[i] >= 10) s += `<circle cx="${x(du).toFixed(1)}" cy="${y(100 * capOf(i)).toFixed(1)}" r="4.5" class="dot-gr anel"></circle>`; });
+    setSvg(el, w, h, s);
+    const dom = Math.log10(2000);
+    el._hv = (px) => {
+      const fr = Math.max(0, Math.min(1, (px - ml) / (w - mr - ml)));
+      const du = 0.1 * Math.pow(10, fr * dom);
+      let ni = 0, best = 1e9;
+      CENSUS_UM.forEach((u, i) => { const q = Math.abs(Math.log10(u) - Math.log10(du)); if (q < best) { best = q; ni = i; } });
+      const marks = [{ x: x(du), y: y(100 * model.lapple(du * 1e-6)), cl: "dot-ink" }];
+      const has = census.tot[ni] >= 10 && best < 0.2;
+      if (has) marks.push({ x: x(CENSUS_UM[ni]), y: y(100 * capOf(ni)), cl: "dot-gr" });
+      return { x: x(du), y0: t, y1: b, tipY: 110, html: `${fmtSig(du)} µm<br>Lapple ${fmt(100 * model.lapple(du * 1e-6), 0)}%` + (has ? `<br>simulação em ${fmtSig(CENSUS_UM[ni])} µm: ${fmt(100 * capOf(ni), 0)}%` : ""), marks };
+    };
+  }
+  ["f1", "f2", "f3"].forEach((id) => { const el = plotOf(id); mountHover(el, (px) => (el._hv ? el._hv(px) : null)); });
+
+  function syncTable() {
+    const rowsH = [15, 7, 3, 2].map((cm) => {
+      const m = makeModel(cm / 100, S.v, S.rho);
+      const n = Math.max(1, Math.ceil(0.03 / m.Q - 1e-9));
+      const cur = Math.abs(cm / 100 - S.D) < 1e-6;
+      return `<tr${cur ? ' style="font-weight:500"' : ""}><td>${cm} cm</td><td>${fmt(m.Q * 1000, m.Q < 0.01 ? 1 : 0)} L/s</td><td>${n}</td><td>${fmt(m.gPeak)} g</td><td>${um(m.d50Lapple)}</td><td>${pa(m.dP)}</td></tr>`;
+    }).join("");
+    $("#tab-esc").innerHTML = rowsH;
+    $("#tab-sub").textContent = `Na entrada a ${S.v} m/s, com ${fmt(S.rho)} kg/m³. Cada linha usa a mesma geometria em escala.`;
+  }
+  function syncText() {
+    const m = model, p0 = m.pressureProfile(40).ps[0];
+    const set = (k, t) => $$(`[data-v="${k}"]`).forEach((e) => (e.textContent = t));
+    set("dpCore", pa(p0));
+    set("uPeak", fmt(m.uPeak, 0) + " m/s");
+    set("rPeak", fmt(m.rPeak * 100, 1) + " cm");
+    set("gPeak", fmt(m.gPeak) + " g");
+    set("gPeakN", fmt(m.gPeak));
+    set("razao", fmt(Math.round(S.rho / 1.2)));
+    set("urCs", fmt(m.urCs, 2) + " m/s");
+    set("d50B", um(m.d50Barth));
+    set("Ne", fmt(m.Ne, 1));
+    set("dP", pa(m.dP));
+    set("pw", fmt(m.power) + " W");
+    $("#r-g").textContent = fmt(m.gPeak) + " g";
+    $("#r-g2").textContent = `na parede ${fmt(m.gWall)} g`;
+    $("#r-u").textContent = fmt(m.uPeak, 0) + " m/s";
+    $("#r-u2").textContent = `na parede ${fmt(m.Uw, 0)} m/s`;
+    $("#r-q").textContent = fmt(m.Q * 1000, m.Q < 0.01 ? 1 : 0) + " L/s";
+    const n = Math.max(1, Math.ceil(0.03 / m.Q - 1e-9));
+    $("#r-q2").textContent = n === 1 ? "1 ciclone para 30 L/s" : `${n} ciclones para 30 L/s`;
+    $("#r-p").textContent = pa(m.dP);
+    $("#r-p2").textContent = `${fmt(m.dP / (0.5 * 1.2 * m.vin * m.vin), 1)} cargas de velocidade`;
+    $("#r-w").textContent = fmt(m.power, m.power < 10 ? 1 : 0) + " W";
+    $("#r-w2").textContent = "vazão × pressão";
+    const lento = Math.round(1 / (simPerSec() * S.ritmo));
+    const volta = ((2 * Math.PI * m.geo.R) / m.Uw) * 1000;
+    $("#hud-lenta").textContent = `Câmera lenta ${fmt(lento)}×`;
+    $("#hud-volta").textContent = `uma volta na parede leva ${fmt(volta, volta < 10 ? 1 : 0)} ms`;
+    $("#out-d").textContent = fmt(S.D * 100, S.D * 100 % 1 ? 1 : 0) + " cm";
+    $("#out-v").textContent = S.v + " m/s";
+    $("#out-r").textContent = fmt(S.rho) + " kg/m³";
+    syncTug();
+  }
+  const drawCharts = () => { chart1(); chart2(); chart3(); };
+
+  /* ---------- Controles ---------- */
+  function applyModel() {
+    const old = model;
+    model = makeModel(S.D, S.v, S.rho);
+    const k = model.D / old.D;
+    if (k !== 1) for (const p of grains.concat(tracers)) { p.x *= k; p.y *= k; p.z *= k; p.r *= k; }
+    censusReset();
+    syncText(); syncTable(); drawCharts(); syncCensusUi();
+    $$("[data-r]").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.r === S.rho)));
+    $$("[data-p]").forEach((b) => { const [d, v, r] = b.dataset.p.split(",").map(Number); b.setAttribute("aria-pressed", String(d / 100 === S.D && v === S.v && r === S.rho)); });
+    if (!S.running) { draw3D(); drawPlan(); }
+    passoLeitura();
+  }
+  $("#in-d").addEventListener("input", (e) => { S.D = +e.target.value / 100; applyModel(); });
+  $("#in-v").addEventListener("input", (e) => { S.v = +e.target.value; applyModel(); });
+  $$("[data-r]").forEach((b) => b.addEventListener("click", () => { S.rho = +b.dataset.r; applyModel(); }));
+  $$("[data-p]").forEach((b) => b.addEventListener("click", () => {
+    const [d, v, r] = b.dataset.p.split(",").map(Number);
+    S.D = d / 100; S.v = v; S.rho = r;
+    $("#in-d").value = d; $("#in-v").value = v;
+    applyModel();
+  }));
+  $$("[data-ritmo]").forEach((b) => b.addEventListener("click", () => {
+    S.ritmo = +b.dataset.ritmo;
+    $$("[data-ritmo]").forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
+    syncText();
+  }));
+  const toggle = (id, key) => $(id).addEventListener("click", (e) => {
+    S[key] = !S[key]; e.currentTarget.setAttribute("aria-pressed", String(S[key]));
+    if (!S.running) { draw3D(); drawPlan(); }
+  });
+  toggle("#vw-ar", "showAir"); toggle("#vw-graos", "showGrain"); toggle("#vw-rot", "labels");
+  const btP = $("#bt-pausa");
+  const syncPause = () => { btP.textContent = S.running ? "Pausar" : "Reproduzir"; btP.setAttribute("aria-pressed", String(!S.running)); };
+  btP.addEventListener("click", () => { S.running = !S.running; syncPause(); });
+  $("#bt-esvaziar").addEventListener("click", () => { pile.col.fill(-1); pile.i = 0; pile.nBin = 0; pile.nFiltro = 0; if (!S.running) draw3D(); });
+
+  // Girar a câmera
+  let drag = null;
+  cv.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY, yaw: cam.yaw, pitch: cam.pitch }; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    cam.yaw = drag.yaw - (e.clientX - drag.x) * 0.008;
+    cam.pitch = Math.max(-0.1, Math.min(0.95, drag.pitch + (e.clientY - drag.y) * 0.004));
+    if (!S.running) draw3D();
+  });
+  const endDrag = () => (drag = null);
+  cv.addEventListener("pointerup", endDrag); cv.addEventListener("pointercancel", endDrag);
+  cv.addEventListener("keydown", (e) => {
+    const k = { ArrowLeft: [0.08, 0], ArrowRight: [-0.08, 0], ArrowUp: [0, 0.05], ArrowDown: [0, -0.05] }[e.key];
+    if (!k) return;
+    e.preventDefault();
+    cam.yaw += k[0]; cam.pitch = Math.max(-0.1, Math.min(0.95, cam.pitch + k[1]));
+    if (!S.running) draw3D();
+  });
+
+  /* ---------- Passo a passo: cada etapa ajusta a cena e explica o que ela mostra ---------- */
+  const CAM0 = { yaw: -0.38, pitch: 0.2 };
+  let camT = null;
+  const pctDe = (i) => { const k = CLASS_IDX[i]; return census.tot[k] >= 10 ? fmt(100 * capOf(k), 0) + "%" : "medindo…"; };
+  const corte = () => { const d = d50Measured(); return isNaN(d) ? um(model.d50Barth) : "≈ " + um(d); };
+  const voltaMs = () => { const v = ((2 * Math.PI * model.geo.R) / model.Uw) * 1000; return fmt(v, v < 10 ? 1 : 0) + " ms"; };
+  const litros = () => fmt(model.Q * 1000, model.Q < 0.01 ? 1 : 0) + " L/s";
+  const nCic = () => Math.max(1, Math.ceil(0.03 / model.Q - 1e-9));
+  const item = (rot, val) => `<div><span>${rot}</span><strong>${val}</strong></div>`;
+  const legendaTamanhos = () => CLASSES.map((c, i) => `<div><span><i class="pt" style="background:${C.g[i]}"></i>${c.ex}</span><strong>${c.nome}</strong></div>`).join("");
+  const capturaTamanhos = () => CLASSES.map((c, i) => `<div><span><i class="pt" style="background:${C.g[i]}"></i>${c.nome} fica</span><strong>${pctDe(i)}</strong></div>`).join("");
+
+  const PASSOS = [
+    {
+      titulo: "Separar sem peneira",
+      texto: [
+        "O aspirador puxa ar com poeira de todos os tamanhos: areia, pólen, mofo, fuligem, fumaça. Um saco ou um filtro barra tudo isso numa malha, e a malha entope conforme enche.",
+        "O ciclone separa de outro jeito. Ele faz o ar girar muito rápido e deixa a inércia jogar os grãos contra a parede. Os próximos passos mostram cada etapa isolada, na ordem em que acontece.",
+      ],
+      cena: { ar: true, graos: true, iso: -1, fluxo: -1, rotulo: 0, cam: CAM0 },
+      leitura: legendaTamanhos,
+    },
+    {
+      titulo: "O ar entra pela lateral",
+      texto: [
+        "O duto de entrada é retangular e fica encostado na parede, apontado para o lado, não para o centro. Ao entrar, o ar dá de cara com a parede curva e é obrigado a girar.",
+        "Nada lá dentro se mexe: não há hélice nem pá. Todo o giro vem da velocidade com que o ar chega, puxado pelo motor lá no fim do caminho.",
+      ],
+      cena: { ar: true, graos: false, iso: -1, fluxo: -1, rotulo: 1, cam: { yaw: -0.38, pitch: 0.8 } },
+      leitura: () => item("Entrada", `${S.v} m/s`) + item("Vazão", litros()) + item("Uma volta na parede", voltaMs()),
+    },
+    {
+      titulo: "O ar desce em espiral",
+      texto: [
+        "Encostado na parede, o ar desce girando. É o vórtice externo, as linhas azuis.",
+        "Enquanto desce, ele vai cruzando aos poucos para o centro, porque a única saída fica no meio, lá em cima. Cada volta perto da parede é uma chance de um grão encostar nela.",
+      ],
+      cena: { ar: true, graos: false, iso: -1, fluxo: 0, rotulo: 2, cam: CAM0 },
+      leitura: () => item("Giro na parede", fmt(model.Uw, 0) + " m/s") + item("Voltas efetivas", fmt(model.Ne, 1)),
+    },
+    {
+      titulo: "Girar custa pressão",
+      texto: [
+        "Para andar em círculo, o ar precisa ser empurrado para o centro o tempo todo. Quem empurra é a pressão: o giro deixa a pressão alta junto à parede e baixa no eixo.",
+        "Perto do eixo o ar gira ainda mais rápido, como uma patinadora que fecha os braços. O pico fica na borda do tubo central, e ali a aceleração para o centro chega a milhares de vezes a gravidade.",
+      ],
+      cena: { ar: true, graos: false, iso: -1, fluxo: -1, rotulo: 0, cam: { yaw: -0.38, pitch: 0.92 } },
+      leitura: () => item("Pico do giro", fmt(model.uPeak, 0) + " m/s") + item("Distância do eixo", fmt(model.rPeak * 100, 1) + " cm") +
+        item("Pressão no eixo", "−" + pa(model.pressureProfile(40).ps[0])) + item("Aceleração no pico", fmt(model.gPeak) + " g"),
+    },
+    {
+      titulo: "O grão grande segue reto",
+      texto: [
+        () => `A mesma pressão empurra o grão, mas ele é ${fmt(Math.round(S.rho / 1.2))} vezes mais denso que o ar. O empurrão dá a ele só uma fração da aceleração de que precisaria para acompanhar a curva.`,
+        "Por inércia, o grão continua quase em linha reta até bater na parede. Ali ele perde o giro rápido e escorre para baixo, levado pelo ar que desce rente à parede. Na vista de cima, os grãos de 100 µm formam um anel junto à parede.",
+      ],
+      cena: { ar: false, graos: true, iso: 4, fluxo: -1, rotulo: 3, cam: CAM0 },
+      leitura: () => item("Densidade do grão", fmt(S.rho) + " kg/m³") + item("Densidade do ar", "1,2 kg/m³") + item("100 µm fica", pctDe(4)),
+      vivo: true,
+    },
+    {
+      titulo: "O tamanho decide",
+      texto: [
+        "Enquanto escorrega para fora, o grão sofre o arrasto do ar. A massa cresce com o cubo do diâmetro e o arrasto só com o diâmetro. Sobra o quadrado: um grão 10 vezes maior vai para a parede 100 vezes mais rápido.",
+        "Ao mesmo tempo, o ar que cruza para o centro puxa o grão para dentro. O tamanho em que os dois empatam é o diâmetro de corte. Acima dele o grão tende a ficar; abaixo, a escapar com o ar.",
+      ],
+      cena: { ar: false, graos: true, iso: -1, fluxo: -1, rotulo: 0, cam: CAM0 },
+      leitura: () => item("Diâmetro de corte", corte()) + capturaTamanhos(),
+      vivo: true,
+      acao: { rotulo: () => (S.iso < 0 ? "Isolar um tamanho" : S.iso === CLASSES.length - 1 ? "Mostrar todos" : "Próximo tamanho"),
+        fazer: () => { S.iso = S.iso >= CLASSES.length - 1 ? -1 : S.iso + 1; } },
+    },
+    {
+      titulo: "O pó assenta no reservatório",
+      texto: [
+        "O cone termina numa câmara sem saída para o ar. Sem ar atravessando, o pó que desceu pela parede perde o embalo e assenta.",
+        "A linha laranja marca o máximo. Com o pó acima dela, o fundo do vórtice alcança o que já estava depositado e levanta tudo de volta. Por isso o copo precisa ser esvaziado antes de encher.",
+      ],
+      cena: { ar: false, graos: true, iso: -1, fluxo: -1, rotulo: 4, cam: { yaw: -0.38, pitch: 0.42 } },
+      leitura: () => item("No reservatório", fmt(pile.nBin) + " grãos") + item("Foram para o filtro", fmt(pile.nFiltro) + " grãos"),
+      vivo: true,
+      acao: { rotulo: () => "Esvaziar o reservatório", fazer: () => $("#bt-esvaziar").click() },
+    },
+    {
+      titulo: "O ar sobe pelo centro",
+      texto: [
+        "O ar não tem como sair por baixo. Ele faz a volta perto do fundo do cone e sobe pelo meio, ainda girando no mesmo sentido. É o vórtice interno, as linhas verdes.",
+        "O tubo central desce um pouco para dentro do ciclone, até abaixo da entrada. Assim o ar que acabou de chegar não pega um atalho direto para a saída, sem passar pela parede.",
+      ],
+      cena: { ar: true, graos: false, iso: -1, fluxo: 1, rotulo: 5, cam: CAM0 },
+      leitura: () => item("Sobe pelo tubo", litros()) + item("Desce pela parede", litros()),
+    },
+    {
+      titulo: "O que escapa vai para o filtro",
+      texto: [
+        "Sobem com o ar só os grãos pequenos demais para vencer o arrasto: fumaça, fuligem, parte das bactérias. Eles seguem para um filtro fino antes do motor.",
+        "Esse filtro recebe só uma pequena parte do pó, então entope muito mais devagar que um saco. E a sucção não cai conforme o copo enche, porque o pó separado sai do caminho do ar.",
+      ],
+      cena: { ar: true, graos: true, iso: 0, fluxo: 1, rotulo: 6, cam: CAM0 },
+      leitura: () => item("0,5 µm fica", pctDe(0)) + item("2 µm fica", pctDe(1)) + item("Foram para o filtro", fmt(pile.nFiltro) + " grãos"),
+      vivo: true,
+    },
+    {
+      titulo: "Ciclones menores cortam mais fino",
+      texto: [
+        "A aceleração depende de v²/r. Na mesma velocidade, um ciclone 5 vezes mais estreito acelera 5 vezes mais e segura grãos bem menores.",
+        "Só que um ciclone pequeno passa pouco ar. Por isso os aspiradores usam um ciclone grande para tirar o grosso e, depois dele, vários pequenos em paralelo. Troque o cenário e compare o corte.",
+      ],
+      cena: { ar: true, graos: true, iso: -1, fluxo: -1, rotulo: 0, cam: CAM0 },
+      leitura: () => item("Diâmetro", fmt(S.D * 100, S.D * 100 % 1 ? 1 : 0) + " cm") + item("Diâmetro de corte", corte()) +
+        item("Aceleração no pico", fmt(model.gPeak) + " g") + item("Ciclones para 30 L/s", fmt(nCic())),
+      vivo: true,
+      acao: { rotulo: () => (S.D < 0.1 ? "Voltar ao ciclone grande" : "Trocar para multiciclone"),
+        fazer: () => $(S.D < 0.1 ? "#pr-grande" : "#pr-multi").click() },
+    },
+  ];
+
+  const T = { on: false, i: 0, salvo: null };
+  const elP = $("#passo"), elBar = $("#passo-bar");
+  $("#passo-dots").innerHTML = PASSOS.map(() => "<i></i>").join("");
+  function syncViewUi() {
+    $("#vw-ar").setAttribute("aria-pressed", String(S.showAir));
+    $("#vw-graos").setAttribute("aria-pressed", String(S.showGrain));
+    $("#vw-rot").setAttribute("aria-pressed", String(S.labels));
+    rows.forEach((r, j) => r.el.setAttribute("aria-pressed", String(S.iso === j)));
+  }
+  function passoLeitura() {
+    if (!T.on) return;
+    const p = PASSOS[T.i];
+    $("#passo-leit").innerHTML = p.leitura ? p.leitura() : "";
+    const bt = $("#passo-acao");
+    bt.hidden = !p.acao;
+    if (p.acao) bt.textContent = p.acao.rotulo();
+  }
+  function redraw() { if (!S.running) { draw3D(); drawPlan(); } }
+  function irPara(i) {
+    T.i = Math.max(0, Math.min(PASSOS.length - 1, i));
+    const p = PASSOS[T.i], c = p.cena, ultimo = T.i === PASSOS.length - 1;
+    S.showAir = c.ar; S.showGrain = c.graos; S.iso = c.iso; S.airFocus = c.fluxo; S.focusLabel = c.rotulo;
+    camT = c.cam;
+    if (reduced) { cam.yaw = camT.yaw; cam.pitch = camT.pitch; camT = null; }
+    syncViewUi();
+    $("#passo-n").textContent = `Passo ${T.i + 1} de ${PASSOS.length}`;
+    $("#passo-titulo").textContent = p.titulo;
+    $("#passo-txt").innerHTML = p.texto.map((t) => `<p>${typeof t === "function" ? t() : t}</p>`).join("");
+    $$("#passo-dots i").forEach((el, k) => el.classList.toggle("on", k <= T.i));
+    $("#passo-ant").disabled = $("#bar-ant").disabled = T.i === 0;
+    $("#passo-prox").textContent = ultimo ? "Explorar à vontade" : "Próximo →";
+    $("#bar-prox").setAttribute("aria-label", ultimo ? "Sair do passo a passo" : "Próximo passo");
+    $("#bar-rot").textContent = `${T.i + 1}/${PASSOS.length} · ${p.titulo}`;
+    passoLeitura();
+    redraw();
+  }
+  function abrir(i = 0) {
+    if (!T.on) T.salvo = { showAir: S.showAir, showGrain: S.showGrain, iso: S.iso, labels: S.labels };
+    T.on = true;
+    document.body.classList.add("touring"); S.tourOn = true;
+    elP.hidden = false; elBar.hidden = false;
+    irPara(i);
+    const b = $(".bancada").getBoundingClientRect();
+    if (b.top < 0 || b.top > innerHeight * 0.4) $(".bancada").scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+    $("#passo-prox").focus({ preventScroll: true });
+  }
+  function sair() {
+    T.on = false;
+    document.body.classList.remove("touring"); S.tourOn = false;
+    elP.hidden = true; elBar.hidden = true;
+    Object.assign(S, T.salvo, { airFocus: -1, focusLabel: 0 });
+    camT = null;
+    syncViewUi();
+    redraw();
+    $("#bt-passo").focus({ preventScroll: true });
+  }
+  const avancar = () => (T.i === PASSOS.length - 1 ? sair() : irPara(T.i + 1));
+  const voltar = () => irPara(T.i - 1);
+  $("#bt-passo").addEventListener("click", () => abrir(0));
+  $("#bt-passo-topo").addEventListener("click", () => abrir(0));
+  $$("[data-passo]").forEach((b) => b.addEventListener("click", () => abrir(+b.dataset.passo)));
+  $("#passo-prox").addEventListener("click", avancar);
+  $("#passo-ant").addEventListener("click", voltar);
+  $("#bar-prox").addEventListener("click", avancar);
+  $("#bar-ant").addEventListener("click", voltar);
+  $("#passo-sair").addEventListener("click", sair);
+  $("#passo-acao").addEventListener("click", () => { PASSOS[T.i].acao.fazer(); syncViewUi(); passoLeitura(); redraw(); });
+  elP.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowRight") { e.preventDefault(); avancar(); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); voltar(); }
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && T.on && !e.target.closest("input")) sair(); });
+  cv.addEventListener("pointerdown", () => (camT = null));
+  cv.addEventListener("keydown", () => (camT = null));
+
+  /* ---------- Laço principal ---------- */
+  let stageVisible = true;
+  if ("IntersectionObserver" in window) new IntersectionObserver((es) => { stageVisible = es[0].isIntersecting; }).observe($(".bancada"));
+  let last = performance.now(), uiT = 0, vivoT = 0;
+  function frame(now) {
+    const dt = Math.min(now - last, 40) / 1000; last = now;
+    if (camT) {
+      // a câmera vai até o ângulo do passo pelo caminho mais curto
+      const k = 1 - Math.exp(-dt * 5);
+      const dy = Math.atan2(Math.sin(camT.yaw - cam.yaw), Math.cos(camT.yaw - cam.yaw)), dp = camT.pitch - cam.pitch;
+      cam.yaw += dy * k; cam.pitch += dp * k;
+      if (Math.abs(dy) + Math.abs(dp) < 0.002) camT = null;
+      if (!S.running) draw3D();
+    }
+    if (S.running && stageVisible) {
+      advance(simPerSec() * S.ritmo * dt);
+      draw3D(); drawPlan();
+    }
+    censusWork(3);
+    uiT += dt;
+    if (census.dirty && uiT > 0.3) { uiT = 0; census.dirty = false; syncCensusUi(); }
+    vivoT += dt;
+    if (T.on && PASSOS[T.i].vivo && vivoT > 0.5) { vivoT = 0; passoLeitura(); }
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- Início ---------- */
+  syncPause();
+  syncText(); syncTable();
+  for (let i = 0; i < 620; i++) advance(simPerSec() / 60);
+  censusWork(90);
+  resize();
+  drawCharts(); syncCensusUi();
+  let rT;
+  const ro = new ResizeObserver(() => { clearTimeout(rT); rT = setTimeout(() => { resize(); drawCharts(); }, 60); });
+  ro.observe(cv); ro.observe(cvP); ["f1", "f2", "f3"].forEach((id) => ro.observe(plotOf(id)));
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (!S.running) draw3D(); });
+  requestAnimationFrame((t) => { last = t; frame(t); });
+})();
+
+</script>
+
+</body></html>

@@ -28,7 +28,7 @@ site/              # tudo o que é publicado
     <projeto>/index.html  # cada gerador: prévia 3D, medidas e download do STL
   simulacoes/
     index.html     # a lista das simulações
-    <projeto>/index.html  # cada simulação, em three.js
+    <projeto>/index.html  # cada simulação, em three.js ou num canvas 2D (o aspirador ciclone)
   style.css        # o visual escrachado: contorno preto grosso, sombra dura; serve às listas, não aos geradores
   favicon.svg
   tabs.js          # troca de aba na página inicial e lembra a aba no endereço (#impressao-3d, #jogos, #simulacoes)
@@ -62,7 +62,7 @@ Todo projeto tem um desenho em `site/img/<projeto>.svg` que mostra o que o proje
 
 ### Páginas trazidas de artefatos do Claude
 
-Alguns projetos nasceram como artefato no claude.ai e vieram para cá como página própria (os geradores, o Porquinhos do Roli, o Guincho Porco Seguro, o Diferencial Aberto e o Teardown da Embreagem). Na vinda:
+Alguns projetos nasceram como artefato no claude.ai e vieram para cá como página própria (os geradores, o Porquinhos do Roli, o Guincho Porco Seguro, o Diferencial Aberto, o Teardown da Embreagem e o Dentro do Aspirador Ciclone). Na vinda:
 
 - Troque o cabeçalho que o claude.ai injeta por um `<head>` de verdade, com `lang="pt-BR"`, título `<nome> · slop`, descrição e favicon, e acrescente `[hidden] { display: none !important; }`, que vinha desse cabeçalho.
 - Tire tudo o que usa `window.claude` (salvar no banco do artefato, `downloads`, `hot`) e os textos que mandam falar com o Claude. Progresso fica no `localStorage`; arquivo sai por link `blob:`.
