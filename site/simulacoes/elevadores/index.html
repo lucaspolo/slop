@@ -388,6 +388,8 @@ body { margin: 0; }
             <button class="btn dng" id="gearFire" type="button">Romper os cabos em câmera lenta</button>
             <button class="btn pri" id="gearReset" type="button" hidden>Chamar o técnico</button>
           </div>
+          <div class="gearsvg" id="govSvg"></div>
+          <p class="note">O regulador não fica na cabine. Ele está na casa de máquinas, e o que o liga ao freio de segurança é o cabo dele: um laço fechado que desce até uma polia tensora no poço, com a alavanca das cunhas presa num ponto. Em serviço, o cabo anda junto com a cabine e faz a polia do regulador girar, e é por essa rotação que ele mede a velocidade. Passando do limite, um contato elétrico abre primeiro e manda cortar motor e freio da máquina. Se a cabine continua acelerando, a garra trava o cabo. A cabine segue, o ponto preso no cabo fica para trás, puxa a alavanca e a alavanca levanta as cunhas. O corte abaixo amplia essa última parte.</p>
           <div class="gearsvg" id="gearSvg"></div>
           <p class="note" id="gearCap"></p>
           <div class="reads" id="gearReads"></div>
@@ -514,7 +516,7 @@ body { margin: 0; }
         <li><b>Freio da máquina.</b> Molas o mantêm fechado e uma bobina o abre. Sem energia, ele fecha sozinho.</li>
         <li><b>Cadeia de segurança.</b> Contatos em série. Se um abre, o comando corta motor e freio, seja qual for o software.</li>
         <li><b>Trincos.</b> A porta de andar só destrava com a cabine na zona do andar, e a cabine não parte com porta aberta.</li>
-        <li><b>Regulador.</b> Mede a velocidade por um cabo próprio, sem depender do comando. Primeiro abre um contato elétrico, depois trava e puxa as cunhas.</li>
+        <li><b>Regulador.</b> Uma polia na casa de máquinas, girada por um cabo próprio. Esse cabo forma um laço até uma polia tensora no poço e é preso à alavanca das cunhas da cabine, então anda junto com ela. Pesos que abrem com a rotação medem a velocidade sem depender do comando. Acima do limite, primeiro abrem um contato elétrico, que corta motor e freio da máquina. Depois soltam uma garra que trava o cabo. A cabine continua, o cabo parado puxa a alavanca e as cunhas sobem. Entre regulador e freio de segurança não há fio nem software, só esse cabo.</li>
         <li><b>Freio de segurança.</b> Cunhas sob a cabine apertam as guias. O disparo mecânico fica a partir de 115% da velocidade nominal. A vista <b>Cunhas</b> mostra o mecanismo em câmera lenta.</li>
         <li><b>Para-choques.</b> Absorvem a chegada ao fundo do poço, dentro da velocidade para a qual foram calculados.</li>
       </ul>
@@ -1920,7 +1922,7 @@ const COMPARE_DEFAULT = {"label":"14 andares, 4 cabines, pico de subida, lotaç�
     { id: 'cab', n: 6, name: 'Cabine', text: 'Fica dentro de um quadro de aço com guias. Uma balança mede a carga, para bloquear a partida em sobrecarga e passar direto quando está cheia.' },
     { id: 'rails', n: 7, name: 'Guias', text: 'Trilhos de aço presos à estrutura do poço. Guiam a cabine e são onde as cunhas agarram na emergência.' },
     { id: 'gear', n: 8, name: 'Freio de segurança', text: 'Cunhas no quadro da cabine. Quando o cabo do regulador para, a cabine que segue puxa a alavanca e as cunhas sobem por uma face inclinada até apertar a guia. Só soltam com o técnico.' },
-    { id: 'gov', n: 9, name: 'Regulador', text: 'Polia com pesos que abrem com a rotação. Acima do limite, abre um contato elétrico e depois trava o próprio cabo. Funciona sem energia e sem o comando.' },
+    { id: 'gov', n: 9, name: 'Regulador', text: 'Polia na casa de máquinas, girada pelo próprio cabo, que anda com a cabine. Pesos abrem com a rotação: acima do limite, abrem um contato elétrico e depois soltam a garra que trava o cabo. É o cabo parado que aciona as cunhas. Funciona sem energia e sem o comando.' },
     { id: 'govrope', n: 10, name: 'Cabo do regulador', text: 'Laço fechado entre o regulador e uma polia tensora no poço, preso à alavanca das cunhas. Se ele para e a cabine continua, as cunhas sobem.' },
     { id: 'buffer', n: 11, name: 'Para-choques', text: 'Molas ou óleo no fundo do poço, sob a cabine e sob o contrapeso. Absorvem a chegada dentro da velocidade para a qual foram calculados, não uma queda livre.' },
     { id: 'door', n: 12, name: 'Porta de andar', text: 'Cada andar tem sua porta, travada por um trinco. A cabine traz o operador e destrava só na zona do andar. O contato faz parte da cadeia de segurança.' },
@@ -2580,7 +2582,7 @@ const COMPARE_DEFAULT = {"label":"14 andares, 4 cabines, pico de subida, lotaç�
       // tracao e regulador
       const a = c.x / 0.45;
       v.sheave.rotation.z = -a; v.drum.rotation.z = -a; v.defl.rotation.z = c.x / 0.18;
-      v.gov.rotation.z = -c.x / 0.17;
+      v.gov.rotation.z = -(c.rodFrom != null ? c.rodFrom : c.x) / 0.17; // cabo travado, polia parada
       const ratio = Math.min(1.3, Math.abs(c.v) / sim.vTrip);
       v.gw1.position.x = 0.07 + 0.07 * ratio; v.gw2.position.x = -v.gw1.position.x;
       const gap = c.brake ? 0.37 : 0.41;
@@ -3435,6 +3437,7 @@ const COMPARE_DEFAULT = {"label":"14 andares, 4 cabines, pico de subida, lotaç�
     $('gearFire').addEventListener('click', fireGear);
     $('gearReset').addEventListener('click', () => { sim.technician(sim.cars[sel]); gearTrace = null; setSpeedTo(1); });
     buildGearSvg();
+    buildGovSvg();
     attachHover('gPlot', 'gCv');
     $('cmpRun').addEventListener('click', runCompare);
     attachHover('stPlot', 'st'); attachHover('vPlot', 'vCv'); attachHover('pPlot', 'pCv');
@@ -3516,7 +3519,7 @@ const COMPARE_DEFAULT = {"label":"14 andares, 4 cabines, pico de subida, lotaç�
       '<text id="gLabW" x="' + (GEAR_CX + 40) + '" y="0" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--accent-ink)">Cunha</text>' +
       '</g></g></svg>';
     const steps = ['Perda de controle', 'Contato elétrico abre', 'Regulador trava o cabo', 'O cabo para e a cabine segue', 'Cunhas tocam a guia', 'Aperto completo', 'Cabine presa'];
-    const notes = ['Sem o motor segurando, a cabine ganha velocidade.', 'Os pesos do regulador abrem com a rotação e cortam a cadeia de segurança.', 'Se a velocidade continua a subir, a garra prende o cabo do regulador.', 'O cabo fica para trás e puxa a alavanca presa nele.', 'A folga acaba. Daqui em diante, a própria guia arrasta as cunhas.', 'As cunhas chegam ao fim do curso. As molas mantêm a força sem travar de golpe.', 'A força nas guias tirou toda a velocidade. Só o técnico solta.'];
+    const notes = ['Sem o motor segurando, a cabine ganha velocidade.', 'Os pesos do regulador abrem com a rotação e cortam a cadeia de segurança.', 'Se a velocidade continua a subir, a garra do regulador prende o cabo lá na casa de máquinas.', 'O cabo para. A cabine segue, e o ponto onde a alavanca está presa no cabo fica para trás e a puxa.', 'A folga acaba. Daqui em diante, a própria guia arrasta as cunhas.', 'As cunhas chegam ao fim do curso. As molas mantêm a força sem travar de golpe.', 'A força nas guias tirou toda a velocidade. Só o técnico solta.'];
     $('gearSteps').innerHTML = steps.map((s, i) => '<li><span class="dot">' + (i + 1) + '</span><span><b>' + s + '</b>' + notes[i] + '</span><time></time></li>').join('');
   }
 
@@ -3575,6 +3578,109 @@ const COMPARE_DEFAULT = {"label":"14 andares, 4 cabines, pico de subida, lotaç�
     lab.setAttribute('x', (GEAR_CX + inner + 25).toFixed(1));
   }
 
+  /* Laço do regulador: casa de máquinas, cabo, alavanca da cabine e polia tensora */
+  const GOV = { cx: 110, cy: 52, r: 26, py: 266, carH: 64, yHi: 104, yLo: 232, pivX: 224, rodX: 204, ropePx: 24 };
+  function buildGovSvg() {
+    const { cx, cy, r, py } = GOV;
+    const R = cx + r, L = cx - r;
+    const loop = 'M' + R + ' ' + cy + ' L' + R + ' ' + py + ' A' + r + ' ' + r + ' 0 0 1 ' + L + ' ' + py + ' L' + L + ' ' + cy + ' A' + r + ' ' + r + ' 0 0 1 ' + R + ' ' + cy + ' Z';
+    const wheel = (id, y, weights) => '<g id="' + id + '">' +
+      '<circle cx="' + cx + '" cy="' + y + '" r="' + (r - 3) + '" fill="var(--plate)" stroke="var(--s-dark)" stroke-width="3"/>' +
+      '<line x1="' + (cx - r + 5) + '" y1="' + y + '" x2="' + (cx + r - 5) + '" y2="' + y + '" stroke="var(--axis)" stroke-width="2"/>' +
+      (weights ? '<line class="gva" x1="' + cx + '" y1="' + y + '" x2="' + cx + '" y2="' + y + '" stroke="var(--ink2)" stroke-width="2"/>' +
+        '<circle class="gvw" cx="' + cx + '" cy="' + y + '" r="5" fill="var(--accent)" stroke="var(--plate)" stroke-width="1"/>' +
+        '<circle class="gvw" cx="' + cx + '" cy="' + y + '" r="5" fill="var(--accent)" stroke="var(--plate)" stroke-width="1"/>' : '') +
+      '<circle cx="' + cx + '" cy="' + y + '" r="3.5" fill="var(--ink)"/></g>';
+    const t = (x, y, s, a) => '<text x="' + x + '" y="' + y + '"' + (a ? ' text-anchor="' + a + '"' : '') + '>' + s + '</text>';
+    $('govSvg').innerHTML = '<svg viewBox="0 0 300 300" role="img" aria-label="Esquema do poço: regulador na casa de máquinas, cabo do regulador em laço até a polia tensora no poço, preso à alavanca das cunhas da cabine">' +
+      '<rect x="0" y="96" width="300" height="5" fill="var(--s-slab)"/>' +
+      '<rect x="0" y="295" width="300" height="5" fill="var(--s-slab)"/>' +
+      '<rect x="230" y="101" width="5" height="194" fill="var(--axis)"/>' +
+      '<path id="gvRope" d="' + loop + '" fill="none" stroke="var(--ink2)" stroke-width="3.5"/>' +
+      '<path id="gvTicks" d="' + loop + '" fill="none" stroke="var(--plate)" stroke-width="1.6" stroke-dasharray="4 8"/>' +
+      wheel('gvTop', cy, true) + wheel('gvBot', py, false) +
+      // garra do regulador
+      '<rect id="gvJawL" x="0" y="80" width="7" height="13" rx="1.5" fill="var(--s-dark)"/>' +
+      '<rect id="gvJawR" x="0" y="80" width="7" height="13" rx="1.5" fill="var(--s-dark)"/>' +
+      // contato eletrico
+      '<circle cx="162" cy="44" r="2.5" fill="var(--ink)"/><rect x="190" y="41" width="8" height="6" fill="var(--ink)"/>' +
+      '<line id="gvSw" x1="162" y1="44" x2="191" y2="44" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round"/>' +
+      // cabine
+      '<g id="gvCar">' +
+      '<rect x="150" y="0" width="64" height="' + GOV.carH + '" rx="2" fill="var(--s-cab)" stroke="var(--s-dark)" stroke-width="2"/>' +
+      '<rect x="214" y="5" width="16" height="10" fill="var(--s-dark)"/>' +
+      '<polygon id="gvWedge" points="" fill="var(--accent)" stroke="var(--plate)" stroke-width="1"/>' +
+      '<line id="gvBar" x1="' + GOV.rodX + '" x2="219" y1="0" y2="0" stroke="var(--ink)" stroke-width="3"/>' +
+      '<line id="gvRod" x1="' + GOV.rodX + '" x2="' + GOV.rodX + '" y1="0" y2="0" stroke="var(--ink)" stroke-width="2.5"/>' +
+      '<line id="gvLever" x1="' + R + '" y1="10" x2="' + GOV.pivX + '" y2="10" stroke="var(--ink)" stroke-width="4" stroke-linecap="round"/>' +
+      '<circle cx="' + GOV.pivX + '" cy="10" r="3.5" fill="var(--plate)" stroke="var(--ink)" stroke-width="2"/>' +
+      '<rect id="gvClamp" x="' + (R - 5) + '" y="5" width="10" height="10" rx="1.5" fill="var(--ink)"/>' +
+      '<g font-family="var(--f-body)" font-size="11" fill="var(--ink2)">' + t(178, 30, 'Alavanca', 'middle') + t(178, 50, 'Cabine', 'middle') + '</g>' +
+      '<text id="gvWedgeLab" x="240" y="58" font-family="var(--f-body)" font-size="11" font-weight="600" fill="var(--accent)">Cunha</text>' +
+      '</g>' +
+      '<g font-family="var(--f-body)" font-size="11.5" fill="var(--ink2)" paint-order="stroke" stroke="var(--stage)" stroke-width="3">' +
+      '<text x="' + cx + '" y="16" text-anchor="middle" font-weight="600" fill="var(--ink)">Regulador</text>' +
+      t(180, 64, 'Contato', 'middle') + t(154, 90, 'Garra') +
+      t(294, 90, 'Casa de máquinas', 'end') + t(294, 289, 'Poço', 'end') + t(240, 114, 'Guia') +
+      t(6, 258, 'Polia') + t(6, 272, 'tensora') +
+      '<text x="74" y="180" text-anchor="middle" transform="rotate(-90 74 180)">Cabo do regulador</text>' +
+      '</g></svg>';
+  }
+
+  function updateGovSvg() {
+    const c = sim.cars[sel];
+    if (!c || !$('gvTop')) return;
+    const { cx, cy, r, py } = GOV;
+    const R = cx + r;
+    // o cabo anda com a cabine ate a garra travar; dali em diante fica parado
+    const ropeX = c.rodFrom != null ? c.rodFrom : c.x;
+    const ang = -ropeX * GOV.ropePx / r * 180 / Math.PI;
+    $('gvTop').setAttribute('transform', 'rotate(' + ang.toFixed(1) + ' ' + cx + ' ' + cy + ')');
+    $('gvBot').setAttribute('transform', 'rotate(' + ang.toFixed(1) + ' ' + cx + ' ' + py + ')');
+    $('gvTicks').setAttribute('stroke-dashoffset', (ropeX * GOV.ropePx).toFixed(1));
+    $('gvRope').setAttribute('stroke', c.govMech ? 'var(--crit)' : 'var(--ink2)');
+    // pesos: abrem com a rotacao e ficam abertos depois do disparo
+    let ratio = Math.min(1.3, Math.abs(c.v) / sim.vTrip);
+    if (c.govMech) ratio = Math.max(1, ratio);
+    const d = 7 + 11 * ratio;
+    const ws = $('govSvg').querySelectorAll('.gvw');
+    ws[0].setAttribute('cx', cx + d); ws[1].setAttribute('cx', cx - d);
+    const arm = $('govSvg').querySelector('.gva');
+    arm.setAttribute('x1', cx - d); arm.setAttribute('x2', cx + d);
+    ws.forEach((w) => w.setAttribute('fill', ratio >= 1 ? 'var(--crit)' : 'var(--accent)'));
+    // garra
+    const gap = c.govMech ? 0 : 5;
+    $('gvJawL').setAttribute('x', (R - 2 - gap - 7).toFixed(1));
+    $('gvJawR').setAttribute('x', (R + 2 + gap).toFixed(1));
+    ['gvJawL', 'gvJawR'].forEach((id) => $(id).setAttribute('fill', c.govMech ? 'var(--crit)' : 'var(--s-dark)'));
+    // contato eletrico
+    const sw = $('gvSw');
+    const open = c.govElec;
+    sw.setAttribute('x2', open ? 186 : 191); sw.setAttribute('y2', open ? 30 : 44);
+    sw.setAttribute('stroke', open ? 'var(--crit)' : 'var(--ink)');
+    // cabine: posicao no poco, comprimida
+    const top = sim.top || 1;
+    const yc = GOV.yHi + (1 - Math.max(0, Math.min(1, c.x / top))) * (GOV.yLo - GOV.yHi);
+    $('gvCar').setAttribute('transform', 'translate(0,' + yc.toFixed(1) + ')');
+    // alavanca: o ponto preso no cabo fica para tras da cabine (curso exagerado)
+    const frac = Math.min(1, c.gearG / E.GEAR_FULL);
+    const dir = c.rodFrom == null ? 0 : (c.gearDir < 0 ? 1 : -1);
+    const endY = 10 - dir * 24 * frac;
+    $('gvLever').setAttribute('y1', endY.toFixed(1));
+    $('gvClamp').setAttribute('y', (endY - 5).toFixed(1));
+    $('gvClamp').setAttribute('fill', c.govMech ? 'var(--crit)' : 'var(--ink)');
+    const k = (GOV.pivX - GOV.rodX) / (GOV.pivX - R);
+    const rodY = 10 + (endY - 10) * k;
+    const yb = GOV.carH - 4 + (rodY - 10) * 2.5; // cunha sobe com a haste, curso exagerado
+    $('gvRod').setAttribute('y1', rodY.toFixed(1)); $('gvRod').setAttribute('y2', yb.toFixed(1));
+    $('gvBar').setAttribute('y1', yb.toFixed(1)); $('gvBar').setAttribute('y2', yb.toFixed(1));
+    const wx = c.safety ? 1.5 : 0;
+    $('gvWedge').setAttribute('points', [[217 + wx, yb + 2], [228.5 + wx, yb - 22], [228.5 + wx, yb + 2]].map((q) => q[0] + ',' + q[1].toFixed(1)).join(' '));
+    $('gvWedge').setAttribute('fill', c.safety ? 'var(--crit)' : 'var(--accent)');
+    $('gvWedgeLab').setAttribute('y', (yb - 4).toFixed(1));
+    $('gvWedgeLab').setAttribute('fill', c.safety ? 'var(--crit)' : 'var(--accent)');
+  }
+
   function updateGearPanel() {
     const c = sim.cars[sel];
     const ev = c.ev || {};
@@ -3609,7 +3715,7 @@ const COMPARE_DEFAULT = {"label":"14 andares, 4 cabines, pico de subida, lotaç�
     else if (gearSlow && c.mode === 'free') now += ' Tempo 10 vezes mais lento que o real.';
     else if (stuck && c.safety) now = 'Cabine presa nas guias. Cortar a energia não solta as cunhas: elas só saem com a cabine movida em sentido contrário, sob controle do técnico.';
     else if (c.creep) now = 'O técnico soltou as cunhas e a cabine volta em velocidade de inspeção.';
-    else now = 'Em serviço, o cabo do regulador anda junto com a cabine. A alavanca não se move e as cunhas ficam afastadas da guia.';
+    else now = 'Em serviço, o cabo do regulador anda junto com a cabine e faz girar a polia do regulador. A alavanca não se move e as cunhas ficam afastadas da guia.';
     $('gearNow').textContent = now;
     const flip = c.gearDir > 0 && c.rodFrom != null;
     $('gearCap').textContent = 'Corte visto da cabine: é a guia que parece correr. A folga e o curso estão exagerados.' + (flip ? ' Cabine subindo: o desenho inverte e atuam as cunhas do sentido oposto.' : '');
@@ -3720,7 +3826,7 @@ const COMPARE_DEFAULT = {"label":"14 andares, 4 cabines, pico de subida, lotaç�
     }
     updateScene(playing ? dtReal : 0);
     if (renderer) renderer.render(scene, camera);
-    if (viewMode === 'gear' && currentTab === 'c') updateGearSvg();
+    if (viewMode === 'gear' && currentTab === 'c') { updateGovSvg(); updateGearSvg(); }
     if (now - lastUI > 170) {
       lastUI = now;
       updateBoard(); updateAlert();
