@@ -1,0 +1,2291 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Formigário 3D · slop</title>
+<meta name="description" content="Simulação 3D de formigas guiadas por feromônio, rodando na GPU: uma colônia explorando um terreno com relevo, colônias rivais em guerra, castas, alarme e o experimento da ponte dupla.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Martian+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: cena 3D em tela cheia, painel de colônias flutuando no canto, barra de ferramentas na base */
+:root {
+  color-scheme: dark;
+  --ceu: #17130e;
+  --painel: rgba(27, 22, 16, 0.86);
+  --painel-solido: #1d1812;
+  --linha: #3d3227;
+  --texto: #f1e8d8;
+  --suave: #a89884;
+  --ambar: #e9a53b;
+  --tinta: #1b140b;
+  --ruiva: #e2643a;
+  --negra: #9aa7c6;
+  --bom: #93cf86;
+  --mal: #ff806e;
+  --display: 'Archivo', 'Arial Narrow', system-ui, sans-serif;
+  --dados: 'Martian Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+html, body { height: 100%; }
+body { margin: 0; }
+.crumbs { font: 400 11px var(--dados); color: var(--suave); }
+.crumbs a { color: var(--suave); }
+.crumbs a:hover { color: var(--texto); }
+[hidden] { display: none !important; }
+body { background: var(--ceu); color: var(--texto); font-family: var(--display); overflow: hidden; }
+#cena { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+
+.painel {
+  position: fixed; z-index: 2;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  left: calc(12px + env(safe-area-inset-left, 0px));
+  width: min(318px, calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+  max-height: calc(100% - 156px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px 14px;
+  background: var(--painel);
+  border: 1px solid var(--linha); border-radius: 10px;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.cab { display: flex; align-items: center; gap: 10px; }
+h1 { margin: 0; font-weight: 800; font-size: 16px; line-height: 1; font-stretch: 125%; text-transform: uppercase; letter-spacing: 0.01em; flex: 1; min-width: 0; text-wrap: balance; }
+h1 span { font-family: var(--dados); font-weight: 600; font-size: 11px; color: var(--ambar); font-stretch: normal; vertical-align: 2px; margin-left: 2px; }
+.chips { display: flex; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; font: 600 12px/1 var(--dados); font-variant-numeric: tabular-nums; color: var(--texto); }
+.chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.recolher { background: transparent; color: var(--suave); border: 1px solid var(--linha); border-radius: 6px; padding: 5px 8px; font: 600 11px/1 var(--display); font-stretch: 80%; text-transform: uppercase; letter-spacing: 0.08em; cursor: pointer; }
+.recolher:hover { color: var(--texto); }
+.corpo { display: flex; flex-direction: column; gap: 10px; }
+
+.col { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--linha); }
+.col-cab { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.col-nome { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; font-size: 14px; }
+.col-nome i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+.estado { font-weight: 600; font-size: 10px; font-stretch: 75%; text-transform: uppercase; letter-spacing: 0.1em; padding: 3px 7px; border-radius: 99px; border: 1px solid currentColor; color: var(--suave); }
+.estado[data-tom="bom"] { color: var(--bom); }
+.estado[data-tom="alerta"] { color: var(--ambar); }
+.estado[data-tom="mal"] { color: var(--mal); }
+.col-pop { display: flex; align-items: baseline; gap: 6px; }
+.col-pop b { font: 600 26px/1 var(--dados); font-variant-numeric: tabular-nums; color: var(--c); }
+.col-pop span { color: var(--suave); font-size: 12px; }
+.trilhas { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--suave); }
+.trilhas span { display: inline-flex; align-items: center; gap: 5px; }
+.trilhas i { width: 14px; height: 4px; border-radius: 2px; }
+dl.num { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 10px; margin: 0; }
+dl.num div { min-width: 0; }
+dl.num dt { font-weight: 600; font-size: 10px; font-stretch: 75%; text-transform: uppercase; letter-spacing: 0.08em; color: var(--suave); }
+dl.num dd { margin: 2px 0 0; font: 400 13px/1.2 var(--dados); font-variant-numeric: tabular-nums; }
+
+.grafico { display: grid; gap: 4px; padding-top: 10px; border-top: 1px solid var(--linha); }
+.rotulo { font-weight: 600; font-size: 10px; font-stretch: 75%; text-transform: uppercase; letter-spacing: 0.08em; color: var(--suave); display: flex; justify-content: space-between; gap: 8px; }
+.rotulo b { font: 400 10px var(--dados); letter-spacing: 0; text-transform: none; color: var(--suave); }
+#grafico { width: 100%; height: 54px; display: block; }
+
+.ponte { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--linha); }
+.ponte-barra { height: 8px; border-radius: 4px; background: var(--linha); overflow: hidden; }
+.ponte-barra i { display: block; height: 100%; width: 50%; background: var(--ambar); transition: width 0.4s ease; }
+.ponte-num { display: flex; justify-content: space-between; font: 600 15px/1 var(--dados); font-variant-numeric: tabular-nums; }
+.ponte-num b:last-child { color: var(--suave); }
+.nota { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--suave); }
+.tempo { display: flex; justify-content: space-between; align-items: center; font: 400 11px var(--dados); color: var(--suave); padding-top: 8px; border-top: 1px solid var(--linha); }
+.motor { padding: 4px 6px; font-size: 12px; }
+
+.barra {
+  position: fixed; z-index: 2;
+  left: calc(10px + env(safe-area-inset-left, 0px));
+  right: calc(10px + env(safe-area-inset-right, 0px));
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  max-width: 1000px; margin: 0 auto;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 12px;
+  padding: 8px 10px;
+  background: var(--painel);
+  border: 1px solid var(--linha); border-radius: 12px;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.grupo { display: inline-flex; border: 1px solid var(--linha); border-radius: 8px; overflow: hidden; }
+.grupo button { background: transparent; color: var(--texto); border: 0; padding: 8px 11px; font-weight: 600; font-size: 13px; line-height: 1; font-family: var(--display); font-stretch: 88%; cursor: pointer; }
+.grupo button + button { border-left: 1px solid var(--linha); }
+.grupo button:hover { background: rgba(233, 165, 59, 0.12); }
+.grupo button[aria-pressed="true"] { background: var(--ambar); color: var(--tinta); }
+.campo { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; font-size: 10.5px; font-stretch: 75%; text-transform: uppercase; letter-spacing: 0.08em; color: var(--suave); }
+.campo input[type="range"] { width: 86px; accent-color: var(--ambar); }
+select { background: var(--painel-solido); color: var(--texto); border: 1px solid var(--linha); border-radius: 7px; padding: 6px 8px; font: 500 13px var(--display); text-transform: none; letter-spacing: 0; }
+.acao { background: transparent; color: var(--ambar); border: 1px solid var(--ambar); border-radius: 8px; padding: 7px 12px; font: 700 13px/1 var(--display); font-stretch: 88%; cursor: pointer; }
+.acao:hover { background: var(--ambar); color: var(--tinta); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--ambar); outline-offset: 2px; }
+
+.castas { display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 12px; color: var(--suave); }
+.castas b { font: 600 12px var(--dados); font-variant-numeric: tabular-nums; color: var(--texto); }
+
+.seguir {
+  position: fixed; z-index: 3;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  width: min(268px, calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+  display: grid; gap: 8px;
+  padding: 12px 14px;
+  background: var(--painel);
+  border: 1px solid var(--linha); border-radius: 10px;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.seg-nome { display: inline-flex; align-items: baseline; gap: 7px; flex: 1; min-width: 0; }
+.seg-nome i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); align-self: center; flex: none; }
+.seg-nome b { font-weight: 800; font-size: 15px; font-stretch: 112%; }
+.seg-nome em { font: 400 11px var(--dados); font-style: normal; color: var(--suave); }
+.seg-estado { font-size: 13px; color: var(--texto); }
+.seg-estado span { color: var(--suave); }
+.vida { height: 5px; border-radius: 3px; background: var(--linha); overflow: hidden; }
+.vida i { display: block; height: 100%; width: 100%; background: var(--bom); transition: width 0.25s linear; }
+.seg-acoes { display: flex; flex-wrap: wrap; gap: 6px; }
+.mini { background: transparent; color: var(--texto); border: 1px solid var(--linha); border-radius: 7px; padding: 6px 9px; font: 600 12px/1 var(--display); font-stretch: 88%; cursor: pointer; }
+.mini:hover { border-color: var(--ambar); }
+.mini[aria-pressed="true"] { background: var(--ambar); color: var(--tinta); border-color: var(--ambar); }
+@media (max-width: 640px) {
+  .seguir { top: calc(62px + env(safe-area-inset-top, 0px)); }
+}
+
+#erro { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--texto); font-size: 15px; }
+
+@media (max-width: 560px) {
+  .barra { gap: 6px 8px; padding: 7px 8px; }
+  .grupo button { padding: 8px 9px; font-size: 12.5px; }
+  .campo input[type="range"] { width: 70px; }
+}
+</style>
+</head>
+<body>
+<canvas id="cena" aria-label="Simulação 3D de formigas"></canvas>
+
+<section class="painel" aria-label="Colônias">
+  <nav class="crumbs" aria-label="Caminho"><a href="../../">slop</a> / <a href="../">simulações</a></nav>
+  <div class="cab">
+    <h1>Formigário<span>3D</span></h1>
+    <div class="chips" id="chips"></div>
+    <button class="recolher" id="recolher" aria-expanded="true" aria-controls="corpo">Ocultar</button>
+  </div>
+  <div class="corpo" id="corpo">
+    <div id="colonias"></div>
+    <div class="ponte" id="ponte" hidden>
+      <div class="rotulo"><span>Ponte curta</span><span>Ponte longa</span></div>
+      <div class="ponte-barra"><i id="ponte-i"></i></div>
+      <div class="ponte-num"><b id="ponte-c">50%</b><b id="ponte-l">50%</b></div>
+      <p class="nota" id="ponte-nota"></p>
+    </div>
+    <div class="grafico">
+      <div class="rotulo"><span id="graf-rot">População</span><b id="graf-max"></b></div>
+      <canvas id="grafico"></canvas>
+    </div>
+    <p class="nota" id="dica">Arraste para girar a câmera e toque numa formiga para segui-la. Escolha Comida ou Parede para desenhar no terreno. Soldados são maiores e correm para o alarme; batedoras são mais claras, rápidas e exploram mais.</p>
+    <div class="tempo"><label for="motor">Motor</label><select id="motor" class="motor"><option value="gpu">GPU</option><option value="cpu">CPU</option></select></div>
+    <p class="nota" id="motor-info"></p>
+    <div class="tempo"><span>Tempo simulado</span><span id="tempo">00:00</span></div>
+  </div>
+</section>
+
+<nav class="barra" aria-label="Controles">
+  <div class="grupo" role="group" aria-label="Ferramenta">
+    <button type="button" data-tool="camera" aria-pressed="true">Câmera</button>
+    <button type="button" data-tool="comida" aria-pressed="false">Comida</button>
+    <button type="button" data-tool="parede" aria-pressed="false">Parede</button>
+    <button type="button" data-tool="apagar" aria-pressed="false">Apagar</button>
+  </div>
+  <label class="campo" for="pincel">Pincel <input type="range" id="pincel" min="2" max="14" value="5"></label>
+  <div class="grupo" role="group" aria-label="Velocidade">
+    <button type="button" data-vel="0" aria-pressed="false">Pausa</button>
+    <button type="button" data-vel="1" aria-pressed="true">1×</button>
+    <button type="button" data-vel="2" aria-pressed="false">2×</button>
+    <button type="button" data-vel="4" aria-pressed="false">4×</button>
+  </div>
+  <label class="campo" for="fero">Feromônio
+    <select id="fero">
+      <option value="ambos">Todas as trilhas</option>
+      <option value="casa">Só casa</option>
+      <option value="comida">Só comida</option>
+      <option value="alarme">Só alarme</option>
+      <option value="nenhum">Ocultar</option>
+    </select>
+  </label>
+  <label class="campo" for="cenario">Cenário
+    <select id="cenario">
+      <option value="solo">Uma colônia</option>
+      <option value="rivais">Colônias rivais</option>
+      <option value="ponte">Ponte dupla</option>
+    </select>
+  </label>
+  <button type="button" class="acao" id="seguir-btn">Seguir formiga</button>
+  <button type="button" class="acao" id="reiniciar">Reiniciar</button>
+</nav>
+
+<section class="seguir" id="seguir" hidden aria-label="Formiga seguida">
+  <div class="cab">
+    <span class="seg-nome"><i></i><b id="seg-nome">Operária</b><em id="seg-id">nº 0</em></span>
+    <button type="button" class="recolher" id="seg-soltar">Soltar</button>
+  </div>
+  <div class="seg-estado" id="seg-estado">procurando comida</div>
+  <div class="vida"><i id="seg-vida"></i></div>
+  <dl class="num">
+    <div><dt>Vida</dt><dd id="seg-hp">100</dd></div>
+    <div><dt>Restam</dt><dd id="seg-idade">0:00</dd></div>
+    <div><dt>Carrega</dt><dd id="seg-max">nada</dd></div>
+  </dl>
+  <div class="seg-acoes">
+    <button type="button" class="mini" id="seg-atras" aria-pressed="false">Câmera atrás dela</button>
+    <button type="button" class="mini" id="seg-outra">Outra formiga</button>
+  </div>
+</section>
+
+<div id="erro" hidden>Não foi possível carregar o three.js. Verifique a conexão e recarregue a página.</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function () {
+  'use strict';
+  if (!window.THREE) { document.getElementById('erro').hidden = false; return; }
+
+  /* ================= Parâmetros ================= */
+  const W = 320, H = 200, N = W * H;
+  const WALL_H = 5;
+  const MAXA = 3200;
+  const SA = 0.55;                        // ângulo entre sensores
+  const NEST_R = 3.5, NEST_SENSE = 12;
+  const DEP = 0.14, CAP = 3, DEP_DECAY = 1 / 650;
+  const EV_H = Math.pow(0.5, 2 / 3200);   // meia-vida da trilha de casa (ticks)
+  const EV_F = Math.pow(0.5, 2 / 1100);   // meia-vida da trilha de comida
+  const EV_A = Math.pow(0.5, 2 / 260);    // alarme some rápido
+  const ALARM_SD = 9;
+  const SLOPE_K = 2.6;
+  const FIGHT_R2 = 1.6 * 1.6, CHASE_R2 = 7 * 7;
+  const UPKEEP = 1 / 4000, RESERVE = 0.03;
+  const FOOD_CAP = 60;
+  const TAU = Math.PI * 2;
+  const ALARM_RGB = [255, 58, 92];
+
+  // 0 operária, 1 soldado, 2 batedora
+  const CASTAS = [
+    { nome: 'Operária', plural: 'operárias', vel: 0.55, hp: 100, dano: 1.6, sd: 5.5, aut: 0.008, carrega: true, custo: 2, peso: 1, esc: [1.35, 1.35, 1.35] },
+    { nome: 'Soldado', plural: 'soldados', vel: 0.47, hp: 260, dano: 4.5, sd: 6, aut: 0.01, carrega: false, custo: 5, peso: 2, esc: [1.95, 1.8, 1.95] },
+    { nome: 'Batedora', plural: 'batedoras', vel: 0.82, hp: 60, dano: 0.8, sd: 8.5, aut: 0.05, carrega: true, custo: 2, peso: 1, esc: [1.55, 1.1, 1.05] }
+  ];
+
+  const DEFS = [
+    { nome: 'Ruivas', corUI: '--ruiva', rgb: [[0.78, 0.3, 0.13], [0.52, 0.11, 0.05], [0.96, 0.56, 0.24]], casa: [255, 110, 40], comida: [255, 214, 70], anel: 0xe2643a },
+    { nome: 'Negras', corUI: '--negra', rgb: [[0.11, 0.12, 0.16], [0.03, 0.03, 0.05], [0.34, 0.36, 0.47]], casa: [128, 104, 255], comida: [60, 226, 255], anel: 0x8fa0d8 }
+  ];
+
+  /* ================= Ruído ================= */
+  function hash2(ix, iy, s) {
+    let h = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ Math.imul(s + 1, 1442695041);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  }
+  function vnoise(x, y, s) {
+    const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
+    const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+    const a = hash2(ix, iy, s), b = hash2(ix + 1, iy, s), c = hash2(ix, iy + 1, s), d = hash2(ix + 1, iy + 1, s);
+    return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+  }
+  function fbm(x, y, s) {
+    let v = 0, amp = 0.5, f = 1;
+    for (let o = 0; o < 4; o++) { v += amp * vnoise(x * f, y * f, s + o * 17); f *= 2; amp *= 0.5; }
+    return v / 0.9375;
+  }
+
+  /* ================= Mundo ================= */
+  const height = new Float32Array(N), grain = new Float32Array(N), grain2 = new Float32Array(N), wallVar = new Float32Array(N);
+  const wall = new Uint8Array(N), food = new Uint8Array(N), mask = new Uint8Array(N);
+  // por colônia: [casa, comida, alarme]
+  const pher = [0, 1].map(() => [new Float32Array(N), new Float32Array(N), new Float32Array(N)]);
+  const tmpGrid = new Float32Array(N);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i;
+    grain[k] = hash2(i, j, 7); grain2[k] = hash2(i, j, 3); wallVar[k] = hash2(i, j, 11) * 1.6;
+  }
+
+  let colonies = [], preset = 'solo', tick = 0, totalFood = 0, maxPop = 1500;
+  let engine = 'cpu', inSetup = false;
+  const G = { ready: false };
+
+  // Comida passa por aqui para que o motor GPU receba as mesmas alterações
+  function addFood(k, delta) {
+    const nv = Math.max(0, Math.min(FOOD_CAP, food[k] + delta));
+    const real = nv - food[k];
+    totalFood += real; food[k] = nv; foodDirty = true;
+    if (engine === 'gpu' && !inSetup && G.ready && real !== 0) { G.addData[k * 4] += real; G.addPending = true; }
+  }
+  function clearFood(k) {
+    totalFood -= food[k]; food[k] = 0; foodDirty = true;
+    if (engine === 'gpu' && !inSetup && G.ready) { G.addData[k * 4] = -1000; G.addPending = true; }
+  }
+  let HMIN = 0, HMAX = 1;
+  let foodDirty = true, mapDirty = true, terrainDirty = false;
+  let ponte = null;
+
+  /* ================= Formigas (estrutura de arrays) ================= */
+  const ax = new Float32Array(MAXA), ay = new Float32Array(MAXA), aa = new Float32Array(MAXA);
+  const at = new Float32Array(MAXA), ahp = new Float32Array(MAXA);
+  const ac = new Uint8Array(MAXA), ast = new Uint8Array(MAXA), dead = new Uint8Array(MAXA);
+  const aage = new Int32Array(MAXA), alife = new Int32Array(MAXA);
+  const acaste = new Uint8Array(MAXA), aflag = new Uint8Array(MAXA), aid = new Int32Array(MAXA);
+  let nAnts = 0, nextId = 1;
+  let followId = -1, followDeath = null;
+
+  function mkColony(d, x, y, stock) {
+    return { def: DEFS[d], x, y, stock, acc: 0, collected: 0, births: 0, saques: 0, roubado: 0,
+      mortes: { combate: 0, fome: 0, idade: 0 }, pop: 0, hist: [], castes: [0, 0, 0], alarme: 0 };
+  }
+
+  // A colônia produz mais soldados quando está em guerra
+  function chooseCaste(col) {
+    const multi = colonies.length > 1;
+    const tSold = multi ? 0.1 + Math.min(0.25, col.alarme / 200) : 0;
+    const tBat = 0.12;
+    const tOp = 1 - tSold - tBat;
+    const p = Math.max(1, col.pop);
+    const d0 = tOp - col.castes[0] / p, d1 = tSold - col.castes[1] / p, d2 = tBat - col.castes[2] / p;
+    if (d1 >= d0 && d1 >= d2 && tSold > 0) return 1;
+    if (d2 >= d0) return 2;
+    return 0;
+  }
+
+  function spawn(ci, ageFrac, caste) {
+    if (nAnts >= MAXA) return false;
+    const col = colonies[ci], i = nAnts++;
+    const r = Math.random() * 2.5, t = Math.random() * TAU;
+    ax[i] = col.x + Math.cos(t) * r; ay[i] = col.y + Math.sin(t) * r; aa[i] = t;
+    ac[i] = ci; ast[i] = 0; at[i] = 0; dead[i] = 0; aflag[i] = 0;
+    acaste[i] = caste; ahp[i] = CASTAS[caste].hp; aid[i] = nextId++;
+    alife[i] = 10000 + ((Math.random() * 7000) | 0);
+    aage[i] = (alife[i] * ageFrac * Math.random()) | 0;
+    col.pop++; col.castes[caste]++;
+    return true;
+  }
+
+  function kill(i, causa) {
+    if (dead[i]) return;
+    dead[i] = 1;
+    const col = colonies[ac[i]];
+    col.pop--; col.mortes[causa]++; col.castes[acaste[i]]--;
+    if (aid[i] === followId) followDeath = causa;
+    if (ast[i] === 1) {
+      const k = (ay[i] | 0) * W + (ax[i] | 0);
+      if (!wall[k] && food[k] < FOOD_CAP) { food[k]++; totalFood++; foodDirty = true; }
+    }
+  }
+
+  function killRandom(ci) {
+    if (nAnts === 0) return false;
+    const start = (Math.random() * nAnts) | 0;
+    for (let n = 0; n < nAnts; n++) {
+      const j = (start + n) % nAnts;
+      if (ac[j] === ci && !dead[j]) { kill(j, 'fome'); return true; }
+    }
+    return false;
+  }
+
+  function compact() {
+    let j = 0;
+    for (let i = 0; i < nAnts; i++) {
+      if (dead[i]) continue;
+      if (i !== j) {
+        ax[j] = ax[i]; ay[j] = ay[i]; aa[j] = aa[i]; at[j] = at[i]; ahp[j] = ahp[i];
+        ac[j] = ac[i]; ast[j] = ast[i]; aage[j] = aage[i]; alife[j] = alife[i];
+        acaste[j] = acaste[i]; aflag[j] = aflag[i]; aid[j] = aid[i];
+      }
+      dead[j] = 0; j++;
+    }
+    nAnts = j;
+  }
+
+  function blocked(x, y) {
+    if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) return true;
+    return wall[(y | 0) * W + (x | 0)] === 1;
+  }
+
+  function hAt(x, y) {
+    let fx = x - 0.5, fy = y - 0.5;
+    if (fx < 0) fx = 0; else if (fx > W - 1.001) fx = W - 1.001;
+    if (fy < 0) fy = 0; else if (fy > H - 1.001) fy = H - 1.001;
+    const ix = fx | 0, iy = fy | 0, tx = fx - ix, ty = fy - iy, k = iy * W + ix;
+    const a = height[k], b = height[k + 1], c = height[k + W], d = height[k + W + 1];
+    return a + (b - a) * tx + (c - a) * ty + (a - b - c + d) * tx * ty;
+  }
+
+  function sense(g, x, y, wantFood) {
+    const ix = x | 0, iy = y | 0;
+    if (ix < 1 || iy < 1 || ix >= W - 1 || iy >= H - 1) return -1;
+    const c = iy * W + ix;
+    if (wall[c]) return -1;
+    let v = g[c] + 0.5 * (g[c - 1] + g[c + 1] + g[c - W] + g[c + W]);
+    if (wantFood && food[c]) v += 30;
+    return v;
+  }
+
+  function turnToward(a, t, k) {
+    let d = t - a;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    return a + d * k;
+  }
+
+  /* Grade espacial para combate */
+  const BS = 4, BW = Math.ceil(W / BS), BH = Math.ceil(H / BS);
+  const bHead = new Int32Array(BW * BH), bNext = new Int32Array(MAXA);
+  function buildBuckets() {
+    bHead.fill(-1);
+    for (let i = 0; i < nAnts; i++) {
+      const b = ((ay[i] / BS) | 0) * BW + ((ax[i] / BS) | 0);
+      bNext[i] = bHead[b]; bHead[b] = i;
+    }
+  }
+  // Dano recebido de inimigos encostados (até 3 de uma vez)
+  function enemyDamage(x, y, ci) {
+    const bx = (x / BS) | 0, by = (y / BS) | 0;
+    let n = 0, dmg = 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      const yy = by + dy; if (yy < 0 || yy >= BH) continue;
+      for (let dx = -1; dx <= 1; dx++) {
+        const xx = bx + dx; if (xx < 0 || xx >= BW) continue;
+        let j = bHead[yy * BW + xx];
+        while (j !== -1) {
+          if (ac[j] !== ci && !dead[j]) {
+            const ex = ax[j] - x, ey = ay[j] - y;
+            if (ex * ex + ey * ey < FIGHT_R2) { dmg += CASTAS[acaste[j]].dano; if (++n >= 3) return dmg; }
+          }
+          j = bNext[j];
+        }
+      }
+    }
+    return dmg;
+  }
+  // Inimigo mais próximo dentro do raio de perseguição dos soldados
+  function nearestEnemy(x, y, ci) {
+    const bx = (x / BS) | 0, by = (y / BS) | 0;
+    let best = -1, bd = CHASE_R2;
+    for (let dy = -2; dy <= 2; dy++) {
+      const yy = by + dy; if (yy < 0 || yy >= BH) continue;
+      for (let dx = -2; dx <= 2; dx++) {
+        const xx = bx + dx; if (xx < 0 || xx >= BW) continue;
+        let j = bHead[yy * BW + xx];
+        while (j !== -1) {
+          if (ac[j] !== ci && !dead[j]) {
+            const ex = ax[j] - x, ey = ay[j] - y, d = ex * ex + ey * ey;
+            if (d < bd) { bd = d; best = j; }
+          }
+          j = bNext[j];
+        }
+      }
+    }
+    return best;
+  }
+  function depositAlarm(g, x, y) {
+    const cx = x | 0, cy = y | 0;
+    for (let j = cy - 3; j <= cy + 3; j++) {
+      if (j < 1 || j >= H - 1) continue;
+      for (let i = cx - 3; i <= cx + 3; i++) {
+        if (i < 1 || i >= W - 1) continue;
+        const d = Math.hypot(i - cx, j - cy);
+        if (d > 3.5) continue;
+        const k = j * W + i;
+        if (wall[k]) continue;
+        const v = g[k] + 0.25 * (1 - d / 4);
+        g[k] = v > 2 ? 2 : v;
+      }
+    }
+  }
+  function senseA(g, x, y) {
+    const ix = x | 0, iy = y | 0;
+    if (ix < 1 || iy < 1 || ix >= W - 1 || iy >= H - 1) return 0;
+    const c = iy * W + ix;
+    return g[c] + 0.5 * (g[c - 1] + g[c + 1] + g[c - W] + g[c + W]);
+  }
+  // O alarme se espalha pelo ar
+  function diffuseAlarm(g) {
+    for (let j = 1; j < H - 1; j++) {
+      const r = j * W;
+      for (let i = 1; i < W - 1; i++) {
+        const k = r + i;
+        tmpGrid[k] = wall[k] ? 0 : g[k] * 0.6 + (g[k - 1] + g[k + 1] + g[k - W] + g[k + W]) * 0.1;
+      }
+    }
+    g.set(tmpGrid);
+  }
+
+  /* ================= Comportamento ================= */
+  // aflag: 0 normal, 1 em combate, 2 fugindo do alarme, 3 atendendo alarme, 4 perseguindo inimigo
+  function updateAnt(i, multi) {
+    const ci = ac[i], col = colonies[ci], cs = acaste[i], K = CASTAS[cs];
+    let x = ax[i], y = ay[i], a = aa[i];
+    if (++aage[i] > alife[i]) { kill(i, 'idade'); return; }
+    at[i]++;
+    let sp = K.vel, flag = 0, steered = false;
+    const alarmG = pher[ci][2];
+
+    if (multi) {
+      const dmg = enemyDamage(x, y, ci);
+      if (dmg > 0) {
+        ahp[i] -= dmg;
+        if (ahp[i] <= 0) { kill(i, 'combate'); return; }
+        sp *= cs === 1 ? 0.15 : 0.3;
+        a += (Math.random() - 0.5) * 1.4;
+        flag = 1; steered = true;
+        col.alarme += 0.01;
+        depositAlarm(alarmG, x, y);
+      } else if (ahp[i] < K.hp) ahp[i] += 0.03;
+      if (!steered && cs === 1) {
+        const j = nearestEnemy(x, y, ci);
+        if (j >= 0) { a = turnToward(a, Math.atan2(ay[j] - y, ax[j] - x), 0.35); sp *= 1.15; flag = 4; steered = true; }
+      }
+    }
+
+    const c0 = (y | 0) * W + (x | 0);
+
+    if (steered) {
+      // combate ou perseguição já decidiram a direção
+    } else if (ast[i] === 1) {
+      const dx = col.x - x, dy = col.y - y, d2 = dx * dx + dy * dy;
+      if (d2 < NEST_R * NEST_R) {
+        col.stock++; col.collected++; ast[i] = 0; at[i] = 0; a += Math.PI; steered = true;
+      } else if (d2 < NEST_SENSE * NEST_SENSE) {
+        a = turnToward(a, Math.atan2(dy, dx), 0.25); steered = true;
+      }
+    } else if (K.carrega && food[c0] > 0) {
+      food[c0]--; totalFood--; foodDirty = true;
+      ast[i] = 1; at[i] = 0; a += Math.PI; steered = true;
+    } else {
+      const dx = col.x - x, dy = col.y - y, d2n = dx * dx + dy * dy;
+      if (d2n < 49) at[i] = 0;
+      // soldado sem alarme não se afasta demais do ninho
+      if (cs === 1 && d2n > 75 * 75) a = turnToward(a, Math.atan2(dy, dx), 0.04);
+      if (multi && K.carrega) {
+        for (let o = 0; o < colonies.length; o++) {
+          if (o === ci) continue;
+          const en = colonies[o], ex = en.x - x, ey = en.y - y;
+          if (ex * ex + ey * ey < 25 && en.stock >= 1 && Math.random() < 0.06) {
+            en.stock -= 1; en.roubado++; col.saques++;
+            ast[i] = 1; at[i] = 0; a += Math.PI; steered = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // Alarme: soldados vão até ele, quem procura comida foge
+    if (!steered && multi && !(cs !== 1 && ast[i] === 1)) {
+      const aC = senseA(alarmG, x + Math.cos(a) * ALARM_SD, y + Math.sin(a) * ALARM_SD);
+      const aL = senseA(alarmG, x + Math.cos(a - SA) * ALARM_SD, y + Math.sin(a - SA) * ALARM_SD);
+      const aR = senseA(alarmG, x + Math.cos(a + SA) * ALARM_SD, y + Math.sin(a + SA) * ALARM_SD);
+      const m = Math.max(aC, aL, aR);
+      if (m > 0.05) {
+        if (cs === 1) {
+          if (aL === m && aL > aC) a -= SA * 0.6; else if (aR === m && aR > aC) a += SA * 0.6;
+          sp *= 1.25; flag = 3;
+        } else {
+          if (aC === m) a += (aL < aR ? -1 : 1) * SA * 1.1;
+          else if (aL === m) a += SA * 0.7;
+          else a -= SA * 0.7;
+          sp *= 1.15; flag = 2;
+        }
+        a += (Math.random() - 0.5) * 0.1;
+        steered = true;
+      }
+    }
+
+    if (!steered) {
+      const busca = ast[i] === 0, SD = K.sd;
+      const g = busca ? pher[ci][1] : pher[ci][0];
+      const querComida = busca && K.carrega;
+      if (Math.random() < K.aut) {
+        a += (Math.random() - 0.5) * 2.2;
+      } else {
+        const vC = sense(g, x + Math.cos(a) * SD, y + Math.sin(a) * SD, querComida);
+        const vL = sense(g, x + Math.cos(a - SA) * SD, y + Math.sin(a - SA) * SD, querComida);
+        const vR = sense(g, x + Math.cos(a + SA) * SD, y + Math.sin(a + SA) * SD, querComida);
+        if (vC < 0) a += (vL >= vR ? -1 : 1) * SA * 0.9;
+        else if (vL > vC && vL >= vR && vL > 0.03) a -= SA * 0.45;
+        else if (vR > vC && vR > vL && vR > 0.03) a += SA * 0.45;
+        else if (vC <= 0.03 && Math.random() < 0.02) a += (Math.random() - 0.5) * 1.2;
+      }
+      a += (Math.random() - 0.5) * 0.16;
+    }
+
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const inWall = wall[c0] === 1;
+    const nx = x + ca * sp, ny = y + sa * sp;
+    if (!inWall && blocked(nx, ny)) {
+      a += Math.PI * 0.5 + Math.random() * Math.PI;
+    } else {
+      const slope = (hAt(nx, ny) - hAt(x, y)) / sp;
+      const f = slope > 0 ? 1 / (1 + slope * SLOPE_K) : Math.min(1.3, 1 - slope * 0.6);
+      const mx = x + ca * sp * f, my = y + sa * sp * f;
+      const ok = inWall ? (mx >= 1 && my >= 1 && mx < W - 1 && my < H - 1) : !blocked(mx, my);
+      if (ok) { x = mx; y = my; }
+    }
+    a -= TAU * Math.floor((a + Math.PI) / TAU);
+
+    const c1 = (y | 0) * W + (x | 0);
+    const inten = Math.exp(-at[i] * DEP_DECAY);
+    if (inten > 0.02 && !wall[c1]) {
+      const g = ast[i] === 1 ? pher[ci][1] : pher[ci][0];
+      const v = g[c1] + inten * DEP;
+      g[c1] = v > CAP ? CAP : v;
+    }
+    ax[i] = x; ay[i] = y; aa[i] = a; aflag[i] = flag;
+  }
+
+  function evaporate() {
+    for (let ci = 0; ci < colonies.length; ci++) {
+      const h = pher[ci][0], f = pher[ci][1], al = pher[ci][2];
+      for (let k = 0; k < N; k++) { h[k] *= EV_H; f[k] *= EV_F; al[k] *= EV_A; }
+    }
+  }
+
+  function step() {
+    tick++;
+    if ((tick & 1) === 0) evaporate();
+    const multi = colonies.length > 1;
+    if (multi && (tick & 3) === 0) for (let ci = 0; ci < colonies.length; ci++) diffuseAlarm(pher[ci][2]);
+    if (multi) buildBuckets();
+    const n0 = nAnts;
+    for (let i = 0; i < n0; i++) if (!dead[i]) updateAnt(i, multi);
+
+    for (let ci = 0; ci < colonies.length; ci++) {
+      const col = colonies[ci];
+      col.alarme *= 0.998;
+      // soldados comem o dobro
+      col.acc += (col.pop + col.castes[1]) * UPKEEP;
+      while (col.acc >= 1) {
+        col.acc -= 1;
+        if (col.stock >= 1) col.stock -= 1;
+        else if (!killRandom(ci)) { col.acc = 0; break; }
+      }
+    }
+    compact();
+
+    if (tick % 3 === 0) {
+      for (let ci = 0; ci < colonies.length; ci++) {
+        const col = colonies[ci];
+        if (col.pop > 0 && col.pop < maxPop) {
+          const cs = chooseCaste(col), custo = CASTAS[cs].custo;
+          if (col.stock >= custo + col.pop * RESERVE && spawn(ci, 0, cs)) { col.stock -= custo; col.births++; }
+        }
+      }
+    }
+    if (tick % 60 === 0) {
+      for (const col of colonies) { col.hist.push(col.pop); if (col.hist.length > 300) col.hist.shift(); }
+    }
+    if (preset !== 'ponte' && tick % 700 === 0 && totalFood < 3000) randomCluster();
+    if (ponte) {
+      if (tick % 30 === 0) countPonte();
+      if (tick % 600 === 0) refillFoodRoom();
+    }
+  }
+
+  /* ================= Cenários ================= */
+  function foodCluster(cx, cy, r) {
+    const x0 = Math.max(1, Math.floor(cx - r)), x1 = Math.min(W - 2, Math.ceil(cx + r));
+    const y0 = Math.max(1, Math.floor(cy - r)), y1 = Math.min(H - 2, Math.ceil(cy + r));
+    for (let j = y0; j <= y1; j++) for (let i = x0; i <= x1; i++) {
+      const k = j * W + i;
+      if (wall[k]) continue;
+      const d = Math.hypot(i + 0.5 - cx, j + 0.5 - cy);
+      if (d > r) continue;
+      const v = engine === 'gpu' ? (20 + 40 * (1 - d / r)) | 0 : (6 + 12 * (1 - d / r)) | 0;
+      addFood(k, v);
+    }
+    foodDirty = true;
+  }
+  function randomCluster() {
+    const big = engine === 'gpu';
+    for (let t = 0; t < 40; t++) {
+      const x = 20 + Math.random() * (W - 40), y = 20 + Math.random() * (H - 40);
+      if (wall[(y | 0) * W + (x | 0)]) continue;
+      let ok = true;
+      for (const c of colonies) if (Math.hypot(c.x - x, c.y - y) < 40) ok = false;
+      if (ok) { foodCluster(x, y, big ? 6 + Math.random() * 4 : 4 + Math.random() * 3); return; }
+    }
+  }
+  function populate(ci, nCpu, nGpu) {
+    if (engine === 'gpu') { for (let n = 0; n < nGpu; n++) gpuSeedAnt(ci); }
+    else for (let n = 0; n < nCpu; n++) spawn(ci, 0.6, chooseCaste(colonies[ci]));
+  }
+  function relevo(rochas) {
+    const s = (Math.random() * 10000) | 0;
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      const k = j * W + i;
+      height[k] = fbm(i / 75, j / 75, s) * 15 + fbm(i / 24, j / 24, s + 40) * 3.5;
+      wall[k] = rochas && fbm(i / 18, j / 18, s + 90) > 0.72 ? 1 : 0;
+    }
+  }
+  function flattenAround(x, y, r0, r1) {
+    const hN = height[(y | 0) * W + (x | 0)];
+    for (let j = Math.max(0, (y - r1) | 0); j < Math.min(H, y + r1 + 1); j++)
+      for (let i = Math.max(0, (x - r1) | 0); i < Math.min(W, x + r1 + 1); i++) {
+        const d = Math.hypot(i + 0.5 - x, j + 0.5 - y);
+        if (d > r1) continue;
+        let t = d <= r0 ? 1 : 1 - (d - r0) / (r1 - r0);
+        t = t * t * (3 - 2 * t);
+        const k = j * W + i;
+        height[k] += (hN - height[k]) * t;
+      }
+  }
+  function carveCircle(x, y, r, clearOnly) {
+    for (let j = Math.max(1, (y - r) | 0); j < Math.min(H - 1, y + r + 1); j++)
+      for (let i = Math.max(1, (x - r) | 0); i < Math.min(W - 1, x + r + 1); i++) {
+        if (Math.hypot(i + 0.5 - x, j + 0.5 - y) > r) continue;
+        const k = j * W + i; wall[k] = 0; if (!clearOnly) mask[k] = 0;
+      }
+  }
+  function carveSeg(x1, y1, x2, y2, r, val) {
+    const xa = Math.max(1, Math.floor(Math.min(x1, x2) - r)), xb = Math.min(W - 2, Math.ceil(Math.max(x1, x2) + r));
+    const ya = Math.max(1, Math.floor(Math.min(y1, y2) - r)), yb = Math.min(H - 2, Math.ceil(Math.max(y1, y2) + r));
+    const dx = x2 - x1, dy = y2 - y1, L2 = dx * dx + dy * dy || 1;
+    for (let j = ya; j <= yb; j++) for (let i = xa; i <= xb; i++) {
+      const px = i + 0.5, py = j + 0.5;
+      let t = ((px - x1) * dx + (py - y1) * dy) / L2;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const ex = px - (x1 + dx * t), ey = py - (y1 + dy * t);
+      if (ex * ex + ey * ey <= r * r) { const k = j * W + i; wall[k] = 0; mask[k] = val; }
+    }
+  }
+  function carvePath(pts, r, val) {
+    let len = 0;
+    for (let n = 0; n < pts.length - 1; n++) {
+      carveSeg(pts[n][0], pts[n][1], pts[n + 1][0], pts[n + 1][1], r, val);
+      len += Math.hypot(pts[n + 1][0] - pts[n][0], pts[n + 1][1] - pts[n][1]);
+    }
+    return len;
+  }
+  function border() {
+    for (let i = 0; i < W; i++) { wall[i] = 1; wall[(H - 1) * W + i] = 1; }
+    for (let j = 0; j < H; j++) { wall[j * W] = 1; wall[j * W + W - 1] = 1; }
+  }
+
+  function setupSolo() {
+    relevo(true);
+    const gpu = engine === 'gpu';
+    colonies = [mkColony(0, 160, 100, gpu ? 2000 : 300)];
+    flattenAround(160, 100, 9, 20); carveCircle(160, 100, 22, true);
+    border();
+    for (let n = 0; n < 7; n++) randomCluster();
+    maxPop = gpu ? Math.floor(GCAP * 0.9) : 2500;
+    populate(0, 300, 2500);
+  }
+
+  function setupRivais() {
+    relevo(true);
+    const gpu = engine === 'gpu';
+    colonies = [mkColony(0, 52, 100, gpu ? 1500 : 260), mkColony(1, 268, 100, gpu ? 1500 : 260)];
+    for (const c of colonies) { flattenAround(c.x, c.y, 9, 20); carveCircle(c.x, c.y, 22, true); }
+    border();
+    foodCluster(160, 55 + Math.random() * 25, gpu ? 9 : 6);
+    foodCluster(160, 120 + Math.random() * 25, gpu ? 9 : 6);
+    for (let n = 0; n < 4; n++) randomCluster();
+    maxPop = gpu ? Math.floor(GCAP * 0.48) : 1500;
+    for (let ci = 0; ci < 2; ci++) populate(ci, 250, 2000);
+  }
+
+  function setupPonte() {
+    const s = (Math.random() * 10000) | 0;
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) height[j * W + i] = fbm(i / 40, j / 40, s) * 1.4;
+    wall.fill(1);
+    const curta = [[40, 100], [95, 55], [225, 55], [280, 100]];
+    const longa = [[40, 100], [95, 145], [95, 186], [225, 186], [225, 145], [280, 100]];
+    const lc = carvePath(curta, 4.2, 1), ll = carvePath(longa, 4.2, 2);
+    carveCircle(40, 100, 16); carveCircle(280, 100, 16);
+    border();
+    const gpu = engine === 'gpu';
+    colonies = [mkColony(0, 40, 100, gpu ? 1500 : 300)];
+    ponte = { curta: 0, longa: 0, lenC: Math.round(lc - 32), lenL: Math.round(ll - 32), hist: [], fx: 280, fy: 100 };
+    refillFoodRoom();
+    maxPop = gpu ? 3000 : 500;
+    populate(0, 300, 1500);
+  }
+  function refillFoodRoom() {
+    const r = 9, gpu = engine === 'gpu' && !inSetup && G.ready;
+    for (let j = ponte.fy - r; j <= ponte.fy + r; j++) for (let i = ponte.fx - r; i <= ponte.fx + r; i++) {
+      if (Math.hypot(i + 0.5 - ponte.fx, j + 0.5 - ponte.fy) > r) continue;
+      const k = j * W + i;
+      if (wall[k]) continue;
+      if (gpu) { G.addData[k * 4 + 1] = 30; G.addPending = true; }
+      if (food[k] >= 30) continue;
+      totalFood += 30 - food[k]; food[k] = 30;
+    }
+    foodDirty = true;
+  }
+  function countPonte() {
+    let s = 0, l = 0;
+    for (let i = 0; i < nAnts; i++) {
+      const m = mask[(ay[i] | 0) * W + (ax[i] | 0)];
+      if (m === 1) s++; else if (m === 2) l++;
+    }
+    ponte.curta = s; ponte.longa = l;
+    if (tick % 60 === 0) {
+      ponte.hist.push(s + l ? s / (s + l) : 0.5);
+      if (ponte.hist.length > 300) ponte.hist.shift();
+    }
+  }
+
+  function setup(p) {
+    preset = p; tick = 0; totalFood = 0; nAnts = 0; ponte = null;
+    stopFollow();
+    wall.fill(0); food.fill(0); mask.fill(0);
+    for (const g of pher) { g[0].fill(0); g[1].fill(0); g[2].fill(0); }
+    if (engine === 'gpu') { makeGPU(); G.initData.fill(0); G.seedCount = 0; }
+    inSetup = true;
+    if (p === 'ponte') setupPonte(); else if (p === 'rivais') setupRivais(); else setupSolo();
+    inSetup = false;
+    HMIN = Infinity; HMAX = -Infinity;
+    for (let k = 0; k < N; k++) { if (height[k] < HMIN) HMIN = height[k]; if (height[k] > HMAX) HMAX = height[k]; }
+    updateTerrainHeights();
+    mapDirty = true; foodDirty = true;
+    if (engine === 'gpu') gpuUpload();
+    applyEngineVisuals();
+    buildSkirt(); buildNests(); buildColonyUI(); fitCamera();
+  }
+
+  /* ================= Renderização ================= */
+  const canvas = document.getElementById('cena');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x17130e);
+  scene.fog = new THREE.Fog(0x17130e, 420, 900);
+  const camera = new THREE.PerspectiveCamera(42, 1, 1, 2000);
+  const controls = THREE.OrbitControls ? new THREE.OrbitControls(camera, canvas)
+    : { update() {}, target: new THREE.Vector3(), mouseButtons: {}, touches: {} };
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.maxPolarAngle = 1.35;
+  controls.minDistance = 20;
+  controls.maxDistance = 720;
+  controls.screenSpacePanning = false;
+
+  scene.add(new THREE.HemisphereLight(0xfff1dc, 0x3a2c1c, 0.75));
+  const sun = new THREE.DirectionalLight(0xffe2b8, 0.85);
+  sun.position.set(-120, 200, -60);
+  scene.add(sun);
+
+  // Terreno
+  const posArr = new Float32Array(N * 3), uvArr = new Float32Array(N * 2);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i;
+    posArr[k * 3] = i + 0.5 - W / 2; posArr[k * 3 + 2] = j + 0.5 - H / 2;
+    uvArr[k * 2] = (i + 0.5) / W; uvArr[k * 2 + 1] = (j + 0.5) / H;
+  }
+  const index = new Uint32Array((W - 1) * (H - 1) * 6);
+  let q = 0;
+  for (let j = 0; j < H - 1; j++) for (let i = 0; i < W - 1; i++) {
+    const a = j * W + i, b = a + 1, c = a + W, d = c + 1;
+    index[q++] = a; index[q++] = c; index[q++] = b;
+    index[q++] = b; index[q++] = c; index[q++] = d;
+  }
+  const terrGeo = new THREE.BufferGeometry();
+  const posAttr = new THREE.BufferAttribute(posArr, 3);
+  terrGeo.setAttribute('position', posAttr);
+  terrGeo.setAttribute('uv', new THREE.BufferAttribute(uvArr, 2));
+  terrGeo.setIndex(new THREE.BufferAttribute(index, 1));
+
+  const mapData = new Uint8Array(N * 4), emData = new Uint8Array(N * 4);
+  const mapTex = new THREE.DataTexture(mapData, W, H, THREE.RGBAFormat);
+  const emTex = new THREE.DataTexture(emData, W, H, THREE.RGBAFormat);
+  for (const t of [mapTex, emTex]) { t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearFilter; t.needsUpdate = true; }
+  const terrMat = new THREE.MeshLambertMaterial({ map: mapTex, emissive: 0xffffff, emissiveMap: emTex });
+  const terrain = new THREE.Mesh(terrGeo, terrMat);
+  scene.add(terrain);
+
+  function updateTerrainHeights() {
+    for (let k = 0; k < N; k++) posArr[k * 3 + 1] = height[k] + (wall[k] ? WALL_H + wallVar[k] : 0);
+    posAttr.needsUpdate = true;
+    terrGeo.computeVertexNormals();
+    terrGeo.computeBoundingSphere();
+  }
+
+  function paintMap() {
+    const span = (HMAX - HMIN) || 1;
+    for (let k = 0; k < N; k++) {
+      const o = k * 4, g = grain[k];
+      let r, gg, b;
+      if (wall[k]) {
+        const v = 0.78 + g * 0.3;
+        r = 112 * v; gg = 105 * v; b = 97 * v;
+      } else {
+        const t = (height[k] - HMIN) / span, v = 0.9 + g * 0.2;
+        r = (70 + 92 * t) * v; gg = (54 + 74 * t) * v; b = (36 + 46 * t) * v;
+      }
+      mapData[o] = r; mapData[o + 1] = gg; mapData[o + 2] = b; mapData[o + 3] = 255;
+    }
+    mapTex.needsUpdate = true;
+    mapDirty = false;
+  }
+
+  let pherMode = 'ambos', emCleared = false;
+  function paintEmissive() {
+    if (pherMode === 'nenhum') {
+      if (!emCleared) { emData.fill(0); emTex.needsUpdate = true; emCleared = true; }
+      return;
+    }
+    emCleared = false;
+    const showH = pherMode === 'ambos' || pherMode === 'casa';
+    const showF = pherMode === 'ambos' || pherMode === 'comida';
+    const showA = pherMode === 'ambos' || pherMode === 'alarme';
+    const nc = colonies.length;
+    for (let k = 0; k < N; k++) {
+      let r = 0, g = 0, b = 0;
+      for (let ci = 0; ci < nc; ci++) {
+        const d = DEFS[ci];
+        if (showA) {
+          const v = pher[ci][2][k];
+          if (v > 0.01) { const s = Math.sqrt(v > 1 ? 1 : v) * 1.1; r += ALARM_RGB[0] * s; g += ALARM_RGB[1] * s; b += ALARM_RGB[2] * s; }
+        }
+        if (showH) {
+          const v = pher[ci][0][k];
+          if (v > 0.004) { const s = Math.sqrt(v > 1 ? 1 : v) * 0.5; r += d.casa[0] * s; g += d.casa[1] * s; b += d.casa[2] * s; }
+        }
+        if (showF) {
+          const v = pher[ci][1][k];
+          if (v > 0.004) { const s = Math.sqrt(v > 1 ? 1 : v) * 0.9; r += d.comida[0] * s; g += d.comida[1] * s; b += d.comida[2] * s; }
+        }
+      }
+      const o = k * 4;
+      emData[o] = r > 255 ? 255 : r; emData[o + 1] = g > 255 ? 255 : g; emData[o + 2] = b > 255 ? 255 : b; emData[o + 3] = 255;
+    }
+    emTex.needsUpdate = true;
+  }
+
+  // Saia lateral: corte do solo nas bordas do terrário
+  let skirt = null;
+  const skirtMat = new THREE.MeshLambertMaterial({ color: 0x2e2216, side: THREE.DoubleSide });
+  function buildSkirt() {
+    if (skirt) { scene.remove(skirt); skirt.geometry.dispose(); }
+    const edges = [[], [], [], []];
+    for (let i = 0; i < W; i++) { edges[0].push(i); edges[1].push((H - 1) * W + i); }
+    for (let j = 0; j < H; j++) { edges[2].push(j * W); edges[3].push(j * W + W - 1); }
+    const yb = HMIN - 9, v = [];
+    for (const e of edges) for (let n = 0; n < e.length - 1; n++) {
+      const k1 = e[n] * 3, k2 = e[n + 1] * 3;
+      const x1 = posArr[k1], y1 = posArr[k1 + 1], z1 = posArr[k1 + 2];
+      const x2 = posArr[k2], y2 = posArr[k2 + 1], z2 = posArr[k2 + 2];
+      v.push(x1, y1, z1, x2, y2, z2, x1, yb, z1, x2, y2, z2, x2, yb, z2, x1, yb, z1);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(v), 3));
+    g.computeVertexNormals();
+    skirt = new THREE.Mesh(g, skirtMat);
+    scene.add(skirt);
+  }
+
+  // Formigueiros
+  const nestGroup = new THREE.Group();
+  scene.add(nestGroup);
+  function buildNests() {
+    for (const g of nestGroup.children.slice()) {
+      nestGroup.remove(g);
+      g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+    }
+    for (const col of colonies) {
+      const g = new THREE.Group();
+      const mound = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 6.5, 2.4, 28, 1), new THREE.MeshLambertMaterial({ color: 0x8c6c46 }));
+      mound.position.y = 1.0;
+      const hole = new THREE.Mesh(new THREE.CircleGeometry(1.7, 20), new THREE.MeshBasicMaterial({ color: 0x0b0806 }));
+      hole.rotation.x = -Math.PI / 2; hole.position.y = 2.22;
+      const anel = new THREE.Mesh(new THREE.TorusGeometry(7.4, 0.32, 6, 48),
+        new THREE.MeshLambertMaterial({ color: col.def.anel, emissive: col.def.anel, emissiveIntensity: 0.45 }));
+      anel.rotation.x = Math.PI / 2; anel.position.y = 0.25;
+      g.add(mound, hole, anel);
+      g.position.set(col.x - W / 2, hAt(col.x, col.y) - 0.2, col.y - H / 2);
+      nestGroup.add(g);
+    }
+  }
+
+  // Formiga: abdômen, tórax, cabeça, pernas e antenas
+  function antGeometry() {
+    const parts = [];
+    const add = (g, x, y, z, sx, sy, sz, ry) => {
+      g.scale(sx, sy, sz); if (ry) g.rotateY(ry); g.translate(x, y, z);
+      parts.push(g.index ? g.toNonIndexed() : g);
+    };
+    add(new THREE.SphereGeometry(0.42, 8, 6), -0.62, 0.05, 0, 1.35, 0.85, 0.95);
+    add(new THREE.SphereGeometry(0.22, 6, 5), -0.05, 0.02, 0, 1.4, 0.8, 0.9);
+    add(new THREE.SphereGeometry(0.27, 7, 5), 0.42, 0.04, 0, 1.0, 0.85, 1.0);
+    for (const ry of [-0.55, 0, 0.55]) add(new THREE.BoxGeometry(0.07, 0.05, 1.5), -0.05, -0.08, 0, 1, 1, 1, ry);
+    add(new THREE.BoxGeometry(0.5, 0.04, 0.04), 0.72, 0.12, 0.12, 1, 1, 1, -0.5);
+    add(new THREE.BoxGeometry(0.5, 0.04, 0.04), 0.72, 0.12, -0.12, 1, 1, 1, 0.5);
+    let total = 0;
+    for (const p of parts) total += p.attributes.position.count;
+    const pos = new Float32Array(total * 3), nor = new Float32Array(total * 3);
+    let off = 0;
+    for (const p of parts) {
+      pos.set(p.attributes.position.array, off);
+      nor.set(p.attributes.normal.array, off);
+      off += p.attributes.position.array.length;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    return g;
+  }
+
+  const antMesh = new THREE.InstancedMesh(antGeometry(), new THREE.MeshLambertMaterial({ color: 0xffffff }), MAXA);
+  antMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  antMesh.setColorAt(0, new THREE.Color(1, 1, 1));
+  antMesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+  antMesh.frustumCulled = false;
+  scene.add(antMesh);
+
+  const carryMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.38, 6, 5),
+    new THREE.MeshLambertMaterial({ color: 0xe8e39a, emissive: 0x3a3410 }), MAXA);
+  carryMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  carryMesh.frustumCulled = false;
+  scene.add(carryMesh);
+
+  const FOODMAX = 9000;
+  const foodMesh = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.5, 0),
+    new THREE.MeshLambertMaterial({ color: 0xc8e070, emissive: 0x2a3a0c }), FOODMAX);
+  foodMesh.frustumCulled = false;
+  scene.add(foodMesh);
+
+  function rebuildFood() {
+    const m = foodMesh.instanceMatrix.array;
+    let n = 0;
+    for (let k = 0; k < N && n < FOODMAX; k++) {
+      const v = food[k];
+      if (!v) continue;
+      const i = k % W, j = (k / W) | 0;
+      const s = 0.55 + Math.min(1, v / 24) * 0.9, o = n * 16;
+      m[o] = s; m[o + 1] = 0; m[o + 2] = 0; m[o + 3] = 0;
+      m[o + 4] = 0; m[o + 5] = s * 0.8; m[o + 6] = 0; m[o + 7] = 0;
+      m[o + 8] = 0; m[o + 9] = 0; m[o + 10] = s; m[o + 11] = 0;
+      m[o + 12] = i + 0.5 - W / 2 + (grain[k] - 0.5) * 0.5;
+      m[o + 13] = height[k] + 0.25 * s;
+      m[o + 14] = j + 0.5 - H / 2 + (grain2[k] - 0.5) * 0.5;
+      m[o + 15] = 1;
+      n++;
+    }
+    foodMesh.count = n;
+    foodMesh.instanceMatrix.needsUpdate = true;
+    foodDirty = false;
+  }
+
+  function updateAntInstances() {
+    const m = antMesh.instanceMatrix.array, cl = antMesh.instanceColor.array, fm = carryMesh.instanceMatrix.array;
+    let nf = 0;
+    for (let i = 0; i < nAnts; i++) {
+      const a = aa[i], ca = Math.cos(a), sa = Math.sin(a);
+      const e = CASTAS[acaste[i]].esc, sx = e[0], sy = e[1], sz = e[2];
+      const wx = ax[i] - W / 2, wz = ay[i] - H / 2, wy = hAt(ax[i], ay[i]) + 0.3;
+      const o = i * 16;
+      m[o] = ca * sx; m[o + 1] = 0; m[o + 2] = sa * sx; m[o + 3] = 0;
+      m[o + 4] = 0; m[o + 5] = sy; m[o + 6] = 0; m[o + 7] = 0;
+      m[o + 8] = -sa * sz; m[o + 9] = 0; m[o + 10] = ca * sz; m[o + 11] = 0;
+      m[o + 12] = wx; m[o + 13] = wy; m[o + 14] = wz; m[o + 15] = 1;
+      const rgb = DEFS[ac[i]].rgb[acaste[i]], c3 = i * 3;
+      cl[c3] = rgb[0]; cl[c3 + 1] = rgb[1]; cl[c3 + 2] = rgb[2];
+      if (ast[i] === 1) {
+        const f = nf * 16;
+        fm[f] = 1; fm[f + 1] = 0; fm[f + 2] = 0; fm[f + 3] = 0;
+        fm[f + 4] = 0; fm[f + 5] = 1; fm[f + 6] = 0; fm[f + 7] = 0;
+        fm[f + 8] = 0; fm[f + 9] = 0; fm[f + 10] = 1; fm[f + 11] = 0;
+        fm[f + 12] = wx + ca * 0.95 * sx; fm[f + 13] = wy + 0.35; fm[f + 14] = wz + sa * 0.95 * sx; fm[f + 15] = 1;
+        nf++;
+      }
+    }
+    antMesh.count = nAnts;
+    antMesh.instanceMatrix.needsUpdate = true;
+    antMesh.instanceColor.needsUpdate = true;
+    carryMesh.count = nf;
+    carryMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  // Indicador do pincel
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.88, 1, 48),
+    new THREE.MeshBasicMaterial({ color: 0xe9a53b, transparent: true, opacity: 0.9, depthTest: false }));
+  ring.rotation.x = -Math.PI / 2;
+  ring.renderOrder = 10;
+  ring.visible = false;
+  scene.add(ring);
+
+  /* ================= Motor GPU =================
+     Estado de cada formiga em 2 texels de uma textura float:
+       A = (x, y, ângulo, flag)   flag de vivas: 0..4; de mortas: causa 5..7
+       B = (timer, vida, vida restante, info)
+       info = viva + 2*carrega + 4*colônia + 8*casta + 32*evento
+       evento: 1 entregou, 2 saqueou, 3 pegou comida, 4 nasceu, 5 morreu em combate, 6 velhice, 7 fome
+     Cada passo: espalha densidade e depósitos (pontos com soma), atualiza comida,
+     feromônios e formigas em passes de tela cheia, e soma estatísticas por redução. */
+  const glc = renderer.getContext();
+  const GPU_OK = renderer.capabilities.isWebGL2 && !!glc.getExtension('EXT_color_buffer_float');
+  const S = window.matchMedia('(pointer: coarse)').matches ? 128 : 256;
+  const GCAP = S * S;
+  const NSTAT = 6;
+  renderer.setClearColor(0x000000, 0);
+
+  const GLSL_DEFS = { W: W, H: H, S: S };
+  const PASS_VS = 'void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }';
+  const GLSL_COMMON = `
+    const float PI = 3.141592653589793;
+    const float TAU = 6.283185307179586;
+    bool inside(ivec2 c) { return c.x >= 1 && c.y >= 1 && c.x < W - 1 && c.y < H - 1; }
+    ivec2 cellOf(vec2 p) { return ivec2(floor(p)); }
+    float hAtW(highp sampler2D wt, vec2 p) {
+      vec2 f = clamp(p - 0.5, vec2(0.0), vec2(float(W) - 1.001, float(H) - 1.001));
+      ivec2 i = ivec2(floor(f)); vec2 t = f - vec2(i);
+      float a = texelFetch(wt, i, 0).r, b = texelFetch(wt, i + ivec2(1, 0), 0).r;
+      float c = texelFetch(wt, i + ivec2(0, 1), 0).r, d = texelFetch(wt, i + ivec2(1, 1), 0).r;
+      return mix(mix(a, b, t.x), mix(c, d, t.x), t.y);
+    }`;
+
+  const ANT_FS = GLSL_COMMON + `
+    uniform highp sampler2D uAnt, uP0, uP1, uF, uD, uWorld;
+    uniform vec2 uNest[2];
+    uniform float uStockOk[2];
+    uniform float uBirthP[2];
+    uniform float uSoldP[2];
+    uniform float uBatP[2];
+    uniform float uStarveP[2];
+    uniform vec4 uCA[3];   // velocidade, vida, dano, alcance do sensor
+    uniform vec4 uCB[3];   // autonomia, carrega
+    uniform int uSeed, uMulti;
+
+    uint hashU(uint x) { x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16; return x; }
+    float rnd(inout uint s) { s = hashU(s); return float(s >> 8) / 16777216.0; }
+    float wallAt(vec2 p) { ivec2 c = cellOf(p); if (!inside(c)) return 1.0; return texelFetch(uWorld, c, 0).g; }
+    vec4 pherAt(int col, ivec2 c) { return col == 0 ? texelFetch(uP0, c, 0) : texelFetch(uP1, c, 0); }
+    float sense(int col, int ch, vec2 p, bool wantFood) {
+      ivec2 c = cellOf(p);
+      if (!inside(c)) return -1.0;
+      if (texelFetch(uWorld, c, 0).g > 0.5) return -1.0;
+      float v = pherAt(col, c)[ch] + 0.5 * (pherAt(col, c + ivec2(1, 0))[ch] + pherAt(col, c - ivec2(1, 0))[ch]
+              + pherAt(col, c + ivec2(0, 1))[ch] + pherAt(col, c - ivec2(0, 1))[ch]);
+      if (wantFood && texelFetch(uF, c, 0).r > 0.5) v += 30.0;
+      return v;
+    }
+    float senseA(int col, vec2 p) {
+      ivec2 c = cellOf(p);
+      if (!inside(c)) return 0.0;
+      return pherAt(col, c).z + 0.5 * (pherAt(col, c + ivec2(1, 0)).z + pherAt(col, c - ivec2(1, 0)).z
+              + pherAt(col, c + ivec2(0, 1)).z + pherAt(col, c - ivec2(0, 1)).z);
+    }
+    float enemyAt(int col, ivec2 c) { if (!inside(c)) return 0.0; return texelFetch(uD, c, 0)[1 - col]; }
+    float enemyDmg(int col, ivec2 c) {
+      float d = enemyAt(col, c) + 0.35 * (enemyAt(col, c + ivec2(1, 0)) + enemyAt(col, c - ivec2(1, 0))
+              + enemyAt(col, c + ivec2(0, 1)) + enemyAt(col, c - ivec2(0, 1)));
+      return min(d, 13.5);
+    }
+    float turnToward(float a, float t, float k) { float d = t - a; d = atan(sin(d), cos(d)); return a + d * k; }
+
+    void antStep(int idx, vec4 A, vec4 B, bool onlyB, out vec4 nA, out vec4 nB) {
+      uint s = hashU(uint(idx) * 747796405u + uint(uSeed) * 2891336453u);
+      int info = int(B.w + 0.5);
+      bool alive = (info & 1) == 1;
+      bool carry = (info & 2) == 2;
+      int col = (info >> 2) & 1;
+      int caste = (info >> 3) & 3;
+
+      if (!alive) {
+        float r = rnd(s);
+        int nc = -1;
+        if (r < uBirthP[0]) nc = 0;
+        else if (uMulti == 1 && r < uBirthP[0] + uBirthP[1]) nc = 1;
+        if (nc < 0) { nA = A; nB = vec4(0.0, 0.0, 0.0, float(info & 28)); return; }
+        float r2 = rnd(s);
+        int cs = r2 < uSoldP[nc] ? 1 : (r2 < uSoldP[nc] + uBatP[nc] ? 2 : 0);
+        float rr = rnd(s) * 2.5, t = rnd(s) * TAU;
+        nA = vec4(uNest[nc] + vec2(cos(t), sin(t)) * rr, t - TAU * floor((t + PI) / TAU), 0.0);
+        nB = vec4(0.0, uCA[cs].y, 10000.0 + rnd(s) * 7000.0, float(1 + 4 * nc + 8 * cs + 32 * 4));
+        return;
+      }
+
+      vec4 KA = uCA[caste], KB = uCB[caste];
+      float x = A.x, y = A.y, a = A.z, flag = 0.0;
+      float timer = B.x + 1.0, hp = B.y, rem = B.z - 1.0;
+      int ev = 0, death = 0;
+      if (rem <= 0.0) death = 6;
+      else if (rnd(s) < uStarveP[col]) death = 7;
+      ivec2 c0 = cellOf(vec2(x, y));
+      float sp = KA.x;
+      bool steered = false;
+      if (death == 0 && uMulti == 1) {
+        float dmg = enemyDmg(col, c0);
+        if (dmg > 0.001) {
+          hp -= dmg;
+          if (hp <= 0.0) death = 5;
+          sp *= caste == 1 ? 0.15 : 0.3;
+          a += (rnd(s) - 0.5) * 1.4; flag = 1.0; steered = true;
+        } else hp = min(KA.y, hp + 0.03);
+      }
+      if (death != 0) {
+        nA = vec4(x, y, a, float(death));
+        nB = vec4(0.0, 0.0, 0.0, float((carry ? 2 : 0) + 4 * col + 8 * caste + 32 * death));
+        return;
+      }
+      if (!steered && uMulti == 1 && caste == 1) {
+        float best = 0.0, ba = a;
+        for (int k = -2; k <= 2; k++) {
+          float ang = a + float(k) * 0.6;
+          vec2 d = vec2(cos(ang), sin(ang));
+          float e = max(enemyAt(col, cellOf(vec2(x, y) + d * 3.0)), enemyAt(col, cellOf(vec2(x, y) + d * 6.0)) * 0.7);
+          if (e > best) { best = e; ba = ang; }
+        }
+        if (best > 0.001) { a = turnToward(a, ba, 0.35); sp *= 1.15; flag = 4.0; steered = true; }
+      }
+      vec2 toN = uNest[col] - vec2(x, y);
+      float d2 = dot(toN, toN);
+      if (!steered) {
+        if (carry) {
+          if (d2 < 12.25) { carry = false; timer = 0.0; a += PI; ev = 1; steered = true; }
+          else if (d2 < 144.0) { a = turnToward(a, atan(toN.y, toN.x), 0.25); steered = true; }
+        } else if (KB.y > 0.5 && texelFetch(uF, c0, 0).r > 0.5) {
+          carry = true; timer = 0.0; a += PI; ev = 3; steered = true;
+        } else {
+          if (d2 < 49.0) timer = 0.0;
+          if (caste == 1 && d2 > 5625.0) a = turnToward(a, atan(toN.y, toN.x), 0.04);
+          if (uMulti == 1 && KB.y > 0.5) {
+            vec2 e = uNest[1 - col] - vec2(x, y);
+            if (dot(e, e) < 25.0 && uStockOk[1 - col] > 0.5 && rnd(s) < 0.06) { carry = true; timer = 0.0; a += PI; ev = 2; steered = true; }
+          }
+        }
+      }
+      nB = vec4(timer, hp, rem, float(1 + (carry ? 2 : 0) + 4 * col + 8 * caste + 32 * ev));
+      // quem pegou comida fica na célula neste passo, para o consumo ser descontado no lugar certo
+      if (onlyB || ev == 3) { nA = onlyB ? A : vec4(x, y, a - TAU * floor((a + PI) / TAU), flag); return; }
+
+      vec2 p = vec2(x, y);
+      if (!steered && uMulti == 1 && !(caste != 1 && carry)) {
+        float aC = senseA(col, p + vec2(cos(a), sin(a)) * 9.0);
+        float aL = senseA(col, p + vec2(cos(a - 0.55), sin(a - 0.55)) * 9.0);
+        float aR = senseA(col, p + vec2(cos(a + 0.55), sin(a + 0.55)) * 9.0);
+        float m = max(aC, max(aL, aR));
+        if (m > 0.05) {
+          if (caste == 1) {
+            if (aL == m && aL > aC) a -= 0.33; else if (aR == m && aR > aC) a += 0.33;
+            sp *= 1.25; flag = 3.0;
+          } else {
+            if (aC == m) a += (aL < aR ? -1.0 : 1.0) * 0.605;
+            else if (aL == m) a += 0.385; else a -= 0.385;
+            sp *= 1.15; flag = 2.0;
+          }
+          a += (rnd(s) - 0.5) * 0.1;
+          steered = true;
+        }
+      }
+      if (!steered) {
+        bool busca = !carry;
+        int ch = busca ? 1 : 0;
+        bool wf = busca && KB.y > 0.5;
+        float sd = KA.w;
+        if (rnd(s) < KB.x) a += (rnd(s) - 0.5) * 2.2;
+        else {
+          float vC = sense(col, ch, p + vec2(cos(a), sin(a)) * sd, wf);
+          float vL = sense(col, ch, p + vec2(cos(a - 0.55), sin(a - 0.55)) * sd, wf);
+          float vR = sense(col, ch, p + vec2(cos(a + 0.55), sin(a + 0.55)) * sd, wf);
+          if (vC < 0.0) a += (vL >= vR ? -1.0 : 1.0) * 0.495;
+          else if (vL > vC && vL >= vR && vL > 0.03) a -= 0.2475;
+          else if (vR > vC && vR > vL && vR > 0.03) a += 0.2475;
+          else if (vC <= 0.03 && rnd(s) < 0.02) a += (rnd(s) - 0.5) * 1.2;
+        }
+        a += (rnd(s) - 0.5) * 0.16;
+      }
+      vec2 dv = vec2(cos(a), sin(a));
+      bool inWall = texelFetch(uWorld, c0, 0).g > 0.5;
+      vec2 np = p + dv * sp;
+      if (!inWall && wallAt(np) > 0.5) a += PI * 0.5 + rnd(s) * PI;
+      else {
+        float slope = (hAtW(uWorld, np) - hAtW(uWorld, p)) / sp;
+        float f = slope > 0.0 ? 1.0 / (1.0 + slope * 2.6) : min(1.3, 1.0 - slope * 0.6);
+        vec2 mp = p + dv * sp * f;
+        bool ok = inWall ? (mp.x >= 1.0 && mp.y >= 1.0 && mp.x < float(W) - 1.0 && mp.y < float(H) - 1.0) : wallAt(mp) < 0.5;
+        if (ok) p = mp;
+      }
+      a = a - TAU * floor((a + PI) / TAU);
+      nA = vec4(p, a, flag);
+    }
+    void main() {
+      ivec2 fc = ivec2(gl_FragCoord.xy);
+      int i = fc.x / 2, j = fc.y;
+      bool isB = (fc.x & 1) == 1;
+      vec4 A = texelFetch(uAnt, ivec2(i * 2, j), 0), B = texelFetch(uAnt, ivec2(i * 2 + 1, j), 0);
+      vec4 nA, nB;
+      antStep(j * S + i, A, B, isB, nA, nB);
+      gl_FragColor = isB ? nB : nA;
+    }`;
+
+  const SCAT_VS = `
+    uniform highp sampler2D uAnt;
+    uniform int uMode;
+    uniform float uDano[3];
+    attribute vec2 ref;
+    varying vec4 vVal;
+    void main() {
+      ivec2 ia = ivec2(int(ref.x) * 2, int(ref.y));
+      vec4 A = texelFetch(uAnt, ia, 0), B = texelFetch(uAnt, ia + ivec2(1, 0), 0);
+      int info = int(B.w + 0.5);
+      bool alive = (info & 1) == 1, carry = (info & 2) == 2;
+      int col = (info >> 2) & 1, caste = (info >> 3) & 3, ev = (info >> 5) & 7;
+      vec4 v = vec4(0.0);
+      if (uMode == 0) {
+        if (alive) {
+          if (col == 0) v.r = uDano[caste]; else v.g = uDano[caste];
+          if (ev == 3) v.b = 1.0;
+        } else if (carry && ev >= 5) v.b = -1.0;
+      } else if (alive) {
+        float inten = exp(-B.x / 650.0);
+        if (inten > 0.02) v[col * 2 + (carry ? 1 : 0)] = inten * 0.14;
+      }
+      vVal = v;
+      gl_PointSize = 1.0;
+      if (v == vec4(0.0)) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+      vec2 cell = floor(A.xy) + 0.5;
+      gl_Position = vec4(cell / vec2(float(W), float(H)) * 2.0 - 1.0, 0.0, 1.0);
+    }`;
+  const SCAT_FS = 'varying vec4 vVal; void main(){ gl_FragColor = vVal; }';
+
+  const FOOD_FS = `
+    uniform highp sampler2D uF, uD, uWorld, uAdd;
+    uniform float uApply;
+    void main() {
+      ivec2 c = ivec2(gl_FragCoord.xy);
+      float f = texelFetch(uF, c, 0).r - texelFetch(uD, c, 0).b;
+      if (uApply > 0.5) { vec4 ad = texelFetch(uAdd, c, 0); f = max(f + ad.r, ad.g); }
+      if (texelFetch(uWorld, c, 0).g > 0.5) f = 0.0;
+      gl_FragColor = vec4(clamp(f, 0.0, 60.0), 0.0, 0.0, 1.0);
+    }`;
+
+  const PHER_FS = `
+    uniform highp sampler2D uP, uDep, uD, uWorld;
+    uniform int uCol, uMulti;
+    uniform float uEvH, uEvF, uEvA;
+    float en(ivec2 c) { vec4 d = texelFetch(uD, c, 0); return uCol == 0 ? d.g : d.r; }
+    void main() {
+      ivec2 c = ivec2(gl_FragCoord.xy);
+      if (c.x < 1 || c.y < 1 || c.x >= W - 1 || c.y >= H - 1 || texelFetch(uWorld, c, 0).g > 0.5) { gl_FragColor = vec4(0.0); return; }
+      vec4 p = texelFetch(uP, c, 0), dep = texelFetch(uDep, c, 0);
+      float h = min(3.0, p.x + (uCol == 0 ? dep.r : dep.b)) * uEvH;
+      float f = min(3.0, p.y + (uCol == 0 ? dep.g : dep.a)) * uEvF;
+      float al = 0.0;
+      if (uMulti == 1) {
+        float nb = texelFetch(uP, c + ivec2(1, 0), 0).z + texelFetch(uP, c - ivec2(1, 0), 0).z
+                 + texelFetch(uP, c + ivec2(0, 1), 0).z + texelFetch(uP, c - ivec2(0, 1), 0).z;
+        al = p.z * 0.6 + nb * 0.1;
+        vec4 d = texelFetch(uD, c, 0);
+        float own = uCol == 0 ? d.r : d.g;
+        float e = en(c) + 0.35 * (en(c + ivec2(1, 0)) + en(c - ivec2(1, 0)) + en(c + ivec2(0, 1)) + en(c - ivec2(0, 1)));
+        if (own > 0.0 && e > 0.0) al += 0.3;
+        al = min(al, 2.0) * uEvA;
+      }
+      gl_FragColor = vec4(h, f, al, 0.0);
+    }`;
+
+  const EM_FS = `
+    uniform highp sampler2D uP0, uP1;
+    uniform vec3 uShow, uAlarm;
+    uniform vec3 uCasa[2];
+    uniform vec3 uComida[2];
+    uniform int uNc;
+    void main() {
+      ivec2 c = ivec2(gl_FragCoord.xy);
+      vec3 col = vec3(0.0);
+      for (int ci = 0; ci < 2; ci++) {
+        if (ci >= uNc) break;
+        vec4 p = ci == 0 ? texelFetch(uP0, c, 0) : texelFetch(uP1, c, 0);
+        if (uShow.z > 0.5 && p.z > 0.01) col += uAlarm * sqrt(min(p.z, 1.0)) * 1.1;
+        if (uShow.x > 0.5 && p.x > 0.004) col += uCasa[ci] * sqrt(min(p.x, 1.0)) * 0.32;
+        if (uShow.y > 0.5 && p.y > 0.004) col += uComida[ci] * sqrt(min(p.y, 1.0)) * 0.9;
+      }
+      gl_FragColor = vec4(min(col, vec3(1.0)), 1.0);
+    }`;
+
+  const STAT1_FS = `
+    uniform highp sampler2D uAnt, uWorld;
+    void main() {
+      ivec2 fc = ivec2(gl_FragCoord.xy);
+      int k = fc.x, j = fc.y;
+      vec4 acc = vec4(0.0);
+      for (int i = 0; i < S; i++) {
+        vec4 B = texelFetch(uAnt, ivec2(i * 2 + 1, j), 0);
+        int info = int(B.w + 0.5);
+        bool alive = (info & 1) == 1;
+        int col = (info >> 2) & 1, caste = (info >> 3) & 3, ev = (info >> 5) & 7;
+        if (!alive && ev == 0) continue;
+        if (k <= 1) {
+          if (alive && col == k) {
+            acc[caste] += 1.0;
+            float fl = texelFetch(uAnt, ivec2(i * 2, j), 0).w;
+            if (fl > 0.5 && fl < 1.5) acc.w += 1.0;
+          }
+        } else if (k == 2) {
+          if (ev == 1) acc[col] += 1.0;
+          if (ev == 2) acc[2 + col] += 1.0;
+        } else if (k == 3) {
+          if (ev == 4) acc[col] += 1.0;
+          if (ev == 3) acc.z += 1.0;
+          if (!alive && (info & 2) == 2) acc.w += 1.0;
+        } else if (k == 4) {
+          if (ev == 5) acc[col] += 1.0;
+          if (ev == 6) acc[2 + col] += 1.0;
+        } else {
+          if (ev == 7) acc[col] += 1.0;
+          if (alive) {
+            vec2 pos = texelFetch(uAnt, ivec2(i * 2, j), 0).xy;
+            float m = texelFetch(uWorld, ivec2(floor(pos)), 0).b;
+            if (m > 0.5 && m < 1.5) acc.z += 1.0; else if (m > 1.5) acc.w += 1.0;
+          }
+        }
+      }
+      gl_FragColor = acc;
+    }`;
+  const STAT2_FS = `
+    uniform highp sampler2D uS1, uAcc;
+    uniform float uReset;
+    void main() {
+      int k = int(gl_FragCoord.x);
+      vec4 sum = vec4(0.0);
+      for (int j = 0; j < S; j++) sum += texelFetch(uS1, ivec2(k, j), 0);
+      vec4 old = texelFetch(uAcc, ivec2(k, 0), 0) * (1.0 - uReset);
+      vec4 m = k <= 1 ? vec4(0.0) : (k == 5 ? vec4(1.0, 1.0, 0.0, 0.0) : vec4(1.0));
+      gl_FragColor = sum + old * m;
+    }`;
+  const COPY_FS = 'uniform highp sampler2D uSrc; void main(){ gl_FragColor = texelFetch(uSrc, ivec2(gl_FragCoord.xy), 0); }';
+  const ZERO_FS = 'void main(){ gl_FragColor = vec4(0.0); }';
+
+  const ANTR_VS = GLSL_COMMON + `
+    uniform highp sampler2D uAnt, uWorld;
+    uniform vec3 uCol[6];
+    uniform vec3 uEsc[3];
+    attribute vec2 ref;
+    attribute float part;
+    varying vec3 vN;
+    varying vec3 vC;
+    varying float vDepth;
+    void main() {
+      ivec2 ia = ivec2(int(ref.x) * 2, int(ref.y));
+      vec4 A = texelFetch(uAnt, ia, 0), B = texelFetch(uAnt, ia + ivec2(1, 0), 0);
+      int info = int(B.w + 0.5);
+      vN = vec3(0.0, 1.0, 0.0); vC = vec3(0.0); vDepth = 0.0;
+      if ((info & 1) == 0 || (part > 0.5 && (info & 2) == 0)) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+      int col = (info >> 2) & 1, caste = (info >> 3) & 3;
+      vec3 e = uEsc[caste];
+      vec3 p = part > 0.5 ? position + vec3(0.95 * e.x, 0.35, 0.0) : position * e;
+      float ca = cos(A.z), sa = sin(A.z);
+      vec3 w = vec3(p.x * ca - p.z * sa, p.y, p.x * sa + p.z * ca);
+      vN = vec3(normal.x * ca - normal.z * sa, normal.y, normal.x * sa + normal.z * ca);
+      vC = part > 0.5 ? vec3(0.91, 0.89, 0.6) : uCol[col * 3 + caste];
+      vec3 wp = vec3(A.x - float(W) * 0.5, hAtW(uWorld, A.xy) + 0.3, A.y - float(H) * 0.5) + w;
+      vec4 mv = viewMatrix * vec4(wp, 1.0);
+      vDepth = -mv.z;
+      gl_Position = projectionMatrix * mv;
+    }`;
+  const ANTR_FS = `
+    uniform vec3 uFog;
+    varying vec3 vN;
+    varying vec3 vC;
+    varying float vDepth;
+    void main() {
+      vec3 n = normalize(vN);
+      float d = max(dot(n, normalize(vec3(-120.0, 200.0, -60.0))), 0.0);
+      vec3 hemi = mix(vec3(0.227, 0.173, 0.11), vec3(1.0, 0.945, 0.863), n.y * 0.5 + 0.5) * 0.75;
+      vec3 c = vC * (hemi + vec3(1.0, 0.886, 0.722) * 0.85 * d);
+      gl_FragColor = vec4(mix(c, uFog, smoothstep(420.0, 900.0, vDepth)), 1.0);
+    }`;
+
+  const fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const fsScene = new THREE.Scene();
+  const fsQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
+  fsQuad.frustumCulled = false;
+  fsScene.add(fsQuad);
+
+  function passMat(fs, uniforms, vs) {
+    return new THREE.ShaderMaterial({ vertexShader: vs || PASS_VS, fragmentShader: fs, uniforms, defines: GLSL_DEFS, depthTest: false, depthWrite: false });
+  }
+  function runPass(mat, target) {
+    fsQuad.material = mat;
+    renderer.setRenderTarget(target);
+    renderer.render(fsScene, fsCam);
+  }
+  function mkRT(w, h, type, linear) {
+    const f = linear ? THREE.LinearFilter : THREE.NearestFilter;
+    return new THREE.WebGLRenderTarget(w, h, { type, format: THREE.RGBAFormat, minFilter: f, magFilter: f, depthBuffer: false, stencilBuffer: false, generateMipmaps: false });
+  }
+  function mkData(arr, w, h) {
+    const t = new THREE.DataTexture(arr, w, h, THREE.RGBAFormat, THREE.FloatType);
+    t.minFilter = THREE.NearestFilter; t.magFilter = THREE.NearestFilter; t.needsUpdate = true;
+    return t;
+  }
+
+  function antGeometryLow() {
+    const parts = [];
+    const add = (g, part, x, y, z, sx, sy, sz, ry) => {
+      g.scale(sx, sy, sz); if (ry) g.rotateY(ry); g.translate(x, y, z);
+      parts.push([g.index ? g.toNonIndexed() : g, part]);
+    };
+    add(new THREE.SphereGeometry(0.42, 6, 4), 0, -0.62, 0.05, 0, 1.35, 0.85, 0.95);
+    add(new THREE.SphereGeometry(0.22, 4, 3), 0, -0.05, 0.02, 0, 1.4, 0.8, 0.9);
+    add(new THREE.SphereGeometry(0.27, 5, 3), 0, 0.42, 0.04, 0, 1.0, 0.85, 1.0);
+    for (const ry of [-0.55, 0, 0.55]) {
+      const leg = new THREE.PlaneGeometry(0.08, 1.5); leg.rotateX(-Math.PI / 2);
+      add(leg, 0, -0.05, -0.08, 0, 1, 1, 1, ry);
+    }
+    add(new THREE.SphereGeometry(0.38, 5, 3), 1, 0, 0, 0, 1, 1, 1);
+    let total = 0;
+    for (const [p] of parts) total += p.attributes.position.count;
+    const pos = new Float32Array(total * 3), nor = new Float32Array(total * 3), prt = new Float32Array(total);
+    let off = 0;
+    for (const [p, part] of parts) {
+      const n = p.attributes.position.count;
+      pos.set(p.attributes.position.array, off * 3);
+      nor.set(p.attributes.normal.array, off * 3);
+      prt.fill(part, off, off + n);
+      off += n;
+    }
+    const g = new THREE.InstancedBufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    g.setAttribute('part', new THREE.BufferAttribute(prt, 1));
+    return g;
+  }
+
+  function makeGPU() {
+    if (G.ready) return;
+    const T = THREE.FloatType;
+    G.ant = [mkRT(2 * S, S, T), mkRT(2 * S, S, T)];
+    G.F = [mkRT(W, H, T), mkRT(W, H, T)];
+    G.P0 = [mkRT(W, H, T), mkRT(W, H, T)];
+    G.P1 = [mkRT(W, H, T), mkRT(W, H, T)];
+    G.D = mkRT(W, H, THREE.HalfFloatType);
+    G.Dep = mkRT(W, H, THREE.HalfFloatType);
+    G.S1 = mkRT(NSTAT, S, T);
+    G.acc = [mkRT(NSTAT, 1, T), mkRT(NSTAT, 1, T)];
+    G.em = new THREE.WebGLRenderTarget(W, H, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, stencilBuffer: false });
+    G.worldData = new Float32Array(N * 4); G.worldTex = mkData(G.worldData, W, H);
+    G.addData = new Float32Array(N * 4); G.addTex = mkData(G.addData, W, H);
+    G.initData = new Float32Array(2 * S * S * 4); G.initTex = mkData(G.initData, 2 * S, S);
+    G.foodData = new Float32Array(N * 4); G.foodTex = mkData(G.foodData, W, H);
+    G.accBuf = new Float32Array(NSTAT * 4);
+    G.fbuf = new Float32Array(N * 4);
+    G.rbuf = new Float32Array(8);
+    G.fullBuf = new Float32Array(2 * S * S * 4);
+
+    const v2 = () => [new THREE.Vector2(), new THREE.Vector2()];
+    G.antMat = passMat(ANT_FS, {
+      uAnt: { value: null }, uP0: { value: null }, uP1: { value: null }, uF: { value: null }, uD: { value: null }, uWorld: { value: G.worldTex },
+      uNest: { value: v2() }, uStockOk: { value: [0, 0] }, uBirthP: { value: [0, 0] }, uSoldP: { value: [0, 0] },
+      uBatP: { value: [0, 0] }, uStarveP: { value: [0, 0] },
+      uCA: { value: CASTAS.map(k => new THREE.Vector4(k.vel, k.hp, k.dano, k.sd)) },
+      uCB: { value: CASTAS.map(k => new THREE.Vector4(k.aut, k.carrega ? 1 : 0, 0, 0)) },
+      uSeed: { value: 0 }, uMulti: { value: 0 }
+    });
+    G.foodMat = passMat(FOOD_FS, { uF: { value: null }, uD: { value: G.D.texture }, uWorld: { value: G.worldTex }, uAdd: { value: G.addTex }, uApply: { value: 0 } });
+    G.pherMat = passMat(PHER_FS, {
+      uP: { value: null }, uDep: { value: G.Dep.texture }, uD: { value: G.D.texture }, uWorld: { value: G.worldTex },
+      uCol: { value: 0 }, uMulti: { value: 0 }, uEvH: { value: Math.pow(0.5, 1 / 3200) }, uEvF: { value: Math.pow(0.5, 1 / 1100) }, uEvA: { value: Math.pow(0.5, 1 / 260) }
+    });
+    const c3 = a => new THREE.Vector3(a[0] / 255, a[1] / 255, a[2] / 255);
+    G.emMat = passMat(EM_FS, {
+      uP0: { value: null }, uP1: { value: null }, uShow: { value: new THREE.Vector3(1, 1, 1) }, uAlarm: { value: c3(ALARM_RGB) },
+      uCasa: { value: DEFS.map(d => c3(d.casa)) }, uComida: { value: DEFS.map(d => c3(d.comida)) }, uNc: { value: 1 }
+    });
+    G.s1Mat = passMat(STAT1_FS, { uAnt: { value: null }, uWorld: { value: G.worldTex } });
+    G.s2Mat = passMat(STAT2_FS, { uS1: { value: G.S1.texture }, uAcc: { value: null }, uReset: { value: 0 } });
+    G.copyMat = passMat(COPY_FS, { uSrc: { value: null } });
+    G.zeroMat = passMat(ZERO_FS, {});
+
+    // Pontos que espalham cada formiga numa célula do mapa
+    const ref = new Float32Array(GCAP * 2);
+    for (let n = 0; n < GCAP; n++) { ref[n * 2] = n % S; ref[n * 2 + 1] = (n / S) | 0; }
+    const pg = new THREE.BufferGeometry();
+    pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(GCAP * 3), 3));
+    pg.setAttribute('ref', new THREE.BufferAttribute(ref, 2));
+    G.scatMat = new THREE.ShaderMaterial({
+      vertexShader: SCAT_VS, fragmentShader: SCAT_FS, defines: GLSL_DEFS,
+      uniforms: { uAnt: { value: null }, uMode: { value: 0 }, uDano: { value: CASTAS.map(k => k.dano) } },
+      blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
+      depthTest: false, depthWrite: false
+    });
+    const pts = new THREE.Points(pg, G.scatMat);
+    pts.frustumCulled = false;
+    G.scatScene = new THREE.Scene();
+    G.scatScene.add(pts);
+
+    // Formigas desenhadas direto da textura de estado
+    const ag = antGeometryLow();
+    ag.setAttribute('ref', new THREE.InstancedBufferAttribute(ref, 2));
+    ag.instanceCount = GCAP;
+    G.renderMat = new THREE.ShaderMaterial({
+      vertexShader: ANTR_VS, fragmentShader: ANTR_FS, defines: GLSL_DEFS, side: THREE.DoubleSide,
+      uniforms: {
+        uAnt: { value: null }, uWorld: { value: G.worldTex }, uFog: { value: new THREE.Color(0x17130e) },
+        uCol: { value: DEFS.flatMap(d => d.rgb.map(c => new THREE.Vector3(c[0], c[1], c[2]))) },
+        uEsc: { value: CASTAS.map(k => new THREE.Vector3(k.esc[0], k.esc[1], k.esc[2])) }
+      }
+    });
+    G.mesh = new THREE.Mesh(ag, G.renderMat);
+    G.mesh.frustumCulled = false;
+    G.mesh.visible = false;
+    scene.add(G.mesh);
+    G.ready = true;
+  }
+
+  function gpuSeedAnt(ci) {
+    if (G.seedCount >= GCAP) return;
+    const col = colonies[ci], n = G.seedCount++;
+    const caste = chooseCaste(col);
+    const i = n % S, j = (n / S) | 0, o = (j * 2 * S + 2 * i) * 4;
+    const r = Math.random() * 3, t = Math.random() * TAU;
+    const life = 10000 + Math.random() * 7000;
+    const d = G.initData;
+    d[o] = col.x + Math.cos(t) * r; d[o + 1] = col.y + Math.sin(t) * r; d[o + 2] = t; d[o + 3] = 0;
+    d[o + 4] = 0; d[o + 5] = CASTAS[caste].hp; d[o + 6] = life * (1 - 0.6 * Math.random()); d[o + 7] = 1 + 4 * ci + 8 * caste;
+    col.pop++; col.castes[caste]++;
+  }
+  function gpuWorld() {
+    const d = G.worldData;
+    for (let k = 0; k < N; k++) { d[k * 4] = height[k]; d[k * 4 + 1] = wall[k]; d[k * 4 + 2] = mask[k]; }
+    G.worldTex.needsUpdate = true;
+  }
+  function gpuUpload() {
+    gpuWorld();
+    G.initTex.needsUpdate = true;
+    G.copyMat.uniforms.uSrc.value = G.initTex;
+    runPass(G.copyMat, G.ant[0]); G.ai = 0;
+    for (let k = 0; k < N; k++) G.foodData[k * 4] = food[k];
+    G.foodTex.needsUpdate = true;
+    G.copyMat.uniforms.uSrc.value = G.foodTex;
+    runPass(G.copyMat, G.F[0]); G.fi = 0;
+    for (const t of [G.P0[0], G.P0[1], G.P1[0], G.P1[1], G.acc[0], G.acc[1]]) runPass(G.zeroMat, t);
+    G.pi = 0; G.acci = 0;
+    G.addData.fill(0); G.addTex.needsUpdate = true; G.addPending = false;
+    G.resetNext = false; G.stepsSinceRead = 0;
+    renderer.setRenderTarget(null);
+  }
+
+  // Economia continua na CPU: decide nascimentos e fome e passa probabilidades à GPU
+  function gpuEconomy() {
+    const u = G.antMat.uniforms, nc = colonies.length;
+    let total = 0;
+    for (const c of colonies) total += c.pop;
+    const dead = Math.max(1, GCAP - total);
+    for (let ci = 0; ci < 2; ci++) {
+      if (ci >= nc) { u.uBirthP.value[ci] = 0; u.uStarveP.value[ci] = 0; u.uStockOk.value[ci] = 0; continue; }
+      const col = colonies[ci];
+      col.alarme *= 0.998;
+      col.acc += (col.pop + col.castes[1]) * UPKEEP;
+      let kills = 0;
+      while (col.acc >= 1) { col.acc -= 1; if (col.stock >= 1) col.stock -= 1; else kills++; }
+      u.uStarveP.value[ci] = col.pop > 0 ? Math.min(1, kills / col.pop) : 0;
+      const p = Math.max(1, col.pop);
+      const tS = nc > 1 ? 0.1 + Math.min(0.25, col.alarme / 200) : 0, tB = 0.12;
+      const pS = Math.max(0, Math.min(0.6, tS + (tS - col.castes[1] / p)));
+      const pB = Math.max(0, Math.min(0.4, tB + (tB - col.castes[2] / p)));
+      u.uSoldP.value[ci] = pS; u.uBatP.value[ci] = pB;
+      let births = 0;
+      if (col.pop > 0 && col.pop < maxPop) {
+        const custo = 2 * (1 - pS - pB) + 5 * pS + 2 * pB;
+        const livre = col.stock - col.pop * RESERVE;
+        if (livre >= custo) births = Math.min(livre / custo, 0.34 + col.pop * 0.0012, maxPop - col.pop);
+        col.stock -= births * custo;
+        col.pop += births;
+      }
+      u.uBirthP.value[ci] = Math.min(1, births / dead);
+      u.uStockOk.value[ci] = col.stock >= 1 ? 1 : 0;
+    }
+  }
+
+  function gpuStep() {
+    tick++;
+    gpuEconomy();
+    const nc = colonies.length, multi = nc > 1 ? 1 : 0;
+    const antTex = G.ant[G.ai].texture;
+    // 1. densidade/dano e depósitos de feromônio
+    G.scatMat.uniforms.uAnt.value = antTex;
+    G.scatMat.uniforms.uMode.value = 0;
+    renderer.setRenderTarget(G.D); renderer.render(G.scatScene, fsCam);
+    G.scatMat.uniforms.uMode.value = 1;
+    renderer.setRenderTarget(G.Dep); renderer.render(G.scatScene, fsCam);
+    // 2. comida
+    G.foodMat.uniforms.uF.value = G.F[G.fi].texture;
+    G.foodMat.uniforms.uApply.value = G.addPending ? 1 : 0;
+    if (G.addPending) G.addTex.needsUpdate = true;
+    runPass(G.foodMat, G.F[1 - G.fi]); G.fi ^= 1;
+    if (G.addPending) { G.addPending = false; G.addData.fill(0); }
+    // 3. feromônios
+    const pu = G.pherMat.uniforms;
+    pu.uMulti.value = multi;
+    for (let ci = 0; ci < nc; ci++) {
+      const P = ci === 0 ? G.P0 : G.P1;
+      pu.uP.value = P[G.pi].texture; pu.uCol.value = ci;
+      runPass(G.pherMat, P[1 - G.pi]);
+    }
+    G.pi ^= 1;
+    // 4. formigas
+    const au = G.antMat.uniforms;
+    au.uAnt.value = antTex; au.uP0.value = G.P0[G.pi].texture; au.uP1.value = G.P1[G.pi].texture;
+    au.uF.value = G.F[G.fi].texture; au.uD.value = G.D.texture;
+    au.uSeed.value = (Math.random() * 2147483647) | 0; au.uMulti.value = multi;
+    for (let ci = 0; ci < nc; ci++) au.uNest.value[ci].set(colonies[ci].x, colonies[ci].y);
+    runPass(G.antMat, G.ant[1 - G.ai]); G.ai ^= 1;
+    // 5. estatísticas
+    G.s1Mat.uniforms.uAnt.value = G.ant[G.ai].texture;
+    runPass(G.s1Mat, G.S1);
+    G.s2Mat.uniforms.uAcc.value = G.acc[G.acci].texture;
+    G.s2Mat.uniforms.uReset.value = G.resetNext ? 1 : 0;
+    runPass(G.s2Mat, G.acc[1 - G.acci]); G.acci ^= 1;
+    G.resetNext = false; G.stepsSinceRead++;
+
+    if (tick % 60 === 0) {
+      for (const col of colonies) { col.hist.push(Math.round(col.pop)); if (col.hist.length > 300) col.hist.shift(); }
+      if (ponte) {
+        const t = ponte.curta + ponte.longa;
+        ponte.hist.push(t ? ponte.curta / t : 0.5);
+        if (ponte.hist.length > 300) ponte.hist.shift();
+      }
+    }
+    if (preset !== 'ponte' && tick % 300 === 0 && totalFood < 40000) randomCluster();
+    if (ponte && tick % 600 === 0) refillFoodRoom();
+  }
+
+  function gpuReadStats() {
+    if (!G.stepsSinceRead) return;
+    renderer.readRenderTargetPixels(G.acc[G.acci], 0, 0, NSTAT, 1, G.accBuf);
+    G.resetNext = true; G.stepsSinceRead = 0;
+    const b = Array.from(G.accBuf, v => Math.round(v));
+    const nc = colonies.length;
+    for (let ci = 0; ci < nc; ci++) {
+      const col = colonies[ci], o = ci * 4;
+      col.castes = [b[o], b[o + 1], b[o + 2]];
+      col.pop = b[o] + b[o + 1] + b[o + 2];
+      col.alarme = Math.max(col.alarme, b[o + 3] * 5);
+      col.stock += b[8 + ci]; col.collected += b[8 + ci];
+      col.saques += b[10 + ci];
+      if (nc > 1) { const other = colonies[1 - ci]; other.stock = Math.max(0, other.stock - b[10 + ci]); other.roubado += b[10 + ci]; }
+      col.births += b[12 + ci];
+      col.mortes.combate += b[16 + ci];
+      col.mortes.idade += b[18 + ci];
+      col.mortes.fome += b[20 + ci];
+    }
+    if (ponte) { ponte.curta = b[22]; ponte.longa = b[23]; }
+  }
+  function gpuReadFood() {
+    if (G.addPending) return;
+    renderer.readRenderTargetPixels(G.F[G.fi], 0, 0, W, H, G.fbuf);
+    let t = 0;
+    for (let k = 0; k < N; k++) { const v = Math.round(G.fbuf[k * 4]); food[k] = v; t += v; }
+    totalFood = t; foodDirty = true;
+  }
+  function gpuEmissive() {
+    const u = G.emMat.uniforms;
+    u.uP0.value = G.P0[G.pi].texture; u.uP1.value = G.P1[G.pi].texture; u.uNc.value = colonies.length;
+    u.uShow.value.set(pherMode === 'ambos' || pherMode === 'casa' ? 1 : 0, pherMode === 'ambos' || pherMode === 'comida' ? 1 : 0, pherMode === 'ambos' || pherMode === 'alarme' ? 1 : 0);
+    runPass(G.emMat, G.em);
+  }
+  function gpuReadAll() {
+    renderer.readRenderTargetPixels(G.ant[G.ai], 0, 0, 2 * S, S, G.fullBuf);
+    renderer.setRenderTarget(null);
+  }
+
+  function applyEngineVisuals() {
+    const gpu = engine === 'gpu';
+    antMesh.visible = carryMesh.visible = !gpu;
+    if (G.mesh) G.mesh.visible = gpu;
+    terrMat.emissiveMap = gpu ? G.em.texture : emTex;
+    terrMat.needsUpdate = true;
+    if (gpu) { renderer.setRenderTarget(G.em); renderer.clear(); renderer.setRenderTarget(null); }
+    else { emCleared = false; }
+  }
+
+  function fitCamera() {
+    const asp = canvas.clientWidth / Math.max(1, canvas.clientHeight);
+    const mid = (HMIN + HMAX) / 2;
+    if (asp < 0.85) {
+      const d = 470;
+      camera.position.set(d * 0.55, mid + d * 0.83, 0.01);
+      controls.target.set(-4, mid, 0);
+    } else {
+      const d = asp < 1.3 ? 360 : 300;
+      camera.position.set(0, mid + d * 0.8, d * 0.6);
+      controls.target.set(0, mid, 8);
+    }
+    controls.update();
+  }
+
+  function resize() {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / Math.max(1, h);
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+
+  /* ================= Desenho no terreno ================= */
+  const raycaster = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  function pick(cx, cy) {
+    const r = canvas.getBoundingClientRect();
+    ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+    raycaster.setFromCamera(ndc, camera);
+    const o = raycaster.ray.origin, d = raycaster.ray.direction;
+    if (d.y >= -0.01) return null;
+    let t = Math.max(0, (o.y - (HMAX + WALL_H + 2)) / -d.y);
+    const tEnd = (o.y - (HMIN - 1)) / -d.y;
+    for (; t < tEnd; t += 0.5) {
+      const px = o.x + d.x * t + W / 2, pz = o.z + d.z * t + H / 2, py = o.y + d.y * t;
+      if (px < 0 || pz < 0 || px >= W || pz >= H) continue;
+      const k = (pz | 0) * W + (px | 0);
+      const gh = height[k] + (wall[k] ? WALL_H + wallVar[k] : 0);
+      if (py <= gh) return { x: px, y: pz, h: gh };
+    }
+    return null;
+  }
+  function nearNest(x, y, r) {
+    for (const c of colonies) if (Math.hypot(c.x - x, c.y - y) < r) return true;
+    return false;
+  }
+  let tool = 'camera', brush = 5;
+  function paintAt(cx, cy) {
+    const r = brush, r2 = r * r;
+    const x0 = Math.max(1, Math.floor(cx - r)), x1 = Math.min(W - 2, Math.ceil(cx + r));
+    const y0 = Math.max(1, Math.floor(cy - r)), y1 = Math.min(H - 2, Math.ceil(cy + r));
+    let wallChange = false;
+    for (let j = y0; j <= y1; j++) for (let i = x0; i <= x1; i++) {
+      const dx = i + 0.5 - cx, dy = j + 0.5 - cy;
+      if (dx * dx + dy * dy > r2) continue;
+      const k = j * W + i;
+      if (tool === 'comida') {
+        if (wall[k]) continue;
+        addFood(k, 6);
+      } else if (tool === 'parede') {
+        if (wall[k] || nearNest(i + 0.5, j + 0.5, 9)) continue;
+        wall[k] = 1;
+        if (food[k]) { totalFood -= food[k]; food[k] = 0; foodDirty = true; }
+        for (const g of pher) { g[0][k] = 0; g[1][k] = 0; g[2][k] = 0; }
+        wallChange = true;
+      } else if (tool === 'apagar') {
+        if (wall[k]) { wall[k] = 0; wallChange = true; }
+        clearFood(k);
+      }
+    }
+    if (wallChange) { terrainDirty = true; mapDirty = true; G.worldDirty = true; }
+  }
+  let painting = false, last = null;
+  const pointers = new Set();
+  function strokeTo(p) {
+    if (last) {
+      const dist = Math.hypot(p.x - last.x, p.y - last.y);
+      const steps = Math.max(1, Math.ceil(dist / (brush * 0.5)));
+      for (let s = 1; s <= steps; s++) paintAt(last.x + (p.x - last.x) * s / steps, last.y + (p.y - last.y) * s / steps);
+    } else paintAt(p.x, p.y);
+    last = p;
+  }
+  function showRing(p) {
+    if (!p || tool === 'camera') { ring.visible = false; return; }
+    ring.visible = true;
+    ring.position.set(p.x - W / 2, p.h + 0.4, p.y - H / 2);
+    ring.scale.setScalar(brush);
+  }
+  let tapStart = null;
+  canvas.addEventListener('pointerdown', e => {
+    pointers.add(e.pointerId);
+    if (tool === 'camera') {
+      tapStart = pointers.size === 1 ? { x: e.clientX, y: e.clientY, t: performance.now() } : null;
+      return;
+    }
+    if (pointers.size > 1 || (e.pointerType === 'mouse' && e.button !== 0)) { painting = false; return; }
+    painting = true; last = null;
+    const p = pick(e.clientX, e.clientY);
+    showRing(p);
+    if (p) strokeTo(p);
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (tool === 'camera') return;
+    const p = pick(e.clientX, e.clientY);
+    showRing(p);
+    if (painting && p && pointers.size === 1) strokeTo(p);
+  });
+  const endPointer = e => { pointers.delete(e.pointerId); painting = false; last = null; };
+  canvas.addEventListener('pointerup', e => {
+    if (tool === 'camera' && tapStart && pointers.size === 1 &&
+        Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y) < 8 && performance.now() - tapStart.t < 350) {
+      selectAt(e.clientX, e.clientY);
+    }
+    tapStart = null;
+    endPointer(e);
+  });
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('pointerleave', e => { endPointer(e); ring.visible = false; });
+
+  /* ================= Seguir uma formiga ================= */
+  const followRing = new THREE.Mesh(new THREE.RingGeometry(1.7, 2.15, 40),
+    new THREE.MeshBasicMaterial({ color: 0xe9a53b, transparent: true, opacity: 0.95, depthTest: false }));
+  followRing.rotation.x = -Math.PI / 2;
+  followRing.renderOrder = 11;
+  followRing.visible = false;
+  scene.add(followRing);
+
+  const seguirEl = document.getElementById('seguir'), seguirBtn = document.getElementById('seguir-btn');
+  const segNome = document.getElementById('seg-nome'), segId = document.getElementById('seg-id');
+  const segEstado = document.getElementById('seg-estado'), segVida = document.getElementById('seg-vida');
+  const segHp = document.getElementById('seg-hp'), segIdade = document.getElementById('seg-idade'), segMax = document.getElementById('seg-max');
+  const segAtras = document.getElementById('seg-atras');
+  let chase = false;
+  const antV = new THREE.Vector3(), tmpV = new THREE.Vector3();
+
+  // Lê uma formiga pelo identificador: id na CPU, vaga da textura na GPU
+  function readAnt(h) {
+    if (engine === 'gpu') {
+      const i = h % S, j = (h / S) | 0;
+      renderer.readRenderTargetPixels(G.ant[G.ai], 2 * i, j, 2, 1, G.rbuf);
+      const r = G.rbuf, info = Math.round(r[7]);
+      return { x: r[0], y: r[1], a: r[2], flag: Math.round(r[3]), hp: r[5], rem: r[6], alive: (info & 1) === 1,
+        carry: (info & 2) === 2, col: (info >> 2) & 1, caste: (info >> 3) & 3, id: h };
+    }
+    for (let i = 0; i < nAnts; i++) {
+      if (aid[i] === h) return { x: ax[i], y: ay[i], a: aa[i], flag: aflag[i], hp: ahp[i], rem: alife[i] - aage[i],
+        alive: true, carry: ast[i] === 1, col: ac[i], caste: acaste[i], id: h };
+    }
+    return null;
+  }
+  // Varre todas as formigas vivas: (handle, x, y, colônia)
+  function eachAnt(fn) {
+    if (engine === 'gpu') {
+      gpuReadAll();
+      const b = G.fullBuf;
+      for (let n = 0; n < GCAP; n++) {
+        const o = (((n / S) | 0) * 2 * S + 2 * (n % S)) * 4, info = Math.round(b[o + 7]);
+        if (info & 1) fn(n, b[o], b[o + 1], (info >> 2) & 1);
+      }
+      return;
+    }
+    for (let i = 0; i < nAnts; i++) fn(aid[i], ax[i], ay[i], ac[i]);
+  }
+  let followLast = null;
+  function startFollow(h) {
+    const f = readAnt(h);
+    if (!f || !f.alive) return;
+    followId = h; followDeath = null; followLast = f;
+    antV.set(f.x - W / 2, hAt(f.x, f.y) + 0.6, f.y - H / 2);
+    controls.target.copy(antV);
+    camera.position.set(antV.x - Math.cos(f.a) * 24, antV.y + 15, antV.z - Math.sin(f.a) * 24);
+    controls.minDistance = 6;
+    controls.update();
+    seguirEl.hidden = false;
+    seguirBtn.textContent = 'Soltar câmera';
+    updateFollowCard();
+  }
+  function stopFollow() {
+    followId = -1; followDeath = null; followLast = null;
+    followRing.visible = false;
+    controls.minDistance = 20;
+    seguirEl.hidden = true;
+    seguirBtn.textContent = 'Seguir formiga';
+  }
+  function followRandom() {
+    const longe = [], todas = [];
+    eachAnt((h, x, y, c) => {
+      todas.push(h);
+      if (Math.hypot(x - colonies[c].x, y - colonies[c].y) > 18) longe.push(h);
+    });
+    const lista = longe.length ? longe : todas;
+    if (lista.length) startFollow(lista[(Math.random() * lista.length) | 0]);
+  }
+  function selectAt(cx, cy) {
+    const p = pick(cx, cy);
+    if (!p) return;
+    let best = -1, bd = 36;
+    eachAnt((h, x, y) => {
+      const d = (x - p.x) * (x - p.x) + (y - p.y) * (y - p.y);
+      if (d < bd) { bd = d; best = h; }
+    });
+    if (best >= 0) startFollow(best);
+  }
+  function followTick() {
+    if (followId < 0) return;
+    let f = followDeath ? null : readAnt(followId);
+    if (f && engine === 'gpu') {
+      if (!f.alive) { followDeath = ({ 5: 'combate', 6: 'idade', 7: 'fome' })[f.flag] || 'sumiu'; f = null; }
+      else if (followLast && (f.rem > followLast.rem + 0.5 || f.col !== followLast.col || f.caste !== followLast.caste)) { followDeath = 'sumiu'; f = null; }
+    }
+    if (!f) { followRing.visible = false; return; }
+    followLast = f;
+    antV.set(f.x - W / 2, hAt(f.x, f.y) + 0.6, f.y - H / 2);
+    tmpV.copy(antV).sub(controls.target).multiplyScalar(0.18);
+    controls.target.add(tmpV);
+    camera.position.add(tmpV);
+    if (chase) {
+      const t = controls.target, ox = camera.position.x - t.x, oz = camera.position.z - t.z;
+      const hd = Math.max(8, Math.hypot(ox, oz));
+      camera.position.x += (t.x - Math.cos(f.a) * hd - camera.position.x) * 0.05;
+      camera.position.z += (t.z - Math.sin(f.a) * hd - camera.position.z) * 0.05;
+    }
+    followRing.visible = true;
+    followRing.position.set(antV.x, antV.y - 0.25, antV.z);
+  }
+  function fmtT(ticks) {
+    const s = Math.max(0, Math.floor(ticks / 60));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+  function descreve(f) {
+    if (f.flag === 1) return 'em combate';
+    if (f.flag === 4) return 'perseguindo um inimigo';
+    if (f.flag === 3) return 'atendendo ao alarme';
+    if (f.flag === 2) return 'fugindo do alarme';
+    if (f.carry) return 'levando comida ao ninho';
+    if (f.caste === 1) return 'patrulhando';
+    if (f.caste === 2) return 'explorando';
+    return 'procurando comida';
+  }
+  const CAUSAS = { combate: 'Morreu em combate.', fome: 'Morreu de fome.', idade: 'Morreu de velhice.', sumiu: 'Não está mais no mapa.' };
+  function updateFollowCard() {
+    if (followId < 0) return;
+    const f = followLast;
+    if (followDeath || !f) {
+      segEstado.textContent = CAUSAS[followDeath] || CAUSAS.sumiu;
+      segVida.style.width = '0%'; segHp.textContent = '0';
+      return;
+    }
+    const K = CASTAS[f.caste], d = DEFS[f.col];
+    seguirEl.style.setProperty('--c', 'var(' + d.corUI + ')');
+    segNome.textContent = K.nome;
+    segId.textContent = 'nº ' + f.id;
+    segEstado.innerHTML = '<span>' + d.nome + ':</span> ' + descreve(f);
+    const fr = Math.max(0, f.hp / K.hp);
+    segVida.style.width = (fr * 100).toFixed(0) + '%';
+    segVida.style.background = fr > 0.5 ? 'var(--bom)' : fr > 0.25 ? 'var(--ambar)' : 'var(--mal)';
+    segHp.textContent = Math.ceil(f.hp) + '/' + K.hp;
+    segIdade.textContent = fmtT(f.rem);
+    segMax.textContent = f.carry ? 'comida' : 'nada';
+  }
+  seguirBtn.addEventListener('click', () => { if (followId >= 0) stopFollow(); else followRandom(); });
+  document.getElementById('seg-soltar').addEventListener('click', stopFollow);
+  document.getElementById('seg-outra').addEventListener('click', followRandom);
+  segAtras.addEventListener('click', () => { chase = !chase; segAtras.setAttribute('aria-pressed', String(chase)); });
+  window.addEventListener('keydown', e => { if (e.key === 'Escape' && followId >= 0) stopFollow(); });
+
+  /* ================= Interface ================= */
+  const toolBtns = document.querySelectorAll('[data-tool]');
+  function setTool(t) {
+    tool = t;
+    toolBtns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === t)));
+    if (t === 'camera') {
+      controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+      controls.touches.ONE = THREE.TOUCH.ROTATE;
+      canvas.style.cursor = 'grab';
+      ring.visible = false;
+    } else {
+      controls.mouseButtons.LEFT = -1;
+      controls.touches.ONE = -1;
+      canvas.style.cursor = 'crosshair';
+    }
+  }
+  toolBtns.forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
+
+  const pincel = document.getElementById('pincel');
+  pincel.addEventListener('input', () => { brush = +pincel.value; ring.scale.setScalar(brush); });
+
+  let vel = 1, lastVel = 1;
+  const velBtns = document.querySelectorAll('[data-vel]');
+  function setVel(v) {
+    vel = v; if (v > 0) lastVel = v;
+    velBtns.forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.vel === v)));
+  }
+  velBtns.forEach(b => b.addEventListener('click', () => setVel(+b.dataset.vel)));
+  window.addEventListener('keydown', e => {
+    if (e.code === 'Space' && !/INPUT|SELECT|BUTTON/.test(document.activeElement.tagName)) {
+      e.preventDefault(); setVel(vel === 0 ? lastVel : 0);
+    }
+  });
+
+  const fero = document.getElementById('fero');
+  fero.addEventListener('change', () => { pherMode = fero.value; });
+  const cenario = document.getElementById('cenario');
+  cenario.addEventListener('change', () => setup(cenario.value));
+  document.getElementById('reiniciar').addEventListener('click', () => setup(preset));
+
+  const corpo = document.getElementById('corpo'), recolher = document.getElementById('recolher');
+  function setCollapsed(c) {
+    corpo.hidden = c;
+    recolher.setAttribute('aria-expanded', String(!c));
+    recolher.textContent = c ? 'Detalhes' : 'Ocultar';
+  }
+  recolher.addEventListener('click', () => setCollapsed(!corpo.hidden));
+  if (window.matchMedia('(max-width: 640px)').matches) setCollapsed(true);
+
+  let ui = [];
+  function buildColonyUI() {
+    const box = document.getElementById('colonias'), chips = document.getElementById('chips');
+    box.textContent = ''; chips.textContent = '';
+    const multi = colonies.length > 1;
+    ui = colonies.map(col => {
+      const el = document.createElement('div');
+      el.className = 'col';
+      el.style.setProperty('--c', 'var(' + col.def.corUI + ')');
+      el.innerHTML =
+        '<div class="col-cab"><span class="col-nome"><i></i>' + col.def.nome + '</span><span class="estado" data-k="estado">estável</span></div>' +
+        '<div class="col-pop"><b data-k="pop">0</b><span>formigas</span></div>' +
+        '<div class="castas"><span><b data-k="k0">0</b> operárias</span>' +
+        (multi ? '<span><b data-k="k1">0</b> soldados</span>' : '') +
+        '<span><b data-k="k2">0</b> batedoras</span></div>' +
+        '<div class="trilhas"><span><i style="background:rgb(' + col.def.casa + ')"></i>casa</span>' +
+        '<span><i style="background:rgb(' + col.def.comida + ')"></i>comida</span>' +
+        (multi ? '<span><i style="background:rgb(' + ALARM_RGB + ')"></i>alarme</span>' : '') + '</div>' +
+        '<dl class="num">' +
+        '<div><dt>Estoque</dt><dd data-k="stock">0</dd></div>' +
+        '<div><dt>Coletado</dt><dd data-k="col">0</dd></div>' +
+        (multi ? '<div><dt>Saques</dt><dd data-k="saq">0</dd></div><div><dt>† combate</dt><dd data-k="mc">0</dd></div>' : '<div><dt>Nascidas</dt><dd data-k="nas">0</dd></div>') +
+        '<div><dt>† fome</dt><dd data-k="mf">0</dd></div>' +
+        '<div><dt>† velhice</dt><dd data-k="mi">0</dd></div>' +
+        '</dl>';
+      box.appendChild(el);
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.style.setProperty('--c', 'var(' + col.def.corUI + ')');
+      chip.innerHTML = '<i></i><b>0</b>';
+      chips.appendChild(chip);
+      const refs = { chip: chip.querySelector('b') };
+      el.querySelectorAll('[data-k]').forEach(n => { refs[n.dataset.k] = n; });
+      return refs;
+    });
+    document.getElementById('ponte').hidden = !ponte;
+    if (ponte) {
+      document.getElementById('ponte-nota').textContent =
+        'Os dois caminhos saem do ninho no mesmo ângulo. Curta: ' + ponte.lenC + ' células; longa: ' + ponte.lenL +
+        ' células. No experimento da ponte dupla (Goss, Deneubourg e colegas, 1989), a colônia tende a convergir para o caminho mais curto, porque a trilha dele é reforçada mais vezes por minuto.';
+    }
+    document.getElementById('graf-rot').textContent = ponte ? 'Fração na ponte curta' : 'População';
+    document.getElementById('dica').hidden = !!ponte;
+  }
+
+  function estado(col) {
+    if (col.pop === 0) return ['extinta', 'mal'];
+    if (col.stock < 1) return ['faminta', 'mal'];
+    if (col.alarme > 8) return ['em guerra', 'alerta'];
+    const h = col.hist;
+    if (h.length >= 6) {
+      const d = col.pop - h[h.length - 6];
+      if (d > 8) return ['crescendo', 'bom'];
+      if (d < -8) return ['em declínio', 'alerta'];
+    }
+    return ['estável', 'neutro'];
+  }
+
+  const css = getComputedStyle(document.documentElement);
+  const cssVar = n => css.getPropertyValue(n).trim();
+  const chartCv = document.getElementById('grafico'), grafMax = document.getElementById('graf-max');
+  function drawChart() {
+    const w = chartCv.clientWidth, h = chartCv.clientHeight;
+    if (!w || !h) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (chartCv.width !== Math.round(w * dpr)) { chartCv.width = Math.round(w * dpr); chartCv.height = Math.round(h * dpr); }
+    const ctx = chartCv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    let series, colors, max;
+    if (ponte) {
+      series = [ponte.hist]; colors = [cssVar('--ambar')]; max = 1;
+      ctx.strokeStyle = cssVar('--linha'); ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, h / 2 + 0.5); ctx.lineTo(w, h / 2 + 0.5); ctx.stroke(); ctx.setLineDash([]);
+      grafMax.textContent = 'linha tracejada: 50%';
+    } else {
+      series = colonies.map(c => c.hist); colors = colonies.map(c => cssVar(c.def.corUI));
+      let m = 10;
+      for (const s of series) for (const v of s) if (v > m) m = v;
+      max = m * 1.12;
+      grafMax.textContent = 'máx. ' + Math.round(m);
+      ctx.strokeStyle = cssVar('--linha'); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, h - 0.5); ctx.lineTo(w, h - 0.5); ctx.stroke();
+    }
+    series.forEach((s, si) => {
+      if (s.length < 2) return;
+      ctx.strokeStyle = colors[si]; ctx.lineWidth = 1.6; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      for (let n = 0; n < s.length; n++) {
+        const x = (n / (s.length - 1)) * (w - 4) + 1, y = h - 2 - (s[n] / max) * (h - 4);
+        if (n === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      const ly = h - 2 - (s[s.length - 1] / max) * (h - 4);
+      ctx.fillStyle = colors[si];
+      ctx.beginPath(); ctx.arc(w - 3, ly, 2.6, 0, TAU); ctx.fill();
+    });
+  }
+
+  const tempoEl = document.getElementById('tempo');
+  function updateStats() {
+    colonies.forEach((col, ci) => {
+      const r = ui[ci]; if (!r) return;
+      const pop = Math.round(col.pop).toLocaleString('pt-BR');
+      r.pop.textContent = pop;
+      r.chip.textContent = pop;
+      r.stock.textContent = Math.floor(col.stock);
+      r.col.textContent = col.collected;
+      if (r.saq) r.saq.textContent = col.saques;
+      if (r.mc) r.mc.textContent = col.mortes.combate;
+      if (r.nas) r.nas.textContent = col.births;
+      r.mf.textContent = col.mortes.fome;
+      r.mi.textContent = col.mortes.idade;
+      r.k0.textContent = col.castes[0];
+      if (r.k1) r.k1.textContent = col.castes[1];
+      r.k2.textContent = col.castes[2];
+      const [txt, tom] = estado(col);
+      r.estado.textContent = txt; r.estado.dataset.tom = tom;
+    });
+    if (ponte) {
+      const t = ponte.curta + ponte.longa, f = t ? ponte.curta / t : 0.5;
+      document.getElementById('ponte-i').style.width = (f * 100).toFixed(1) + '%';
+      document.getElementById('ponte-c').textContent = Math.round(f * 100) + '%';
+      document.getElementById('ponte-l').textContent = Math.round((1 - f) * 100) + '%';
+    }
+    const sec = Math.floor(tick / 60);
+    tempoEl.textContent = String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+    if (!corpo.hidden) drawChart();
+    updateFollowCard();
+  }
+
+  /* ================= Laço principal ================= */
+  let frameNo = 0;
+  function frame() {
+    requestAnimationFrame(frame);
+    const gpu = engine === 'gpu';
+    for (let s = 0; s < vel; s++) { if (gpu) gpuStep(); else step(); }
+    if (terrainDirty && frameNo % 3 === 0) { updateTerrainHeights(); terrainDirty = false; }
+    if (gpu && G.worldDirty && frameNo % 3 === 0) { gpuWorld(); G.worldDirty = false; }
+    if (mapDirty) paintMap();
+    if (gpu) {
+      if (frameNo % 10 === 0) gpuReadStats();
+      if (frameNo % 20 === 5) gpuReadFood();
+      if ((frameNo & 1) === 0) gpuEmissive();
+      G.renderMat.uniforms.uAnt.value = G.ant[G.ai].texture;
+    } else {
+      if ((frameNo & 1) === 0 && (vel > 0 || frameNo % 20 === 0)) paintEmissive();
+      updateAntInstances();
+    }
+    if (foodDirty && frameNo % 6 === 0) rebuildFood();
+    followTick();
+    controls.update();
+    renderer.setRenderTarget(null);
+    renderer.render(scene, camera);
+    if (frameNo % 15 === 0) updateStats();
+    frameNo++;
+  }
+
+  const motorSel = document.getElementById('motor'), motorInfo = document.getElementById('motor-info');
+  function motorTexto() {
+    motorInfo.textContent = engine === 'gpu'
+      ? 'Simulação em shaders WebGL2, até ' + GCAP.toLocaleString('pt-BR') + ' formigas.'
+      : GPU_OK ? 'Simulação em JavaScript, até ' + MAXA.toLocaleString('pt-BR') + ' formigas.'
+        : 'Este navegador não oferece WebGL2 com texturas float; usando a CPU, até ' + MAXA.toLocaleString('pt-BR') + ' formigas.';
+  }
+  if (!GPU_OK) motorSel.querySelector('option[value="gpu"]').disabled = true;
+  engine = GPU_OK ? 'gpu' : 'cpu';
+  motorSel.value = engine;
+  motorSel.addEventListener('change', () => { engine = motorSel.value; motorTexto(); setup(preset); });
+  motorTexto();
+
+  resize();
+  setup('solo');
+  setTool('camera');
+  frame();
+})();
+</script>
+</body>
+</html>
