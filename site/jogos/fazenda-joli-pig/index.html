@@ -130,6 +130,24 @@ button{font:inherit;color:inherit}
 .fala::after{content:"";position:absolute;left:50%;bottom:-11px;margin-left:-8px;border:8px solid transparent;border-top-color:var(--borda);border-bottom:0}
 .fala.beto{background:#e6f1fb}
 .fala.jaca{background:#e8f6dc}
+.fala.pelucio{background:#fde4e1}
+/* cena do Pelúcio: faixas de cinema e caixa de diálogo */
+.cine{position:absolute;inset:0;z-index:25;pointer-events:none}
+.cine .faixa{position:absolute;left:0;right:0;height:10vh;background:#1d1410;transition:transform .7s ease}
+.cine .faixa.topo{top:0;transform:translateY(-100%)}
+.cine .faixa.base{bottom:0;transform:translateY(100%)}
+.cine.on .faixa{transform:none}
+.dialogo{position:absolute;left:50%;bottom:calc(10vh + 16px);transform:translateX(-50%);width:min(620px,calc(100vw - 32px));display:flex;gap:12px;align-items:flex-start;padding:12px 14px 10px;pointer-events:auto;cursor:pointer;animation:sobe .25s ease-out}
+.dialogo img{width:62px;height:62px;flex:none;border-radius:12px;background:var(--papel-2);border:2px solid var(--borda)}
+.dialogo .quem{font-family:var(--f-titulo);font-size:21px;line-height:1;color:var(--rosa)}
+.dialogo .quem.ed{color:#b58a12}
+.dialogo p{margin:5px 0 0;font-weight:700;font-size:16px;line-height:1.4;min-height:2.8em}
+.dialogo .seguir{display:block;text-align:right;font-size:12px;font-weight:800;color:var(--tinta-suave);margin-top:2px;visibility:hidden}
+.dialogo .seguir.pode{visibility:visible;animation:pisca 1s ease-in-out infinite}
+@keyframes pisca{50%{opacity:.35}}
+.dialogo .pular{position:absolute;top:-16px;right:12px}
+#jogo.cinema .hud-topo,#jogo.cinema .hud-base,#jogo.cinema .camera-ctl,#jogo.cinema .menu{display:none !important}
+.janela-topo.rosa2{background:#f7c9c3}
 .janela-topo.verde{background:#cdeab0}
 .flutua{position:absolute;left:0;top:0;z-index:6;font-family:var(--f-titulo);font-size:17px;color:#fff;-webkit-text-stroke:5px var(--borda);paint-order:stroke fill;pointer-events:none;white-space:nowrap;display:flex;align-items:center;gap:3px;animation:flutua 1.3s ease-out forwards}
 .flutua img{width:24px;height:24px}
@@ -213,7 +231,7 @@ a{color:var(--rosa)}
 .caderno small{font-size:17px;color:#7a7aa8}
 .caderno .grifo{background:linear-gradient(transparent 55%,#fff07a 55% 90%,transparent 90%)}
 .caderno .botao{font-family:var(--f-texto);margin-top:6px}
-.rabiscos{display:flex;justify-content:center;align-items:flex-end;gap:2px;margin:0 0 0 -8px;height:120px}
+.rabiscos{display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-end;gap:2px;margin:0 0 0 -8px;min-height:120px}
 .rabisco{display:block;transform:rotate(var(--r,0deg))}
 .rabisco figcaption{text-align:center;font-size:20px;line-height:20px;margin-top:-4px}
 .rabisco-canto{position:absolute;pointer-events:none}
@@ -275,6 +293,10 @@ a{color:var(--rosa)}
 
   <div class="menu painel" id="menu" hidden role="menu"></div>
   <div id="sobreposicoes"></div>
+  <div class="cine" id="cine" hidden>
+    <div class="faixa topo"></div><div class="faixa base"></div>
+    <div class="dialogo painel" id="cineDialogo" hidden><img id="cineRosto" alt=""><div style="flex:1;min-width:0"><div class="quem" id="cineNome"></div><p id="cineTexto" aria-live="polite"></p><span class="seguir" id="cineSeguir">toque para continuar ▸</span></div><button class="botao mini claro pular" id="cinePular" type="button">pular</button></div>
+  </div>
   <div class="modal" id="modal" hidden><div class="janela painel" id="janela" role="dialog" aria-modal="true"></div></div>
 
   <svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="giz" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="3" result="r"/><feDisplacementMap in="SourceGraphic" in2="r" scale="2.6"/></filter></svg>
@@ -410,6 +432,7 @@ const CULTURAS = {
   abobora:  { nome:'Abóbora',  plural:'abóboras',  semente:24, tempo:300, venda:62,  rend:1, xp:9,  nivel:4 },
   morango:  { nome:'Morango',  plural:'morangos',  semente:34, tempo:420, venda:23,  rend:4, xp:12, nivel:5 },
   melancia: { nome:'Melancia', plural:'melancias', semente:48, tempo:600, venda:125, rend:1, xp:16, nivel:6 },
+  cafe:     { nome:'Café',     plural:'saquinhos de café seco', semente:70, tempo:720, venda:60, rend:4, xp:22, nivel:15 },
 };
 const ORDEM_CULTURAS = Object.keys(CULTURAS);
 const ANIMAIS = {
@@ -418,6 +441,8 @@ const ANIMAIS = {
 };
 const PRODUTOS = {};
 for (const k of ORDEM_CULTURAS){ const c = CULTURAS[k]; PRODUTOS[k] = { nome:c.nome, plural:c.plural, venda:c.venda, nivel:c.nivel }; }
+// o café seco só o Pelúcio compra, para a Joli Coffee; o Beto e o Jaca não levam
+PRODUTOS.cafe = { nome:'Café seco', plural:'saquinhos de café seco', venda:CULTURAS.cafe.venda, nivel:CULTURAS.cafe.nivel, so:'pelucio' };
 PRODUTOS.ovo = { nome:'Ovo', plural:'ovos', venda:9, nivel:1 };
 PRODUTOS.leite = { nome:'Leite', plural:'garrafas de leite', venda:28, nivel:3 };
 const ORDEM_PRODUTOS = [...ORDEM_CULTURAS, 'ovo', 'leite'];
@@ -507,12 +532,53 @@ function rota(sx, sz, gx, gz){
 // olhos de conta, sorriso marrom, orelhas pontudas em concha) com macacão de cor diferente: alças com botão,
 // peitilho com pesponto, bolso com o P rosa bordado, barra nas pernas e cascos fendidos.
 // Feitos no triplo da resolução do resto da fazenda.
-function vPorco(cor, bolso, soCabeca){
+// estampa do moletom do Pelúcio: estrelinhas azul-claro, amarelas e brancas espalhadas no rosa
+const MOLETOM = { rosa: 0xf8c2ba, punho: 0xe6a097, p: 0xc8303a, pBorda: 0x96202a, cordao: 0x9ad8cc, cordaoE: 0x79bfb2 };
+function estampaMoletom(x, y, z){
+  const cx = Math.floor(x / 7), cy = Math.floor(y / 7), cz = Math.floor(z / 7);
+  const h = hash(cx * 7 + 3, cy * 5 + 1, cz * 11 + 2);
+  if (h > 0.55) return null;
+  const d = Math.abs(x - (cx * 7 + 3)) + Math.abs(y - (cy * 7 + 3)) + Math.abs(z - (cz * 7 + 3));
+  return d <= 2 ? [0x7fcdd3, 0xf0ea86, 0xffffff][Math.floor(h * 30) % 3] : null;
+}
+const panoMoletom = (x, y, z) => estampaMoletom(x, y, z) || MOLETOM.rosa;
+function corpoMoletom(v, frenteZ){
+  for (const lx of [-7, 7]) for (let y = 2; y <= 8; y++) for (let x = lx - 5; x <= lx + 5; x++) for (let z = -5; z <= 5; z++)
+    if ((x - lx) ** 2 + z * z <= 28) v.set(x, y, z, y <= 3 ? MOLETOM.punho : panoMoletom(x, y, z));
+  v.ell(0, 15, 0, 17.4, 14.6, 14.4, panoMoletom, (x, y) => y >= 5);
+  v.ell(0, 26, 0, 15.8, 8.6, 13.4, panoMoletom);
+  // capuz amontoado atrás do pescoço
+  v.ell(0, 30, -9, 14, 6, 7, panoMoletom, (x, y, z) => z <= -6);
+  for (let x = -12; x <= 12; x++){ const y = 35 - Math.round(x * x / 40); for (let z = -16; z <= -6; z++) if (v.has(x, y, z) && !v.has(x, y + 1, z)) v.set(x, y, z, MOLETOM.punho); }
+  // P vermelho aplicado no peito, com a borda mais escura
+  const noP = (x, y) => (x >= -6 && x <= -3 && y >= 7 && y <= 21) ||
+    ((x / 6.2) ** 2 + ((y - 16.5) / 5) ** 2 <= 1 && !((x / 2.8) ** 2 + ((y - 16.5) / 2) ** 2 <= 1) && x >= -6);
+  for (let x = -7; x <= 7; x++) for (let y = 6; y <= 22; y++){
+    if (!noP(x, y)) continue;
+    const borda = !noP(x + 1, y) || !noP(x - 1, y) || !noP(x, y + 1) || !noP(x, y - 1);
+    v.set(x, y, frenteZ(x, y) + 1, borda ? MOLETOM.pBorda : MOLETOM.p);
+  }
+  // cordão verde-água: laço embaixo do queixo e duas pontas com nó
+  const cordao = (x, y, dz = 1, c = MOLETOM.cordao) => { const z = frenteZ(x, y); if (z != null) v.set(x, y, z + dz, c); };
+  for (const [x, y] of [[-1, 27], [0, 27], [1, 27], [-2, 28], [2, 28], [-3, 28], [3, 28]]) cordao(x, y, 1, MOLETOM.cordaoE);
+  for (let y = 26; y >= 18; y--) cordao(-1 - Math.round((26 - y) * 0.25), y);
+  for (let y = 26; y >= 15; y--) cordao(1 + Math.round((26 - y) * 0.3), y);
+  for (const [x, y] of [[-3, 17], [-2, 17], [-3, 18], [-2, 18], [3, 14], [4, 14], [3, 15], [4, 15]]) cordao(x, y, 2, MOLETOM.cordaoE);
+}
+function vBracoMoletom(){
+  const v = new Vox();
+  v.ell(0, -7, 0, 5.2, 8.6, 5.2, (x, y, z) => y <= -13 ? MOLETOM.punho : panoMoletom(x, y, z));
+  v.ell(0, -16, 0.8, 3.6, 3, 3.6, COR.focinho, (x, y) => y <= -14);
+  for (let y = -19; y <= -15; y++) for (let z = -5; z <= 5; z++) v.set(0, y, z, null);
+  return v;
+}
+function vPorco(cor, bolso, soCabeca, roupa){
   const v = new Vox();
   const tom = (c, k) => new THREE.Color(c).multiplyScalar(k).getHex();
   const costura = tom(cor, 0.84), barra = tom(cor, 0.9), botao = 0xfff3cf, borda = tom(bolso, 0.9);
   const frenteZ = (x, y) => { for (let z = 80; z >= -80; z--) if (v.has(x, y, z)) return z; return null; };
-  if (!soCabeca){
+  if (!soCabeca && roupa === 'moletom') corpoMoletom(v, frenteZ);
+  else if (!soCabeca){
     for (const lx of [-7, 7]) for (let y = 2; y <= 8; y++) for (let x = lx - 5; x <= lx + 5; x++) for (let z = -5; z <= 5; z++)
       if ((x - lx) ** 2 + z * z <= 27) v.set(x, y, z, y <= 3 ? barra : cor);
     v.ell(0, 15, 0, 16.8, 14.2, 14.1, cor, (x, y) => y >= 5);
@@ -680,6 +746,13 @@ function vPlanta(cult, est){
       folhagem(v);
       v.ell(7.5, 3.4, 7.5, 5, 3.5, 4.6, (X) => ((X % 3) + 3) % 3 === 0 ? 0xd9711f : 0xef8a2b);
       v.box(7, 7, 7, 8, 8, 8, 0x6b8a3a); v.set(8, 9, 7, 0x6b8a3a);
+      break;
+    case 'cafe':
+      for (const [x, z] of P4){
+        v.box(x, 0, z, x, 1, z, 0x7a5232);
+        v.ell(x, 4.5, z, 2.7, 4.3, 2.7, (X, Y, Z) => hash(X, Y, Z) < 0.5 ? 0x2f7a3a : 0x3c8f45);
+        [[-3, 3, 0], [3, 5, 0], [0, 4, 3], [0, 6, -3], [2, 7, 2], [-2, 2, 2], [2, 2, -2], [-2, 6, -2]].forEach(([dx, y, dz], i) => v.set(x + dx, y, z + dz, i === 5 ? 0xd8a52a : 0xc8323a));
+      }
       break;
     case 'melancia':
       folhagem(v);
@@ -855,9 +928,14 @@ function vPortao(arco){
   return v;
 }
 function vPlaca(){ const v = new Vox(); v.box(7, 0, 7, 8, 11, 8, 0x8a5a36); v.box(1, 8, 7, 14, 14, 8, 0xf3e3c3); v.box(1, 8, 7, 14, 8, 8, 0xc99a66); v.box(1, 14, 7, 14, 14, 8, 0xc99a66); return v; }
-function vCaminhao(){
+function vCaminhao(cafe){
   const v = new Vox();
-  const azul = 0xa9cff0, azulE = 0x7fb3e0, branco = 0xfdf8ef, vidro = 0x9fc8e0;
+  const azul = cafe ? 0xf2a9b8 : 0xa9cff0, azulE = cafe ? 0x8a5a3c : 0x7fb3e0, branco = cafe ? 0xfdf3e6 : 0xfdf8ef, vidro = 0x9fc8e0;
+  if (cafe){
+    for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++) if (x * x + z * z <= 17) v.box(12 + x, 25, 8 + z, 12 + x, 31, 8 + z, (X, Y) => Y === 28 ? 0xe0408a : 0xfdf8ef);
+    for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) if (x * x + z * z <= 10) v.set(12 + x, 31, 8 + z, 0x6b4226);
+    v.box(17, 26, 8, 18, 26, 8, 0xfdf8ef); v.box(17, 30, 8, 18, 30, 8, 0xfdf8ef); v.box(18, 26, 8, 18, 30, 8, 0xfdf8ef);
+  }
   v.box(2, 4, 2, 37, 6, 15, 0x3e3e44);
   for (const wx of [8, 30]) for (const wz of [0, 15]){
     for (let x = -3; x <= 3; x++) for (let y = -3; y <= 3; y++) if (x * x + y * y <= 10) v.box(wx + x, 3 + y, wz, wx + x, 3 + y, wz + 2, (x * x + y * y <= 2) ? 0xbdbdbd : 0x222226);
@@ -957,7 +1035,9 @@ const VI = {
   mato(){ const v = new Vox(); for (const [x, z, h] of [[0, 0, 6], [-2, 0, 4], [2, 1, 5], [1, -1, 3]]){ v.box(x, 0, z, x, h, z, 0x3f7a2a); v.set(x - 1, h - 2, z, 0x4d8a33); v.set(x + 1, h - 1, z, 0x4d8a33); } v.set(0, 7, 0, 0xa35ccf); return v; },
   enxada(){ return vEnxada(); }, regador(){ return vRegador(); }, cesta(){ return vCesta(); },
   galinha(){ return vGalinha(); }, vaca(){ return vVaca(); },
-  ed(){ return vPorco(COR.ed, COR.edBolso, true); }, beto(){ return vPorco(COR.beto, COR.betoBolso, true); },
+  ed(){ return vPorco(COR.ed, COR.edBolso); }, beto(){ return vPorco(COR.beto, COR.betoBolso); }, pelucio(){ return vPorco(0, 0, false, 'moletom'); },
+  cafe(){ const v = new Vox(); v.ell(-2.4, 2, 0, 2.3, 1.7, 3.3, 0x6b4226); v.ell(2.6, 2, 0.6, 2.3, 1.7, 3.3, 0x7d4e2c); for (let z = -2; z <= 2; z++){ v.set(-2, 3, z, 0x3f2616); v.set(3, 3, z + 1, 0x3f2616); } v.ell(0, 1.4, -4.5, 1.8, 1.2, 1.8, 0xc8323a); return v; },
+  xicara(){ const v = new Vox(); for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++) if (x * x + z * z <= 17) v.box(x, 0, z, x, 6, z, (X, Y) => Y === 3 ? 0xf28fac : 0xfdf8ef); for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) if (x * x + z * z <= 10) v.set(x, 6, z, 0x6b4226); v.box(5, 2, 0, 6, 2, 0, 0xfdf8ef); v.box(5, 5, 0, 6, 5, 0, 0xfdf8ef); v.box(6, 2, 0, 6, 5, 0, 0xfdf8ef); return v; },
   caminhao(){ return vCaminhao(); }, celeiro(){ return vCeleiro(); }, casa(){ return vCasa(); }, poco(){ return vPoco(); },
   alimentador(){ return vAlimentador(false); },
   jaca(){ return vJaca(true); },
@@ -1505,7 +1585,7 @@ function comprarAlimentador(tp){
 }
 
 // ================= Ed, os visitantes do Joli Market e o caminhão
-let ed, beto, jaca, visita, caminhao;
+let ed, beto, jaca, pelucio, visita, caminhao, caminhaoMarket, caminhaoCafe;
 // quem vem no caminhão: quase sempre o Beto, às vezes o Jaca (nunca na primeira visita)
 const VISITA = {
   beto: {
@@ -1522,8 +1602,16 @@ const VISITA = {
     tchau: ['Tchau, Ed! Vou mandar um abraço pro Beto por você.', 'Foi muito bom te ver! Até a próxima!', 'Valeu, amigão! Cuida bem das galinhas!'],
     tudo: 'Oba! Vou levar tudo com muito cuidado.', pedido: 'Uau, pedido completinho! O Beto vai ficar feliz. Já anotei outro.', botaoTchau: 'Tchau, Jaca',
   },
+  pelucio: {
+    nome: 'Pelúcio', icone: 'pelucio', cor: 'rosa2', titulo: 'Pelúcio da Joli Coffee', sub: 'Seu irmão veio buscar café para a cafeteria', compra: 'cafe',
+    chegada: ['Boa tarde, irmão! Vim buscar o café.', 'Oi, Ed! A Joli Coffee tá lotada, preciso de café!', 'Cheguei! Sente o cheirinho de café na van?'],
+    conversa: () => ['Quanto café seco você tem pra mim hoje?', 'Os clientes da Joli Coffee adoram o café da fazenda!', 'Esse café vai virar um cappuccino caprichado.'],
+    tchau: ['Valeu, irmão! Passa lá na Joli Coffee pra tomar um cafezinho.', 'Até mais! Vou torrar esse café hoje mesmo.', 'Tchau, Ed! Manda um oi pro Beto.'],
+    tudo: 'Perfeito! Vou torrar hoje mesmo.', botaoTchau: 'Tchau, Pelúcio',
+    vazio: 'Ainda não tem café seco no celeiro. Plante café e colha quando os grãos ficarem vermelhos.',
+  },
 };
-const dadosVisita = () => VISITA[visita && visita === jaca ? 'jaca' : 'beto'];
+const dadosVisita = () => VISITA[visita && visita === jaca ? 'jaca' : visita && visita === pelucio ? 'pelucio' : 'beto'];
 let presenteJaca = '';
 const caminhaoE = { estado: 'longe', x: -5, t: 0 };
 const PARADA = 15.5, Z_ESTRADA = 17.5;
@@ -1532,29 +1620,46 @@ function construirPersonagens(){
   beto = new Porco(COR.beto, COR.betoBolso, 'beto'); beto.g.visible = false; scene.add(beto.g);
   jaca = new Porco(0, 0, 'jaca', { corpo: () => vJaca(false), braco: vBracoJaca, pe: vPeJaca, ombro: [11.5, 22, 2], quadril: [5.5, 7], mao: [-12, 1], altura: 1.1 });
   jaca.g.visible = false; jaca.vel = 2.3; scene.add(jaca.g);
+  pelucio = new Porco(0, 0, 'pelucio', { corpo: () => vPorco(0, 0, false, 'moletom'), braco: vBracoMoletom, pe: vPe, ombro: [15.5, 28.5, 1], quadril: [7, 9], mao: [-16, 1.5], altura: 1.32 });
+  pelucio.g.visible = false; scene.add(pelucio.g);
   visita = beto;
-  caminhao = malha(vCaminhao().build(1 / 16, { origin: [20, 0, 8.5] }));
-  caminhao.position.set(-5, 0, Z_ESTRADA); caminhao.visible = false;
-  const tex = texturaTexto([['JOLI', 1, '#2f6fb3'], ['MARKET', 0.62, '#e0408a']], 512, 210, '#fdf8ef');
+  caminhaoMarket = criarCaminhao(false, [['JOLI', 1, '#2f6fb3'], ['MARKET', 0.62, '#e0408a']], '#fdf8ef');
+  caminhaoCafe = criarCaminhao(true, [['JOLI', 1, '#7a4a2a'], ['COFFEE', 0.62, '#e0408a']], '#fdf3e6');
+  caminhao = caminhaoMarket;
+}
+function criarCaminhao(cafe, linhas, fundo){
+  const c = malha(vCaminhao(cafe).build(1 / 16, { origin: [20, 0, 8.5] }));
+  c.position.set(-5, 0, Z_ESTRADA); c.visible = false;
+  const tex = texturaTexto(linhas, 512, 210, fundo);
   for (const lado of [1, -1]){
     const pl = placaDeTexto(tex, 22 / 16, 9 / 16);
     pl.position.set((13.5 - 20) / 16, 16.5 / 16, lado * (8.6 / 16));
     if (lado < 0) pl.rotation.y = Math.PI;
-    caminhao.add(pl);
+    c.add(pl);
   }
-  caminhao.traverse(o => { o.userData.alvo = { k: 'caminhao' }; });
-  pickaveis.push(caminhao);
-  scene.add(caminhao);
+  c.traverse(o => { o.userData.alvo = { k: 'caminhao' }; });
+  pickaveis.push(c);
+  scene.add(c);
+  return c;
 }
 function chamarBeto(){
   if (caminhaoE.estado === 'aqui'){ abrirBeto(); return; }
-  if (caminhaoE.estado !== 'longe'){ aviso('O caminhão do Joli Market já está a caminho!'); return; }
+  if (caminhaoE.estado !== 'longe'){ aviso(`${dadosVisita().nome} ainda está por aqui. Espere ele ir embora.`); return; }
   visita = (S.visitas || 0) >= 1 && Math.random() < 0.3 ? jaca : beto;
+  caminhao = caminhaoMarket;
   caminhaoE.estado = 'chegando'; caminhaoE.t = 0; caminhao.visible = true; caminhao.position.x = -5;
   Som.buzina(); aviso('Você ligou pro Joli Market. O caminhão já vem!'); hud();
   avancarTut(4);
 }
+function chamarPelucio(){
+  if (caminhaoE.estado === 'aqui' && visita === pelucio){ abrirBeto(); return; }
+  if (caminhaoE.estado !== 'longe'){ aviso(`${dadosVisita().nome} ainda está por aqui. Espere ele ir embora.`); return; }
+  visita = pelucio; caminhao = caminhaoCafe;
+  caminhaoE.estado = 'chegando'; caminhaoE.t = 0; caminhao.visible = true; caminhao.position.x = -5;
+  Som.buzina(); aviso('Você ligou pro Pelúcio. A van da Joli Coffee já vem!'); hud();
+}
 function atualizarCaminhao(dt){
+  if (caminhaoE.estado === 'cine') return;
   const c = caminhaoE;
   if (c.estado === 'chegando'){
     c.t += dt / 4.2;
@@ -1615,6 +1720,121 @@ function darPresente(){
   S.bolsa[k] = (S.bolsa[k] || 0) + q;
   flutuar(jaca.topo(), '+' + q, '', k);
   return `Trouxe ${q} sementes de ${CULTURAS[k].nome.toLowerCase()} de presente pra você!`;
+}
+
+// ================= cena do nível 15: o Pelúcio aparece pela primeira vez
+const FALAS_CINE = [
+  ['pelucio', 'Pelúcio', 'Boa tarde, irmão! O que acha de vender café pra eu vender lá na minha cafeteria?'],
+  ['ed', 'Ed', 'Aooooa! Grande ideia irmão, vou começar a plantar e assim que tiver pronto ligo pra você vir buscar.'],
+];
+const PONTO_ED = [16.5, 13.5], PONTO_PELUCIO = [15.5, 14.5];
+let cine = null;
+function podeIniciarCine(){
+  return S && !S.viuCinePelucio && nivel() >= 15 && !cine && ed.estado === 'parado' && !tarefaAtual
+    && !algumaJanela() && !menuAberto && caminhaoE.estado === 'longe';
+}
+function iniciarCine(){
+  fecharMenu(); desligarModo(); marcaHover.visible = false;
+  cine = { passo: 'chegando', t: 0, cam0: { alvo: cam.alvo.clone(), vista: cam.vista, az: cam.azAlvo }, linha: -1, letras: 0, presente: false };
+  cam.azAlvo = Math.round((cam.azAlvo - Math.PI / 4) / (Math.PI / 2)) * (Math.PI / 2) + Math.PI / 4;
+  $('jogo').classList.add('cinema');
+  $('cine').hidden = false; requestAnimationFrame(() => $('cine').classList.add('on'));
+  caminhao = caminhaoCafe; caminhao.visible = true; caminhao.position.set(-5, 0, Z_ESTRADA);
+  caminhaoE.estado = 'cine';
+  const pts = rota(clamp(Math.floor(ed.pos.x), 0, W - 1), clamp(Math.floor(ed.pos.y), 0, H - 1), Math.floor(PONTO_ED[0]), Math.floor(PONTO_ED[1]));
+  if (pts) ed.ir(pts, () => ed.olhar(...PONTO_PELUCIO)); else { ed.colocar(...PONTO_ED); ed.olhar(...PONTO_PELUCIO); }
+  Som.buzina();
+}
+// olha para (x, z) mas gira um pouco na direção da câmera, para o rosto aparecer na cena
+function virarNaCena(p, x, z){ p.olhar(x, z); p.angAlvo = anguloPerto(p.angAlvo, cam.azAlvo, 0.42); }
+function atualizarCine(dt){
+  const c = cine; c.t += dt;
+  const fim = c.passo === 'voltando-camera';
+  const alvo = fim ? c.cam0.alvo : new THREE.Vector3((PONTO_ED[0] + PONTO_PELUCIO[0]) / 2 + 0.25, 0.35, (PONTO_ED[1] + PONTO_PELUCIO[1]) / 2 + 0.6);
+  const k = Math.min(1, dt * (fim ? 3 : 1.6));
+  cam.alvo.lerp(alvo, k); cam.vista = lerp(cam.vista, fim ? c.cam0.vista : 4, k);
+  switch (c.passo){
+    case 'chegando': {
+      const e = 1 - Math.pow(1 - Math.min(1, c.t / 4.2), 3);
+      caminhao.position.x = lerp(-5, PARADA, e);
+      caminhao.position.y = Math.abs(Math.sin(c.t * 10)) * 0.015;
+      if (c.t >= 4.2){
+        caminhao.position.y = 0; Som.buzina();
+        c.passo = 'descendo'; c.t = 0; c.chegou = false;
+        pelucio.g.visible = true; pelucio.colocar(PARADA, 16.85); pelucio.ang = pelucio.angAlvo = Math.PI;
+        pelucio.ir([[PARADA, 16.4], PONTO_PELUCIO], () => { c.chegou = true; pelucio.olhar(...PONTO_ED); });
+      }
+      break;
+    }
+    case 'descendo':
+      if (c.chegou && ed.estado === 'parado'){ virarNaCena(ed, ...PONTO_PELUCIO); virarNaCena(pelucio, ...PONTO_ED); c.passo = 'dialogo'; mostrarFalaCine(0); }
+      break;
+    case 'dialogo': {
+      const txt = FALAS_CINE[c.linha][2];
+      if (c.letras < txt.length){
+        c.letras = Math.min(txt.length, c.letras + dt * 34);
+        $('cineTexto').textContent = txt.slice(0, Math.floor(c.letras));
+        if (c.letras >= txt.length) $('cineSeguir').classList.add('pode');
+      }
+      break;
+    }
+    case 'despedida':
+      if (c.t > 1.6){ c.passo = 'saindo'; c.t = 0; pelucio.ir([[PARADA, 16.4], [PARADA, 16.85]], () => { pelucio.g.visible = false; c.passo = 'partindo'; c.t = 0; Som.buzina(); }); }
+      break;
+    case 'partindo': {
+      const e = Math.pow(Math.min(1, c.t / 3.5), 2);
+      caminhao.position.x = lerp(PARADA, 31, e);
+      if (c.t >= 3.5){ caminhao.visible = false; c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
+      break;
+    }
+    case 'voltando-camera':
+      if (c.t >= 0.9) encerrarCine();
+      break;
+  }
+}
+function mostrarFalaCine(i){
+  const c = cine, [quem, nome, txt] = FALAS_CINE[i];
+  c.linha = i; c.letras = 0;
+  $('cineDialogo').hidden = false;
+  $('cineRosto').src = icone(quem);
+  $('cineNome').textContent = nome; $('cineNome').className = 'quem ' + quem;
+  $('cineTexto').textContent = ''; $('cineSeguir').classList.remove('pode');
+  if (quem === 'ed'){ ed.pulo = 0.45; ed.aceno = 1.2; } else pelucio.aceno = 2;
+  Som.oinc();
+}
+function avancarCine(){
+  const c = cine;
+  if (!c || c.passo !== 'dialogo') return;
+  const txt = FALAS_CINE[c.linha][2];
+  if (c.letras < txt.length){ c.letras = txt.length; $('cineTexto').textContent = txt; $('cineSeguir').classList.add('pode'); return; }
+  if (c.linha < FALAS_CINE.length - 1){ mostrarFalaCine(c.linha + 1); return; }
+  $('cineDialogo').hidden = true;
+  presenteCafe();
+  pelucio.aceno = 1.6; c.passo = 'despedida'; c.t = 0;
+}
+// o Pelúcio deixa umas sementes de café para o Ed começar
+function presenteCafe(){
+  if (cine.presente) return;
+  cine.presente = true;
+  S.bolsa.cafe = (S.bolsa.cafe || 0) + 4;
+  if (pelucio.g.visible) flutuar(ed.topo(), '+4', '', 'cafe');
+}
+function pularCine(){
+  if (!cine) return;
+  presenteCafe();
+  pelucio.g.visible = false; pelucio.pontos = []; pelucio.estado = 'parado';
+  caminhao.visible = false;
+  cam.alvo.copy(cine.cam0.alvo); cam.vista = cine.cam0.vista; cam.azAlvo = cine.cam0.az;
+  encerrarCine();
+}
+function encerrarCine(){
+  $('cine').classList.remove('on'); $('cine').hidden = true; $('cineDialogo').hidden = true;
+  $('jogo').classList.remove('cinema');
+  caminhao = caminhaoMarket; caminhaoE.estado = 'longe';
+  cine = null;
+  S.viuCinePelucio = true;
+  aviso('Café liberado! O Pelúcio compra o café seco para a Joli Coffee.', 'grande', 4.5);
+  hud(); salvar();
 }
 
 // ================= tarefas do Ed
@@ -1693,7 +1913,7 @@ function limparFila(){ for (const t of fila.slice()) cancelar(t); }
 function alvoMundo(alvo){ return alvo.k === 'animal' ? [alvo.a.pos.x, alvo.a.pos.y] : [alvo.x + 0.5, alvo.z + 0.5]; }
 let tarefaAtual = null;
 function proximaTarefa(){
-  if (tarefaAtual || ed.estado !== 'parado' || !fila.length) return;
+  if (cine || tarefaAtual || ed.estado !== 'parado' || !fila.length) return;
   const tarefa = fila[0];
   if (tarefa.tipo !== 'andar' && !checar(tarefa.tipo, tarefa.alvo, tarefa.param).ok && !(tarefa.custo && Object.keys(tarefa.custo).length)){ fila.shift(); liberar(tarefa, true); hud(); return; }
   tarefaAtual = tarefa;
@@ -1799,7 +2019,7 @@ function gastar(v){ S.dinheiro -= v; hud(); }
 function chipPulsa(id){ const e = $(id); e.classList.remove('pulsa'); void e.offsetWidth; e.classList.add('pulsa'); }
 
 // pedidos e oferta do dia
-function produtosLiberados(){ const n = nivel(); return ORDEM_PRODUTOS.filter(p => PRODUTOS[p].nivel <= n); }
+function produtosLiberados(){ const n = nivel(); return ORDEM_PRODUTOS.filter(p => PRODUTOS[p].nivel <= n && !PRODUTOS[p].so); }
 function novoPedido(){
   const n = nivel(), disp = produtosLiberados();
   const k = Math.min(disp.length, 1 + (n >= 3 ? 1 : 0) + (n >= 6 ? 1 : 0));
@@ -1826,7 +2046,8 @@ function hud(){
   $('fila').hidden = nf < 2;
   $('filaTexto').textContent = `Ed tem ${nf} tarefas`;
   const bt = $('btnBeto'), est = caminhaoE.estado;
-  $('btnBetoTexto').textContent = est === 'aqui' ? `Falar com o ${dadosVisita().nome}` : est === 'chegando' || est === 'descendo' ? 'Caminhão chegando' : est === 'longe' ? 'Chamar o Beto' : 'Caminhão indo embora';
+  const quem = dadosVisita().nome;
+  $('btnBetoTexto').textContent = est === 'aqui' ? `Falar com o ${quem}` : est === 'chegando' || est === 'descendo' ? `${quem} chegando` : est === 'longe' || est === 'cine' ? (S.viuCinePelucio ? 'Ligar' : 'Chamar o Beto') : `${quem} indo embora`;
   bt.classList.toggle('destaque', est === 'aqui');
   const totalProd = Object.values(S.celeiro).reduce((a, b) => a + b, 0);
   let bol = $('btnCeleiro').querySelector('.bolinha');
@@ -1860,7 +2081,7 @@ const FALAS = [];
 function falar(quem, txt, dur = 2){
   for (const f of FALAS.filter(f => f.quem === quem)){ f.el.remove(); FALAS.splice(FALAS.indexOf(f), 1); }
   const e = document.createElement('div');
-  e.className = 'fala' + (quem === beto ? ' beto' : quem === jaca ? ' jaca' : ''); e.textContent = txt;
+  e.className = 'fala ' + (quem.nome || ''); e.textContent = txt;
   $('sobreposicoes').appendChild(e);
   FALAS.push({ quem, el: e, fim: performance.now() + dur * 1000 });
 }
@@ -1990,7 +2211,14 @@ function itensDoAlvo(alvo){
     }
     return r;
   }
-  if (alvo.k === 'beto' || alvo.k === 'jaca' || alvo.k === 'caminhao'){ abrirBeto(); return null; }
+  if (alvo.k === 'beto' || alvo.k === 'jaca' || alvo.k === 'pelucio' || alvo.k === 'caminhao'){ abrirBeto(); return null; }
+  if (alvo.k === 'telefone'){
+    const cafe = S.celeiro.cafe || 0;
+    r.titulo = 'Ligar para quem?'; r.icone = 'caminhao';
+    r.itens.push({ rotulo: 'Beto', sub: 'Joli Market · compra o que a fazenda produz', icone: 'beto', fn: chamarBeto });
+    r.itens.push({ rotulo: 'Pelúcio', sub: cafe ? `Joli Coffee · você tem ${cafe} ${cafe > 1 ? 'saquinhos' : 'saquinho'} de café seco` : 'Joli Coffee · só compra café seco', icone: 'pelucio', fn: chamarPelucio });
+    return r;
+  }
   if (alvo.k === 'alimentador'){
     const A = ANIMAIS[alvo.tp];
     r.titulo = 'Alimentador automático'; r.icone = 'alimentador';
@@ -2171,24 +2399,27 @@ function comprarAnimal(tp){
   aviso(`${A.nome} nova no ${A.lugar}!`);
   hud(); salvar();
 }
-function linhasProdutos(comVenda){
+function linhasProdutos(comVenda, aceita = () => true, vazio = 'O celeiro está vazio. Colha alguma coisa ou pegue ovos e leite.'){
   const of = ofertaDoDia();
-  const itens = ORDEM_PRODUTOS.filter(p => S.celeiro[p] > 0);
-  if (!itens.length) return '<div class="vazio">O celeiro está vazio. Colha alguma coisa ou pegue ovos e leite.</div>';
+  const itens = ORDEM_PRODUTOS.filter(p => S.celeiro[p] > 0 && aceita(p));
+  if (!itens.length) return `<div class="vazio">${vazio}</div>`;
   return '<div class="linhas">' + itens.map(p => {
     const pr = preco(p), q = S.celeiro[p];
     return `<div class="linha${p === of ? ' oferta' : ''}"><img src="${icone(p)}" alt=""><div class="nome">${PRODUTOS[p].nome}${p === of ? '<span class="selo">oferta do dia</span>' : ''}<small>${reais(pr)} cada</small></div><div class="qtd">${q}</div>${comVenda ? `<button class="botao mini claro" data-vender="${p}" data-q="1" type="button">1</button><button class="botao mini" data-vender="${p}" data-q="${q}" type="button">Tudo · ${reais(pr * q)}</button>` : ''}</div>`;
   }).join('') + '</div>';
 }
-function valorCeleiro(){ return ORDEM_PRODUTOS.reduce((s, p) => s + (S.celeiro[p] || 0) * preco(p), 0); }
+function valorCeleiro(aceita = () => true){ return ORDEM_PRODUTOS.reduce((s, p) => s + (aceita(p) ? (S.celeiro[p] || 0) * preco(p) : 0), 0); }
+const aceitaDe = v => v === pelucio ? (p => p === 'cafe') : (p => !PRODUTOS[p].so);
 function abrirCeleiro(){
   const sementes = ORDEM_CULTURAS.filter(k => S.bolsa[k] > 0);
   let corpo = linhasProdutos(false);
   corpo += `<div class="rodape-janela"><div class="total">Vale ${reais(valorCeleiro())}</div><button class="botao azul" id="jBeto" type="button"><img src="${icone('beto')}" alt="">${caminhaoE.estado === 'aqui' ? 'Vender pro Beto' : 'Chamar o Beto'}</button></div>`;
   corpo += `<h3 style="margin:16px 0 8px;font-size:15px">Bolsa de sementes</h3>`;
   corpo += sementes.length ? '<div class="linhas">' + sementes.map(k => `<div class="linha"><img src="${icone(k)}" alt=""><div class="nome">${CULTURAS[k].nome}<small>semente</small></div><div class="qtd">${S.bolsa[k]}</div></div>`).join('') + '</div>' : '<div class="vazio">Nenhuma semente na bolsa. Dá para comprar na loja ou na hora de plantar.</div>';
+  if (S.viuCinePelucio && S.celeiro.cafe) corpo = corpo.replace('<div class="rodape-janela">', `<div class="rodape-janela" style="justify-content:flex-end;margin-bottom:-4px"><button class="botao rosa" id="jPelucio" type="button"><img src="${icone('pelucio')}" alt="">Chamar o Pelúcio</button></div><div class="rodape-janela">`);
   abrirJanela(topo('celeiro', 'Celeiro', 'Tudo o que o Ed colheu', 'rosa') + `<div class="janela-corpo">${corpo}</div>`);
   const b = $('jBeto'); if (b) b.addEventListener('click', () => { fecharJanela(); chamarBeto(); });
+  const bp = $('jPelucio'); if (bp) bp.addEventListener('click', () => { fecharJanela(); chamarPelucio(); });
 }
 function pedidoHTML(comBotao){
   if (!S.pedido) novoPedido();
@@ -2243,6 +2474,7 @@ function lembretes(){
     if (prontos) out.push([A.produto, tp === 'galinha' ? `pegar ${plural(prontos, 'ovo', 'ovos')}` : `tirar leite de ${plural(prontos, 'vaca', 'vacas')}`]);
   }
   if (S.racao < 4 && ANI.length) out.push(['racao', `comprar ração (só tem ${S.racao})`]);
+  if (S.celeiro.cafe && S.viuCinePelucio) out.push(['pelucio', `ligar pro Pelúcio buscar o café`]);
   return out;
 }
 function abrirCaderno(){
@@ -2250,7 +2482,7 @@ function abrirCaderno(){
   let h = `<div class="caderno">`;
   h += `<div class="rabisco-canto" style="right:10px;top:4px">${rabisco(RABISCO.sol(), '0 0 80 80', 64, 8)}</div>`;
   h += `<h2>Caderno do Ed</h2>`;
-  h += `<div class="rabiscos">${rabisco(RABISCO.porco('#f6e27c', '#c9a92c'), '0 0 120 115', 92, -5, 'eu')}${rabisco(RABISCO.coracao(), '0 0 60 60', 34, 6)}${rabisco(RABISCO.porco('#b6d5ee', '#5f8fbf'), '0 0 120 115', 92, 4, 'Beto')}${S.conheceuJaca ? rabisco(RABISCO.jaca(), '0 0 112 112', 88, -3, 'Jaca') : ''}</div>`;
+  h += `<div class="rabiscos">${rabisco(RABISCO.porco('#f6e27c', '#c9a92c'), '0 0 120 115', 92, -5, 'eu')}${rabisco(RABISCO.coracao(), '0 0 60 60', 34, 6)}${rabisco(RABISCO.porco('#b6d5ee', '#5f8fbf'), '0 0 120 115', 92, 4, 'Beto')}${S.conheceuJaca ? rabisco(RABISCO.jaca(), '0 0 112 112', 88, -3, 'Jaca') : ''}${S.viuCinePelucio ? rabisco(RABISCO.porco('#f3b3ab', '#d77f75'), '0 0 120 115', 92, 3, 'Pelúcio') : ''}</div>`;
   h += `<div class="rabisco-canto" style="right:14px;top:210px">${rabisco(RABISCO.cenoura(), '0 0 72 66', 56, -10)}</div>`;
   h += `<h3>Pedido do Beto</h3>`;
   if (!S.anotado || !S.pedido){
@@ -2262,6 +2494,14 @@ function abrirCaderno(){
     if (completo) h += `<p>Já tenho tudo!! É só chamar o Beto.</p>`;
     h += `<h3>Oferta de hoje</h3><p>O Joli Market tá pagando mais por <span class="grifo">${PRODUTOS[of].plural}</span>.</p>`;
   }
+  if (S.viuCinePelucio){
+    const cafe = S.celeiro.cafe || 0;
+    let plantado = 0; for (const k in S.campo) if (S.campo[k].c === 'cafe') plantado++;
+    h += `<h3>Café pro Pelúcio</h3>`;
+    h += cafe ? `<p>Tenho <span class="grifo">${cafe} ${cafe > 1 ? 'saquinhos' : 'saquinho'} de café seco</span> pra Joli Coffee!</p>` : '<p>Ainda não tenho café seco.</p>';
+    h += plantado ? `<p>Tem café plantado em ${plantado} ${plantado > 1 ? 'canteiros' : 'canteiro'}.</p>` : '<p>Preciso plantar café! A semente fica na loja.</p>';
+    if (cafe) h += `<p><button class="botao rosa" id="jPelucio" type="button"><img src="${icone('pelucio')}" alt="">Ligar pro Pelúcio</button></p>`;
+  }
   h += `<div class="rabisco-canto" style="right:12px;bottom:40px">${rabisco(RABISCO.galinha(), '0 0 72 70', 58, 6)}</div>`;
   h += `<h3>Não esquecer</h3>`;
   const lem = lembretes();
@@ -2272,20 +2512,23 @@ function abrirCaderno(){
   h += `</div>`;
   abrirJanela(topo('caderno', 'Caderno do Ed', 'Pedidos, lembretes e desenhos', 'rosa') + `<div class="janela-corpo">${h}</div>`);
   $('jBeto').addEventListener('click', () => { fecharJanela(); chamarBeto(); });
+  const bp = $('jPelucio'); if (bp) bp.addEventListener('click', () => { fecharJanela(); chamarPelucio(); });
 }
 let falaBeto = '';
 function abrirBeto(){
   if (caminhaoE.estado !== 'aqui'){ chamarBeto(); return; }
   const of = ofertaDoDia(), D = dadosVisita();
   if (!falaBeto){ falaBeto = sorteia(D.conversa(of)); if (presenteJaca){ falaBeto = presenteJaca + ' ' + falaBeto; presenteJaca = ''; } }
-  if (!S.anotado){ S.anotado = true; salvar(); hud(); }
-  let corpo = `<div class="fala-janela">${esc(falaBeto)}</div>${pedidoHTML(true)}${linhasProdutos(true)}`;
-  const total = valorCeleiro();
+  const aceita = aceitaDe(visita), doCafe = visita === pelucio;
+  if (!doCafe && !S.anotado){ S.anotado = true; salvar(); hud(); }
+  let corpo = `<div class="fala-janela">${esc(falaBeto)}</div>${doCafe ? '' : pedidoHTML(true)}${linhasProdutos(true, aceita, D.vazio)}`;
+  if (!doCafe && S.celeiro.cafe) corpo += `<p style="margin:10px 0 0;font-weight:700;font-size:13px;color:var(--tinta-suave)">O café seco fica guardado para o Pelúcio, da Joli Coffee.</p>`;
+  const total = valorCeleiro(aceita);
   corpo += `<div class="rodape-janela"><button class="botao claro" type="button" data-fechar>${D.botaoTchau}</button><button class="botao" id="jTudo" type="button"${total ? '' : ' disabled'}>Vender tudo · ${reais(total)}</button></div>`;
   abrirJanela(topo(D.icone, D.titulo, D.sub, D.cor) + `<div class="janela-corpo">${corpo}</div>`, () => { falaBeto = ''; despedirBeto(); });
   const j = $('janela');
   j.querySelectorAll('[data-vender]').forEach(b => b.addEventListener('click', () => { vender(b.dataset.vender, +b.dataset.q); reabrirBeto(); }));
-  const tudo = $('jTudo'); if (tudo) tudo.addEventListener('click', () => { for (const p of ORDEM_PRODUTOS) if (S.celeiro[p]) vender(p, S.celeiro[p], true); Som.moeda(); falaBeto = D.tudo; reabrirBeto(); });
+  const tudo = $('jTudo'); if (tudo) tudo.addEventListener('click', () => { for (const p of ORDEM_PRODUTOS) if (S.celeiro[p] && aceita(p)) vender(p, S.celeiro[p], true); Som.moeda(); falaBeto = D.tudo; reabrirBeto(); });
   const ent = $('jEntregar'); if (ent) ent.addEventListener('click', entregarPedido);
 }
 function reabrirBeto(){ const cb = aoFecharJanela; aoFecharJanela = null; $('modal').hidden = true; abrirBeto(); if (!aoFecharJanela) aoFecharJanela = cb; }
@@ -2388,6 +2631,7 @@ function alvoNaTela(cx, cy){
 }
 function tocou(cx, cy){
   Som.ligar();
+  if (cine){ avancarCine(); return; }
   if (menuAberto){ fecharMenu(); return; }
   const alvo = alvoNaTela(cx, cy);
   if (!alvo){ return; }
@@ -2425,7 +2669,7 @@ function eventos(){
     if (ponteiros.size === 1){
       const dx = e.clientX - p.x, dy = e.clientY - p.y;
       if (!arrastou && Math.hypot(e.clientX - inicio.x, e.clientY - inicio.y) > 7) arrastou = true;
-      if (arrastou){ arrastar(dx, dy); marcaHover.visible = false; }
+      if (arrastou && !cine){ arrastar(dx, dy); marcaHover.visible = false; }
     } else if (ponteiros.size === 2){
       p.x = e.clientX; p.y = e.clientY;
       const [a, b] = [...ponteiros.values()];
@@ -2444,7 +2688,9 @@ function eventos(){
   canvas.addEventListener('pointerup', solta);
   canvas.addEventListener('pointercancel', solta);
   canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') marcaHover.visible = false; });
-  canvas.addEventListener('wheel', e => { e.preventDefault(); zoom(Math.exp(e.deltaY * 0.0012)); fecharMenu(); }, { passive: false });
+  canvas.addEventListener('wheel', e => { e.preventDefault(); if (cine) return; zoom(Math.exp(e.deltaY * 0.0012)); fecharMenu(); }, { passive: false });
+  $('cineDialogo').addEventListener('click', avancarCine);
+  $('cinePular').addEventListener('click', e => { e.stopPropagation(); pularCine(); });
   addEventListener('resize', () => { redimensionar(); fecharMenu(); });
   $('girarE').addEventListener('click', () => girar(-1));
   $('girarD').addEventListener('click', () => girar(1));
@@ -2452,7 +2698,11 @@ function eventos(){
   $('zoomMenos').addEventListener('click', () => zoom(1.25));
   $('btnLoja').addEventListener('click', () => { Som.ligar(); Som.clique(); abrirLoja(); });
   $('btnCeleiro').addEventListener('click', () => { Som.ligar(); Som.clique(); abrirCeleiro(); });
-  $('btnBeto').addEventListener('click', () => { Som.ligar(); Som.clique(); chamarBeto(); });
+  $('btnBeto').addEventListener('click', () => {
+    Som.ligar(); Som.clique();
+    if (S.viuCinePelucio && caminhaoE.estado === 'longe'){ const b = $('btnBeto').getBoundingClientRect(); abrirMenu({ k: 'telefone' }, b.left, b.top - 20); }
+    else chamarBeto();
+  });
   $('btnAjustes').addEventListener('click', () => { Som.ligar(); Som.clique(); abrirAjustes(); });
   $('btnCaderno').addEventListener('click', () => { Som.ligar(); Som.clique(); abrirCaderno(); });
   $('modoSair').addEventListener('click', desligarModo);
@@ -2461,6 +2711,7 @@ function eventos(){
   $('modal').addEventListener('pointerdown', e => { if (e.target === $('modal')) fecharJanela(); });
   document.addEventListener('pointerdown', e => { if (menuAberto && !$('menu').contains(e.target) && e.target !== canvas) fecharMenu(); });
   addEventListener('keydown', e => {
+    if (cine){ if (e.key === 'Escape') pularCine(); else if (e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); avancarCine(); } return; }
     if (e.key === 'Escape'){ if (algumaJanela()) fecharJanela(); else if (menuAberto) fecharMenu(); else if (modo) desligarModo(); return; }
     if (algumaJanela() || e.target.tagName === 'INPUT') return;
     const k = e.key.toLowerCase(), passo = 30;
@@ -2504,8 +2755,10 @@ function quadro(agoraP){
   const t = agoraP / 1000;
   cam.az = lerp(cam.az, cam.azAlvo, Math.min(1, dt * 9));
   posicionarCamera();
+  if (cine) atualizarCine(dt); else if (podeIniciarCine()) iniciarCine();
   proximaTarefa();
   ed.update(dt, t);
+  if (pelucio.g.visible) pelucio.update(dt, t);
   if (beto.g.visible) beto.update(dt, t);
   if (jaca.g.visible) jaca.update(dt, t);
   atualizarCaminhao(dt);
@@ -2562,7 +2815,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   if (novo) setTimeout(() => mostrarAjuda(true), 300);
   else if (fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 iniciar();
 })();
