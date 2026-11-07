@@ -1915,8 +1915,10 @@ function montarFabrica(id){
     if (st.esteira){
       // esteira curta saindo da frente, do lado oposto à porta
       const e = malha(geo('esteira', () => vEsteira().build(1 / 16, { origin: [2, 0, 0] })));
-      e.position.set(0.6, 0, 0.62); V.mesh.add(e);
-      if (st.repetidor){ V.luz = new THREE.Mesh(geoPart, new THREE.MeshBasicMaterial({ color: 0x5ad16a })); V.luz.scale.setScalar(1.6); V.luz.position.set(0.6, 0.36, 1.43); V.mesh.add(V.luz); }
+      // o terreiro é um pátio baixo com a porta no lado de menor z: a esteira vira para lá e começa na borda do pátio
+      const pat = id === 'terreiro', sg = pat ? -1 : 1, ex = pat ? 0.9 : 0.6, ez = pat ? 0.88 : 0.62;
+      e.position.set(ex, 0, sg * ez); if (pat) e.rotation.y = Math.PI; V.mesh.add(e);
+      if (st.repetidor){ V.luz = new THREE.Mesh(geoPart, new THREE.MeshBasicMaterial({ color: 0x5ad16a })); V.luz.scale.setScalar(1.6); V.luz.position.set(ex, 0.36, sg * (ez + 0.81)); V.mesh.add(V.luz); }
     }
     if (id === 'terreiro'){ V.graos = malha(geo('graos', () => vGraos().build(1 / 8, { origin: [12, 0, 8] })), false); V.mesh.add(V.graos); }
   }
@@ -1997,7 +1999,7 @@ function comprarAutomacao(id, qual){
     let xp = 0; for (const rid of st.feitos.splice(0)) xp += entregarReceita(rid);
     for (const t of fila.slice()) if (t.tipo === 'recolher' && t.alvo.id === id) cancelar(t);
     if (xp) ganharXP(xp);
-    aviso(`Esteira na ${FABRICAS[id].nome.toLowerCase()}: o que fica pronto vai direto para o celeiro.`, 'grande', 3.5);
+    aviso(`Esteira ${FABRICAS[id].fem ? 'na' : 'no'} ${FABRICAS[id].nome.toLowerCase()}: o que fica pronto vai direto para o celeiro.`, 'grande', 3.5);
   } else {
     st.repetidor = true;
     aviso('Repetidor instalado! Escolha no menu qual receita repetir.', 'grande', 3.5);
@@ -2056,7 +2058,7 @@ function itensFabrica(id){
     r.itens.push({ rotulo: R.nome, sub: `${textoItens(R.entra)} → ${textoItens(R.sai)} · ${tempo(R.tempo)}`, icone: sai === 'racao' ? 'racao' : sai, off: cheia || !temItens(R.entra), fn: () => enfileirar('produzir', { k: 'fabrica', id }, rid) });
   }
   if (cheia) r.itens.push({ rotulo: 'Fila cheia', sub: `até ${VAGAS_FAB} receitas por vez`, icone: id, off: true, leve: true, fn: () => {} });
-  if (id !== 'terreiro'){
+  {
     if (!st.esteira) r.itens.push({ rotulo: 'Esteira de saída', sub: 'o que fica pronto vai sozinho para o celeiro', icone: 'esteira', preco: reais(ESTEIRA.preco), leve: true, off: S.dinheiro < ESTEIRA.preco, fn: () => comprarAutomacao(id, 'esteira') });
     else if (!st.repetidor) r.itens.push({ rotulo: 'Repetidor de receita', sub: 'recomeça sozinho uma receita escolhida', icone: 'repetir', preco: reais(REPETIDOR.preco), leve: true, off: S.dinheiro < REPETIDOR.preco, fn: () => comprarAutomacao(id, 'repetidor') });
     else for (const rid of F.receitas){
@@ -3656,8 +3658,8 @@ function chipPulsa(id){ const e = $(id); e.classList.remove('pulsa'); void e.off
 // pedidos e oferta do dia
 function produtosLiberados(){ const n = nivel(); return ORDEM_PRODUTOS.filter(p => PRODUTOS[p].nivel <= n && !PRODUTOS[p].so && (!PRODUTOS[p].fab || estFab(PRODUTOS[p].fab).feita)); }
 // ================= mural de pedidos
-// até três pedidos ao mesmo tempo (um por vez no começo, dois do nível 5, três do 10). O terceiro é do Pelúcio
-// depois que ele aparece. Cada pedido tem prazo; entregue ou vencido, outro chega alguns minutos depois.
+// até três pedidos do Beto e do Jaca ao mesmo tempo (um por vez no começo, dois do nível 5, três do 10). O Pelúcio ganha
+// uma quarta vaga própria depois que aparece. Cada pedido tem prazo; entregue ou vencido, outro chega alguns minutos depois.
 const PRAZO_PEDIDO = 45 * 60 * 1000;
 // empurra para frente o que só deve correr com o jogo aberto: o tempo do Hud e o prazo dos pedidos
 function pausarRelogios(ms){
@@ -3666,19 +3668,27 @@ function pausarRelogios(ms){
   if (S.hudAte && S.hudAte > inicio) S.hudAte += ms;
   for (const p of S.pedidos || []) if (p && p.prazo && p.prazo > inicio) p.prazo += ms;
 }
-const vagasPedido = () => nivel() < 5 ? 1 : nivel() < 10 ? 2 : 3;
-const quemPede = i => (i === 2 && S.viuCinePelucio) ? 'pelucio' : (S.conheceuJaca && Math.random() < 0.35 ? 'jaca' : 'beto');
+const vagasPedido = () => (nivel() < 5 ? 1 : nivel() < 10 ? 2 : 3) + (S.viuCinePelucio ? 1 : 0);
+const MAX_ITEM_PEDIDO = 30, BASE_MAX_PEDIDO = 40;
+const quemPede = i => i === 3 ? 'pelucio' : (S.conheceuJaca && Math.random() < 0.35 ? 'jaca' : 'beto');
 const NOME_PEDE = { beto: 'Beto', jaca: 'Jaca', pelucio: 'Pelúcio' };
 function gerarPedido(quem){
   const n = nivel();
   let disp = quem === 'pelucio' ? ['cafe', ...(estFab('torrador').feita ? ['torrado'] : [])] : produtosLiberados();
   const k = Math.min(disp.length, quem === 'pelucio' ? disp.length : 1 + (n >= 3 ? 1 : 0) + (n >= 6 ? 1 : 0));
-  const escolhidos = [];
-  while (escolhidos.length < k){ const p = sorteia(disp); if (!escolhidos.includes(p)) escolhidos.push(p); }
   // o tamanho do pedido acompanha o nível e quanta terra o Ed tem
   const escala = (22 + n * 14) * (1 + 0.35 * (S.lotes.filter(Boolean).length - 1));
+  // Beto e Jaca não pedem item barato demais (centenas de cenouras): sorteiam entre os de quantidade-base até 40
+  // e, se faltarem, completam com os de maior preço
+  if (quem !== 'pelucio'){
+    const razoaveis = disp.filter(p => escala / PRODUTOS[p].venda <= BASE_MAX_PEDIDO);
+    if (razoaveis.length >= k) disp = razoaveis;
+    else disp = [...razoaveis, ...disp.filter(p => !razoaveis.includes(p)).sort((a, b) => PRODUTOS[b].venda - PRODUTOS[a].venda).slice(0, k - razoaveis.length)];
+  }
+  const escolhidos = [];
+  while (escolhidos.length < k){ const p = sorteia(disp); if (!escolhidos.includes(p)) escolhidos.push(p); }
   let valor = 0;
-  const itens = escolhidos.map(p => { const q = Math.max(1, Math.round(escala / PRODUTOS[p].venda * rnd(0.6, 1))); valor += q * PRODUTOS[p].venda; return [p, q]; });
+  const itens = escolhidos.map(p => { const q = Math.min(MAX_ITEM_PEDIDO, Math.max(1, Math.round(escala / PRODUTOS[p].venda * rnd(0.6, 1)))); valor += q * PRODUTOS[p].venda; return [p, q]; });
   const ped = { quem, itens, dinheiro: Math.round(valor * 1.5 / 5) * 5, xp: Math.round(valor / 6) + 3, prazo: Date.now() + PRAZO_PEDIDO };
   // de vez em quando vem um presente junto
   if (Math.random() < 0.3){
@@ -3692,7 +3702,9 @@ function atualizarPedidos(){
   if (!Array.isArray(S.pedidos)) S.pedidos = [];
   const agora = Date.now(), vagas = vagasPedido();
   let mudou = false;
-  for (let i = 0; i < 3; i++){
+  // save antigo: o pedido do Pelúcio ficava na vaga 2 e agora a vaga dele é a 3
+  if (S.pedidos[2] && S.pedidos[2].quem === 'pelucio' && !S.pedidos[3]){ S.pedidos[3] = S.pedidos[2]; S.pedidos[2] = null; mudou = true; }
+  for (let i = 0; i < 4; i++){
     let p = S.pedidos[i];
     if (i >= vagas){ continue; }
     if (!p){ S.pedidos[i] = gerarPedido(quemPede(i)); mudou = true; continue; }
