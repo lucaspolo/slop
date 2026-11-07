@@ -423,7 +423,7 @@ const COR = {
 };
 
 // ================= dados do jogo
-const W = 24, H = 18;
+const W = 30, H = 18;
 const CULTURAS = {
   cenoura:  { nome:'Cenoura',  plural:'cenouras',  semente:4,  tempo:40,  venda:3,   rend:4, xp:2,  nivel:1 },
   alface:   { nome:'Alface',   plural:'alfaces',   semente:6,  tempo:70,  venda:5,   rend:4, xp:3,  nivel:1 },
@@ -432,7 +432,7 @@ const CULTURAS = {
   abobora:  { nome:'Abóbora',  plural:'abóboras',  semente:24, tempo:300, venda:62,  rend:1, xp:9,  nivel:4 },
   morango:  { nome:'Morango',  plural:'morangos',  semente:34, tempo:420, venda:23,  rend:4, xp:12, nivel:5 },
   melancia: { nome:'Melancia', plural:'melancias', semente:48, tempo:600, venda:125, rend:1, xp:16, nivel:6 },
-  cafe:     { nome:'Café',     plural:'saquinhos de café seco', semente:70, tempo:720, venda:40, rend:4, xp:22, nivel:15 },
+  cafe:     { nome:'Café',     plural:'cerejas de café', semente:70, tempo:720, venda:40, rend:4, xp:22, nivel:15, produto:'cereja' },
 };
 const ORDEM_CULTURAS = Object.keys(CULTURAS);
 const ANIMAIS = {
@@ -445,7 +445,38 @@ for (const k of ORDEM_CULTURAS){ const c = CULTURAS[k]; PRODUTOS[k] = { nome:c.n
 PRODUTOS.cafe = { nome:'Café seco', plural:'saquinhos de café seco', venda:CULTURAS.cafe.venda, nivel:CULTURAS.cafe.nivel, so:'pelucio' };
 PRODUTOS.ovo = { nome:'Ovo', plural:'ovos', venda:9, nivel:1 };
 PRODUTOS.leite = { nome:'Leite', plural:'garrafas de leite', venda:28, nivel:3 };
-const ORDEM_PRODUTOS = [...ORDEM_CULTURAS, 'ovo', 'leite'];
+// processados: fab diz em qual construção são feitos; só entram em pedidos depois que ela existe
+PRODUTOS.fuba = { nome:'Fubá', plural:'pacotes de fubá', venda:45, nivel:7, fab:'moinho' };
+PRODUTOS.queijo = { nome:'Queijo', plural:'queijos', venda:120, nivel:8, fab:'queijaria' };
+PRODUTOS.bolo = { nome:'Bolo de fubá', plural:'bolos de fubá', venda:170, nivel:9, fab:'padaria' };
+PRODUTOS.paodequeijo = { nome:'Pão de queijo', plural:'fornadas de pão de queijo', venda:260, nivel:9, fab:'padaria' };
+PRODUTOS.geleia = { nome:'Geleia de morango', plural:'potes de geleia', venda:200, nivel:11, fab:'cozinha' };
+PRODUTOS.doce = { nome:'Doce de abóbora', plural:'potes de doce de abóbora', venda:95, nivel:11, fab:'cozinha' };
+// o café sai do pé em cereja; seca no terreiro e vira café seco, que o Pelúcio compra; torrado vale mais
+PRODUTOS.cereja = { nome:'Café em cereja', plural:'cerejas de café', venda:0, nivel:15, so:'ninguem' };
+PRODUTOS.torrado = { nome:'Café torrado', plural:'pacotes de café torrado', venda:120, nivel:17, so:'pelucio', fab:'torrador' };
+const ORDEM_PRODUTOS = [...ORDEM_CULTURAS.filter(k => k !== 'cafe'), 'ovo', 'leite', 'fuba', 'queijo', 'bolo', 'paodequeijo', 'geleia', 'doce', 'cereja', 'cafe', 'torrado'];
+// construções de processamento: cada uma faz uma receita por vez, com até três na fila
+const FABRICAS = {
+  moinho:    { nome: 'Moinho', nivel: 7, preco: 1500, alto: 4.3, desc: 'Mói milho em fubá e em ração para os bichos.', receitas: ['fuba', 'racaoMilho'] },
+  queijaria: { nome: 'Queijaria', fem: true, nivel: 8, preco: 2500, alto: 2.3, desc: 'Transforma leite em queijo.', receitas: ['queijo'] },
+  padaria:   { nome: 'Padaria', fem: true, nivel: 9, preco: 4000, alto: 2.6, desc: 'Assa bolo de fubá e pão de queijo.', receitas: ['bolo', 'paodequeijo'] },
+  cozinha:   { nome: 'Cozinha de doces', fem: true, nivel: 11, preco: 6000, alto: 2.3, desc: 'Faz geleia de morango e doce de abóbora.', receitas: ['geleia', 'doce'] },
+  terreiro:  { nome: 'Terreiro de café', nivel: 15, preco: 0, alto: 0.9, desc: 'Seca as cerejas de café ao sol. O café seco vai para o Pelúcio.', receitas: ['secar'] },
+  torrador:  { nome: 'Torrador de café', nivel: 17, preco: 9000, alto: 2.4, desc: 'Torra o café seco. O Pelúcio paga mais pelo torrado.', receitas: ['torrar'] },
+};
+const RECEITAS = {
+  fuba:        { nome: 'Fubá', entra: { milho: 3 }, sai: { fuba: 1 }, tempo: 60, xp: 4 },
+  racaoMilho:  { nome: 'Ração de milho', entra: { milho: 2 }, sai: { racao: 8 }, tempo: 40, xp: 2 },
+  queijo:      { nome: 'Queijo', entra: { leite: 3 }, sai: { queijo: 1 }, tempo: 120, xp: 8 },
+  bolo:        { nome: 'Bolo de fubá', entra: { fuba: 2, ovo: 3 }, sai: { bolo: 1 }, tempo: 180, xp: 12 },
+  paodequeijo: { nome: 'Pão de queijo', entra: { queijo: 1, fuba: 1, ovo: 2 }, sai: { paodequeijo: 1 }, tempo: 150, xp: 14 },
+  geleia:      { nome: 'Geleia de morango', entra: { morango: 6 }, sai: { geleia: 1 }, tempo: 150, xp: 14 },
+  doce:        { nome: 'Doce de abóbora', entra: { abobora: 1 }, sai: { doce: 1 }, tempo: 120, xp: 8 },
+  secar:       { nome: 'Secar café', entra: { cereja: 4 }, sai: { cafe: 4 }, tempo: 240, xp: 6 },
+  torrar:      { nome: 'Torrar café', entra: { cafe: 2 }, sai: { torrado: 1 }, tempo: 180, xp: 10 },
+};
+const VAGAS_FAB = 3;
 const PRECO_RACAO = 3;
 // melhorias do Ed: cada uma tem degraus comprados em ordem; o tempo do Ed é o recurso que mais limita a fazenda
 const MELHORIAS = {
@@ -502,18 +533,25 @@ const PREDIOS = [
   { id:'galinheiro', nome:'Galinheiro',          x0:20, z0:7,  x1:21, z1:8,  porta:[19, 8] },
   { id:'curral',     nome:'Curral',              x0:20, z0:11, x1:21, z1:11, porta:[19, 12] },
   { id:'correio',    nome:'Caixa de correio',    x0:14, z0:15, x1:14, z1:15, porta:[15, 15] },
+  // área de produção: as construções ficam de frente para a estradinha de terra (z = 5)
+  { id:'moinho',     nome:'Moinho',              x0:18, z0:2,  x1:19, z1:3,  porta:[18, 4], fab:'moinho' },
+  { id:'queijaria',  nome:'Queijaria',           x0:21, z0:2,  x1:22, z1:3,  porta:[21, 4], fab:'queijaria' },
+  { id:'padaria',    nome:'Padaria',             x0:24, z0:2,  x1:25, z1:3,  porta:[24, 4], fab:'padaria' },
+  { id:'cozinha',    nome:'Cozinha de doces',    x0:27, z0:2,  x1:28, z1:3,  porta:[27, 4], fab:'cozinha' },
+  { id:'terreiro',   nome:'Terreiro de café',    x0:24, z0:7,  x1:26, z1:8,  porta:[25, 6], fab:'terreiro' },
+  { id:'torrador',   nome:'Torrador de café',    x0:28, z0:7,  x1:29, z1:8,  porta:[28, 6], fab:'torrador', ry: Math.PI },
 ];
 const PREDIO = {}; PREDIOS.forEach(p => { PREDIO[p.id] = p; });
-const ARVORES = [[0,1,0],[1,5,1],[0,9,2],[1,13,0],[11,1,1],[19,2,0],[21,1,2],[23,4,1],[23,8,0],[23,13,2],[2,0,1],[8,0,0],[23,0,1],[0,15,1]];
+const ARVORES = [[0,1,0],[1,5,1],[0,9,2],[1,13,0],[11,1,1],[20,0,0],[23,4,1],[23,8,0],[23,13,2],[2,0,1],[8,0,0],[23,0,1],[0,15,1],[26,0,2],[29,4,1],[29,0,0]];
 const ARBUSTOS = [[7,1],[12,6],[1,10],[16,2]];
 const FENOS = [[12,3],[12,4]];
-const FLORES = [[7,3],[2,3],[8,6],[14,6],[1,7],[0,4],[10,15],[4,15],[16,6]];
+const FLORES = [[7,3],[2,3],[8,6],[14,6],[1,7],[0,4],[10,15],[4,15],[16,6],[20,4],[26,4],[27,6]];
 const PASTO_G = [], PASTO_V = [];
 function montarMapa(){
   for (let x = 0; x < W; x++){ setT(x, 17, 'estrada'); setT(x, 16, 'cerca'); }
   setT(15, 16, 'portao');
   for (let z = 5; z <= 15; z++) setT(15, z, 'caminho');
-  for (let x = 4; x <= 15; x++) setT(x, 5, 'caminho');
+  for (let x = 4; x <= W - 1; x++) setT(x, 5, 'caminho');
   setT(9, 4, 'caminho'); setT(16, 8, 'caminho'); setT(16, 13, 'caminho');
   for (let x = 2; x <= 13; x++) for (let z = 7; z <= 14; z++) setT(x, z, 'campo');
   for (let x = 17; x <= 22; x++){ setT(x, 6, 'cerca'); setT(x, 10, 'cerca'); }
@@ -1092,6 +1130,98 @@ function comprarMelhoria(id){
   aviso(`${d.nome}! ${d.desc}`, 'grande', 4);
   hud(); salvar();
 }
+// construções de processamento (1/8 de escala, 16×16 cubinhos por 2×2 canteiros, frente para +z)
+function telhado(v, x0, x1, z0, z1, y0, cor1, cor2, parede){
+  const meio = (z1 - z0) / 2;
+  for (let i = 0; i <= Math.ceil(meio) + 1; i++){
+    const c = i % 2 ? cor1 : cor2;
+    v.box(x0 - 1, y0 + i, z0 - 1 + i, x1 + 1, y0 + i, z0 - 1 + i, c); v.box(x0 - 1, y0 + i, z1 + 1 - i, x1 + 1, y0 + i, z1 + 1 - i, c);
+    if (z0 + i <= z1 - i) v.box(x0, y0 + i, z0 + i, x1, y0 + i, z1 - i, parede);
+  }
+}
+function vMoinho(){
+  const v = new Vox();
+  v.box(1, 0, 1, 14, 1, 14, 0xa9a196);
+  for (let y = 2; y <= 22; y++){ const r = 6.4 - y * 0.08; for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++) if ((x - 7.5) ** 2 + (z - 7.5) ** 2 <= r * r) v.set(x, y, z, y % 6 === 0 ? 0xd9cdb8 : 0xf3eadb); }
+  for (let y = 23; y <= 30; y++){ const r = 6.6 - (y - 23) * 0.95; for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++) if ((x - 7.5) ** 2 + (z - 7.5) ** 2 <= r * r) v.set(x, y, z, y % 2 ? 0x8a5a3c : 0x7a4a2a); }
+  v.box(6, 2, 13, 9, 7, 13, 0x7a4a2a); v.box(6, 2, 14, 9, 2, 14, 0xa9a196); v.set(8, 5, 14, 0xf2c335);
+  v.box(7, 12, 13, 8, 14, 13, 0x9fc8e0); v.box(1, 11, 7, 1, 13, 8, 0x9fc8e0);
+  v.box(12, 2, 14, 13, 3, 15, 0xe2cfa0); v.set(13, 4, 14, 0xd2bd8a);
+  return v;
+}
+function vPas(){
+  const v = new Vox();
+  v.box(-1, -1, 0, 1, 1, 1, 0x7a4a2a);
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){
+    for (let i = 2; i <= 12; i++){
+      v.set(dx * i, dy * i, 0, 0x8a5a3c);
+      if (i >= 4) for (let k = 1; k <= 3; k++) v.set(dx * i + dy * k, dy * i - dx * k, 0, (i === 4 || i === 12 || k === 3) ? 0x9c6a40 : 0xfdf8ef);
+    }
+  }
+  return v;
+}
+function vQueijaria(){
+  const v = new Vox();
+  v.box(1, 0, 2, 14, 9, 13, (x, y, z) => y === 0 ? 0xbdb5a6 : 0xf6f0e0);
+  telhado(v, 1, 14, 2, 13, 10, 0x4a8fc0, 0x5f9fd6, 0xf6f0e0);
+  v.box(6, 1, 14, 9, 6, 14, 0x6aa7da); v.box(6, 1, 13, 9, 6, 13, 0x6aa7da);
+  v.box(2, 4, 14, 4, 6, 14, 0x9fc8e0); v.box(11, 4, 14, 13, 6, 14, 0x9fc8e0);
+  for (let i = 0; i <= 5; i++) v.box(5 + i, 8, 14, 5 + i, 8 + Math.floor(i / 2), 15, i % 2 ? 0xf5d142 : 0xe9c235);
+  v.set(6, 9, 15, 0xc9a326); v.set(9, 10, 15, 0xc9a326);
+  return v;
+}
+function vPadaria(){
+  const v = new Vox();
+  v.box(1, 0, 2, 14, 9, 13, (x, y, z) => ((x + (y % 2) * 2) % 4 === 0 || y % 3 === 0) ? 0xb5603c : 0xc8734c);
+  telhado(v, 1, 14, 2, 13, 10, 0xb8433a, 0xd0503f, 0xc8734c);
+  v.box(11, 10, 4, 12, 19, 5, 0x6e4a3a); v.box(10, 19, 3, 13, 19, 6, 0x5a3a2c);
+  v.box(6, 1, 14, 9, 6, 14, 0x7a4a2a); v.box(6, 1, 13, 9, 6, 13, 0x7a4a2a);
+  v.box(2, 4, 14, 4, 6, 14, 0xffb347); v.box(11, 4, 14, 13, 6, 14, 0xffb347);
+  v.ell(7.5, 9.5, 15, 3.2, 1.6, 1, 0xe0a050); v.set(6, 10, 16, 0xc98a3a); v.set(8, 10, 16, 0xc98a3a);
+  return v;
+}
+function vCozinha(){
+  const v = new Vox();
+  v.box(1, 0, 2, 14, 9, 13, (x, y) => y === 0 ? 0xbdb5a6 : 0xf7c9d9);
+  telhado(v, 1, 14, 2, 13, 10, 0x8f5bbf, 0xa35ccf, 0xf7c9d9);
+  v.box(6, 1, 14, 9, 6, 14, 0xffffff); v.box(6, 1, 13, 9, 6, 13, 0xffffff);
+  v.box(2, 4, 14, 4, 6, 14, 0x9fc8e0); v.box(11, 4, 14, 13, 6, 14, 0x9fc8e0);
+  v.box(2, 3, 15, 4, 3, 15, 0xf28fac); v.box(11, 3, 15, 13, 3, 15, 0xf28fac);
+  v.box(6, 7, 15, 9, 10, 15, 0xd8344a); v.box(6, 11, 15, 9, 11, 15, 0xfdf8ef); v.set(7, 9, 16, 0xf27fa0);
+  return v;
+}
+function vTerreiro(cheio){
+  const v = new Vox();
+  v.box(0, 0, 0, 23, 0, 15, (x, z) => 0xd8d2c6);
+  for (let x = 0; x <= 23; x++){ v.set(x, 1, 0, 0xbdb5a6); v.set(x, 1, 15, 0xbdb5a6); }
+  for (let z = 0; z <= 15; z++){ v.set(0, 1, z, 0xbdb5a6); v.set(23, 1, z, 0xbdb5a6); }
+  if (cheio) for (let x = 2; x <= 21; x++) for (let z = 2; z <= 13; z++) if ((z % 3) !== 1 && hash(x, 5, z) < 0.8) v.set(x, 1, z, [0x8a3b2b, 0x6b3a22, 0xa8432f, 0x5a3324][Math.floor(hash(z, 3, x) * 4)]);
+  v.box(19, 1, 6, 19, 1, 14, 0x9c6a40); v.box(17, 1, 14, 21, 1, 14, 0x9c6a40);
+  return v;
+}
+function vTorrador(){
+  const v = new Vox();
+  v.box(1, 0, 2, 14, 8, 13, (x, y) => y === 0 ? 0xa9a196 : (x % 3 === 0 ? 0x7a4a2a : 0x8a5a3c));
+  telhado(v, 1, 14, 2, 13, 9, 0x5f4d47, 0x6e5a53, 0x8a5a3c);
+  v.box(6, 1, 14, 9, 6, 14, 0x5a3a2c); v.box(6, 1, 13, 9, 6, 13, 0x5a3a2c);
+  for (let x = 0; x <= 5; x++) for (let y = -3; y <= 3; y++) for (let z = -3; z <= 3; z++) if (y * y + z * z <= 9) v.set(x + 9, y + 5, z + 15 + 2, (y * y + z * z >= 6) ? 0xb87333 : 0x8a5226);
+  v.box(10, 1, 16, 13, 1, 18, 0x555555);
+  v.box(3, 9, 4, 4, 20, 5, 0x8e99a3); v.box(2, 20, 3, 5, 20, 6, 0x6e7880);
+  return v;
+}
+function vGraos(){
+  const v = new Vox();
+  for (let x = 2; x <= 21; x++) for (let z = 2; z <= 13; z++) if ((z % 3) !== 1 && hash(x, 5, z) < 0.8) v.set(x, 1, z, [0x8a3b2b, 0x6b3a22, 0xa8432f, 0x5a3324][Math.floor(hash(z, 3, x) * 4)]);
+  return v;
+}
+function vObra(){
+  const v = new Vox();
+  v.box(1, 0, 1, 14, 0, 14, (x, y, z) => hash(x, 1, z) < 0.5 ? 0x9c7650 : 0x8a6644);
+  for (const [x, z] of [[1, 1], [14, 1], [1, 14], [14, 14]]) v.box(x, 1, z, x, 5, z, 0xc99a66);
+  for (let i = 1; i <= 14; i++){ v.set(i, 4, 1, 0xf08a2c); v.set(i, 4, 14, 0xf08a2c); v.set(1, 4, i, 0xf08a2c); v.set(14, 4, i, 0xf08a2c); }
+  v.box(4, 1, 5, 6, 2, 9, 0xb9b0a3); v.box(9, 1, 4, 11, 1, 7, 0xd2bd8a);
+  return v;
+}
 function vEnxada(){ const v = new Vox(); v.box(0, -3, 0, 0, 12, 0, 0x9c6a40); v.box(-1, 11, 1, 1, 12, 3, 0x9aa3ad); return v; }
 function vRegador(){ const v = new Vox(); v.box(-2, -6, -2, 2, -1, 2, 0x5aa86a); v.box(0, -3, 3, 0, -2, 6, 0x4c9a5c); v.set(0, -1, 6, 0x4c9a5c); v.box(-1, 0, 0, 1, 0, 0, 0x3f7f4c); v.box(0, 0, -3, 0, -1, -3, 0x3f7f4c); return v; }
 function vCesta(){ const v = new Vox(); v.box(-3, -7, -2, 3, -3, 2, (x, y) => y % 2 ? 0xb7864e : 0xa47442); v.box(-3, -2, 0, -3, 0, 0, 0x8a5a36); v.box(3, -2, 0, 3, 0, 0, 0x8a5a36); v.box(-3, 1, 0, 3, 1, 0, 0x8a5a36); v.box(-2, -3, -1, 2, -3, 1, COR.laranja); return v; }
@@ -1121,6 +1251,17 @@ const VI = {
   xicara(){ const v = new Vox(); for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++) if (x * x + z * z <= 17) v.box(x, 0, z, x, 6, z, (X, Y) => Y === 3 ? 0xf28fac : 0xfdf8ef); for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) if (x * x + z * z <= 10) v.set(x, 6, z, 0x6b4226); v.box(5, 2, 0, 6, 2, 0, 0xfdf8ef); v.box(5, 5, 0, 6, 5, 0, 0xfdf8ef); v.box(6, 2, 0, 6, 5, 0, 0xfdf8ef); return v; },
   caminhao(){ return vCaminhao(); }, celeiro(){ return vCeleiro(); }, casa(){ return vCasa(); }, poco(){ return vPoco(); },
   alimentador(){ return vAlimentador(false); },
+  fuba(){ const v = new Vox(); v.box(-3, 0, -2, 3, 8, 2, 0xf3e3c3); v.box(-2, 9, -1, 2, 9, 1, 0xe2cfa0); v.box(-3, 3, 3, 3, 5, 3, 0xf5d142); v.set(0, 10, 0, 0xc99a66); return v; },
+  queijo(){ const v = new Vox(); for (let z = 0; z <= 8; z++) v.box(-4 + Math.floor(z / 2), 0, z, 4 - Math.floor(z / 2), 4, z, 0xf5d142); for (const [x, y, z] of [[-2, 2, 0], [1, 3, 0], [0, 1, 0]]) v.set(x, y, z, 0xd9b52a); for (const [x, y] of [[-1, 4], [1, 4]]) v.set(x, y, 3, 0xd9b52a); return v; },
+  bolo(){ const v = new Vox(); v.ell(0, 2, 0, 5, 2.5, 5, (x, y) => y >= 4 ? 0xfdf3e2 : 0xe0a050); v.ell(0, 0, 0, 6, 0.6, 6, 0xfdf8ef); v.set(0, 5, 0, 0xd8344a); return v; },
+  paodequeijo(){ const v = new Vox(); for (const [x, z] of [[-3, 0], [3, 0], [0, 3], [0, -3]]) v.ell(x, 1.5, z, 2.4, 2, 2.4, (X, Y) => Y >= 2 ? 0xf2c95a : 0xe9b84a); return v; },
+  geleia(){ const v = new Vox(); v.box(-3, 0, -3, 3, 6, 3, 0xd8344a); v.box(-3, 7, -3, 3, 8, 3, 0xfdf8ef); v.box(-2, 2, 4, 2, 4, 4, 0xfdf8ef); v.set(0, 3, 5, 0xe0408a); return v; },
+  doce(){ const v = new Vox(); v.box(-3, 0, -3, 3, 6, 3, 0xef8a2b); v.box(-3, 7, -3, 3, 8, 3, 0xf28fac); v.box(-2, 2, 4, 2, 4, 4, 0xfdf8ef); return v; },
+  cereja(){ const v = new Vox(); for (const [x, y, z] of [[-2, 2, 0], [2, 2, 0], [0, 2, 2], [0, 4, -1], [-1, 5, 1]]) v.ell(x, y, z, 1.7, 1.7, 1.7, 0xc8323a); v.box(0, 6, 0, 0, 8, 0, 0x2f7a3a); v.box(1, 8, 0, 3, 8, 0, 0x3c8f45); return v; },
+  torrado(){ const v = new Vox(); v.box(-3, 0, -2, 3, 8, 2, 0x5a3a2c); v.box(-2, 9, -1, 2, 9, 1, 0x4a2e22); v.box(-2, 3, 3, 2, 5, 3, 0xe0408a); v.set(0, 4, 4, 0xfdf8ef); return v; },
+  moinho(){ const v = vMoinho(); for (const e of vPas().m.values()) v.set(e.x + 8, e.y + 19, 15, e.c); return v; },
+  queijaria(){ return vQueijaria(); }, padaria(){ return vPadaria(); }, cozinha(){ return vCozinha(); },
+  terreiro(){ return vTerreiro(true); }, torrador(){ return vTorrador(); }, obra(){ return vObra(); },
   botas(){ const v = new Vox(); for (const e of vPeBota(0x46a352, 0x2c6e35).m.values()) v.set(e.x - 6, e.y, e.z, e.c); for (const e of vPeBota(0x46a352, 0x2c6e35).m.values()) v.set(e.x + 6, e.y, e.z - 2, e.c); return v; },
   carrinho(){ return vCarrinho(); },
   irrigador(){ const v = vIrrigadorBase(); for (const e of vIrrigadorCabeca().m.values()) v.set(e.x, e.y + 10, e.z, e.c); for (const [x, y, z] of [[-8, 12, 0], [-9, 11, -1], [7, 12, 0], [8, 11, -1], [-10, 9, 0], [9, 9, 0]]) v.set(x, y, z, 0x8fd3f5); return v; },
@@ -1260,7 +1401,7 @@ const geo = (chave, fn) => GEO[chave] || (GEO[chave] = fn());
 const CHAVE_SALVO = 'fazendaJoliPig.v1';
 let S = null;
 function estadoNovo(){
-  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedido: null, versao: 2, feito: [], dicas: true, alimentador: {}, irrigador: {}, melhorias: {}, anotado: false, som: true, nAnimal: 0, vendeu: 0, salvoEm: Date.now() };
+  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedido: null, versao: 2, feito: [], dicas: true, alimentador: {}, irrigador: {}, melhorias: {}, fabricas: {}, anotado: false, som: true, nAnimal: 0, vendeu: 0, salvoEm: Date.now() };
   const l = LOTES[2];
   for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) s.campo[x + ',' + z] = { e: 'grama' };
   for (const k of ['12,9', '13,9', '12,10', '13,10']) s.campo[k] = { e: 'arado' };
@@ -1286,7 +1427,7 @@ function salvar(){
   if (!S) return;
   try {
     const copia = JSON.parse(JSON.stringify(S, (k, v) => k === 'res' ? undefined : v));
-    for (const t of fila){ if (t.custo){ copia.dinheiro += t.custo.dinheiro || 0; copia.racao += t.custo.racao || 0; if (t.custo.semente) copia.bolsa[t.custo.semente] = (copia.bolsa[t.custo.semente] || 0) + 1; } }
+    for (const t of fila){ if (t.custo){ copia.dinheiro += t.custo.dinheiro || 0; copia.racao += t.custo.racao || 0; if (t.custo.semente) copia.bolsa[t.custo.semente] = (copia.bolsa[t.custo.semente] || 0) + 1; if (t.custo.itens) for (const [k, q] of Object.entries(t.custo.itens)) copia.celeiro[k] = (copia.celeiro[k] || 0) + q; } }
     copia.salvoEm = Date.now();
     localStorage.setItem(CHAVE_SALVO, JSON.stringify(copia));
   } catch (e){}
@@ -1380,6 +1521,7 @@ function construirChao(){
 function colocar(m, x, y, z, ry = 0){ m.position.set(x, y, z); m.rotation.y = ry; scene.add(m); return m; }
 function construirCenario(){
   for (const p of PREDIOS){
+    if (p.fab) continue;
     let g = null;
     if (p.id === 'casa') g = vCasa().build(1 / 8, { origin: [16, 0, 16] });
     if (p.id === 'celeiro') g = vCeleiro().build(1 / 8, { origin: [20, 0, 20] });
@@ -1452,6 +1594,134 @@ function comprarLote(i){
   Som.moeda(); flutuar(new THREE.Vector3(l.x + 2, 0.5, l.z + 2), '−' + reais(preco), 'ouro');
   aviso('Terreno novo! Toque na grama para arar.', 'grande');
   hud(); salvar();
+}
+
+// ================= construções de processamento
+const estFab = id => { if (!S.fabricas) S.fabricas = {}; return S.fabricas[id] || (S.fabricas[id] = { feita: false, fila: [], feitos: [] }); };
+const FAB_VIS = {};
+const centroPredio = p => [(p.x0 + p.x1 + 1) / 2, (p.z0 + p.z1 + 1) / 2];
+function montarFabrica(id){
+  const p = PREDIO[id], F = FABRICAS[id], st = estFab(id), V = FAB_VIS[id] || (FAB_VIS[id] = {});
+  const [cx, cz] = centroPredio(p);
+  for (const m of [V.mesh, V.placa]) if (m){ scene.remove(m); const i = pickaveis.indexOf(m); if (i >= 0) pickaveis.splice(i, 1); }
+  V.mesh = V.placa = V.pas = null;
+  if (!st.feita){
+    V.mesh = colocar(malha(geo('obra', () => vObra().build(1 / 8, { origin: [8, 0, 8] }))), cx, 0, cz);
+    const pl = malha(geo('placa', () => vPlaca().build(1 / 16, { origin: [8, 0, 8] })));
+    const tx = placaDeTexto(texturaTexto([[F.nome.toUpperCase(), 1, '#7a4a2a'], [`nível ${F.nivel}`, 0.7, '#c2365f']], 256, 112, '#f3e3c3'), 13 / 16, 6 / 16);
+    tx.position.set(0, 11 / 16, 1.1 / 16); pl.add(tx);
+    pl.position.set(cx, 0, (p.ry ? p.z0 : p.z1 + 1) - 0.15); if (p.ry) pl.rotation.y = Math.PI;
+    scene.add(pl); V.placa = pl;
+    pl.traverse(o => { o.userData.alvo = { k: 'predio', p }; }); pickaveis.push(pl);
+  } else {
+    const modelos = { moinho: vMoinho, queijaria: vQueijaria, padaria: vPadaria, cozinha: vCozinha, terreiro: () => vTerreiro(false), torrador: vTorrador };
+    const larg = (p.x1 - p.x0 + 1) * 8;
+    V.mesh = colocar(malha(geo('fab' + id, () => modelos[id]().build(1 / 8, { origin: [larg / 2, 0, 8] }))), cx, 0, cz, p.ry || 0);
+    if (id === 'moinho'){ V.pas = malha(geo('pas', () => vPas().build(1 / 8, { origin: [0, 0, 0] }))); V.pas.position.set(0, 19.5 / 8, 0.62); V.mesh.add(V.pas); }
+    if (id === 'terreiro'){ V.graos = malha(geo('graos', () => vGraos().build(1 / 8, { origin: [12, 0, 8] })), false); V.mesh.add(V.graos); }
+  }
+  V.mesh.traverse(o => { o.userData.alvo = { k: 'predio', p }; }); pickaveis.push(V.mesh);
+  atualizarBolhaFab(id);
+}
+function atualizarBolhaFab(id){
+  const V = FAB_VIS[id], st = estFab(id), p = PREDIO[id];
+  if (!V) return;
+  const ic = st.feitos.length ? Object.keys(RECEITAS[st.feitos[0]].sai)[0] : '';
+  if (ic){
+    if (!V.bolha){ V.bolha = novaBolha(ic); const [cx, cz] = centroPredio(p); V.bolha.position.set(cx, FABRICAS[id].alto, cz); V.bolha.userData.base = FABRICAS[id].alto; V.bolha.userData.fase = hash(cx, 1, cz) * 6; scene.add(V.bolha); BOLHAS.push(V.bolha); }
+    else trocarBolha(V.bolha, ic);
+  } else if (V.bolha){ scene.remove(V.bolha); BOLHAS.splice(BOLHAS.indexOf(V.bolha), 1); V.bolha = null; }
+  if (V.graos) V.graos.visible = st.fila.length > 0 || st.feitos.length > 0;
+}
+function construirFabrica(id){
+  const F = FABRICAS[id], st = estFab(id);
+  if (st.feita) return;
+  if (nivel() < F.nivel){ aviso(`${F.nome} libera no nível ${F.nivel}`, 'ruim'); Som.erro(); return; }
+  if (S.dinheiro < F.preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return; }
+  if (F.preco){ gastar(F.preco); chipPulsa('chipDinheiro'); }
+  st.feita = true; montarFabrica(id);
+  const [cx, cz] = centroPredio(PREDIO[id]);
+  for (let i = 0; i < 30; i++) particula(cx + rnd(-1, 1), 0.3, cz + rnd(-1, 1), [0xffffff, 0xe2cfa0, 0xffe066][i % 3], 1.4);
+  Som.moeda(); Som.nivel();
+  aviso(`${F.nome} ${F.fem ? 'pronta' : 'pronto'}! ${F.desc}`, 'grande', 4);
+  hud(); salvar();
+}
+// termina as receitas cujo tempo passou (funciona com o jogo fechado, pelo relógio)
+function simularFabricas(){
+  const agora = Date.now();
+  for (const id in FABRICAS){
+    const st = estFab(id);
+    let mudou = false;
+    while (st.fila.length && st.fila[0].fim <= agora){ st.feitos.push(st.fila.shift().r); mudou = true; }
+    if (mudou) atualizarBolhaFab(id);
+  }
+}
+const temItens = entra => Object.entries(entra).every(([k, q]) => (S.celeiro[k] || 0) >= q);
+const textoItens = itens => Object.entries(itens).map(([k, q]) => `${q} ${k === 'racao' ? 'ração' : (q > 1 ? PRODUTOS[k].plural : PRODUTOS[k].nome.toLowerCase())}`).join(' + ');
+function itensFabrica(id){
+  const F = FABRICAS[id], st = estFab(id), p = PREDIO[id];
+  const r = { titulo: F.nome, icone: st.feita ? id : 'obra', itens: [] };
+  if (!st.feita){
+    r.estado = F.desc + (id === 'terreiro' ? ' Chega junto com o café.' : ` Libera no nível ${F.nivel}.`);
+    if (id !== 'terreiro') r.itens.push({ rotulo: `Construir ${F.nome.toLowerCase()}`, sub: nivel() < F.nivel ? `nível ${F.nivel}` : 'pronto na hora', icone: id, preco: reais(F.preco), off: nivel() < F.nivel || S.dinheiro < F.preco, fn: () => construirFabrica(id) });
+    return r;
+  }
+  const agora = Date.now(), naFila = fila.filter(t => t.tipo === 'produzir' && t.alvo.id === id).length;
+  if (st.fila.length){
+    const atual = st.fila[0], R = RECEITAS[atual.r];
+    r.estado = `Fazendo ${R.nome.toLowerCase()} · pronto em ${tempo((atual.fim - agora) / 1000)}` + (st.fila.length > 1 ? ` · mais ${st.fila.length - 1} na fila` : '');
+    r.prog = 1 - (atual.fim - agora) / (R.tempo * 1000);
+  } else r.estado = st.feitos.length ? 'Terminou! Recolha o que ficou pronto.' : 'Parado. Escolha o que fazer:';
+  if (st.feitos.length){
+    const recolhendo = fila.some(t => t.tipo === 'recolher' && t.alvo.id === id);
+    r.classe = 'bom';
+    r.itens.push({ rotulo: `Recolher (${st.feitos.length})`, sub: recolhendo ? 'o Ed já vai buscar' : 'vai para o celeiro', icone: Object.keys(RECEITAS[st.feitos[0]].sai)[0], off: recolhendo, fn: () => enfileirar('recolher', { k: 'fabrica', id }) });
+  }
+  const cheia = st.fila.length + naFila >= VAGAS_FAB;
+  for (const rid of F.receitas){
+    const R = RECEITAS[rid], sai = Object.keys(R.sai)[0];
+    r.itens.push({ rotulo: R.nome, sub: `${textoItens(R.entra)} → ${textoItens(R.sai)} · ${tempo(R.tempo)}`, icone: sai === 'racao' ? 'racao' : sai, off: cheia || !temItens(R.entra), fn: () => enfileirar('produzir', { k: 'fabrica', id }, rid) });
+  }
+  if (cheia) r.itens.push({ rotulo: 'Fila cheia', sub: `até ${VAGAS_FAB} receitas por vez`, icone: id, off: true, leve: true, fn: () => {} });
+  return r;
+}
+function executarFabrica(tarefa){
+  const id = tarefa.alvo.id, st = estFab(id), [cx, cz] = centroPredio(PREDIO[id]);
+  if (tarefa.tipo === 'produzir'){
+    const R = RECEITAS[tarefa.param], ini = st.fila.length ? st.fila[st.fila.length - 1].fim : Date.now();
+    st.fila.push({ r: tarefa.param, fim: ini + R.tempo * 1000 });
+    Som.plantar();
+  }
+  if (tarefa.tipo === 'recolher'){
+    const feitos = st.feitos.splice(0), soma = {};
+    let xp = 0;
+    for (const rid of feitos){ const R = RECEITAS[rid]; xp += R.xp; for (const [k, q] of Object.entries(R.sai)){ soma[k] = (soma[k] || 0) + q; if (k === 'racao') S.racao += q; else S.celeiro[k] = (S.celeiro[k] || 0) + q; } }
+    Object.entries(soma).forEach(([k, q], i) => setTimeout(() => flutuar(new THREE.Vector3(cx, 1.4, cz), '+' + q, '', k), i * 250));
+    if (soma.racao) chipPulsa('chipRacao');
+    if (xp) ganharXP(xp, new THREE.Vector3(cx, 1.7, cz));
+    Som.colher();
+  }
+  atualizarBolhaFab(id); hud(); salvar();
+}
+let fumacaT = 0;
+function atualizarFabricas(dt){
+  fumacaT += dt;
+  for (const id in FAB_VIS){
+    const V = FAB_VIS[id], st = estFab(id), ativo = st.feita && st.fila.length > 0;
+    if (V.pas) V.pas.rotation.z += dt * (ativo ? 2.2 : 0.25);
+    if (ativo && (id === 'padaria' || id === 'torrador') && fumacaT > 0.35){
+      const [cx, cz] = centroPredio(PREDIO[id]), ox = id === 'padaria' ? 0.5 : -0.4;
+      fumaca(cx + ox * (PREDIO[id].ry ? -1 : 1), id === 'padaria' ? 2.5 : 2.6, cz - 0.4 * (PREDIO[id].ry ? -1 : 1));
+    }
+  }
+  if (fumacaT > 0.35) fumacaT = 0;
+}
+function fumaca(x, y, z){
+  const cor = Math.random() < 0.5 ? 0xd9d4cc : 0xc2bcb2;
+  const mat = matsPart[cor] || (matsPart[cor] = new THREE.MeshLambertMaterial({ color: cor }));
+  const m = new THREE.Mesh(geoPart, mat);
+  m.position.set(x + rnd(-0.05, 0.05), y, z); m.scale.setScalar(1.1); scene.add(m);
+  PART.push({ m, v: new THREE.Vector3(rnd(-0.1, 0.1), rnd(0.35, 0.55), rnd(-0.1, 0.1)), vida: 1.6, g: 0, cresce: 0.45 });
 }
 
 // ================= irrigadores
@@ -1586,7 +1856,7 @@ function atualizarCampo(x, z){
   if (temMato && !vis.mato) vis.mato = colocar(malha(geo('mato', () => vMato().build(1 / 16, { origin: [8, 0, 8] }))), px, 2 / 16, pz);
   if (!temMato && vis.mato){ scene.remove(vis.mato); vis.mato = null; }
   let b = '';
-  if (t && t.e === 'plantado'){ if (t.p === 'sede') b = 'gota'; else if (t.p === 'mato') b = 'mato'; else if (t.prog >= 1) b = t.c; }
+  if (t && t.e === 'plantado'){ if (t.p === 'sede') b = 'gota'; else if (t.p === 'mato') b = 'mato'; else if (t.prog >= 1) b = CULTURAS[t.c].produto || t.c; }
   if (b){
     if (!vis.bolha){ vis.bolha = novaBolha(b); vis.bolha.position.set(px, 1.0, pz); vis.bolha.userData.base = 1.0; vis.bolha.userData.fase = hash(x, z, 3) * 6; scene.add(vis.bolha); BOLHAS.push(vis.bolha); }
     else trocarBolha(vis.bolha, b);
@@ -1793,7 +2063,7 @@ const VISITA = {
     conversa: () => ['Quanto café seco você tem pra mim hoje?', 'Os clientes da Joli Coffee adoram o café da fazenda!', 'Esse café vai virar um cappuccino caprichado.'],
     tchau: ['Valeu, irmão! Passa lá na Joli Coffee pra tomar um cafezinho.', 'Até mais! Vou torrar esse café hoje mesmo.', 'Tchau, Ed! Manda um oi pro Beto.'],
     tudo: 'Perfeito! Vou torrar hoje mesmo.', botaoTchau: 'Tchau, Pelúcio',
-    vazio: 'Ainda não tem café seco no celeiro. Plante café e colha quando os grãos ficarem vermelhos.',
+    vazio: 'Ainda não tem café seco no celeiro. Colha as cerejas de café e seque no terreiro.',
   },
 };
 const dadosVisita = () => VISITA[visita && visita === jaca ? 'jaca' : visita && visita === pelucio ? 'pelucio' : 'beto'];
@@ -1881,7 +2151,7 @@ function atualizarCaminhao(dt){
   } else if (c.estado === 'saindo'){
     c.t += dt / 3.5;
     const e = Math.pow(Math.min(1, c.t), 2);
-    caminhao.position.x = lerp(PARADA, 31, e);
+    caminhao.position.x = lerp(PARADA, W + 7, e);
     caminhao.position.y = Math.abs(Math.sin(c.t * 40)) * 0.015;
     if (c.t >= 1){ c.estado = 'longe'; caminhao.visible = false; hud(); }
   }
@@ -1968,7 +2238,7 @@ function atualizarCine(dt){
       break;
     case 'partindo': {
       const e = Math.pow(Math.min(1, c.t / 3.5), 2);
-      caminhao.position.x = lerp(PARADA, 31, e);
+      caminhao.position.x = lerp(PARADA, W + 7, e);
       if (c.t >= 3.5){ caminhao.visible = false; c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
       break;
     }
@@ -2018,20 +2288,34 @@ function encerrarCine(){
   caminhao = caminhaoMarket; caminhaoE.estado = 'longe';
   cine = null;
   S.viuCinePelucio = true;
+  if (!estFab('terreiro').feita){ estFab('terreiro').feita = true; montarFabrica('terreiro'); }
   aviso('Café liberado! O Pelúcio compra o café seco para a Joli Coffee.', 'grande', 4.5);
   hud(); salvar();
 }
 
 // ================= tarefas do Ed
 const fila = [];
-const NOMES_ACAO = { arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', andar:'Andar' };
-const DUR = { arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, andar: 0 };
-const FERR = { arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, andar: null };
+const NOMES_ACAO = { produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', andar:'Andar' };
+const DUR = { produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, andar: 0 };
+const FERR = { produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, andar: null };
 const mesmoAlvo = (a, b) => a.k === b.k && (a.k === 'animal' ? a.a === b.a : a.x === b.x && a.z === b.z);
-function reservado(alvo){ return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
-function setReserva(alvo, v){ if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
+function reservado(alvo){ if (alvo.k === 'fabrica') return false; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
+function setReserva(alvo, v){ if (alvo.k === 'fabrica') return; if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
 // diz se a ação vale para o alvo; devolve o custo ou um motivo
 function checar(tipoA, alvo, param){
+  if (alvo.k === 'fabrica'){
+    const st = estFab(alvo.id);
+    if (!st.feita) return { ok: false };
+    if (tipoA === 'recolher') return { ok: st.feitos.length > 0, custo: {} };
+    if (tipoA === 'produzir'){
+      const R = RECEITAS[param];
+      if (!temItens(R.entra)) return { ok: false, motivo: `Falta ${textoItens(R.entra)}` };
+      const naFila = fila.filter(t => t.tipo === 'produzir' && t.alvo.id === alvo.id).length;
+      if (st.fila.length + naFila >= VAGAS_FAB) return { ok: false, motivo: `${FABRICAS[alvo.id].nome}: a fila está cheia` };
+      return { ok: true, custo: { itens: { ...R.entra } } };
+    }
+    return { ok: false };
+  }
   if (alvo.k === 'animal'){
     const a = alvo.a, A = ANIMAIS[a.d.tipo];
     if (tipoA === 'alimentar'){ if (a.d.e !== 'fome') return { ok: false }; if (S.racao < A.racao) return { ok: false, motivo: `Falta ração (precisa de ${A.racao})` }; return { ok: true, custo: { racao: A.racao } }; }
@@ -2060,6 +2344,7 @@ function checar(tipoA, alvo, param){
 }
 const marcadores = [];
 function enfileirar(tipoA, alvo, param, silencioso){
+  if (tipoA === 'recolher' && fila.some(t => t.tipo === 'recolher' && t.alvo.id === alvo.id)) return false;
   if (alvo.k !== 'animal' && tipoA !== 'andar' && reservado(alvo)) return false;
   if (alvo.k === 'animal' && reservado(alvo)) return false;
   if (fila.length >= 40){ if (!silencioso) aviso('O Ed já tem tarefa demais!', 'ruim'); return false; }
@@ -2069,6 +2354,7 @@ function enfileirar(tipoA, alvo, param, silencioso){
   if (c.dinheiro) S.dinheiro -= c.dinheiro;
   if (c.racao) S.racao -= c.racao;
   if (c.semente) S.bolsa[c.semente]--;
+  if (c.itens) for (const [k, q] of Object.entries(c.itens)){ S.celeiro[k] -= q; if (!S.celeiro[k]) delete S.celeiro[k]; }
   const tarefa = { tipo: tipoA, alvo, param, custo: c };
   if (tipoA !== 'andar'){
     setReserva(alvo, tarefa);
@@ -2084,7 +2370,7 @@ function enfileirar(tipoA, alvo, param, silencioso){
   return true;
 }
 function liberar(tarefa, devolver){
-  if (devolver && tarefa.custo){ const c = tarefa.custo; if (c.dinheiro) S.dinheiro += c.dinheiro; if (c.racao) S.racao += c.racao; if (c.semente) S.bolsa[c.semente] = (S.bolsa[c.semente] || 0) + 1; tarefa.custo = null; }
+  if (devolver && tarefa.custo){ const c = tarefa.custo; if (c.dinheiro) S.dinheiro += c.dinheiro; if (c.racao) S.racao += c.racao; if (c.semente) S.bolsa[c.semente] = (S.bolsa[c.semente] || 0) + 1; if (c.itens) for (const [k, q] of Object.entries(c.itens)) S.celeiro[k] = (S.celeiro[k] || 0) + q; tarefa.custo = null; }
   if (tarefa.tipo !== 'andar') setReserva(tarefa.alvo, null);
   if (tarefa.marca){ scene.remove(tarefa.marca); marcadores.splice(marcadores.indexOf(tarefa.marca), 1); tarefa.marca = null; }
 }
@@ -2095,7 +2381,10 @@ function cancelar(tarefa){
   fila.splice(i, 1); liberar(tarefa, true); hud();
 }
 function limparFila(){ for (const t of fila.slice()) cancelar(t); }
-function alvoMundo(alvo){ return alvo.k === 'animal' ? [alvo.a.pos.x, alvo.a.pos.y] : [alvo.x + 0.5, alvo.z + 0.5]; }
+function alvoMundo(alvo){
+  if (alvo.k === 'fabrica'){ const pt = PREDIO[alvo.id].porta; return [pt[0] + 0.5, pt[1] + 0.5]; }
+  return alvo.k === 'animal' ? [alvo.a.pos.x, alvo.a.pos.y] : [alvo.x + 0.5, alvo.z + 0.5];
+}
 let tarefaAtual = null;
 function proximaTarefa(){
   if (cine || tarefaAtual || ed.estado !== 'parado' || !fila.length) return;
@@ -2124,7 +2413,7 @@ function proximaTarefa(){
   }
   ed.ir(pts, () => {
     if (tarefa.tipo === 'andar'){ fila.shift(); tarefaAtual = null; hud(); return; }
-    const [ax, az] = alvoMundo(tarefa.alvo); ed.olhar(ax, az);
+    const [ax, az] = tarefa.alvo.k === 'fabrica' ? centroPredio(PREDIO[tarefa.alvo.id]) : alvoMundo(tarefa.alvo); ed.olhar(ax, az);
     if (!checar(tarefa.tipo, tarefa.alvo, tarefa.param).ok && !(tarefa.custo && Object.keys(tarefa.custo).length)){ fila.shift(); liberar(tarefa, true); tarefaAtual = null; hud(); return; }
     const sons = { arar: () => Som.arar(), regar: () => Som.regar(), plantar: () => Som.plantar(), alimentar: () => Som.ruido(0.3, 0.12, 1800) };
     if (sons[tarefa.tipo]) sons[tarefa.tipo]();
@@ -2177,9 +2466,9 @@ function aplicarCanteiro(tipo, x, z){
   if (tipo === 'arar'){ t.e = 'arado'; ganharXP(1, pos); }
   if (tipo === 'regar'){ t.p = null; t.ev++; avancar(t, 0, irrigado(x, z)); ganharXP(1, pos); avancarTut(1); }
   if (tipo === 'colher'){
-    const c = CULTURAS[t.c];
-    S.celeiro[t.c] = (S.celeiro[t.c] || 0) + c.rend;
-    flutuar(pos, '+' + c.rend, '', t.c);
+    const c = CULTURAS[t.c], prod = c.produto || t.c;
+    S.celeiro[prod] = (S.celeiro[prod] || 0) + c.rend;
+    flutuar(pos, '+' + c.rend, '', prod);
     ganharXP(c.xp, pos.clone().add(new THREE.Vector3(0, 0.25, 0)));
     Object.assign(t, { e: 'arado', c: null, prog: 0, evs: [], ev: 0, p: null });
     avancarTut(3);
@@ -2187,6 +2476,7 @@ function aplicarCanteiro(tipo, x, z){
 }
 function executar(tarefa){
   const alvo = tarefa.alvo, tp = tarefa.tipo;
+  if (alvo.k === 'fabrica'){ executarFabrica(tarefa); return; }
   if (alvo.k === 'animal'){
     const a = alvo.a, A = ANIMAIS[a.d.tipo], pos = new THREE.Vector3(a.pos.x, 0.9, a.pos.y);
     if (tp === 'alimentar'){ a.d.e = 'produzindo'; a.d.pronto = Date.now() + A.tempo * 1000; ganharXP(1, pos); a.d.tipo === 'galinha' ? Som.co() : Som.muu(); avancarTut(2); }
@@ -2242,6 +2532,7 @@ function subiuNivel(n){
   for (const k in ANIMAIS) if (ANIMAIS[k].nivel === n) libs.push(ANIMAIS[k].nome);
   if (n > 1 && NIVEL_LOTE.includes(n)) libs.push('mais um terreno');
   for (const tp in ALIMENTADOR) if (ALIMENTADOR[tp].nivel === n) libs.push(`alimentador automático do ${ALIMENTADOR[tp].lugar}`);
+  for (const id in FABRICAS) if (FABRICAS[id].nivel === n && FABRICAS[id].preco) libs.push(FABRICAS[id].nome.toLowerCase());
   if (n === IRRIGADOR.nivel) libs.push('irrigador automático');
   for (const id in MELHORIAS) for (const d of MELHORIAS[id].degraus) if (d.nivel === n) libs.push(d.nome.toLowerCase());
   aviso(`Nível ${n}!` + (libs.length ? ` Liberou: ${libs.join(', ')}` : ''), 'grande', 4);
@@ -2251,7 +2542,7 @@ function gastar(v){ S.dinheiro -= v; hud(); }
 function chipPulsa(id){ const e = $(id); e.classList.remove('pulsa'); void e.offsetWidth; e.classList.add('pulsa'); }
 
 // pedidos e oferta do dia
-function produtosLiberados(){ const n = nivel(); return ORDEM_PRODUTOS.filter(p => PRODUTOS[p].nivel <= n && !PRODUTOS[p].so); }
+function produtosLiberados(){ const n = nivel(); return ORDEM_PRODUTOS.filter(p => PRODUTOS[p].nivel <= n && !PRODUTOS[p].so && (!PRODUTOS[p].fab || estFab(PRODUTOS[p].fab).feita)); }
 function novoPedido(){
   const n = nivel(), disp = produtosLiberados();
   const k = Math.min(disp.length, 1 + (n >= 3 ? 1 : 0) + (n >= 6 ? 1 : 0));
@@ -2342,7 +2633,8 @@ function particula(x, y, z, cor, sobe = 1){
 function atualizarParticulas(dt){
   for (let i = PART.length - 1; i >= 0; i--){
     const p = PART[i];
-    p.vida -= dt; p.v.y -= 6 * dt; p.m.position.addScaledVector(p.v, dt); p.m.rotation.x += dt * 8;
+    p.vida -= dt; p.v.y -= (p.g == null ? 6 : p.g) * dt; p.m.position.addScaledVector(p.v, dt); p.m.rotation.x += dt * 8;
+    if (p.cresce) p.m.scale.multiplyScalar(1 + p.cresce * dt);
     if (p.vida <= 0 || p.m.position.y < 0){ scene.remove(p.m); PART.splice(i, 1); }
   }
 }
@@ -2482,6 +2774,7 @@ function itemBeto(){
 }
 function itemAndar(alvo){ return { rotulo: 'Ir até aqui', icone: 'ed', leve: true, fn: () => enfileirar('andar', alvo) }; }
 function itensPredio(p){
+  if (p.fab) return itensFabrica(p.fab);
   const r = { titulo: p.nome, itens: [] };
   if (p.id === 'casa'){ r.icone = 'casa'; r.estado = 'A casinha rosa do Ed.'; r.itens.push({ rotulo: 'Como jogar', icone: 'ed', fn: mostrarAjuda }); r.itens.push({ rotulo: 'Ajustes', icone: 'casa', leve: true, fn: abrirAjustes }); }
   if (p.id === 'celeiro'){ r.icone = 'celeiro'; r.estado = 'Onde fica guardado tudo o que o Ed colhe.'; r.itens.push({ rotulo: 'Abrir o celeiro', icone: 'celeiro', fn: abrirCeleiro }); r.itens.push(itemBeto()); }
@@ -2593,7 +2886,7 @@ function abrirLoja(aba){
     for (const k of ORDEM_CULTURAS){
       const c = CULTURAS[k], bloq = c.nivel > n, tem = S.bolsa[k] || 0;
       corpo += `<div class="cartao${bloq ? ' bloq' : ''}"><div class="cab"><img src="${icone(k)}" alt=""><div><h4>${c.nome}</h4><div class="info">${bloq ? `libera no nível ${c.nivel}` : `${tem} na bolsa`}</div></div></div>
-        <div class="info">${reais(c.semente)} a semente · cresce em ${tempo(c.tempo)} · dá ${c.rend} × ${reais(c.venda)}</div>
+        <div class="info">${reais(c.semente)} a semente · cresce em ${tempo(c.tempo)} · ${c.produto ? `dá ${c.rend} ${c.plural}; secas valem ${reais(c.venda)} cada` : `dá ${c.rend} × ${reais(c.venda)}`}</div>
         <div class="botoes">${bloq ? '' : `<button class="botao mini" data-comprar="${k}" data-q="1" type="button"${S.dinheiro < c.semente ? ' disabled' : ''}>+1</button><button class="botao mini" data-comprar="${k}" data-q="5" type="button"${S.dinheiro < c.semente * 5 ? ' disabled' : ''}>+5 · ${reais(c.semente * 5)}</button>`}</div></div>`;
     }
   } else if (abaLoja === 'animais'){
@@ -2670,11 +2963,11 @@ function linhasProdutos(comVenda, aceita = () => true, vazio = 'O celeiro está 
   if (!itens.length) return `<div class="vazio">${vazio}</div>`;
   return '<div class="linhas">' + itens.map(p => {
     const pr = preco(p), q = S.celeiro[p];
-    return `<div class="linha${p === of ? ' oferta' : ''}"><img src="${icone(p)}" alt=""><div class="nome">${PRODUTOS[p].nome}${p === of ? '<span class="selo">oferta do dia</span>' : ''}<small>${reais(pr)} cada</small></div><div class="qtd">${q}</div>${comVenda ? `<button class="botao mini claro" data-vender="${p}" data-q="1" type="button">1</button><button class="botao mini" data-vender="${p}" data-q="${q}" type="button">Tudo · ${reais(pr * q)}</button>` : ''}</div>`;
+    return `<div class="linha${p === of ? ' oferta' : ''}"><img src="${icone(p)}" alt=""><div class="nome">${PRODUTOS[p].nome}${p === of ? '<span class="selo">oferta do dia</span>' : ''}<small>${PRODUTOS[p].venda ? reais(pr) + ' cada' : 'precisa secar no terreiro'}</small></div><div class="qtd">${q}</div>${comVenda ? `<button class="botao mini claro" data-vender="${p}" data-q="1" type="button">1</button><button class="botao mini" data-vender="${p}" data-q="${q}" type="button">Tudo · ${reais(pr * q)}</button>` : ''}</div>`;
   }).join('') + '</div>';
 }
 function valorCeleiro(aceita = () => true){ return ORDEM_PRODUTOS.reduce((s, p) => s + (aceita(p) ? (S.celeiro[p] || 0) * preco(p) : 0), 0); }
-const aceitaDe = v => v === pelucio ? (p => p === 'cafe') : (p => !PRODUTOS[p].so);
+const aceitaDe = v => v === pelucio ? (p => p === 'cafe' || p === 'torrado') : (p => !PRODUTOS[p].so);
 function abrirCeleiro(){
   const sementes = ORDEM_CULTURAS.filter(k => S.bolsa[k] > 0);
   let corpo = linhasProdutos(false);
@@ -3011,6 +3304,7 @@ function simular(dt){
     if (estagio(t) !== ep || t.p !== pp) atualizarCampo(x, z);
   }
   simularAnimais();
+  simularFabricas();
 }
 function quadro(agoraP){
   requestAnimationFrame(quadro);
@@ -3033,9 +3327,10 @@ function quadro(agoraP){
   marcadores.forEach((m, i) => { const tf = fila.find(f => f.marca === m); if (!tf) return; const [x, z] = alvoMundo(tf.alvo); m.position.set(x, 1.15 + Math.sin(t * 5 + i) * 0.05, z); m.rotation.y = t * 2; });
   for (const k in VIS){ const p = VIS[k].planta; if (p && p.scale.x < 1) p.scale.setScalar(Math.min(1, p.scale.x + dt * 2.5)); }
   atualizarIrrigadores(dt);
+  atualizarFabricas(dt);
   atualizarParticulas(dt);
   atualizarFalas();
-  if (menuAberto && (menuAberto.alvo.k === 'tile' || menuAberto.alvo.k === 'animal') && Math.floor(t * 2) !== Math.floor((t - dt) * 2)) atualizarEstadoMenu();
+  if (menuAberto && ['tile', 'animal', 'predio'].includes(menuAberto.alvo.k) && Math.floor(t * 2) !== Math.floor((t - dt) * 2)) atualizarEstadoMenu();
   tSalvo += dt; if (tSalvo > 6){ tSalvo = 0; salvar(); }
   renderer.render(scene, camera);
 }
@@ -3065,6 +3360,10 @@ async function iniciar(){
   construirChao();
   construirCenario();
   montarLotes();
+  // o terreiro chega junto com o café, depois da cena do Pelúcio
+  if (S.viuCinePelucio) estFab('terreiro').feita = true;
+  simularFabricas();
+  for (const id in FABRICAS) montarFabrica(id);
   construirPersonagens();
   for (const tp in ALIMENTADOR) if (S.alimentador[tp]) montarAlimentador(tp);
   if (!S.irrigador) S.irrigador = {};
@@ -3086,7 +3385,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   if (novo) setTimeout(() => mostrarAjuda(true), 300);
   else if (fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 iniciar();
 })();
