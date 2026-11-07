@@ -2598,19 +2598,23 @@ let avisoSemRacao = 0;
 function simularAnimais(){
   const agora = Date.now();
   let comeu = 0, falta = false;
-  let coletou = 0, xpCol = 0;
   for (const a of ANI){
     const A0 = ANIMAIS[a.d.tipo];
-    // com coletor, cada produção vai direto para o celeiro; com alimentador também, o ciclo se repete
-    // pelo relógio (inclusive com o jogo fechado) enquanto houver ração
-    let voltas = 0;
-    while (a.d.e === 'produzindo' && agora >= a.d.pronto && voltas++ < 500){
-      if (!S.coletor[a.d.tipo] || a.res){ a.d.e = 'pronto'; break; }
-      S.celeiro[A0.produto] = (S.celeiro[A0.produto] || 0) + 1; contar('colhido', A0.produto); coletou++; xpCol += A0.xp;
-      if (S.alimentador[a.d.tipo] && S.racao >= A0.racao){ S.racao -= A0.racao; a.d.pronto += A0.tempo * 1000; }
+    // com coletor, cada produção vai para a caixa (que guarda uma hora); com alimentador também, o ciclo se repete
+    // pelo relógio (inclusive com o jogo fechado) enquanto houver ração e lugar na caixa
+    const tp = a.d.tipo, col = S.coletor[tp];
+    let voltas = 0, mudou = false;
+    while (voltas++ < 500){
+      const venceu = a.d.e === 'produzindo' && agora >= a.d.pronto, esperando = a.d.e === 'pronto' && col && !a.res;
+      if (!venceu && !esperando) break;
+      if (!col || a.res || naCaixa(tp) >= capCaixa(tp)){ if (a.d.e !== 'pronto'){ a.d.e = 'pronto'; mudou = true; } break; }
+      caixa()[tp] = naCaixa(tp) + 1; mudou = true;
+      // quem estava esperando a caixa recomeça agora; quem produziu no relógio continua de onde parou
+      const base = esperando ? agora : a.d.pronto;
+      if (S.alimentador[tp] && S.racao >= A0.racao){ S.racao -= A0.racao; a.d.e = 'produzindo'; a.d.pronto = base + A0.tempo * 1000; }
       else a.d.e = 'fome';
     }
-    if (voltas) a.atualizarBolha();
+    if (mudou) a.atualizarBolha();
     if (a.d.e === 'fome' && !a.res && S.alimentador[a.d.tipo]){
       const A = ANIMAIS[a.d.tipo];
       if (S.racao >= A.racao){
@@ -2621,14 +2625,28 @@ function simularAnimais(){
     }
   }
   if (comeu){ hud(); chipPulsa('chipRacao'); }
-  if (coletou){
-    if (xpCol) ganharXP(xpCol);
-    for (const tp in COL_MALHA){ const m = COL_MALHA[tp]; for (let i = 0; i < 3; i++) particula(m.position.x + rnd(-0.2, 0.2), 0.45, m.position.z + rnd(-0.2, 0.2), tp === 'galinha' ? 0xfdf3e2 : 0xffffff, 0.8); }
-    hud();
-  }
+  for (const tp in COL_MALHA) atualizarBolhaColetor(tp);
   if (falta && agora - avisoSemRacao > 90000){ avisoSemRacao = agora; aviso('O alimentador automático ficou sem ração', 'ruim', 3.2); }
 }
-const COL_MALHA = {};
+// a caixa do coletor guarda CAIXA_HORAS horas de produção do bando; cheia, os bichos esperam o Ed esvaziar
+const CAIXA_HORAS = 1;
+const caixa = () => S.caixa || (S.caixa = {});
+const naCaixa = tp => caixa()[tp] || 0;
+const capCaixa = tp => Math.ceil(ANI.filter(a => a.d.tipo === tp).length * 3600 * CAIXA_HORAS / ANIMAIS[tp].tempo);
+const COL_MALHA = {}, COL_BOLHA = {};
+function atualizarBolhaColetor(tp){
+  const m = COL_MALHA[tp];
+  if (!m) return;
+  const n = naCaixa(tp);
+  let b = COL_BOLHA[tp];
+  if (!n){ if (b){ scene.remove(b); BOLHAS.splice(BOLHAS.indexOf(b), 1); delete COL_BOLHA[tp]; } return; }
+  const cheia = n >= capCaixa(tp);
+  if (!b){ b = COL_BOLHA[tp] = novaBolha(ANIMAIS[tp].produto); b.position.set(m.position.x, 1.2, m.position.z); b.userData.base = 1.2; b.userData.fase = tp === 'galinha' ? 1 : 2.5; scene.add(b); BOLHAS.push(b); }
+  trocarBolha(b, ANIMAIS[tp].produto);
+  // caixa cheia: a bolha cresce e fica avermelhada
+  b.scale.set(cheia ? 0.8 : 0.52, cheia ? 0.92 : 0.6, 1);
+  b.material.color.set(cheia ? 0xff9a8a : 0xffffff);
+}
 function montarColetor(tp){
   if (COL_MALHA[tp]) return COL_MALHA[tp];
   const C = COLETOR[tp];
@@ -2650,7 +2668,7 @@ function comprarColetor(tp){
   const m = montarColetor(tp);
   for (let i = 0; i < 24; i++) particula(m.position.x + rnd(-0.5, 0.5), 0.4, m.position.z + rnd(-0.5, 0.5), [0xffffff, 0xffe066, 0xbac3cb][i % 3], 1.2);
   Som.moeda(); chipPulsa('chipDinheiro');
-  aviso(`${C.nome} no ${C.lugar}! ${tp === 'galinha' ? 'Os ovos' : 'O leite'} vão direto para o celeiro.`, 'grande', 3.5);
+  aviso(`${C.nome} no ${C.lugar}! ${tp === 'galinha' ? 'Os ovos' : 'O leite'} vão para uma caixa de ${CAIXA_HORAS === 1 ? 'uma hora' : CAIXA_HORAS + ' horas'}. O Ed esvazia.`, 'grande', 3.5);
   simularAnimais(); hud(); salvar();
 }
 const ALIM_MALHA = {};
@@ -3355,15 +3373,16 @@ function itensHud(){
 
 // ================= tarefas do Ed
 const fila = [];
-const NOMES_ACAO = { colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', andar:'Andar' };
-const DUR = { colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, andar: 0 };
-const FERR = { colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, andar: null };
+const NOMES_ACAO = { colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', andar:'Andar' };
+const DUR = { colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, andar: 0 };
+const FERR = { colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', andar: null };
 const mesmoAlvo = (a, b) => a.k === b.k && (a.k === 'animal' ? a.a === b.a : a.x === b.x && a.z === b.z);
-function reservado(alvo){ if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
+function reservado(alvo){ if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
 const visSlot = alvo => { const L = alvo.k === 'pomar' ? POMAR_VIS : COLMEIA_VIS; return L[alvo.i] || (L[alvo.i] = {}); };
-function setReserva(alvo, v){ if (alvo.k === 'fabrica') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
+function setReserva(alvo, v){ if (alvo.k === 'fabrica' || alvo.k === 'coletor') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
 // diz se a ação vale para o alvo; devolve o custo ou um motivo
 function checar(tipoA, alvo, param){
+  if (alvo.k === 'coletor') return { ok: tipoA === 'esvaziar' && !!S.coletor[alvo.tp] && naCaixa(alvo.tp) > 0, custo: {} };
   if (alvo.k === 'pomar') return { ok: tipoA === 'colherFruta' && !!S.pomar[alvo.i] && S.pomar[alvo.i].pronto, custo: {} };
   if (alvo.k === 'colmeia') return { ok: tipoA === 'coletarMel' && !!S.colmeias[alvo.i] && S.colmeias[alvo.i].pronto, custo: {} };
   if (alvo.k === 'fabrica'){
@@ -3445,7 +3464,14 @@ function cancelar(tarefa){
 }
 function limparFila(){ for (const t of fila.slice()) cancelar(t); }
 // onde o Ed para; o pomar e as colmeias são colhidos de pé no canteiro logo abaixo
+// o Ed fica no primeiro ladinho livre do coletor (o coletor em si não é andável)
+function frenteColetor(tp){
+  const C = COLETOR[tp];
+  for (const [dx, dz] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) if (andavel(C.x + dx, C.z + dz)) return [C.x + dx + 0.5, C.z + dz + 0.5];
+  return [C.x + 0.5, C.z + 0.5];
+}
 function alvoMundo(alvo){
+  if (alvo.k === 'coletor') return frenteColetor(alvo.tp);
   if (alvo.k === 'fabrica'){ const pt = PREDIO[alvo.id].porta; return [pt[0] + 0.5, pt[1] + 0.5]; }
   if (alvo.k === 'pomar' || alvo.k === 'colmeia'){ const [x, z] = (alvo.k === 'pomar' ? POMAR_SLOTS : COLMEIA_SLOTS)[alvo.i]; return [x + 0.5, z + 1.5]; }
   return alvo.k === 'animal' ? [alvo.a.pos.x, alvo.a.pos.y] : [alvo.x + 0.5, alvo.z + 0.5];
@@ -3479,7 +3505,7 @@ function proximaTarefa(){
   ed.ir(pts, () => {
     if (tarefa.tipo === 'andar'){ fila.shift(); tarefaAtual = null; hud(); return; }
     const al = tarefa.alvo, sl = al.k === 'pomar' ? POMAR_SLOTS[al.i] : al.k === 'colmeia' ? COLMEIA_SLOTS[al.i] : null;
-    const [ax, az] = al.k === 'fabrica' ? centroPredio(PREDIO[al.id]) : sl ? [sl[0] + 0.5, sl[1] + 0.5] : alvoMundo(al); ed.olhar(ax, az);
+    const [ax, az] = al.k === 'fabrica' ? centroPredio(PREDIO[al.id]) : sl ? [sl[0] + 0.5, sl[1] + 0.5] : al.k === 'coletor' ? [COLETOR[al.tp].x + 0.5, COLETOR[al.tp].z + 0.5] : alvoMundo(al); ed.olhar(ax, az);
     if (!checar(tarefa.tipo, tarefa.alvo, tarefa.param).ok && !(tarefa.custo && Object.keys(tarefa.custo).length)){ fila.shift(); liberar(tarefa, true); tarefaAtual = null; hud(); return; }
     const sons = { arar: () => Som.arar(), regar: () => Som.regar(), plantar: () => Som.plantar(), alimentar: () => Som.ruido(0.3, 0.12, 1800) };
     if (sons[tarefa.tipo]) sons[tarefa.tipo]();
@@ -3540,8 +3566,20 @@ function aplicarCanteiro(tipo, x, z){
     avancarTut(3);
   }
 }
+// o Ed leva tudo o que está na caixa para o celeiro
+function esvaziarCaixa(tp){
+  const A = ANIMAIS[tp], C = COLETOR[tp], qtd = naCaixa(tp);
+  if (!qtd) return;
+  const pos = new THREE.Vector3(C.x + 0.5, 1.0, C.z + 0.5);
+  caixa()[tp] = 0;
+  S.celeiro[A.produto] = (S.celeiro[A.produto] || 0) + qtd; contar('colhido', A.produto, qtd);
+  ganharXP(qtd * A.xp, pos); flutuar(pos, '+' + qtd, '', A.produto); Som.colher();
+  // os bichos que esperavam a caixa voltam a produzir
+  simularAnimais(); hud(); salvar();
+}
 function executar(tarefa){
   const alvo = tarefa.alvo, tp = tarefa.tipo;
+  if (alvo.k === 'coletor'){ esvaziarCaixa(alvo.tp); return; }
   if (alvo.k === 'fabrica'){ executarFabrica(tarefa); return; }
   if (alvo.k === 'pomar' || alvo.k === 'colmeia'){ executarPomar(tarefa); return; }
   if (alvo.k === 'animal'){
@@ -3878,7 +3916,14 @@ function itensDoAlvoBase(alvo){
   if (alvo.k === 'coletor'){
     const C = COLETOR[alvo.tp];
     r.titulo = C.nome; r.icone = alvo.tp === 'galinha' ? 'coletor' : 'ordenhadeira'; r.classe = 'bom';
-    r.estado = `${alvo.tp === 'galinha' ? 'Os ovos' : 'O leite'} vão direto para o celeiro, até com o jogo fechado.` + (S.alimentador[alvo.tp] ? ' Com o alimentador, o ciclo se repete sozinho enquanto houver ração.' : ' Sem alimentador, os bichos ainda precisam de ração.');
+    const tp = alvo.tp, A = ANIMAIS[tp], n = naCaixa(tp), cap = capCaixa(tp), ovo = tp === 'galinha';
+    r.estado = n >= cap && n > 0
+      ? `Caixa cheia! ${ovo ? 'As galinhas pararam' : 'As vacas pararam'} até o Ed esvaziar.`
+      : `Caixa: ${n} de ${cap}${ovo ? ' ovos' : ' de leite'}. Guarda ${CAIXA_HORAS === 1 ? 'uma hora' : CAIXA_HORAS + ' horas'} de produção.`;
+    if (n >= cap && n > 0) r.classe = 'alerta';
+    r.estado += S.alimentador[tp] ? ' Com o alimentador, o ciclo se repete sozinho enquanto houver ração e lugar na caixa.' : ' Sem alimentador, os bichos ainda precisam de ração.';
+    const indo = reservado(alvo);
+    r.itens.push({ rotulo: 'Esvaziar a caixa', sub: indo ? 'o Ed já vai' : `+${n * A.xp} xp`, icone: A.produto, off: !n || indo, fn: () => enfileirar('esvaziar', { k: 'coletor', tp }) });
     return r;
   }
   if (alvo.k === 'alimentador'){
@@ -3911,8 +3956,8 @@ function itensPredio(p){
     r.icone = tp; r.estado = `${n} de ${A.max} ${A.plural}.` + (S.alimentador[tp] ? ' O alimentador automático cuida da ração.' : '');
     const bloq = nivel() < A.nivel;
     const CO = COLETOR[tp];
-    if (S.coletor[tp]) r.estado += ` ${tp === 'galinha' ? 'Os ovos vão' : 'O leite vai'} direto para o celeiro.`;
-    else if (nivel() >= CO.nivel - 1) r.itens.push({ rotulo: CO.nome, sub: nivel() < CO.nivel ? `nível ${CO.nivel}` : `${tp === 'galinha' ? 'ovos' : 'leite'} direto para o celeiro`, icone: tp === 'galinha' ? 'coletor' : 'ordenhadeira', preco: reais(CO.preco), off: nivel() < CO.nivel || S.dinheiro < CO.preco, fn: () => comprarColetor(tp) });
+    if (S.coletor[tp]) r.estado += ` ${tp === 'galinha' ? 'Os ovos vão' : 'O leite vai'} para a caixa do coletor (${naCaixa(tp)} de ${capCaixa(tp)}).`;
+    else if (nivel() >= CO.nivel - 1) r.itens.push({ rotulo: CO.nome, sub: nivel() < CO.nivel ? `nível ${CO.nivel}` : `caixa de uma hora`, icone: tp === 'galinha' ? 'coletor' : 'ordenhadeira', preco: reais(CO.preco), off: nivel() < CO.nivel || S.dinheiro < CO.preco, fn: () => comprarColetor(tp) });
     if (!S.alimentador[tp]) r.itens.push({ rotulo: 'Alimentador automático', sub: nivel() < AL.nivel ? `nível ${AL.nivel}` : 'dá ração sozinho', icone: 'alimentador', preco: reais(AL.preco), off: nivel() < AL.nivel || S.dinheiro < AL.preco, fn: () => comprarAlimentador(tp) });
     r.itens.push({ rotulo: `Comprar ${A.nome.toLowerCase()}`, sub: bloq ? `nível ${A.nivel}` : `cabe mais ${A.max - n}`, icone: tp, preco: reais(A.preco), off: bloq || n >= A.max || S.dinheiro < A.preco, fn: () => comprarAnimal(tp) });
     const fome = ANI.filter(a => a.d.tipo === tp && a.d.e === 'fome' && !a.res).length;
@@ -4054,7 +4099,7 @@ function abrirLoja(aba){
     for (const tp in COLETOR){
       const C = COLETOR[tp], bloq = C.nivel > n, tem = S.coletor[tp];
       corpo += `<div class="cartao${bloq ? ' bloq' : ''}"><div class="cab"><img src="${icone(tp === 'galinha' ? 'coletor' : 'ordenhadeira')}" alt=""><div><h4>${C.nome}</h4><div class="info">${tem ? 'já instalado' : bloq ? `libera no nível ${C.nivel}` : `no ${C.lugar}`}</div></div></div>
-        <div class="info">${tp === 'galinha' ? 'Os ovos vão' : 'O leite vai'} direto para o celeiro, até com o jogo fechado. Junto com o alimentador, o ${C.lugar} trabalha sozinho enquanto houver ração.</div>
+        <div class="info">${tp === 'galinha' ? 'Os ovos vão' : 'O leite vai'} para uma caixa que guarda uma hora de produção, até com o jogo fechado. O Ed esvazia a caixa. Junto com o alimentador, o ${C.lugar} trabalha sozinho até a caixa encher.</div>
         <div class="botoes">${bloq || tem ? '' : `<button class="botao mini" data-coletor="${tp}" type="button"${S.dinheiro < C.preco ? ' disabled' : ''}>Comprar · ${reais(C.preco)}</button>`}</div></div>`;
     }
   } else if (abaLoja === 'enfeites'){
@@ -4192,7 +4237,12 @@ function lembretes(){
     const A = ANIMAIS[tp];
     const fome = ANI.filter(a => a.d.tipo === tp && a.d.e === 'fome').length, prontos = ANI.filter(a => a.d.tipo === tp && a.d.e === 'pronto').length;
     if (fome) out.push(['racao', `dar ração para ${plural(fome, tp === 'galinha' ? 'galinha' : 'vaca', A.plural)}`]);
-    if (prontos) out.push([A.produto, tp === 'galinha' ? `pegar ${plural(prontos, 'ovo', 'ovos')}` : `tirar leite de ${plural(prontos, 'vaca', 'vacas')}`]);
+    if (prontos && !S.coletor[tp]) out.push([A.produto, tp === 'galinha' ? `pegar ${plural(prontos, 'ovo', 'ovos')}` : `tirar leite de ${plural(prontos, 'vaca', 'vacas')}`]);
+  }
+  for (const tp in COLETOR){
+    if (!S.coletor[tp] || !naCaixa(tp)) continue;
+    const cheia = naCaixa(tp) >= capCaixa(tp);
+    out.push([ANIMAIS[tp].produto, `esvaziar a caixa d${tp === 'galinha' ? 'o coletor de ovos' : 'a ordenhadeira'}` + (cheia ? ' (cheia, os bichos pararam)' : '')]);
   }
   if (S.racao < 4 && ANI.length) out.push(['racao', `comprar ração (só tem ${S.racao})`]);
   if (S.celeiro.cafe && S.viuCinePelucio) out.push(['pelucio', `ligar pro Pelúcio buscar o café`]);
@@ -4687,6 +4737,7 @@ async function iniciar(){
   construirPista();
   for (const tp in ALIMENTADOR) if (S.alimentador[tp]) montarAlimentador(tp);
   if (!S.coletor) S.coletor = {};
+  if (!S.caixa) S.caixa = {};
   for (const tp in COLETOR) if (S.coletor[tp]) montarColetor(tp);
   if (!S.irrigador) S.irrigador = {};
   if (!S.melhorias) S.melhorias = {};
