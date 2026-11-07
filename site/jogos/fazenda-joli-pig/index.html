@@ -1458,7 +1458,7 @@ const geo = (chave, fn) => GEO[chave] || (GEO[chave] = fn());
 const CHAVE_SALVO = 'fazendaJoliPig.v1';
 let S = null;
 function estadoNovo(){
-  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedido: null, versao: 2, feito: [], dicas: true, alimentador: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], colmeias: [], anotado: false, som: true, nAnimal: 0, vendeu: 0, salvoEm: Date.now() };
+  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedidos: [], versao: 2, feito: [], dicas: true, alimentador: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], colmeias: [], anotado: false, som: true, nAnimal: 0, vendeu: 0, salvoEm: Date.now() };
   const l = LOTES[2];
   for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) s.campo[x + ',' + z] = { e: 'grama' };
   for (const k of ['12,9', '13,9', '12,10', '13,10']) s.campo[k] = { e: 'arado' };
@@ -2743,17 +2743,48 @@ function chipPulsa(id){ const e = $(id); e.classList.remove('pulsa'); void e.off
 
 // pedidos e oferta do dia
 function produtosLiberados(){ const n = nivel(); return ORDEM_PRODUTOS.filter(p => PRODUTOS[p].nivel <= n && !PRODUTOS[p].so && (!PRODUTOS[p].fab || estFab(PRODUTOS[p].fab).feita)); }
-function novoPedido(){
-  const n = nivel(), disp = produtosLiberados();
-  const k = Math.min(disp.length, 1 + (n >= 3 ? 1 : 0) + (n >= 6 ? 1 : 0));
+// ================= mural de pedidos
+// até três pedidos ao mesmo tempo (um por vez no começo, dois do nível 5, três do 10). O terceiro é do Pelúcio
+// depois que ele aparece. Cada pedido tem prazo; entregue ou vencido, outro chega alguns minutos depois.
+const PRAZO_PEDIDO = 45 * 60 * 1000;
+const vagasPedido = () => nivel() < 5 ? 1 : nivel() < 10 ? 2 : 3;
+const quemPede = i => (i === 2 && S.viuCinePelucio) ? 'pelucio' : (S.conheceuJaca && Math.random() < 0.35 ? 'jaca' : 'beto');
+const NOME_PEDE = { beto: 'Beto', jaca: 'Jaca', pelucio: 'Pelúcio' };
+function gerarPedido(quem){
+  const n = nivel();
+  let disp = quem === 'pelucio' ? ['cafe', ...(estFab('torrador').feita ? ['torrado'] : [])] : produtosLiberados();
+  const k = Math.min(disp.length, quem === 'pelucio' ? disp.length : 1 + (n >= 3 ? 1 : 0) + (n >= 6 ? 1 : 0));
   const escolhidos = [];
   while (escolhidos.length < k){ const p = sorteia(disp); if (!escolhidos.includes(p)) escolhidos.push(p); }
-  let valor = 0;
   // o tamanho do pedido acompanha o nível e quanta terra o Ed tem
   const escala = (22 + n * 14) * (1 + 0.35 * (S.lotes.filter(Boolean).length - 1));
+  let valor = 0;
   const itens = escolhidos.map(p => { const q = Math.max(1, Math.round(escala / PRODUTOS[p].venda * rnd(0.6, 1))); valor += q * PRODUTOS[p].venda; return [p, q]; });
-  S.pedido = { itens, dinheiro: Math.round(valor * 1.5 / 5) * 5, xp: Math.round(valor / 6) + 3 };
+  const ped = { quem, itens, dinheiro: Math.round(valor * 1.5 / 5) * 5, xp: Math.round(valor / 6) + 3, prazo: Date.now() + PRAZO_PEDIDO };
+  // de vez em quando vem um presente junto
+  if (Math.random() < 0.3){
+    const culturas = ORDEM_CULTURAS.filter(c => CULTURAS[c].nivel <= n);
+    ped.premio = (ANI.length && Math.random() < 0.35) ? { tipo: 'racao', q: 15 } : { tipo: 'sementes', k: culturas[culturas.length - 1 - Math.floor(Math.random() * Math.min(3, culturas.length))], q: 5 };
+  }
+  return ped;
 }
+const textoPremio = pr => !pr ? '' : pr.tipo === 'racao' ? `${pr.q} rações` : pr.tipo === 'sementes' ? `${pr.q} sementes de ${CULTURAS[pr.k].nome.toLowerCase()}` : pr.tipo === 'enfeite' ? ENFEITES[pr.k].nome.toLowerCase() : '';
+function atualizarPedidos(){
+  if (!Array.isArray(S.pedidos)) S.pedidos = [];
+  const agora = Date.now(), vagas = vagasPedido();
+  let mudou = false;
+  for (let i = 0; i < 3; i++){
+    let p = S.pedidos[i];
+    if (i >= vagas){ continue; }
+    if (!p){ S.pedidos[i] = gerarPedido(quemPede(i)); mudou = true; continue; }
+    if (p.espera && agora >= p.espera){ S.pedidos[i] = gerarPedido(quemPede(i)); mudou = true; continue; }
+    if (p.quem === 'pelucio' && !S.viuCinePelucio){ S.pedidos[i] = gerarPedido('beto'); mudou = true; continue; }
+    if (p.prazo && agora > p.prazo){ S.pedidos[i] = { espera: agora + 2 * 60 * 1000, venceu: true }; mudou = true; }
+  }
+  if (mudou) hud();
+}
+const pedidoCompleto = p => !!p && !!p.itens && p.itens.every(([k, q]) => (S.celeiro[k] || 0) >= q);
+const pedidosDe = mercado => S.pedidos.map((p, i) => [p, i]).filter(([p]) => p && p.itens && (mercado ? p.quem !== 'pelucio' : p.quem === 'pelucio'));
 function diaHoje(){ const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); }
 function ofertaDoDia(){ const disp = produtosLiberados(); return disp[Math.floor(hash(diaHoje(), 3, 7) * disp.length)]; }
 const preco = p => Math.round(PRODUTOS[p].venda * (p === ofertaDoDia() ? 1.5 : 1));
@@ -2778,7 +2809,7 @@ function hud(){
   let bol = $('btnCeleiro').querySelector('.bolinha');
   if (totalProd){ if (!bol){ bol = document.createElement('span'); bol.className = 'bolinha'; $('btnCeleiro').appendChild(bol); } bol.textContent = totalProd > 99 ? '99+' : totalProd; }
   else if (bol) bol.remove();
-  const completo = S.anotado && S.pedido && S.pedido.itens.every(([k, q]) => (S.celeiro[k] || 0) >= q);
+  const completo = S.anotado && (S.pedidos || []).some(pedidoCompleto);
   let bc = $('btnCaderno').querySelector('.bolinha');
   if (completo){ if (!bc){ bc = document.createElement('span'); bc.className = 'bolinha'; bc.textContent = '!'; $('btnCaderno').appendChild(bc); } }
   else if (bc) bc.remove();
@@ -3181,13 +3212,11 @@ function abrirCeleiro(){
   const b = $('jBeto'); if (b) b.addEventListener('click', () => { fecharJanela(); chamarBeto(); });
   const bp = $('jPelucio'); if (bp) bp.addEventListener('click', () => { fecharJanela(); chamarPelucio(); });
 }
-function pedidoHTML(comBotao){
-  if (!S.pedido) novoPedido();
-  const p = S.pedido, completo = p.itens.every(([k, q]) => (S.celeiro[k] || 0) >= q);
-  return `<div class="pedido"><h4>Pedido do Joli Market</h4><ul>${p.itens.map(([k, q]) => `<li class="${(S.celeiro[k] || 0) >= q ? 'ok' : ''}"><img src="${icone(k)}" alt="">${Math.min(S.celeiro[k] || 0, q)}/${q} ${q > 1 ? PRODUTOS[k].plural : PRODUTOS[k].nome.toLowerCase()}</li>`).join('')}</ul>
-    <div class="rec">Paga ${reais(p.dinheiro)} e ${p.xp} xp</div>
-    ${comBotao ? `<button class="botao verde" id="jEntregar" type="button"${completo ? '' : ' disabled'}>Entregar o pedido</button>` : ''}
-    <div style="font-weight:700;font-size:13px;color:var(--tinta-suave);margin-top:6px">O Ed anota o pedido no caderno.</div></div>`;
+function pedidoHTML(p, i, comBotao){
+  const completo = pedidoCompleto(p), resta = Math.max(0, p.prazo - Date.now()) / 60000;
+  return `<div class="pedido"><h4>Pedido do ${NOME_PEDE[p.quem]} <small style="font-family:var(--f-texto);font-size:12px;font-weight:800;color:${resta < 10 ? 'var(--vermelho)' : 'var(--tinta-suave)'}">· vence em ${Math.ceil(resta)} min</small></h4><ul>${p.itens.map(([k, q]) => `<li class="${(S.celeiro[k] || 0) >= q ? 'ok' : ''}"><img src="${icone(k)}" alt="">${Math.min(S.celeiro[k] || 0, q)}/${q} ${q > 1 ? PRODUTOS[k].plural : PRODUTOS[k].nome.toLowerCase()}</li>`).join('')}</ul>
+    <div class="rec">Paga ${reais(p.dinheiro)} e ${p.xp} xp${p.premio ? ` + de presente, ${textoPremio(p.premio)}` : ''}</div>
+    ${comBotao ? `<button class="botao verde" data-entregar="${i}" type="button"${completo ? '' : ' disabled'}>Entregar o pedido</button>` : ''}</div>`;
 }
 // ================= caderno do Ed
 // desenhos de giz de cera: traço tremido pelo filtro #giz
@@ -3248,14 +3277,19 @@ function abrirCaderno(){
   h += `<h2>Caderno do Ed</h2>`;
   h += `<div class="rabiscos">${rabisco(RABISCO.porco('#f6e27c', '#c9a92c'), '0 0 120 115', 92, -5, 'eu')}${rabisco(RABISCO.coracao(), '0 0 60 60', 34, 6)}${rabisco(RABISCO.porco('#b6d5ee', '#5f8fbf'), '0 0 120 115', 92, 4, 'Beto')}${S.conheceuJaca ? rabisco(RABISCO.jaca(), '0 0 112 112', 88, -3, 'Jaca') : ''}${S.viuCinePelucio ? rabisco(RABISCO.porco('#f3b3ab', '#d77f75'), '0 0 120 115', 92, 3, 'Pelúcio') : ''}</div>`;
   h += `<div class="rabisco-canto" style="right:14px;top:210px">${rabisco(RABISCO.cenoura(), '0 0 72 66', 56, -10)}</div>`;
-  h += `<h3>Pedido do Beto</h3>`;
-  if (!S.anotado || !S.pedido){
+  h += `<h3>Pedidos</h3>`;
+  if (!S.anotado){
     h += `<p>Ainda não sei o que o Beto quer.</p><p>Tenho que chamar ele!</p>`;
   } else {
-    const p = S.pedido, completo = p.itens.every(([k, q]) => (S.celeiro[k] || 0) >= q);
-    h += `<ul>${p.itens.map(([k, q]) => { const tem = S.celeiro[k] || 0, ok = tem >= q; return `<li class="${ok ? 'feito' : ''}"><span class="caixa">${ok ? '✓' : ''}</span><img src="${icone(k)}" alt=""><span class="texto">${q} ${q > 1 ? PRODUTOS[k].plural : PRODUTOS[k].nome.toLowerCase()}</span><small>(tenho ${tem})</small></li>`; }).join('')}</ul>`;
-    h += `<p>Ele paga <span class="grifo">${reais(p.dinheiro)}</span> e ${p.xp} xp!</p>`;
-    if (completo) h += `<p>Já tenho tudo!! É só chamar o Beto.</p>`;
+    const agora = Date.now();
+    S.pedidos.forEach(p => {
+      if (!p) return;
+      if (p.espera){ h += `<p><small>${p.venceu ? 'Um pedido venceu. ' : ''}Pedido novo chega em ${Math.max(1, Math.ceil((p.espera - agora) / 60000))} min.</small></p>`; return; }
+      const completo = pedidoCompleto(p), quem = NOME_PEDE[p.quem];
+      h += `<p><b style="color:${p.quem === 'pelucio' ? '#d77f75' : p.quem === 'jaca' ? '#3e8f2c' : '#2f6fb3'}">${quem}</b> <small>(vence em ${Math.ceil(Math.max(0, p.prazo - agora) / 60000)} min)</small></p>`;
+      h += `<ul>${p.itens.map(([k, q]) => { const tem = S.celeiro[k] || 0, ok = tem >= q; return `<li class="${ok ? 'feito' : ''}"><span class="caixa">${ok ? '✓' : ''}</span><img src="${icone(k)}" alt=""><span class="texto">${q} ${q > 1 ? PRODUTOS[k].plural : PRODUTOS[k].nome.toLowerCase()}</span><small>(tenho ${tem})</small></li>`; }).join('')}</ul>`;
+      h += `<p>Paga <span class="grifo">${reais(p.dinheiro)}</span> e ${p.xp} xp${p.premio ? `, e ainda ${esc(textoPremio(p.premio))}` : ''}!${completo ? ' Já tenho tudo!!' : ''}</p>`;
+    });
     h += `<h3>Oferta de hoje</h3><p>O Joli Market tá pagando mais por <span class="grifo">${PRODUTOS[of].plural}</span>.</p>`;
   }
   if (S.viuCinePelucio){
@@ -3285,7 +3319,9 @@ function abrirBeto(){
   if (!falaBeto){ falaBeto = sorteia(D.conversa(of)); if (presenteJaca){ falaBeto = presenteJaca + ' ' + falaBeto; presenteJaca = ''; } }
   const aceita = aceitaDe(visita), doCafe = visita === pelucio;
   if (!doCafe && !S.anotado){ S.anotado = true; salvar(); hud(); }
-  let corpo = `<div class="fala-janela">${esc(falaBeto)}</div>${doCafe ? '' : pedidoHTML(true)}${linhasProdutos(true, aceita, D.vazio)}`;
+  atualizarPedidos();
+  const peds = pedidosDe(!doCafe);
+  let corpo = `<div class="fala-janela">${esc(falaBeto)}</div>${peds.map(([p, i]) => pedidoHTML(p, i, true)).join('')}${linhasProdutos(true, aceita, D.vazio)}`;
   if (!doCafe && S.celeiro.cafe) corpo += `<p style="margin:10px 0 0;font-weight:700;font-size:13px;color:var(--tinta-suave)">O café seco fica guardado para o Pelúcio, da Joli Coffee.</p>`;
   const total = valorCeleiro(aceita);
   corpo += `<div class="rodape-janela"><button class="botao claro" type="button" data-fechar>${D.botaoTchau}</button><button class="botao" id="jTudo" type="button"${total ? '' : ' disabled'}>Vender tudo · ${reais(total)}</button></div>`;
@@ -3293,7 +3329,7 @@ function abrirBeto(){
   const j = $('janela');
   j.querySelectorAll('[data-vender]').forEach(b => b.addEventListener('click', () => { vender(b.dataset.vender, +b.dataset.q); reabrirBeto(); }));
   const tudo = $('jTudo'); if (tudo) tudo.addEventListener('click', () => { for (const p of ORDEM_PRODUTOS) if (S.celeiro[p] && aceita(p)) vender(p, S.celeiro[p], true); Som.moeda(); falaBeto = D.tudo; reabrirBeto(); });
-  const ent = $('jEntregar'); if (ent) ent.addEventListener('click', entregarPedido);
+  j.querySelectorAll('[data-entregar]').forEach(b => b.addEventListener('click', () => entregarPedido(+b.dataset.entregar)));
 }
 function reabrirBeto(){ const cb = aoFecharJanela; aoFecharJanela = null; $('modal').hidden = true; abrirBeto(); if (!aoFecharJanela) aoFecharJanela = cb; }
 function vender(p, q, quieto){
@@ -3307,16 +3343,24 @@ function vender(p, q, quieto){
   avancarTut(5);
   hud(); salvar();
 }
-function entregarPedido(){
-  const p = S.pedido;
-  if (!p || !p.itens.every(([k, q]) => (S.celeiro[k] || 0) >= q)) return;
+function entregarPedido(i){
+  const p = S.pedidos[i];
+  if (!pedidoCompleto(p)) return;
   for (const [k, q] of p.itens){ S.celeiro[k] -= q; if (!S.celeiro[k]) delete S.celeiro[k]; }
   S.dinheiro += p.dinheiro;
   flutuar(visita.topo(), '+' + reais(p.dinheiro), 'ouro');
   ganharXP(p.xp, visita.topo());
+  if (p.premio){
+    const pr = p.premio;
+    if (pr.tipo === 'racao'){ S.racao += pr.q; chipPulsa('chipRacao'); }
+    if (pr.tipo === 'sementes') S.bolsa[pr.k] = (S.bolsa[pr.k] || 0) + pr.q;
+    if (pr.tipo === 'enfeite') S.guardados[pr.k] = (S.guardados[pr.k] || 0) + 1;
+    setTimeout(() => aviso(`Presente do pedido: ${textoPremio(pr)}!`), 400);
+  }
+  S.entregues = (S.entregues || 0) + 1;
   Som.moeda(); Som.nivel();
-  novoPedido();
-  falaBeto = dadosVisita().pedido;
+  S.pedidos[i] = { espera: Date.now() + rnd(6, 12) * 60 * 1000 };
+  falaBeto = dadosVisita().pedido || 'Perfeito, irmão! Era isso mesmo.';
   hud(); salvar(); reabrirBeto();
 }
 function abrirAjustes(){
@@ -3514,6 +3558,7 @@ function simular(dt){
   simularAnimais();
   simularFabricas();
   simularPomar();
+  atualizarPedidos();
 }
 function quadro(agoraP){
   requestAnimationFrame(quadro);
@@ -3584,7 +3629,11 @@ async function iniciar(){
   calcarEd();
   for (const l in S.irrigador) if (S.irrigador[l] && S.lotes[l]) montarIrrigador(+l);
   for (const d of S.animais){ if (d.x < 17 || d.x > 22){ const [x, z] = sorteia(d.tipo === 'galinha' ? PASTO_G : PASTO_V); d.x = x + 0.5; d.z = z + 0.5; } ANI.push(new Bicho(d)); }
-  if (novo){ novoAnimal('galinha', 18.6, 8.4); novoAnimal('galinha', 19.4, 7.6); novoPedido(); }
+  if (novo){ novoAnimal('galinha', 18.6, 8.4); novoAnimal('galinha', 19.4, 7.6); }
+  // saves antigos tinham um pedido só
+  if (S.pedido && !(S.pedidos && S.pedidos.length)) S.pedidos = [{ ...S.pedido, quem: 'beto', prazo: Date.now() + PRAZO_PEDIDO }];
+  delete S.pedido;
+  atualizarPedidos();
   // o tempo que passou com a página fechada
   const fora = novo ? 0 : Math.max(0, (Date.now() - (S.salvoEm || Date.now())) / 1000);
   for (const k in S.campo){ const t = S.campo[k]; if (t.e !== 'plantado') continue; const [x, z] = k.split(',').map(Number); avancar(t, fora, irrigado(x, z)); }
