@@ -3121,6 +3121,13 @@ function produtosLiberados(){ const n = nivel(); return ORDEM_PRODUTOS.filter(p 
 // até três pedidos ao mesmo tempo (um por vez no começo, dois do nível 5, três do 10). O terceiro é do Pelúcio
 // depois que ele aparece. Cada pedido tem prazo; entregue ou vencido, outro chega alguns minutos depois.
 const PRAZO_PEDIDO = 45 * 60 * 1000;
+// empurra para frente o que só deve correr com o jogo aberto: o tempo do Hud e o prazo dos pedidos
+function pausarRelogios(ms){
+  if (!(ms > 0)) return;
+  const inicio = Date.now() - ms;
+  if (S.hudAte && S.hudAte > inicio) S.hudAte += ms;
+  for (const p of S.pedidos || []) if (p && p.prazo && p.prazo > inicio) p.prazo += ms;
+}
 const vagasPedido = () => nivel() < 5 ? 1 : nivel() < 10 ? 2 : 3;
 const quemPede = i => (i === 2 && S.viuCinePelucio) ? 'pelucio' : (S.conheceuJaca && Math.random() < 0.35 ? 'jaca' : 'beto');
 const NOME_PEDE = { beto: 'Beto', jaca: 'Jaca', pelucio: 'Pelúcio' };
@@ -3821,7 +3828,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Como escolhe:</b> vai sempre ao que está mais perto dele e nunca pega o que já está na fila do Ed. Usa as ferramentas do Ed (regador grande, carrinho de mão).</li>
       <li><b>O que ele não faz:</b> arar, plantar, dar ração aos bichos, coletar ovos e leite, usar as construções ou vender. Isso continua com o Ed.</li>
       <li><b>Onde chamar:</b> na casa do Ed, no caderno ou tocando nele. A pílula embaixo mostra quanto tempo de ajuda falta; no fim ele vai para casa dormir.</li>
-      <li><b>Só funciona com o jogo aberto.</b></li>
+      <li><b>Só trabalha com o jogo aberto.</b> Com o jogo fechado, o tempo dele fica pausado e volta a correr quando você voltar.</li>
     </ul>
     <h3 style="margin:14px 0 6px;font-size:16px">Ajuda automática</h3>
     <ul class="passos">
@@ -3842,7 +3849,7 @@ function mostrarAjuda(intro, aba){
     <ul class="passos">
       <li><b>Níveis:</b> plantar, colher, produzir e entregar pedidos dá xp. Cada nível libera coisas novas.</li>
       <li><b>Terrenos:</b> o Ed começa com um; os outros são comprados nos níveis ${NIVEL_LOTE.slice(1).join(', ')}.</li>
-      <li><b>Pedidos:</b> até três ao mesmo tempo, com prazo. Pagam mais que vender solto e às vezes trazem presente. O caderno do Ed mostra todos.</li>
+      <li><b>Pedidos:</b> até três ao mesmo tempo, com prazo, que só corre com o jogo aberto. Pagam mais que vender solto e às vezes trazem presente. O caderno do Ed mostra todos.</li>
       <li><b>Oferta do dia:</b> um produto vale 50% a mais naquele dia.</li>
       <li><b>Estações:</b> seguem o calendário. Três culturas rendem 50% a mais na colheita; toque no selo da estação para ver quais.</li>
       <li><b>Figurinhas:</b> metas de longo prazo no caderno, que dão xp.</li>
@@ -3863,6 +3870,7 @@ function explicarHud(){
       <li>colhe os canteiros prontos;</li>
       <li>colhe as frutas do pomar e pega o mel.</li>
     </ul>
+    <p>Se você fechar o jogo, o tempo dele fica pausado até você voltar.</p>
     <p>Ele vai ao que está mais perto e não mexe no que já está na fila do Ed. Arar, plantar, cuidar dos bichos e usar as construções continua com o Ed.</p>
     <p>A pílula embaixo mostra quanto tempo falta. Para dar mais tempo, toque no Hud ou na casa do Ed.</p>
     <div class="rodape-janela"><button class="botao claro" type="button" id="jAjudaHud">Ver a ajuda</button><button class="botao" type="button" data-fechar>Valeu, Hud!</button></div></div>`);
@@ -4029,7 +4037,12 @@ function eventos(){
     else if (k === 'arrowleft' || k === 'a') arrastar(passo, 0); else if (k === 'arrowright' || k === 'd') arrastar(-passo, 0);
     else if (k === 'arrowup' || k === 'w') arrastar(0, passo); else if (k === 'arrowdown' || k === 's') arrastar(0, -passo);
   });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) salvar(); });
+  // com a aba escondida o jogo não anda: ao voltar, pausa o Hud e os pedidos pelo tempo que ficou fora
+  let escondidoEm = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden){ escondidoEm = Date.now(); salvar(); }
+    else if (escondidoEm){ pausarRelogios(Date.now() - escondidoEm); escondidoEm = 0; hud(); salvar(); }
+  });
   addEventListener('pagehide', salvar);
 }
 function arrastar(dx, dy){
@@ -4114,6 +4127,8 @@ async function iniciar(){
   document.querySelectorAll('img[data-icone]').forEach(i => { i.src = icone(i.dataset.icone); });
   montarMapa();
   const novo = carregar();
+  // o tempo do Hud e o prazo dos pedidos ficam parados enquanto o jogo está fechado
+  if (!novo && S.salvoEm) pausarRelogios(Date.now() - S.salvoEm);
   scene.add(marcaSel); scene.add(marcaHover);
   construirChao();
   construirCenario();
@@ -4155,7 +4170,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   if (novo) setTimeout(() => mostrarAjuda(true), 300);
   else if (fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 iniciar();
 })();
