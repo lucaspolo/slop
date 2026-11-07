@@ -426,13 +426,13 @@ const COR = {
 const W = 24, H = 18;
 const CULTURAS = {
   cenoura:  { nome:'Cenoura',  plural:'cenouras',  semente:4,  tempo:40,  venda:3,   rend:4, xp:2,  nivel:1 },
-  alface:   { nome:'Alface',   plural:'alfaces',   semente:6,  tempo:70,  venda:4,   rend:4, xp:3,  nivel:1 },
+  alface:   { nome:'Alface',   plural:'alfaces',   semente:6,  tempo:70,  venda:5,   rend:4, xp:3,  nivel:1 },
   tomate:   { nome:'Tomate',   plural:'tomates',   semente:10, tempo:120, venda:7,   rend:4, xp:4,  nivel:2 },
   milho:    { nome:'Milho',    plural:'espigas',   semente:15, tempo:180, venda:10,  rend:4, xp:6,  nivel:3 },
   abobora:  { nome:'Abóbora',  plural:'abóboras',  semente:24, tempo:300, venda:62,  rend:1, xp:9,  nivel:4 },
   morango:  { nome:'Morango',  plural:'morangos',  semente:34, tempo:420, venda:23,  rend:4, xp:12, nivel:5 },
   melancia: { nome:'Melancia', plural:'melancias', semente:48, tempo:600, venda:125, rend:1, xp:16, nivel:6 },
-  cafe:     { nome:'Café',     plural:'saquinhos de café seco', semente:70, tempo:720, venda:60, rend:4, xp:22, nivel:15 },
+  cafe:     { nome:'Café',     plural:'saquinhos de café seco', semente:70, tempo:720, venda:40, rend:4, xp:22, nivel:15 },
 };
 const ORDEM_CULTURAS = Object.keys(CULTURAS);
 const ANIMAIS = {
@@ -453,11 +453,24 @@ const ALIMENTADOR = {
   galinha: { nivel: 4, preco: 1000, x: 23, z: 9, lugar: 'galinheiro' },
   vaca:    { nivel: 5, preco: 1000, x: 23, z: 14, lugar: 'curral' },
 };
-const XP_NIVEL = [0, 15, 40, 80, 140, 220, 330, 470, 650, 880, 1160, 1500, 1900, 2400, 3000];
-const xpPara = n => n - 1 < XP_NIVEL.length ? XP_NIVEL[n - 1] : 3000 + (n - 15) * 700;
+// curva de XP: os primeiros níveis passam rápido; do 6 em diante cada nível pede 30% a mais que o anterior
+// (22% depois do 15), acompanhando a produção, que cresce com terra, culturas longas e processamento
+const XP_NIVEL = [0];
+{ let inc = 15; const passos = [15, 25, 40, 60, 80];
+  for (let n = 1; n < 60; n++){
+    if (n <= passos.length) inc = passos[n - 1];
+    else inc = Math.round(inc * (n < 15 ? 1.3 : 1.22) / 10) * 10;
+    XP_NIVEL.push(XP_NIVEL[n - 1] + inc);
+  } }
+const xpPara = n => XP_NIVEL[Math.min(n - 1, XP_NIVEL.length - 1)] + Math.max(0, n - XP_NIVEL.length) * 1e6;
+// curva antiga, só para converter saves feitos antes do rebalanceamento sem o jogador perder nível
+const XP_ANTIGO = [0, 15, 40, 80, 140, 220, 330, 470, 650, 880, 1160, 1500, 1900, 2400, 3000];
+const xpParaAntigo = n => n - 1 < XP_ANTIGO.length ? XP_ANTIGO[n - 1] : 3000 + (n - 15) * 700;
 const nivelDe = xp => { let n = 1; while (xp >= xpPara(n + 1)) n++; return n; };
 const LOTES = [{ x:2, z:7 }, { x:6, z:7 }, { x:10, z:7 }, { x:2, z:11 }, { x:6, z:11 }, { x:10, z:11 }];
-const PRECO_LOTE = [0, 200, 450, 800, 1300, 2000];
+// o n-ésimo terreno comprado: preço e nível mínimo (o primeiro já vem com a fazenda)
+const PRECO_LOTE = [0, 300, 800, 2000, 4000, 7000];
+const NIVEL_LOTE = [1, 2, 4, 7, 10, 13];
 const loteDe = (x, z) => (x < 2 || x > 13 || z < 7 || z > 14) ? -1 : ((z - 7) >> 2) * 3 + ((x - 2) >> 2);
 
 // ================= mapa
@@ -1194,16 +1207,25 @@ const geo = (chave, fn) => GEO[chave] || (GEO[chave] = fn());
 const CHAVE_SALVO = 'fazendaJoliPig.v1';
 let S = null;
 function estadoNovo(){
-  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedido: null, feito: [], dicas: true, alimentador: {}, irrigador: {}, anotado: false, som: true, nAnimal: 0, vendeu: 0, salvoEm: Date.now() };
+  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedido: null, versao: 2, feito: [], dicas: true, alimentador: {}, irrigador: {}, anotado: false, som: true, nAnimal: 0, vendeu: 0, salvoEm: Date.now() };
   const l = LOTES[2];
   for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) s.campo[x + ',' + z] = { e: 'grama' };
   for (const k of ['12,9', '13,9', '12,10', '13,10']) s.campo[k] = { e: 'arado' };
   return s;
 }
+// saves da versão 1 usavam a curva de XP antiga: mantém o nível e a fração do caminho até o próximo
+function migrar(){
+  if ((S.versao || 1) < 2){
+    let n = 1; while (S.xp >= xpParaAntigo(n + 1)) n++;
+    const frac = (S.xp - xpParaAntigo(n)) / (xpParaAntigo(n + 1) - xpParaAntigo(n));
+    S.xp = Math.round(xpPara(n) + frac * (xpPara(n + 1) - xpPara(n)));
+    S.versao = 2;
+  }
+}
 function carregar(){
   try {
     const d = JSON.parse(localStorage.getItem(CHAVE_SALVO) || 'null');
-    if (d && d.campo){ S = Object.assign(estadoNovo(), d); return false; }
+    if (d && d.campo){ S = Object.assign(estadoNovo(), d); S.versao = d.versao || 1; migrar(); return false; }
   } catch (e){}
   S = estadoNovo(); return true;
 }
@@ -1367,7 +1389,7 @@ function montarLotes(){
 }
 function comprarLote(i){
   const n = S.lotes.filter(Boolean).length, preco = PRECO_LOTE[n];
-  if (nivel() < n + 1){ aviso(`Precisa do nível ${n + 1} para comprar mais terra`, 'ruim'); Som.erro(); return; }
+  if (nivel() < NIVEL_LOTE[n]){ aviso(`Precisa do nível ${NIVEL_LOTE[n]} para comprar mais terra`, 'ruim'); Som.erro(); return; }
   if (S.dinheiro < preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return; }
   S.dinheiro -= preco; S.lotes[i] = true;
   const l = LOTES[i];
@@ -2077,7 +2099,8 @@ function executar(tarefa){
   switch (tp){
     case 'arar': t.e = 'arado'; ganharXP(1, pos); break;
     case 'plantar': {
-      const evs = [[0, 'sede'], [0.5, 'sede']];
+      // as culturas longas (abóbora em diante) só pedem água no plantio: dá para plantar e sair
+      const evs = CULTURAS[tarefa.param].tempo >= 300 ? [[0, 'sede']] : [[0, 'sede'], [0.5, 'sede']];
       if (Math.random() < 0.35) evs.push([rnd(0.22, 0.85), 'mato']);
       evs.sort((a, b) => a[0] - b[0]);
       Object.assign(t, { e: 'plantado', c: tarefa.param, prog: 0, evs, ev: 0, p: null });
@@ -2116,7 +2139,7 @@ function subiuNivel(n){
   const libs = [];
   for (const k of ORDEM_CULTURAS) if (CULTURAS[k].nivel === n) libs.push(CULTURAS[k].nome);
   for (const k in ANIMAIS) if (ANIMAIS[k].nivel === n) libs.push(ANIMAIS[k].nome);
-  if (n <= PRECO_LOTE.length) libs.push('mais um terreno');
+  if (n > 1 && NIVEL_LOTE.includes(n)) libs.push('mais um terreno');
   for (const tp in ALIMENTADOR) if (ALIMENTADOR[tp].nivel === n) libs.push(`alimentador automático do ${ALIMENTADOR[tp].lugar}`);
   if (n === IRRIGADOR.nivel) libs.push('irrigador automático');
   aviso(`Nível ${n}!` + (libs.length ? ` Liberou: ${libs.join(', ')}` : ''), 'grande', 4);
@@ -2133,7 +2156,9 @@ function novoPedido(){
   const escolhidos = [];
   while (escolhidos.length < k){ const p = sorteia(disp); if (!escolhidos.includes(p)) escolhidos.push(p); }
   let valor = 0;
-  const itens = escolhidos.map(p => { const q = Math.max(1, Math.round((22 + n * 14) / PRODUTOS[p].venda * rnd(0.6, 1))); valor += q * PRODUTOS[p].venda; return [p, q]; });
+  // o tamanho do pedido acompanha o nível e quanta terra o Ed tem
+  const escala = (22 + n * 14) * (1 + 0.35 * (S.lotes.filter(Boolean).length - 1));
+  const itens = escolhidos.map(p => { const q = Math.max(1, Math.round(escala / PRODUTOS[p].venda * rnd(0.6, 1))); valor += q * PRODUTOS[p].venda; return [p, q]; });
   S.pedido = { itens, dinheiro: Math.round(valor * 1.5 / 5) * 5, xp: Math.round(valor / 6) + 3 };
 }
 function diaHoje(){ const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); }
@@ -2241,8 +2266,8 @@ function itensDoAlvoBase(alvo){
     if (lote >= 0 && !S.lotes[lote]){
       const n = S.lotes.filter(Boolean).length, p = PRECO_LOTE[n];
       r.titulo = 'Terreno à venda'; r.icone = 'lote';
-      r.estado = `Mais 16 canteiros para plantar. Precisa do nível ${n + 1}.`;
-      r.itens.push({ rotulo: 'Comprar este terreno', icone: 'moeda', preco: reais(p), off: nivel() < n + 1 || S.dinheiro < p, fn: () => comprarLote(lote) });
+      r.estado = `Mais 16 canteiros para plantar. Precisa do nível ${NIVEL_LOTE[n]}.`;
+      r.itens.push({ rotulo: 'Comprar este terreno', icone: 'moeda', preco: reais(p), off: nivel() < NIVEL_LOTE[n] || S.dinheiro < p, fn: () => comprarLote(lote) });
       return r;
     }
     if (t){
