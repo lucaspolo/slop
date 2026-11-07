@@ -551,7 +551,7 @@ const degrau = id => { const n = (S.melhorias || {})[id] || 0; return n ? MELHOR
 const velEd = () => (degrau('botas') || { vel: 2.7 }).vel;
 // irrigador automático: um por terreno, rega sozinho os 16 canteiros dele (o mato continua por conta do Ed)
 const IRRIGADOR = { nivel: 14, preco: 2000 };
-// coletor de ovos e ordenhadeira: o que os bichos produzem vai direto para o celeiro
+// coletor de ovos e ordenhadeira: os bichos produzem para uma caixa; o xp e o celeiro só vêm quando o Ed esvazia a caixa
 const COLETOR = {
   galinha: { nome: 'Coletor de ovos', nivel: 8, preco: 2500, x: 23, z: 7, lugar: 'galinheiro' },
   vaca:    { nome: 'Ordenhadeira', nivel: 12, preco: 4000, x: 23, z: 12, lugar: 'curral' },
@@ -2676,7 +2676,7 @@ function comprarColetor(tp){
   if (nivel() < C.nivel){ aviso(`${C.nome} libera no nível ${C.nivel}`, 'ruim'); Som.erro(); return; }
   if (S.dinheiro < C.preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return; }
   gastar(C.preco); S.coletor[tp] = true;
-  // o que estava pronto esperando já vai para o celeiro
+  // o que estava pronto esperando entra na caixa
   for (const a of ANI) if (a.d.tipo === tp && a.d.e === 'pronto' && !a.res){ a.d.e = 'produzindo'; a.d.pronto = Date.now() - 1; }
   const m = montarColetor(tp);
   for (let i = 0; i < 24; i++) particula(m.position.x + rnd(-0.5, 0.5), 0.4, m.position.z + rnd(-0.5, 0.5), [0xffffff, 0xffe066, 0xbac3cb][i % 3], 1.2);
@@ -2967,7 +2967,7 @@ function encerrarCine(){
 }
 
 // ================= enfeites: comprados na loja, colocados em qualquer gramado livre
-// o espantalho espanta o mato dos canteiros em volta; os outros só deixam a fazenda bonita (e dão um pouquinho de xp)
+// o espantalho espanta o mato dos canteiros em volta; os outros só deixam a fazenda bonita (e dão um pouquinho de xp, só na compra)
 const ENFEITES = {
   canteiroFlor: { nome: 'Canteiro de flores', preco: 60, nivel: 2, xp: 1 },
   banco:        { nome: 'Banco de praça', preco: 150, nivel: 3, xp: 2 },
@@ -3131,7 +3131,7 @@ function abrirEstacao(){
   const e = estacaoAtual();
   const min = chovendo() ? 0 : Math.max(0, Math.ceil((S.proxChuva - Date.now()) / 60000));
   abrirJanela(topo('semente', e.nome, 'A estação segue o calendário', 'azul') + `<div class="janela-corpo">
-    <p>No ${e.nome.toLowerCase()}, estas culturas rendem 50% a mais na colheita. As que dão só 1 por colheita colhem o mesmo, mas o Beto e o Jaca pagam 50% a mais:</p>
+    <p>No ${e.nome.toLowerCase()}, estas culturas rendem 50% a mais na colheita. As que dão só 1 por colheita colhem o mesmo, mas o Beto e o Jaca pagam 50% a mais. O bônus não soma com a oferta do dia:</p>
     <div class="linhas">${e.culturas.filter(c => CULTURAS[c].nivel <= nivel() + 5).map(c => `<div class="linha"><img src="${icone(CULTURAS[c].produto || c)}" alt=""><div class="nome">${CULTURAS[c].nome}<small>${CULTURAS[c].rend < 2 ? `${reais(PRODUTOS[c].venda)} → ${reais(Math.round(PRODUTOS[c].venda * BONUS_ESTACAO))} cada` : `${CULTURAS[c].rend} → ${rendCultura(c)} por canteiro`}${CULTURAS[c].nivel > nivel() ? ` · nível ${CULTURAS[c].nivel}` : ''}</small></div></div>`).join('')}</div>
     <p style="margin-top:12px">${chovendo() ? 'Está chovendo agora: a chuva rega todos os canteiros.' : `A próxima chuva vem em mais ou menos ${min} min. Ela rega todos os canteiros sozinha.`}</p></div>`);
 }
@@ -3670,7 +3670,7 @@ function chipPulsa(id){ const e = $(id); e.classList.remove('pulsa'); void e.off
 function produtosLiberados(){ const n = nivel(); return ORDEM_PRODUTOS.filter(p => PRODUTOS[p].nivel <= n && !PRODUTOS[p].so && (!PRODUTOS[p].fab || estFab(PRODUTOS[p].fab).feita)); }
 // ================= mural de pedidos
 // até três pedidos do Beto e do Jaca ao mesmo tempo (um por vez no começo, dois do nível 5, três do 10). O Pelúcio ganha
-// uma quarta vaga própria depois que aparece. Cada pedido tem prazo; entregue ou vencido, outro chega alguns minutos depois.
+// uma quarta vaga própria, só de café, depois da cena dele. Cada item pede no máximo MAX_ITEM_PEDIDO unidades. Cada pedido tem prazo; entregue ou vencido, outro chega alguns minutos depois.
 const PRAZO_PEDIDO = 45 * 60 * 1000;
 // empurra para frente o que só deve correr com o jogo aberto: o tempo do Hud e o prazo dos pedidos
 function pausarRelogios(ms){
@@ -3932,7 +3932,7 @@ function itensDoAlvoBase(alvo){
   if (alvo.k === 'colmeia') return itensColmeia(alvo.i);
   if (alvo.k === 'irrigador'){
     r.titulo = 'Irrigador automático'; r.icone = 'irrigador';
-    r.estado = 'Rega sozinho os 16 canteiros deste terreno. O mato continua por conta do Ed.';
+    r.estado = 'Rega sozinho os 16 canteiros deste terreno, e cada rega dá 1 xp. O mato continua por conta do Ed.';
     r.classe = 'bom';
     return r;
   }
@@ -4129,7 +4129,7 @@ function abrirLoja(aba){
     for (const id in ENFEITES){
       const E = ENFEITES[id], bloq = E.nivel > nivel(), guard = S.guardados[id] || 0, postos = S.enfeites.filter(e => e.tipo === id).length;
       corpo += `<div class="cartao${bloq ? ' bloq' : ''}"><div class="cab"><img src="${icone(id === 'canteiroFlor' ? 'flores' : id)}" alt=""><div><h4>${E.nome}</h4><div class="info">${bloq ? `libera no nível ${E.nivel}` : `${postos} na fazenda${guard ? ` · ${guard} guardado${guard > 1 ? 's' : ''}` : ''}`}</div></div></div>
-        <div class="info">${E.desc || 'Deixa a fazenda mais bonita.'}</div>
+        <div class="info">${E.desc || 'Deixa a fazenda mais bonita.'} Dá ${E.xp} xp só na compra.</div>
         <div class="botoes">${bloq ? '' : `${guard ? `<button class="botao mini verde" data-pin="${id}" type="button">Colocar</button>` : ''}<button class="botao mini" data-enfeite="${id}" type="button"${S.dinheiro < E.preco ? ' disabled' : ''}>Comprar · ${reais(E.preco)}</button>`}</div></div>`;
     }
   } else if (abaLoja === 'ed'){
@@ -4143,7 +4143,7 @@ function abrirLoja(aba){
   } else if (abaLoja === 'irrigacao'){
     const bloq = nivel() < IRRIGADOR.nivel;
     corpo += `<div class="cartao" style="grid-column:1/-1"><div class="cab"><img src="${icone('irrigador')}" alt=""><div><h4>Irrigador automático</h4><div class="info">${bloq ? `libera no nível ${IRRIGADOR.nivel}` : `${reais(IRRIGADOR.preco)} por terreno`}</div></div></div>
-      <div class="info">Rega sozinho os 16 canteiros de um terreno, até com o jogo fechado. Cada terreno precisa do seu. O mato continua por conta do Ed. Também dá para comprar tocando num canteiro do terreno.</div></div>`;
+      <div class="info">Rega sozinho os 16 canteiros de um terreno, até com o jogo fechado. Cada rega dá 1 xp. Cada terreno precisa do seu. O mato continua por conta do Ed. Também dá para comprar tocando num canteiro do terreno.</div></div>`;
     LOTES.forEach((L, i) => {
       if (!S.lotes[i]) return;
       const tem = S.irrigador[i];
@@ -4426,37 +4426,37 @@ function mostrarAjuda(intro, aba){
     <ul class="passos">
       <li><b>O que ele faz:</b> rega o que está com sede, tira o mato e colhe os canteiros prontos, colhe as frutas do pomar e pega o mel das colmeias.</li>
       <li><b>Como escolhe:</b> vai sempre ao que está mais perto dele e nunca pega o que já está na fila do Ed. Usa as ferramentas do Ed (regador grande, carrinho de mão).</li>
-      <li><b>O que ele não faz:</b> arar, plantar, dar ração aos bichos, coletar ovos e leite, usar as construções ou vender. Isso continua com o Ed.</li>
+      <li><b>O que ele não faz:</b> arar, plantar, dar ração aos bichos, coletar ovos e leite, esvaziar a caixa do coletor, usar as construções ou vender. Isso continua com o Ed.</li>
       <li><b>Onde chamar:</b> na casa do Ed, no caderno ou tocando nele. A pílula embaixo mostra quanto tempo de ajuda falta; no fim ele vai para casa dormir.</li>
       <li><b>Só trabalha com o jogo aberto.</b> Com o jogo fechado, o tempo dele fica pausado e volta a correr quando você voltar.</li>
     </ul>
     <h3 style="margin:14px 0 6px;font-size:16px">Ajuda automática</h3>
     <ul class="passos">
-      <li><b>Irrigador automático</b>${nv(IRRIGADOR.nivel)}: um por terreno, ${reais(IRRIGADOR.preco)}. Rega os 16 canteiros dele, até com o jogo fechado.</li>
-      <li><b>Coletor de ovos</b>${nv(COLETOR.galinha.nivel)} e <b>ordenhadeira</b>${nv(COLETOR.vaca.nivel)}: ovos e leite vão direto para o celeiro, até com o jogo fechado. Com o alimentador junto, o galinheiro e o curral trabalham sozinhos enquanto houver ração.</li>
-      <li><b>Esteira de saída</b> (${reais(ESTEIRA.preco)} por construção): o que fica pronto vai sozinho para o celeiro. Depois dela, o <b>repetidor de receita</b> (${reais(REPETIDOR.preco)}) recomeça a receita que você escolher sempre que houver ingredientes. Não vale para o terreiro de café.</li>
+      <li><b>Irrigador automático</b>${nv(IRRIGADOR.nivel)}: um por terreno, ${reais(IRRIGADOR.preco)}. Rega os 16 canteiros dele, até com o jogo fechado, e dá 1 xp por rega, como regar à mão.</li>
+      <li><b>Coletor de ovos</b>${nv(COLETOR.galinha.nivel)} e <b>ordenhadeira</b>${nv(COLETOR.vaca.nivel)}: os bichos produzem para uma caixa que guarda uma hora de produção, até com o jogo fechado. O xp vem quando o Ed esvazia a caixa, pelo menu do coletor. Com a caixa cheia, os bichos param e não gastam ração. Com o alimentador junto, continua sozinho enquanto houver ração e lugar na caixa.</li>
+      <li><b>Esteira de saída</b> (${reais(ESTEIRA.preco)} por construção): o que fica pronto vai sozinho para o celeiro. Depois dela, o <b>repetidor de receita</b> (${reais(REPETIDOR.preco)}) recomeça a receita que você escolher sempre que houver ingredientes. Vale também para o terreiro de café, que seca ${RECEITAS.secar.entra.cereja} cerejas por vez.</li>
       <li><b>Alimentador automático</b>${nv(ALIMENTADOR.galinha.nivel)}: um no galinheiro e um no curral. Dá ração sozinho, usando a ração do estoque.</li>
-      <li><b>Chuva:</b> de tempos em tempos chove e todos os canteiros ficam regados.</li>
+      <li><b>Chuva:</b> de tempos em tempos chove e todos os canteiros ficam regados, sem dar xp.</li>
       <li><b>Espantalho</b>${nv(ENFEITES.espantalho.nivel)}: os canteiros a até ${RAIO_ESPANTALHO} passos dele não dão mato.</li>
       <li><b>Ferramentas do Ed</b>, na loja: enxada, botas, regador e carrinho fazem o Ed render mais.</li>
     </ul>`;
   if (abaAjuda === 'producao') corpo = `
     <ul class="passos">
-      <li><b>Construções</b>${nv(FABRICAS.moinho.nivel)}: moinho, queijaria, padaria, cozinha de doces e torrador ficam na área à direita. Toque numa delas, escolha a receita e o Ed leva os ingredientes. Cada uma faz até ${VAGAS_FAB} receitas em fila e continua com o jogo fechado; depois o Ed recolhe o que ficou pronto. Os produtos valem mais que os ingredientes.</li>
-      <li><b>Pomar</b>${nv(FRUTIFERAS.laranjeira.nivel)}: laranjeira, goiabeira e mangueira dão frutas de novo e de novo, sem replantar nem regar. Nos níveis ${POMAR_BLOCOS[1].nivel} e ${POMAR_BLOCOS[2].nivel} dá para comprar terrenos de pomar com mais seis covas cada, e uma árvore pode ser cortada para dar lugar a outra.</li>
+      <li><b>Construções:</b> moinho${nv(FABRICAS.moinho.nivel)}, queijaria${nv(FABRICAS.queijaria.nivel)}, padaria${nv(FABRICAS.padaria.nivel)}, cozinha de doces${nv(FABRICAS.cozinha.nivel)} e torrador${nv(FABRICAS.torrador.nivel)} ficam na área à direita. Toque numa delas, escolha a receita e o Ed leva os ingredientes. Cada uma faz até ${VAGAS_FAB} receitas em fila e continua com o jogo fechado; depois o Ed recolhe o que ficou pronto. Os produtos valem mais que os ingredientes.</li>
+      <li><b>Pomar:</b> laranjeira${nv(FRUTIFERAS.laranjeira.nivel)}, goiabeira${nv(FRUTIFERAS.goiabeira.nivel)} e mangueira${nv(FRUTIFERAS.mangueira.nivel)} dão frutas de novo e de novo, sem replantar nem regar. Nos níveis ${POMAR_BLOCOS[1].nivel} e ${POMAR_BLOCOS[2].nivel} dá para comprar terrenos de pomar com mais seis covas cada, e uma árvore pode ser cortada para dar lugar a outra.</li>
       <li><b>Colmeias</b>${nv(COLMEIA.nivel)}: dão mel, e cada colmeia deixa o pomar ${Math.round(COLMEIA.ajuda * 100)}% mais rápido.</li>
-      <li><b>Café</b>${nv(CULTURAS.cafe.nivel)}: sai do pé em cereja e seca no terreiro. Só o Pelúcio, da Joli Coffee, compra o café seco, e paga mais pelo torrado.</li>
+      <li><b>Café</b>${nv(CULTURAS.cafe.nivel)}: sai do pé em cereja e seca no terreiro. Só o Pelúcio, da Joli Coffee, compra o café seco, e o torrado, feito no torrador, vale ${reais(PRODUTOS.torrado.venda)}.</li>
     </ul>`;
   if (abaAjuda === 'progresso') corpo = `
     <ul class="passos">
       <li><b>Níveis:</b> plantar, colher, produzir e entregar pedidos dá xp. Cada nível libera coisas novas.</li>
       <li><b>Terrenos:</b> o Ed começa com um; os outros são comprados nos níveis ${NIVEL_LOTE.slice(1).join(', ')}.</li>
-      <li><b>Pedidos:</b> até três ao mesmo tempo, com prazo, que só corre com o jogo aberto. Pagam mais que vender solto e às vezes trazem presente. O caderno do Ed mostra todos.</li>
+      <li><b>Pedidos:</b> até três do Beto e do Jaca ao mesmo tempo, com prazo, que só corre com o jogo aberto. Depois da cena do Pelúcio, chega mais um dele, só de café. Cada item pede no máximo ${MAX_ITEM_PEDIDO} unidades. Pagam mais que vender solto e às vezes trazem presente. O caderno do Ed mostra todos.</li>
       <li><b>Oferta do dia:</b> um produto vale 50% a mais naquele dia.</li>
-      <li><b>Estações:</b> seguem o calendário. Três culturas rendem 50% a mais na colheita; toque no selo da estação para ver quais.</li>
+      <li><b>Estações:</b> seguem o calendário. As culturas da estação colhem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais. Abóbora e melancia, que rendem 1, valem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais no Beto e no Jaca. O bônus não soma com a oferta do dia. Toque no selo da estação para ver quais.</li>
       <li><b>Figurinhas:</b> metas de longo prazo no caderno, que dão xp.</li>
       <li><b>Pista do Milton:</b> atrás da fazenda, o Milton, irmão do Ed, pousa de tempos em tempos o teco-teco PIG-MTP. Ele traz sementes ou ração e paga uma taxa pelo uso da pista. Só acontece com o jogo aberto.</li>
-      <li><b>Enfeites</b>: comprados na loja e colocados em qualquer gramado livre.</li>
+      <li><b>Enfeites</b>: comprados na loja e colocados em qualquer gramado livre. Dão xp só na compra.</li>
     </ul>`;
   const abas = `<div class="abas" role="tablist">${ABAS.map(([k, r]) => `<button class="aba" role="tab" aria-selected="${abaAjuda === k}" data-aba-ajuda="${k}" type="button">${r}</button>`).join('')}</div>`;
   abrirJanela(topo('ed', intro === true ? 'Bem-vindo à Fazenda Joli Pig!' : 'Como jogar', 'O porquinho fazendeiro') + `<div class="janela-corpo">${intro === true ? '' : abas}${corpo}
