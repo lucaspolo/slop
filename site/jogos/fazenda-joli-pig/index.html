@@ -279,6 +279,7 @@ a{color:var(--rosa)}
   </div>
 
   <div class="hud-base">
+    <div class="fila painel" id="hudPill" hidden><img data-icone="hud" alt=""><span id="hudTexto"></span></div>
     <div class="fila painel" id="fila" hidden><img data-icone="ed" alt=""><span id="filaTexto"></span><button class="botao mini claro" id="filaLimpar" type="button">limpar</button></div>
     <div class="dica painel" id="dica" hidden><img data-icone="ed" alt=""><span id="dicaTexto"></span><button class="x" id="dicaFechar" type="button" aria-label="Esconder as dicas">✕</button></div>
     <div class="modo painel" id="modo" hidden><img id="modoIcone" alt=""><span id="modoTexto"></span><button class="botao mini claro" id="modoSair" type="button">pronto</button></div>
@@ -1295,7 +1296,7 @@ const VI = {
   mato(){ const v = new Vox(); for (const [x, z, h] of [[0, 0, 6], [-2, 0, 4], [2, 1, 5], [1, -1, 3]]){ v.box(x, 0, z, x, h, z, 0x3f7a2a); v.set(x - 1, h - 2, z, 0x4d8a33); v.set(x + 1, h - 1, z, 0x4d8a33); } v.set(0, 7, 0, 0xa35ccf); return v; },
   enxada(){ return vEnxada(); }, regador(){ return vRegador(); }, cesta(){ return vCesta(); },
   galinha(){ return vGalinha(); }, vaca(){ return vVaca(); },
-  ed(){ return vPorco(COR.ed, COR.edBolso); }, beto(){ return vPorco(COR.beto, COR.betoBolso); }, pelucio(){ return vPorco(0, 0, false, 'moletom'); },
+  ed(){ return vPorco(COR.ed, COR.edBolso); }, hud(){ return vPorco(COR.ed, COR.edBolso); }, beto(){ return vPorco(COR.beto, COR.betoBolso); }, pelucio(){ return vPorco(0, 0, false, 'moletom'); },
   cafe(){ const v = new Vox(); v.ell(-2.4, 2, 0, 2.3, 1.7, 3.3, 0x6b4226); v.ell(2.6, 2, 0.6, 2.3, 1.7, 3.3, 0x7d4e2c); for (let z = -2; z <= 2; z++){ v.set(-2, 3, z, 0x3f2616); v.set(3, 3, z + 1, 0x3f2616); } v.ell(0, 1.4, -4.5, 1.8, 1.2, 1.8, 0xc8323a); return v; },
   xicara(){ const v = new Vox(); for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++) if (x * x + z * z <= 17) v.box(x, 0, z, x, 6, z, (X, Y) => Y === 3 ? 0xf28fac : 0xfdf8ef); for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) if (x * x + z * z <= 10) v.set(x, 6, z, 0x6b4226); v.box(5, 2, 0, 6, 2, 0, 0xfdf8ef); v.box(5, 5, 0, 6, 5, 0, 0xfdf8ef); v.box(6, 2, 0, 6, 5, 0, 0xfdf8ef); return v; },
   caminhao(){ return vCaminhao(); }, celeiro(){ return vCeleiro(); }, casa(){ return vCasa(); }, poco(){ return vPoco(); },
@@ -2231,7 +2232,7 @@ function comprarAlimentador(tp){
 }
 
 // ================= Ed, os visitantes do Joli Market e o caminhão
-let ed, beto, jaca, pelucio, visita, caminhao, caminhaoMarket, caminhaoCafe;
+let irmaoHud, ed, beto, jaca, pelucio, visita, caminhao, caminhaoMarket, caminhaoCafe;
 // quem vem no caminhão: quase sempre o Beto, às vezes o Jaca (nunca na primeira visita)
 const VISITA = {
   beto: {
@@ -2268,6 +2269,9 @@ function construirPersonagens(){
   jaca.g.visible = false; jaca.vel = 2.3; scene.add(jaca.g);
   pelucio = new Porco(0, 0, 'pelucio', { corpo: () => vPorco(0, 0, false, 'moletom'), braco: vBracoMoletom, pe: vPe, ombro: [15.5, 28.5, 1], quadril: [7, 9], mao: [-16, 1.5], altura: 1.32 });
   pelucio.g.visible = false; scene.add(pelucio.g);
+  // o Hud é igualzinho ao Ed, só que com metade do tamanho
+  irmaoHud = new Porco(COR.ed, COR.edBolso, 'hud', { corpo: () => vPorco(COR.ed, COR.edBolso), braco: vBraco, pe: vPe, ombro: [15.5, 28.5, 1], quadril: [7, 9], mao: [-16, 1.5], altura: 0.7 });
+  irmaoHud.g.scale.setScalar(0.5); irmaoHud.g.visible = false; irmaoHud.vel = 2.5; scene.add(irmaoHud.g);
   visita = beto;
   caminhaoMarket = criarCaminhao(false, [['JOLI', 1, '#2f6fb3'], ['MARKET', 0.62, '#e0408a']], '#fdf8ef');
   caminhaoCafe = criarCaminhao(true, [['JOLI', 1, '#7a4a2a'], ['COFFEE', 0.62, '#e0408a']], '#fdf3e6');
@@ -2482,6 +2486,94 @@ function encerrarCine(){
   if (!estFab('terreiro').feita){ estFab('terreiro').feita = true; montarFabrica('terreiro'); }
   aviso('Café liberado! O Pelúcio compra o café seco para a Joli Coffee.', 'grande', 4.5);
   hud(); salvar();
+}
+
+// ================= Hud, o irmão caçula: ajuda por um tempo e trabalha sozinho
+// rega, tira o mato e colhe os canteiros, colhe o pomar e pega o mel; nunca pega o que o Ed já tem na fila
+const HUD = { nivel: 8, preco: 500, minutos: 15 };
+let tarefaHud = null;
+const ignoradosHud = new Map();
+const hudAtivo = () => !!S.hudAte && Date.now() < S.hudAte;
+function chamarHud(){
+  if (nivel() < HUD.nivel){ aviso(`O Hud ajuda a partir do nível ${HUD.nivel}`, 'ruim'); Som.erro(); return; }
+  if (S.dinheiro < HUD.preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return; }
+  gastar(HUD.preco); chipPulsa('chipDinheiro');
+  const ja = hudAtivo();
+  S.hudAte = (ja ? S.hudAte : Date.now()) + HUD.minutos * 60000;
+  if (!ja){
+    irmaoHud.saindo = false; irmaoHud.g.visible = true; irmaoHud.estado = 'parado'; irmaoHud.pontos = [];
+    irmaoHud.colocar(5.5, 5.6); irmaoHud.ang = irmaoHud.angAlvo = 0.3; irmaoHud.pulo = 0.45;
+    falar(irmaoHud, sorteia(['Oba! Deixa comigo, Ed!', 'Cheguei! Bora trabalhar!', 'Eu rego, eu colho, eu ajudo!']), 2.8);
+  } else falar(irmaoHud, 'Mais tempo? Oba!', 2);
+  Som.oinc(); hud(); salvar();
+}
+function alvosHud(){
+  const out = [];
+  for (const k in S.campo){
+    const t = S.campo[k];
+    if (t.e !== 'plantado') continue;
+    const tipo = t.p === 'sede' ? 'regar' : t.p === 'mato' ? 'capinar' : t.prog >= 1 ? 'colher' : null;
+    if (!tipo) continue;
+    const [x, z] = k.split(',').map(Number), alvo = { k: 'tile', x, z };
+    if (!reservado(alvo)) out.push([tipo, alvo, x + 0.5, z + 0.5]);
+  }
+  S.pomar.forEach((d, i) => { const alvo = { k: 'pomar', i }; if (d && d.pronto && !reservado(alvo)){ const [x, z] = POMAR_SLOTS[i]; out.push(['colherFruta', alvo, x + 0.5, z + 1.5]); } });
+  S.colmeias.forEach((d, i) => { const alvo = { k: 'colmeia', i }; if (d && d.pronto && !reservado(alvo)){ const [x, z] = COLMEIA_SLOTS[i]; out.push(['coletarMel', alvo, x + 0.5, z + 1.5]); } });
+  const agora = Date.now();
+  return out.filter(([tp, a]) => (ignoradosHud.get(tp + JSON.stringify(a)) || 0) < agora);
+}
+function atualizarHudIrmao(dt, t){
+  const Hd = irmaoHud;
+  if (!Hd.g.visible){
+    if (hudAtivo() && !cine){ Hd.g.visible = true; Hd.colocar(5.5, 5.6); Hd.estado = 'parado'; }
+    return;
+  }
+  Hd.update(dt, t);
+  if (tarefaHud || Hd.estado !== 'parado' || cine) return;
+  if (!hudAtivo()){
+    if (!Hd.saindo){
+      Hd.saindo = true;
+      falar(H, 'Cansei! Vou tirar uma soneca.', 3);
+      const pts = rota(clamp(Math.floor(Hd.pos.x), 0, W - 1), clamp(Math.floor(Hd.pos.y), 0, H - 1), 5, 5);
+      Hd.ir(pts || [], () => { Hd.g.visible = false; Hd.saindo = false; });
+      aviso('O Hud foi descansar.'); hud();
+    }
+    return;
+  }
+  const alvos = alvosHud();
+  if (!alvos.length) return;
+  alvos.sort((a, b) => Math.hypot(a[2] - Hd.pos.x, a[3] - Hd.pos.y) - Math.hypot(b[2] - Hd.pos.x, b[3] - Hd.pos.y));
+  const [tipo, alvo, tx, tz] = alvos[0];
+  const tarefa = { tipo, alvo, hud: true };
+  let pts = rota(clamp(Math.floor(Hd.pos.x), 0, W - 1), clamp(Math.floor(Hd.pos.y), 0, H - 1), Math.floor(tx), Math.floor(tz));
+  if (!pts){ ignoradosHud.set(tipo + JSON.stringify(alvo), Date.now() + 20000); return; }
+  if (pts.length){
+    const ant = pts.length > 1 ? pts[pts.length - 2] : [Hd.pos.x, Hd.pos.y];
+    const dx = tx - ant[0], dz = tz - ant[1], d = Math.hypot(dx, dz);
+    if (d > 0.01 && alvo.k === 'tile') pts[pts.length - 1] = [tx - dx / d * 0.32, tz - dz / d * 0.32];
+  }
+  tarefaHud = tarefa; setReserva(alvo, tarefa);
+  Hd.ir(pts, () => {
+    const sl = alvo.k === 'pomar' ? POMAR_SLOTS[alvo.i] : alvo.k === 'colmeia' ? COLMEIA_SLOTS[alvo.i] : null;
+    Hd.olhar(sl ? sl[0] + 0.5 : tx, sl ? sl[1] + 0.5 : tz);
+    if (!checar(tipo, alvo).ok){ setReserva(alvo, null); tarefaHud = null; return; }
+    efeitoDuranteTrabalho(tarefa);
+    Hd.trabalhar(DUR[tipo] * 1.2, FERR[tipo], () => {
+      setReserva(alvo, null); tarefaHud = null;
+      if (checar(tipo, alvo).ok) executar(tarefa);
+    });
+  });
+}
+function itensHud(){
+  const r = { titulo: 'Hud', icone: 'hud', itens: [] };
+  if (hudAtivo()){
+    r.estado = `O irmão caçula do Ed. Ajudando por mais ${tempo((S.hudAte - Date.now()) / 1000)}.`; r.classe = 'bom';
+    r.itens.push({ rotulo: `Mais ${HUD.minutos} minutos`, sub: 'mesada do Hud', icone: 'moeda', preco: reais(HUD.preco), off: S.dinheiro < HUD.preco, fn: chamarHud });
+  } else {
+    r.estado = 'O irmão caçula do Ed. Com uma mesada, ele rega, tira o mato e colhe sozinho por um tempo.';
+    r.itens.push({ rotulo: 'Chamar o Hud pra ajudar', sub: nivel() < HUD.nivel ? `nível ${HUD.nivel}` : `${HUD.minutos} minutos de ajuda`, icone: 'hud', preco: reais(HUD.preco), off: nivel() < HUD.nivel || S.dinheiro < HUD.preco, fn: chamarHud });
+  }
+  return r;
 }
 
 // ================= tarefas do Ed
@@ -2733,6 +2825,7 @@ function subiuNivel(n){
   for (const id in FABRICAS) if (FABRICAS[id].nivel === n && FABRICAS[id].preco) libs.push(FABRICAS[id].nome.toLowerCase());
   for (const tipo in FRUTIFERAS) if (FRUTIFERAS[tipo].nivel === n) libs.push(FRUTIFERAS[tipo].nome.toLowerCase());
   if (n === COLMEIA.nivel) libs.push('colmeias');
+  if (n === HUD.nivel){ libs.push('a ajuda do Hud'); setTimeout(() => aviso('O Hud, irmão caçula do Ed, pode ajudar na fazenda. Toque na casa para chamar.', '', 5), 4200); }
   if (n === IRRIGADOR.nivel) libs.push('irrigador automático');
   for (const id in MELHORIAS) for (const d of MELHORIAS[id].degraus) if (d.nivel === n) libs.push(d.nome.toLowerCase());
   aviso(`Nível ${n}!` + (libs.length ? ` Liberou: ${libs.join(', ')}` : ''), 'grande', 4);
@@ -2981,6 +3074,7 @@ function itensDoAlvoBase(alvo){
     r.itens.push({ rotulo: 'Pelúcio', sub: cafe ? `Joli Coffee · você tem ${cafe} ${cafe > 1 ? 'saquinhos' : 'saquinho'} de café seco` : 'Joli Coffee · só compra café seco', icone: 'pelucio', fn: chamarPelucio });
     return r;
   }
+  if (alvo.k === 'hud') return itensHud();
   if (alvo.k === 'pomar') return itensPomar(alvo.i);
   if (alvo.k === 'colmeia') return itensColmeia(alvo.i);
   if (alvo.k === 'irrigador'){
@@ -3009,7 +3103,7 @@ function itemAndar(alvo){ return { rotulo: 'Ir até aqui', icone: 'ed', leve: tr
 function itensPredio(p){
   if (p.fab) return itensFabrica(p.fab);
   const r = { titulo: p.nome, itens: [] };
-  if (p.id === 'casa'){ r.icone = 'casa'; r.estado = 'A casinha rosa do Ed.'; r.itens.push({ rotulo: 'Como jogar', icone: 'ed', fn: mostrarAjuda }); r.itens.push({ rotulo: 'Ajustes', icone: 'casa', leve: true, fn: abrirAjustes }); }
+  if (p.id === 'casa'){ r.icone = 'casa'; r.estado = 'A casinha rosa do Ed.'; if (nivel() >= HUD.nivel - 1) r.itens.push(...itensHud().itens); r.itens.push({ rotulo: 'Como jogar', icone: 'ed', fn: mostrarAjuda }); r.itens.push({ rotulo: 'Ajustes', icone: 'casa', leve: true, fn: abrirAjustes }); }
   if (p.id === 'celeiro'){ r.icone = 'celeiro'; r.estado = 'Onde fica guardado tudo o que o Ed colhe.'; r.itens.push({ rotulo: 'Abrir o celeiro', icone: 'celeiro', fn: abrirCeleiro }); r.itens.push(itemBeto()); }
   if (p.id === 'poco'){ r.icone = 'poco'; r.estado = 'Água fresquinha. O Ed enche o regador aqui.'; r.itens.push({ rotulo: 'Ir até o poço', icone: 'regador', leve: true, fn: () => enfileirar('andar', { k: 'tile', x: 9, z: 4 }) }); }
   if (p.id === 'correio'){ r.icone = 'caderno'; r.estado = 'O Ed anota os pedidos do Joli Market no caderno.'; r.itens.push({ rotulo: 'Abrir o caderno do Ed', icone: 'caderno', fn: abrirCaderno }); r.itens.push(itemBeto()); }
@@ -3275,7 +3369,7 @@ function abrirCaderno(){
   let h = `<div class="caderno">`;
   h += `<div class="rabisco-canto" style="right:10px;top:4px">${rabisco(RABISCO.sol(), '0 0 80 80', 64, 8)}</div>`;
   h += `<h2>Caderno do Ed</h2>`;
-  h += `<div class="rabiscos">${rabisco(RABISCO.porco('#f6e27c', '#c9a92c'), '0 0 120 115', 92, -5, 'eu')}${rabisco(RABISCO.coracao(), '0 0 60 60', 34, 6)}${rabisco(RABISCO.porco('#b6d5ee', '#5f8fbf'), '0 0 120 115', 92, 4, 'Beto')}${S.conheceuJaca ? rabisco(RABISCO.jaca(), '0 0 112 112', 88, -3, 'Jaca') : ''}${S.viuCinePelucio ? rabisco(RABISCO.porco('#f3b3ab', '#d77f75'), '0 0 120 115', 92, 3, 'Pelúcio') : ''}</div>`;
+  h += `<div class="rabiscos">${rabisco(RABISCO.porco('#f6e27c', '#c9a92c'), '0 0 120 115', 92, -5, 'eu')}${rabisco(RABISCO.coracao(), '0 0 60 60', 34, 6)}${rabisco(RABISCO.porco('#b6d5ee', '#5f8fbf'), '0 0 120 115', 92, 4, 'Beto')}${S.conheceuJaca ? rabisco(RABISCO.jaca(), '0 0 112 112', 88, -3, 'Jaca') : ''}${S.viuCinePelucio ? rabisco(RABISCO.porco('#f3b3ab', '#d77f75'), '0 0 120 115', 92, 3, 'Pelúcio') : ''}${nivel() >= HUD.nivel ? rabisco(RABISCO.porco('#f6e27c', '#c9a92c'), '0 0 120 115', 52, -6, 'Hud') : ''}</div>`;
   h += `<div class="rabisco-canto" style="right:14px;top:210px">${rabisco(RABISCO.cenoura(), '0 0 72 66', 56, -10)}</div>`;
   h += `<h3>Pedidos</h3>`;
   if (!S.anotado){
@@ -3305,12 +3399,14 @@ function abrirCaderno(){
   const lem = lembretes();
   h += lem.length ? `<ul>${lem.map(([ic, t]) => `<li><span class="caixa"></span><img src="${icone(ic)}" alt="">${esc(t)}</li>`).join('')}</ul>` : '<p>Tudo certinho na fazenda :)</p>';
   if (S.vendeu) h += `<p style="margin-top:30px">Já ganhei <span class="grifo">${reais(S.vendeu)}</span> vendendo pro Beto!</p>`;
+  if (nivel() >= HUD.nivel && !hudAtivo()) h += `<p><button class="botao" id="jHud" type="button"><img src="${icone('hud')}" alt="">Chamar o Hud · ${reais(HUD.preco)}</button></p>`;
   h += `<p><button class="botao azul" id="jBeto" type="button"><img src="${icone(caminhaoE.estado === 'aqui' ? dadosVisita().icone : 'beto')}" alt="">${caminhaoE.estado === 'aqui' ? `Falar com o ${dadosVisita().nome}` : 'Chamar o Beto'}</button></p>`;
   h += `<div style="display:flex;justify-content:flex-end">${rabisco(RABISCO.caminhao(), '0 0 80 60', 70, -3)}</div>`;
   h += `</div>`;
   abrirJanela(topo('caderno', 'Caderno do Ed', 'Pedidos, lembretes e desenhos', 'rosa') + `<div class="janela-corpo">${h}</div>`);
   $('jBeto').addEventListener('click', () => { fecharJanela(); chamarBeto(); });
   const bp = $('jPelucio'); if (bp) bp.addEventListener('click', () => { fecharJanela(); chamarPelucio(); });
+  const bh = $('jHud'); if (bh) bh.addEventListener('click', () => { fecharJanela(); chamarHud(); });
 }
 let falaBeto = '';
 function abrirBeto(){
@@ -3573,6 +3669,9 @@ function quadro(agoraP){
   proximaTarefa();
   ed.update(dt, t);
   if (pelucio.g.visible) pelucio.update(dt, t);
+  atualizarHudIrmao(dt, t);
+  if (irmaoHud.g.visible || hudAtivo()){ $('hudPill').hidden = !hudAtivo(); if (hudAtivo()) $('hudTexto').textContent = `Hud ajudando · ${tempo((S.hudAte - Date.now()) / 1000)}`; }
+  else if (!$('hudPill').hidden) $('hudPill').hidden = true;
   if (beto.g.visible) beto.update(dt, t);
   if (jaca.g.visible) jaca.update(dt, t);
   atualizarCaminhao(dt);
@@ -3647,7 +3746,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   if (novo) setTimeout(() => mostrarAjuda(true), 300);
   else if (fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 iniciar();
 })();
