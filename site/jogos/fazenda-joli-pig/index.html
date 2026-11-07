@@ -292,7 +292,7 @@ a{color:var(--rosa)}
   </div>
 
   <div class="hud-base">
-    <div class="fila painel" id="hudPill" hidden><img data-icone="hud" alt=""><span id="hudTexto"></span></div>
+    <div class="fila painel" id="hudPill" hidden style="cursor:pointer" role="button" tabindex="0" title="O que o Hud faz"><img data-icone="hud" alt=""><span id="hudTexto"></span></div>
     <div class="fila painel" id="fila" hidden><img data-icone="ed" alt=""><span id="filaTexto"></span><button class="botao mini claro" id="filaLimpar" type="button">limpar</button></div>
     <div class="dica painel" id="dica" hidden><img data-icone="ed" alt=""><span id="dicaTexto"></span><button class="x" id="dicaFechar" type="button" aria-label="Esconder as dicas">✕</button></div>
     <div class="modo painel" id="modo" hidden><img id="modoIcone" alt=""><span id="modoTexto"></span><button class="botao mini claro" id="modoSair" type="button">pronto</button></div>
@@ -2784,6 +2784,7 @@ function chamarHud(){
     falar(irmaoHud, sorteia(['Oba! Deixa comigo, Ed!', 'Cheguei! Bora trabalhar!', 'Eu rego, eu colho, eu ajudo!']), 2.8);
   } else falar(irmaoHud, 'Mais tempo? Oba!', 2);
   Som.oinc(); hud(); salvar();
+  if (!S.viuExplicacaoHud){ S.viuExplicacaoHud = true; salvar(); setTimeout(() => { if (!algumaJanela()) explicarHud(); }, 1200); }
 }
 function alvosHud(){
   const out = [];
@@ -2845,12 +2846,13 @@ function atualizarHudIrmao(dt, t){
 function itensHud(){
   const r = { titulo: 'Hud', icone: 'hud', itens: [] };
   if (hudAtivo()){
-    r.estado = `O irmão caçula do Ed. Ajudando por mais ${tempo((S.hudAte - Date.now()) / 1000)}.`; r.classe = 'bom';
+    r.estado = `Ajudando por mais ${tempo((S.hudAte - Date.now()) / 1000)}: rega, tira o mato e colhe sozinho, inclusive pomar e mel.`; r.classe = 'bom';
     r.itens.push({ rotulo: `Mais ${HUD.minutos} minutos`, sub: 'mesada do Hud', icone: 'moeda', preco: reais(HUD.preco), off: S.dinheiro < HUD.preco, fn: chamarHud });
   } else {
-    r.estado = 'O irmão caçula do Ed. Com uma mesada, ele rega, tira o mato e colhe sozinho por um tempo.';
+    r.estado = `O irmão caçula do Ed. Por ${HUD.minutos} minutos ele rega, tira o mato e colhe os canteiros, o pomar e o mel sozinho.`;
     r.itens.push({ rotulo: 'Chamar o Hud pra ajudar', sub: nivel() < HUD.nivel ? `nível ${HUD.nivel}` : `${HUD.minutos} minutos de ajuda`, icone: 'hud', preco: reais(HUD.preco), off: nivel() < HUD.nivel || S.dinheiro < HUD.preco, fn: chamarHud });
   }
+  r.itens.push({ rotulo: 'Como o Hud ajuda', icone: 'ed', leve: true, fn: () => mostrarAjuda(false, 'ajuda') });
   return r;
 }
 
@@ -3104,7 +3106,7 @@ function subiuNivel(n){
   for (const tipo in FRUTIFERAS) if (FRUTIFERAS[tipo].nivel === n) libs.push(FRUTIFERAS[tipo].nome.toLowerCase());
   for (const id in ENFEITES) if (ENFEITES[id].nivel === n) libs.push(ENFEITES[id].nome.toLowerCase());
   if (n === COLMEIA.nivel) libs.push('colmeias');
-  if (n === HUD.nivel){ libs.push('a ajuda do Hud'); setTimeout(() => aviso('O Hud, irmão caçula do Ed, pode ajudar na fazenda. Toque na casa para chamar.', '', 5), 4200); }
+  if (n === HUD.nivel){ libs.push('a ajuda do Hud'); setTimeout(() => aviso('O Hud, irmão caçula do Ed, pode regar, tirar o mato e colher por você. Toque na casa para chamar.', '', 6), 4200); }
   if (n === IRRIGADOR.nivel) libs.push('irrigador automático');
   for (const id in MELHORIAS) for (const d of MELHORIAS[id].degraus) if (d.nivel === n) libs.push(d.nome.toLowerCase());
   aviso(`Nível ${n}!` + (libs.length ? ` Liberou: ${libs.join(', ')}` : ''), 'grande', 4);
@@ -3792,19 +3794,79 @@ function abrirAjustes(){
     location.reload();
   });
 }
-function mostrarAjuda(intro){
-  abrirJanela(topo('ed', intro === true ? 'Bem-vindo à Fazenda Joli Pig!' : 'Como jogar', 'O porquinho fazendeiro') + `<div class="janela-corpo">
+// ajuda em abas; cada novidade aparece com o nível em que libera
+let abaAjuda = 'comeco';
+function mostrarAjuda(intro, aba){
+  if (aba) abaAjuda = aba;
+  if (intro === true) abaAjuda = 'comeco';
+  const n = nivel(), nv = k => n >= k ? '' : ` <span class="selo">nível ${k}</span>`;
+  const ABAS = [['comeco', 'Começo'], ['ajuda', 'Ajudantes'], ['producao', 'Produção'], ['progresso', 'Progresso']];
+  let corpo = '';
+  if (abaAjuda === 'comeco') corpo = `
     <p>Este é o Ed. Ele cuida da fazendinha e o irmão dele, o Beto, tem um mercado na cidade: o Joli Market.</p>
     <ol class="passos">
       <li><b>Toque no chão</b> para ver o que dá para fazer. O Ed anda até lá e faz.</li>
-      <li><b>Are, plante e regue.</b> A semente precisa de água para brotar e de mais água no meio do caminho. Se nascer mato, tire. No nível 10 dá para pôr um irrigador automático em cada terreno.</li>
-      <li><b>Cuide dos bichos.</b> Galinhas e vacas comem ração e dão ovos e leite. Mais tarde dá para comprar um alimentador automático.</li>
+      <li><b>Are, plante e regue.</b> A semente precisa de água para brotar; as culturas curtas pedem mais água no meio do caminho. Se nascer mato, tire.</li>
+      <li><b>Cuide dos bichos.</b> Galinhas e vacas comem ração e dão ovos e leite.</li>
       <li><b>Colha</b> e tudo vai para o celeiro.</li>
-      <li><b>Chame o Beto</b> para vender. Ele também traz pedidos que pagam mais, e o Ed anota tudo no caderno. Às vezes quem vem é o Jaca, o melhor amigo e sócio do Beto, e ele sempre traz um presentinho.</li>
+      <li><b>Chame o Beto</b> para vender. Às vezes quem vem é o Jaca, o melhor amigo e sócio do Beto, e ele sempre traz um presentinho.</li>
     </ol>
-    <p>Dá para tocar em vários canteiros seguidos: depois de escolher uma ação, ela fica valendo para os próximos toques. Arraste para mover a câmera, use dois dedos ou a roda do mouse para o zoom.</p>
-    <p>A fazenda fica salva neste navegador e continua crescendo enquanto você está fora.</p>
+    <p>Depois de escolher uma ação, ela vale para os próximos toques por alguns segundos. Arraste para mover a câmera; use dois dedos ou a roda do mouse para o zoom.</p>
+    <p>A fazenda fica salva neste navegador e continua crescendo enquanto você está fora.</p>`;
+  if (abaAjuda === 'ajuda') corpo = `
+    <h3 style="margin:0 0 6px;font-size:16px">O Hud${nv(HUD.nivel)}</h3>
+    <p>O irmão caçula do Ed. Com uma mesada de ${reais(HUD.preco)}, ele trabalha sozinho por ${HUD.minutos} minutos; pagando de novo, o tempo soma.</p>
+    <ul class="passos">
+      <li><b>O que ele faz:</b> rega o que está com sede, tira o mato e colhe os canteiros prontos, colhe as frutas do pomar e pega o mel das colmeias.</li>
+      <li><b>Como escolhe:</b> vai sempre ao que está mais perto dele e nunca pega o que já está na fila do Ed. Usa as ferramentas do Ed (regador grande, carrinho de mão).</li>
+      <li><b>O que ele não faz:</b> arar, plantar, dar ração aos bichos, coletar ovos e leite, usar as construções ou vender. Isso continua com o Ed.</li>
+      <li><b>Onde chamar:</b> na casa do Ed, no caderno ou tocando nele. A pílula embaixo mostra quanto tempo de ajuda falta; no fim ele vai para casa dormir.</li>
+      <li><b>Só funciona com o jogo aberto.</b></li>
+    </ul>
+    <h3 style="margin:14px 0 6px;font-size:16px">Ajuda automática</h3>
+    <ul class="passos">
+      <li><b>Irrigador automático</b>${nv(IRRIGADOR.nivel)}: um por terreno, ${reais(IRRIGADOR.preco)}. Rega os 16 canteiros dele, até com o jogo fechado.</li>
+      <li><b>Alimentador automático</b>${nv(ALIMENTADOR.galinha.nivel)}: um no galinheiro e um no curral. Dá ração sozinho, usando a ração do estoque.</li>
+      <li><b>Chuva:</b> de tempos em tempos chove e todos os canteiros ficam regados.</li>
+      <li><b>Espantalho</b>${nv(ENFEITES.espantalho.nivel)}: os canteiros a até ${RAIO_ESPANTALHO} passos dele não dão mato.</li>
+      <li><b>Ferramentas do Ed</b>, na loja: enxada, botas, regador e carrinho fazem o Ed render mais.</li>
+    </ul>`;
+  if (abaAjuda === 'producao') corpo = `
+    <ul class="passos">
+      <li><b>Construções</b>${nv(FABRICAS.moinho.nivel)}: moinho, queijaria, padaria, cozinha de doces e torrador ficam na área à direita. Toque numa delas, escolha a receita e o Ed leva os ingredientes. Cada uma faz até ${VAGAS_FAB} receitas em fila e continua com o jogo fechado; depois o Ed recolhe o que ficou pronto. Os produtos valem mais que os ingredientes.</li>
+      <li><b>Pomar</b>${nv(FRUTIFERAS.laranjeira.nivel)}: laranjeira, goiabeira e mangueira dão frutas de novo e de novo, sem replantar nem regar.</li>
+      <li><b>Colmeias</b>${nv(COLMEIA.nivel)}: dão mel, e cada colmeia deixa o pomar ${Math.round(COLMEIA.ajuda * 100)}% mais rápido.</li>
+      <li><b>Café</b>${nv(CULTURAS.cafe.nivel)}: sai do pé em cereja e seca no terreiro. Só o Pelúcio, da Joli Coffee, compra o café seco, e paga mais pelo torrado.</li>
+    </ul>`;
+  if (abaAjuda === 'progresso') corpo = `
+    <ul class="passos">
+      <li><b>Níveis:</b> plantar, colher, produzir e entregar pedidos dá xp. Cada nível libera coisas novas.</li>
+      <li><b>Terrenos:</b> o Ed começa com um; os outros são comprados nos níveis ${NIVEL_LOTE.slice(1).join(', ')}.</li>
+      <li><b>Pedidos:</b> até três ao mesmo tempo, com prazo. Pagam mais que vender solto e às vezes trazem presente. O caderno do Ed mostra todos.</li>
+      <li><b>Oferta do dia:</b> um produto vale 50% a mais naquele dia.</li>
+      <li><b>Estações:</b> seguem o calendário. Três culturas rendem 50% a mais na colheita; toque no selo da estação para ver quais.</li>
+      <li><b>Figurinhas:</b> metas de longo prazo no caderno, que dão xp.</li>
+      <li><b>Enfeites</b>: comprados na loja e colocados em qualquer gramado livre.</li>
+    </ul>`;
+  const abas = `<div class="abas" role="tablist">${ABAS.map(([k, r]) => `<button class="aba" role="tab" aria-selected="${abaAjuda === k}" data-aba-ajuda="${k}" type="button">${r}</button>`).join('')}</div>`;
+  abrirJanela(topo('ed', intro === true ? 'Bem-vindo à Fazenda Joli Pig!' : 'Como jogar', 'O porquinho fazendeiro') + `<div class="janela-corpo">${intro === true ? '' : abas}${corpo}
     <div class="rodape-janela"><span></span><button class="botao" type="button" data-fechar>${intro === true ? 'Bora plantar!' : 'Entendi'}</button></div></div>`);
+  $('janela').querySelectorAll('[data-aba-ajuda]').forEach(b => b.addEventListener('click', () => { Som.clique(); mostrarAjuda(false, b.dataset.abaAjuda); }));
+}
+// na primeira vez que o Hud é chamado, uma janela explica o que ele faz
+function explicarHud(){
+  abrirJanela(topo('hud', 'O Hud chegou para ajudar!', `Por ${HUD.minutos} minutos`) + `<div class="janela-corpo">
+    <p>O Hud é o irmão caçula do Ed. Enquanto a mesada durar, ele anda pela fazenda e faz sozinho:</p>
+    <ul class="passos">
+      <li>rega o que está com sede;</li>
+      <li>tira o mato;</li>
+      <li>colhe os canteiros prontos;</li>
+      <li>colhe as frutas do pomar e pega o mel.</li>
+    </ul>
+    <p>Ele vai ao que está mais perto e não mexe no que já está na fila do Ed. Arar, plantar, cuidar dos bichos e usar as construções continua com o Ed.</p>
+    <p>A pílula embaixo mostra quanto tempo falta. Para dar mais tempo, toque no Hud ou na casa do Ed.</p>
+    <div class="rodape-janela"><button class="botao claro" type="button" id="jAjudaHud">Ver a ajuda</button><button class="botao" type="button" data-fechar>Valeu, Hud!</button></div></div>`);
+  $('jAjudaHud').addEventListener('click', () => mostrarAjuda(false, 'ajuda'));
 }
 
 // ================= dicas do começo
@@ -3931,6 +3993,7 @@ function eventos(){
     else chamarBeto();
   });
   $('chipEstacao').addEventListener('click', () => { Som.ligar(); Som.clique(); abrirEstacao(); });
+  $('hudPill').addEventListener('click', () => { Som.clique(); mostrarAjuda(false, 'ajuda'); });
   $('btnAjustes').addEventListener('click', () => { Som.ligar(); Som.clique(); abrirAjustes(); });
   $('btnCaderno').addEventListener('click', () => { Som.ligar(); Som.clique(); abrirCaderno(); });
   $('modoSair').addEventListener('click', desligarModo);
@@ -4074,7 +4137,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   if (novo) setTimeout(() => mostrarAjuda(true), 300);
   else if (fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 iniciar();
 })();
