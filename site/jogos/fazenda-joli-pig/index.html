@@ -1538,8 +1538,10 @@ function carregar(){
   } catch (e){}
   S = estadoNovo(); return true;
 }
+// ao recomeçar, nada mais pode gravar: nem o salvamento automático nem o que roda quando a página fecha
+let zerando = false;
 function salvar(){
-  if (!S) return;
+  if (!S || zerando) return;
   try {
     const copia = JSON.parse(JSON.stringify(S, (k, v) => k === 'res' ? undefined : v));
     for (const t of fila){ if (t.custo){ copia.dinheiro += t.custo.dinheiro || 0; copia.racao += t.custo.racao || 0; if (t.custo.semente) copia.bolsa[t.custo.semente] = (copia.bolsa[t.custo.semente] || 0) + 1; if (t.custo.itens) for (const [k, q] of Object.entries(t.custo.itens)) copia.celeiro[k] = (copia.celeiro[k] || 0) + q; } }
@@ -3755,10 +3757,16 @@ function abrirAjustes(){
   $('jSom').addEventListener('click', () => { S.som = !S.som; Som.ligar(); Som.clique(); salvar(); abrirAjustes(); });
   $('jDicas').addEventListener('click', () => { S.dicas = !S.dicas; atualizarDica(); salvar(); abrirAjustes(); });
   $('jAjuda').addEventListener('click', mostrarAjuda);
-  $('jZerar').addEventListener('click', () => {
-    if (!confirm('Apagar a fazenda e começar de novo?')) return;
-    try { localStorage.removeItem(CHAVE_SALVO); } catch (e){}
-    salvar = () => {};
+  // confirmação dentro do jogo: o primeiro toque pede certeza, o segundo apaga
+  $('jZerar').addEventListener('click', e => {
+    const b = e.currentTarget;
+    if (!b.dataset.certeza){
+      b.dataset.certeza = '1'; b.textContent = 'tocar de novo para apagar tudo';
+      setTimeout(() => { if (b.isConnected){ delete b.dataset.certeza; b.textContent = 'recomeçar'; } }, 6000);
+      return;
+    }
+    zerando = true;
+    try { localStorage.removeItem(CHAVE_SALVO); } catch (err){}
     location.reload();
   });
 }
