@@ -3889,6 +3889,17 @@ function atualizarDica(){
 
 // ================= entrada
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), planoChao = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), ptChao = new THREE.Vector3();
+const FUNDO_DE_CANTEIRO = ['irrigador', 'enfeite', 'arvore', 'alimentador'];
+const planoCanteiro = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.12), ptCanteiro = new THREE.Vector3();
+function canteiroAtras(obj){
+  if (!ray.ray.intersectPlane(planoCanteiro, ptCanteiro)) return null;
+  const x = Math.floor(ptCanteiro.x), z = Math.floor(ptCanteiro.z);
+  if (!campo(x, z) && loteDe(x, z) < 0) return null;
+  let raiz = obj; while (raiz.parent && raiz.parent !== scene) raiz = raiz.parent;
+  // perto da base do objeto, o toque continua sendo nele
+  if (Math.hypot(ptCanteiro.x - raiz.position.x, ptCanteiro.z - raiz.position.z) < 0.38) return null;
+  return { k: 'tile', x, z };
+}
 function alvoNaTela(cx, cy){
   ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
@@ -3896,7 +3907,14 @@ function alvoNaTela(cx, cy){
   for (const h of hits){
     let o = h.object, vis = true;
     for (let p = o; p; p = p.parent) if (p.visible === false) vis = false;
-    if (vis && o.userData.alvo) return o.userData.alvo;
+    if (!vis || !o.userData.alvo) continue;
+    // objetos altos (irrigador, enfeites, árvores, alimentador) não podem esconder os canteiros atrás deles:
+    // se o toque passa por cima do objeto e cai num canteiro, vale o canteiro; o objeto só é escolhido tocando na base dele
+    if (FUNDO_DE_CANTEIRO.includes(o.userData.alvo.k)){
+      const atras = canteiroAtras(o);
+      if (atras) return atras;
+    }
+    return o.userData.alvo;
   }
   if (ray.ray.intersectPlane(planoChao, ptChao)){
     const x = Math.floor(ptChao.x), z = Math.floor(ptChao.z);
