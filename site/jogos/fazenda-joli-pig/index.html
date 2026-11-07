@@ -813,14 +813,7 @@ const P4 = [[4, 4], [11, 4], [4, 11], [11, 11]];
 function vPlanta(cult, est){
   const v = new Vox();
   const grande = cult === 'abobora' || cult === 'melancia';
-  if (est === 0){ for (const [x, z] of P4){ v.box(x - 1, 0, z - 1, x + 1, 0, z + 1, 0x5e3a22); v.set(x, 1, z, 0xe9dcb0); } return v; }
-  if (est === 1){ for (const [x, z] of P4){ v.set(x, 0, z, COR.verde); v.set(x, 1, z, COR.verde); v.set(x - 1, 2, z, COR.verde2); v.set(x + 1, 2, z, COR.verde2); v.set(x, 2, z, COR.verde); } return v; }
-  if (est === 2){
-    if (cult === 'milho'){ for (const [x, z] of P4){ v.box(x, 0, z, x, 7, z, COR.verde); v.set(x - 1, 3, z, COR.verde2); v.set(x + 1, 5, z, COR.verde2); v.set(x, 6, z - 1, COR.verde2); v.set(x, 4, z + 1, COR.verde2); } }
-    else if (grande){ folhagem(v); v.ell(7.5, 1.6, 7.5, 2.2, 1.6, 2.2, cult === 'abobora' ? 0x9cc44a : 0x5aa548); }
-    else for (const [x, z] of P4) v.ell(x, 1.8, z, 1.9, 2.2, 1.9, (X, Y) => Y > 2 ? COR.verde2 : COR.verde);
-    return v;
-  }
+  if (est < 3){ plantaJovem(v, cult, est); return v; }
   switch (cult){
     case 'cenoura':
       for (const [x, z] of P4){
@@ -870,6 +863,72 @@ function vPlanta(cult, est){
       break;
   }
   return v;
+}
+// cada cultura tem cara própria em todas as fases, para dar para reconhecer sem tocar
+const SEMENTE = { cenoura: 0xc98a4a, alface: 0xe9dcb0, tomate: 0xf2e2a0, milho: 0xf5d142, abobora: 0xfdf5e0, morango: 0xd8344a, melancia: 0x2d2a2a, cafe: 0x8a3b2b };
+function plantaJovem(v, cult, est){
+  const verde = COR.verde, verde2 = COR.verde2, escuro = COR.verdeE;
+  // marcas fixas que aparecem desde o plantio: estaca do tomate, palha do morango, monte do milho
+  if (cult === 'tomate') for (const [x, z] of P4) v.box(x + 1, 0, z + 1, x + 1, est === 2 ? 9 : 6, z + 1, 0xb48a5a);
+  if (cult === 'morango') for (let x = 1; x <= 14; x++) for (let z = 1; z <= 14; z++) if (hash(x, 9, z) < 0.28) v.set(x, 0, z, hash(z, 4, x) < 0.5 ? 0xe9cf7f : 0xd9b86a);
+  if (cult === 'milho') for (const [x, z] of P4) v.box(x - 1, 0, z - 1, x + 1, 0, z + 1, 0x6e472c);
+  if (est === 0){
+    for (const [x, z] of P4){ if (cult !== 'milho' && cult !== 'morango') v.box(x - 1, 0, z - 1, x + 1, 0, z + 1, 0x5e3a22); v.set(x, 1, z, SEMENTE[cult]); v.set(x + 1, 1, z, SEMENTE[cult]); }
+    return;
+  }
+  switch (cult){
+    case 'cenoura': // folhas finas e rendadas; na fase 2 o ombro laranja aparece na terra
+      for (const [x, z] of P4){
+        const h = est === 1 ? 3 : 5;
+        v.box(x, 0, z, x, h, z, escuro);
+        for (const [dx, dz, y] of [[-1, 0, h - 1], [1, 0, h], [0, -1, h - 2], [0, 1, h - 1]]) v.set(x + dx, y, z + dz, est === 1 ? verde2 : escuro);
+        if (est === 2) v.set(x, 0, z, COR.laranja), v.set(x + 1, 0, z, COR.laranja);
+      }
+      break;
+    case 'alface': // roseta rente ao chão, verde-clara
+      for (const [x, z] of P4){
+        const r = est === 1 ? 1.2 : 2.1;
+        v.ell(x, 0.6, z, r + 0.4, est === 1 ? 0.8 : 1.6, r + 0.4, (X, Y) => Y >= 1 ? 0xc7ec8e : 0x8fd35e);
+      }
+      break;
+    case 'tomate': // folhagem presa na estaca; na fase 2, tomatinhos verdes
+      for (const [x, z] of P4){
+        v.ell(x, est === 1 ? 2 : 3.5, z, 1.4, est === 1 ? 1.6 : 2.8, 1.4, verde);
+        if (est === 2) for (const [dx, y, dz] of [[-1, 3, 1], [1, 5, -1], [0, 2, -1]]) v.set(x + dx, y, z + dz, 0x9cc44a);
+      }
+      break;
+    case 'milho': // uma folha comprida e alta, bem mais alto que as outras culturas
+      for (const [x, z] of P4){
+        const h = est === 1 ? 4 : 8;
+        v.box(x, 1, z, x, h, z, verde);
+        v.set(x - 1, Math.round(h * 0.5), z, verde2); v.set(x - 2, Math.round(h * 0.6), z, verde2);
+        v.set(x, Math.round(h * 0.7), z + 1, verde2); v.set(x, Math.round(h * 0.8), z + 2, verde2);
+      }
+      break;
+    case 'abobora': // folhas grandes e redondas rasteiras; fase 2 com uma abobrinha verde
+    case 'melancia': // rama comprida com folhas recortadas; fase 2 com uma melancia listrada pequena
+      if (cult === 'abobora'){
+        for (const [x, z, r] of [[5, 6, 1.8], [10, 5, 1.6], [7, 10, 1.8]].slice(0, est === 1 ? 1 : 3)) v.ell(x, 0.8, z, r + 0.4, 0.9, r + 0.4, (X, Y, Z) => hash(X, Y, Z) < 0.2 ? 0x9cc44a : 0x5aa845);
+        if (est === 2) v.ell(9, 1.4, 10, 1.6, 1.4, 1.5, 0x9cc44a);
+      } else {
+        for (let i = 0; i <= (est === 1 ? 6 : 12); i++){ const x = 2 + i, z = Math.round(7.5 + Math.sin(i * 0.8) * 2.5); v.set(x, 0, z, 0x3e7f2b); if (i % 2 === 0){ v.set(x, 1, z + 1, 0x2f7d32); v.set(x + 1, 1, z - 1, 0x58aa48); } }
+        if (est === 2) v.ell(10, 1.4, 9, 2, 1.4, 1.5, (X) => ((X % 2) + 2) % 2 === 0 ? 0x2f7d32 : 0x58aa48);
+      }
+      break;
+    case 'morango': // tufos baixos de três folhas sobre a palha; fase 2 com florzinhas brancas
+      for (const [x, z] of P4){
+        v.ell(x, 0.8, z, est === 1 ? 1.3 : 2, 1, est === 1 ? 1.3 : 2, (X, Y, Z) => hash(X, Y, Z) < 0.5 ? 0x3c8f45 : verde);
+        if (est === 2) for (const [dx, dz] of [[-1, 1], [1, -1]]) v.set(x + dx, 2, z + dz, 0xffffff);
+      }
+      break;
+    case 'cafe': // arbusto de folha escura e brilhante; fase 2 com flores brancas
+      for (const [x, z] of P4){
+        v.set(x, 0, z, 0x7a5232);
+        v.ell(x, est === 1 ? 2 : 3.5, z, est === 1 ? 1.4 : 2.2, est === 1 ? 1.8 : 3, est === 1 ? 1.4 : 2.2, (X, Y, Z) => hash(X, Y, Z) < 0.5 ? 0x2f7a3a : 0x24652f);
+        if (est === 2) for (const [dx, y, dz] of [[-2, 3, 0], [2, 4, 0], [0, 5, 2]]) v.set(x + dx, y, z + dz, 0xffffff);
+      }
+      break;
+  }
 }
 function folhagem(v){
   for (const [x, z] of [[2, 2], [13, 3], [2, 13], [13, 12], [8, 1], [1, 8], [14, 8], [8, 14]]) v.ell(x, 0.6, z, 1.6, 1, 1.6, hash(x, 0, z) < 0.5 ? COR.verde : COR.verde2);
@@ -1255,19 +1314,33 @@ function vGraos(){
   for (let x = 2; x <= 21; x++) for (let z = 2; z <= 13; z++) if ((z % 3) !== 1 && hash(x, 5, z) < 0.8) v.set(x, 1, z, [0x8a3b2b, 0x6b3a22, 0xa8432f, 0x5a3324][Math.floor(hash(z, 3, x) * 4)]);
   return v;
 }
+// laranjeira: copa redonda e fechada, verde-escura. goiabeira: tronco claro bifurcado e copa baixa e larga, verde-clara.
+// mangueira: a maior, copa alta em dois andares, verde bem escuro. Sem fruta madura, mostram frutinhas verdes.
+const VERDE_FRUTIFERA = { laranjeira: [0x3f8f3a, 0x357f31, 0x4a9a42], goiabeira: [0x7cc45a, 0x6fb84e, 0x8fd06a], mangueira: [0x2c6e33, 0x25602c, 0x357a3b] };
+const FRUTA_VERDE = { laranjeira: 0x8fc24a, goiabeira: 0xa8d07a, mangueira: 0x9cc44a };
 function vFrutifera(tipo, comFruta){
-  const F = FRUTIFERAS[tipo], v = new Vox();
-  v.box(3, 0, 3, 4, 5, 4, 0x8a5a36); v.set(2, 0, 3, 0x7a4c2c); v.set(5, 0, 4, 0x7a4c2c);
-  const verdes = [0x5fb04a, 0x52a03f, 0x6cbf52];
-  v.ell(3.5, 8, 3.5, 4, 3.4, 4, (x, y, z) => verdes[Math.floor(hash(x, y, z) * 3)]);
-  v.ell(3.5, 10.8, 3.5, 2.6, 1.8, 2.6, (x, y, z) => verdes[Math.floor(hash(z, y, x) * 3)]);
+  const F = FRUTIFERAS[tipo], v = new Vox(), verdes = VERDE_FRUTIFERA[tipo];
+  const cor = (x, y, z) => verdes[Math.floor(hash(x, y, z) * 3)];
+  if (tipo === 'laranjeira'){
+    v.box(3, 0, 3, 4, 4, 4, 0x8a5a36); v.set(2, 0, 3, 0x7a4c2c);
+    v.ell(3.5, 8, 3.5, 4.2, 4, 4.2, cor);
+  } else if (tipo === 'goiabeira'){
+    const casca = 0xc8a27a;
+    v.box(3, 0, 3, 4, 3, 4, casca); v.box(1, 3, 3, 2, 6, 3, casca); v.box(5, 3, 4, 6, 6, 4, casca);
+    v.ell(1.5, 7.5, 3.5, 3, 2, 3, cor); v.ell(6, 7.5, 4, 3, 2, 3, cor); v.ell(3.5, 8.6, 3.5, 3.2, 1.6, 3.2, cor);
+  } else {
+    v.box(3, 0, 3, 4, 6, 4, 0x6e4a30); v.set(2, 0, 3, 0x5e3e28); v.set(5, 0, 4, 0x5e3e28);
+    v.ell(3.5, 8.5, 3.5, 4.8, 2.8, 4.8, cor);
+    v.ell(3.5, 11.8, 3.5, 3.6, 2.4, 3.6, cor);
+    v.ell(3.5, 14, 3.5, 2, 1.3, 2, cor);
+  }
   for (const e of v.m.values()){
-    if (e.y < 6) continue;
+    if (e.y < 5 || !verdes.includes(e.c)) continue;
     const exposto = !v.has(e.x + 1, e.y, e.z) || !v.has(e.x - 1, e.y, e.z) || !v.has(e.x, e.y, e.z + 1) || !v.has(e.x, e.y, e.z - 1) || !v.has(e.x, e.y + 1, e.z);
     if (!exposto) continue;
     const h = hash(e.x + 3, e.y * 7, e.z + 11);
     if (comFruta && h < 0.16) e.c = h < 0.05 ? F.cor2 : F.cor;
-    else if (!comFruta && h < 0.04) e.c = 0xffffff;
+    else if (!comFruta && h < 0.08) e.c = FRUTA_VERDE[tipo];
   }
   return v;
 }
@@ -1866,7 +1939,8 @@ function montarPomar(i){
   if (!blocoComprado(blocoDoSlot(i))) return;
   if (!d) montarSlot('pomar', POMAR_VIS, POMAR_SLOTS, i, () => vCova().build(1 / 16, { origin: [8, 0, 8] }), 'cova');
   else montarSlot('pomar', POMAR_VIS, POMAR_SLOTS, i, () => vFrutifera(d.tipo, d.pronto).build(1 / 8, { origin: [4, 0, 4] }), 'fruta' + d.tipo + !!d.pronto);
-  bolhaSlot(POMAR_VIS[i], POMAR_SLOTS[i], d && d.pronto ? FRUTIFERAS[d.tipo].fruta : '', 1.75);
+  bolhaSlot(POMAR_VIS[i], POMAR_SLOTS[i], d && d.pronto ? FRUTIFERAS[d.tipo].fruta : '', d && d.tipo === 'mangueira' ? 2.15 : 1.75);
+  plaquinha(POMAR_VIS[i], POMAR_SLOTS[i][0], POMAR_SLOTS[i][1], d && !d.pronto ? FRUTIFERAS[d.tipo].fruta : '');
 }
 function montarColmeia(i){
   const d = S.colmeias[i];
@@ -2143,6 +2217,28 @@ function avancar(t, dt, irrig){
 }
 const irrigado = (x, z) => { const l = loteDe(x, z); return l >= 0 && !!S.irrigador[l]; };
 function faltaSegundos(t){ return (1 - t.prog) * CULTURAS[t.c].tempo; }
+// plaquinha espetada no canto da frente do canteiro, com o desenho do que está plantado;
+// some quando a bolha (sede, mato, pronto) aparece, porque aí a bolha já diz o que é
+const TEX_PLAQUINHA = {};
+function matPlaquinha(nome){
+  if (TEX_PLAQUINHA[nome]) return TEX_PLAQUINHA[nome];
+  const c = document.createElement('canvas'); c.width = c.height = 72;
+  const g = c.getContext('2d');
+  g.fillStyle = '#7a5232'; g.fillRect(33, 52, 6, 20);
+  g.lineWidth = 4; g.strokeStyle = '#3b2a20'; g.fillStyle = '#fff8e9';
+  g.beginPath(); g.moveTo(14, 4); g.lineTo(58, 4); g.quadraticCurveTo(68, 4, 68, 14); g.lineTo(68, 44); g.quadraticCurveTo(68, 54, 58, 54); g.lineTo(14, 54); g.quadraticCurveTo(4, 54, 4, 44); g.lineTo(4, 14); g.quadraticCurveTo(4, 4, 14, 4); g.closePath(); g.fill(); g.stroke();
+  if (ICONE[nome]) g.drawImage(ICONE[nome].canvas, 13, 6, 46, 46);
+  const t = new THREE.CanvasTexture(c);
+  return (TEX_PLAQUINHA[nome] = new THREE.SpriteMaterial({ map: t, transparent: true }));
+}
+function plaquinha(V, x, z, nome){
+  const mostrar = nome && S.plaquinhas !== false;
+  if (mostrar){
+    if (!V.placa){ V.placa = new THREE.Sprite(matPlaquinha(nome)); V.placa.scale.set(0.3, 0.3, 1); V.placa.userData.nome = nome; V.placa.renderOrder = 5; scene.add(V.placa); }
+    else if (V.placa.userData.nome !== nome){ V.placa.material = matPlaquinha(nome); V.placa.userData.nome = nome; }
+    V.placa.position.set(x + 0.84, 0.24, z + 0.84);
+  } else if (V.placa){ scene.remove(V.placa); V.placa = null; }
+}
 function atualizarCampo(x, z){
   const t = campo(x, z), k = chave(x, z);
   const vis = VIS[k] || (VIS[k] = { solo: null, planta: null, mato: null, bolha: null, cs: '', cp: '' });
@@ -2176,6 +2272,7 @@ function atualizarCampo(x, z){
     const alto = { milho: 1.2, tomate: 1.1 }[t.c] || 0.95;
     vis.bolha.userData.base = est >= 2 ? alto : 0.7;
   } else if (vis.bolha){ scene.remove(vis.bolha); BOLHAS.splice(BOLHAS.indexOf(vis.bolha), 1); vis.bolha = null; }
+  plaquinha(vis, x, z, t && t.e === 'plantado' && !b ? (CULTURAS[t.c].produto || t.c) : '');
 }
 const BOLHAS = [];
 
@@ -3843,11 +3940,18 @@ function entregarPedido(i){
 function abrirAjustes(){
   abrirJanela(topo('casa', 'Ajustes', 'Fazenda Joli Pig') + `<div class="janela-corpo">
     <div class="ajuste"><span>Som</span><button class="botao mini" id="jSom" type="button">${S.som ? 'ligado' : 'desligado'}</button></div>
+    <div class="ajuste"><span>Plaquinhas nos canteiros</span><button class="botao mini" id="jPlaquinhas" type="button">${S.plaquinhas !== false ? 'ligadas' : 'desligadas'}</button></div>
     <div class="ajuste"><span>Dicas</span><button class="botao mini" id="jDicas" type="button">${S.dicas ? 'ligadas' : 'desligadas'}</button></div>
     <div class="ajuste"><span>Como jogar</span><button class="botao mini" id="jAjuda" type="button">abrir</button></div>
     <div class="ajuste"><span>Recomeçar a fazenda do zero</span><button class="botao mini rosa" id="jZerar" type="button">recomeçar</button></div>
     <p style="margin-top:14px"><a href="../">← voltar para os jogos do slop</a></p></div>`);
   $('jSom').addEventListener('click', () => { S.som = !S.som; Som.ligar(); Som.clique(); salvar(); abrirAjustes(); });
+  $('jPlaquinhas').addEventListener('click', () => {
+    S.plaquinhas = S.plaquinhas === false; Som.clique();
+    for (const k in S.campo){ const [x, z] = k.split(',').map(Number); atualizarCampo(x, z); }
+    POMAR_SLOTS.forEach((_, i) => { if (POMAR_VIS[i] && POMAR_VIS[i].mesh) montarPomar(i); });
+    salvar(); abrirAjustes();
+  });
   $('jDicas').addEventListener('click', () => { S.dicas = !S.dicas; atualizarDica(); salvar(); abrirAjustes(); });
   $('jAjuda').addEventListener('click', mostrarAjuda);
   // confirmação dentro do jogo: o primeiro toque pede certeza, o segundo apaga
