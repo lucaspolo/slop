@@ -2344,6 +2344,7 @@ function comprarIrrigador(l){
   for (const tf of fila.slice()) if (tf.tipo === 'regar' && tf.alvo.k === 'tile' && loteDe(tf.alvo.x, tf.alvo.z) === l) cancelar(tf);
   const L = LOTES[l];
   for (let x = L.x; x < L.x + 4; x++) for (let z = L.z; z < L.z + 4; z++){ const t = campo(x, z); if (t && t.e === 'plantado'){ avancar(t, 0, true); atualizarCampo(x, z); } }
+  pagarRegas(new THREE.Vector3(L.x + 2, 0.9, L.z + 2));
   irrigadorJato(l);
   Som.moeda(); chipPulsa('chipDinheiro');
   flutuar(new THREE.Vector3(L.x + 2, 0.9, L.z + 2), '−' + reais(IRRIGADOR.preco), 'ouro');
@@ -2377,6 +2378,9 @@ function mapaLotes(destaque){
 // ================= canteiros
 const VIS = {};
 function estagio(t){ if (t.e !== 'plantado') return -1; if (t.prog >= 1) return 3; if (t.prog >= 0.55) return 2; if (t.prog >= 0.2) return 1; return 0; }
+// regas que o irrigador fez e ainda não viraram xp (a chuva, que passa 'chuva', não conta)
+let regasIrrig = 0;
+function pagarRegas(pos){ if (!regasIrrig) return; const n = regasIrrig; regasIrrig = 0; ganharXP(n, pos); }
 // devolve true se o irrigador regou a planta neste passo
 function avancar(t, dt, irrig){
   const c = CULTURAS[t.c];
@@ -2392,7 +2396,7 @@ function avancar(t, dt, irrig){
     }
     if (t.prog >= 1) t.prog = 1;
     if (!t.p && t.ev < t.evs.length && t.prog >= t.evs[t.ev][0]) t.p = t.evs[t.ev][1];
-    if (irrig && t.p === 'sede'){ t.p = null; t.ev++; regou = true; continue; }
+    if (irrig && t.p === 'sede'){ t.p = null; t.ev++; regou = true; if (irrig === true) regasIrrig++; continue; }
     return regou;
   }
 }
@@ -2973,6 +2977,7 @@ function comprarEnfeite(id){
   if (S.dinheiro < E.preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return false; }
   gastar(E.preco); chipPulsa('chipDinheiro'); Som.moeda();
   S.guardados[id] = (S.guardados[id] || 0) + 1;
+  ganharXP(E.xp, ed.g.position.clone().add(new THREE.Vector3(0, 1.2, 0)));
   salvar(); return true;
 }
 function ligarModoEnfeite(id){
@@ -2989,7 +2994,6 @@ function colocarEnfeite(id, x, z){
   const e = { tipo: id, x, z, rot: Math.floor(hash(x, 7, z) * 4) };
   S.enfeites.push(e); montarEnfeite(e);
   for (let i = 0; i < 12; i++) particula(x + 0.5, 0.3, z + 0.5, [0xffffff, 0xffe066, 0xf27fa4][i % 3], 1.1);
-  ganharXP(ENFEITES[id].xp, new THREE.Vector3(x + 0.5, 0.8, z + 0.5));
   Som.plantar(); hud(); salvar();
   if (!S.guardados[id]) desligarModo();
   return true;
@@ -3016,7 +3020,9 @@ const ESTACOES = [
 const BONUS_ESTACAO = 1.5;
 const estacaoAtual = () => ESTACOES.find(e => e.meses.includes(new Date().getMonth()));
 const daEstacao = c => estacaoAtual().culturas.includes(c);
-const rendCultura = c => Math.round(CULTURAS[c].rend * (daEstacao(c) ? BONUS_ESTACAO : 1));
+// quem rende 1 por colheita não ganha no rendimento (arredondaria para 2): o bônus vai para o preço de venda
+const rendCultura = c => CULTURAS[c].rend < 2 ? CULTURAS[c].rend : Math.round(CULTURAS[c].rend * (daEstacao(c) ? BONUS_ESTACAO : 1));
+const vendeMaisNaEstacao = p => !!CULTURAS[p] && CULTURAS[p].rend < 2 && daEstacao(p);
 const chovendo = () => !!S.chuvaAte && Date.now() < S.chuvaAte;
 let gotas = null, proxChuvaCheck = 0;
 function climaInicio(){
@@ -3047,7 +3053,7 @@ function regarComChuva(){
       const res = VIS[k] && VIS[k].res;
       if (res && res.tipo === 'regar' && res !== tarefaAtual) cancelar(res);
       if (res && res === tarefaAtual) continue;
-      t.p = null; t.ev++; avancar(t, 0, true); atualizarCampo(x, z); n++;
+      t.p = null; t.ev++; avancar(t, 0, 'chuva'); atualizarCampo(x, z); n++;
     }
   }
   return n;
@@ -3094,8 +3100,8 @@ function abrirEstacao(){
   const e = estacaoAtual();
   const min = chovendo() ? 0 : Math.max(0, Math.ceil((S.proxChuva - Date.now()) / 60000));
   abrirJanela(topo('semente', e.nome, 'A estação segue o calendário', 'azul') + `<div class="janela-corpo">
-    <p>No ${e.nome.toLowerCase()}, estas culturas rendem 50% a mais na colheita:</p>
-    <div class="linhas">${e.culturas.filter(c => CULTURAS[c].nivel <= nivel() + 5).map(c => `<div class="linha"><img src="${icone(CULTURAS[c].produto || c)}" alt=""><div class="nome">${CULTURAS[c].nome}<small>${CULTURAS[c].rend} → ${rendCultura(c)} por canteiro${CULTURAS[c].nivel > nivel() ? ` · nível ${CULTURAS[c].nivel}` : ''}</small></div></div>`).join('')}</div>
+    <p>No ${e.nome.toLowerCase()}, estas culturas rendem 50% a mais na colheita. As que dão só 1 por colheita colhem o mesmo, mas o Beto e o Jaca pagam 50% a mais:</p>
+    <div class="linhas">${e.culturas.filter(c => CULTURAS[c].nivel <= nivel() + 5).map(c => `<div class="linha"><img src="${icone(CULTURAS[c].produto || c)}" alt=""><div class="nome">${CULTURAS[c].nome}<small>${CULTURAS[c].rend < 2 ? `${reais(PRODUTOS[c].venda)} → ${reais(Math.round(PRODUTOS[c].venda * BONUS_ESTACAO))} cada` : `${CULTURAS[c].rend} → ${rendCultura(c)} por canteiro`}${CULTURAS[c].nivel > nivel() ? ` · nível ${CULTURAS[c].nivel}` : ''}</small></div></div>`).join('')}</div>
     <p style="margin-top:12px">${chovendo() ? 'Está chovendo agora: a chuva rega todos os canteiros.' : `A próxima chuva vem em mais ou menos ${min} min. Ela rega todos os canteiros sozinha.`}</p></div>`);
 }
 
@@ -3303,7 +3309,7 @@ function atualizarHudIrmao(dt, t){
   if (!hudAtivo()){
     if (!Hd.saindo){
       Hd.saindo = true;
-      falar(H, 'Cansei! Vou tirar uma soneca.', 3);
+      falar(Hd, 'Cansei! Vou tirar uma soneca.', 3);
       const pts = rota(clamp(Math.floor(Hd.pos.x), 0, W - 1), clamp(Math.floor(Hd.pos.y), 0, H - 1), 5, 5);
       Hd.ir(pts || [], () => { Hd.g.visible = false; Hd.saindo = false; });
       aviso('O Hud foi descansar.'); hud();
@@ -3524,7 +3530,7 @@ function espalhar(tipo, x0, z0, raio){
 function aplicarCanteiro(tipo, x, z){
   const t = campo(x, z), pos = new THREE.Vector3(x + 0.5, 0.6, z + 0.5);
   if (tipo === 'arar'){ t.e = 'arado'; ganharXP(1, pos); }
-  if (tipo === 'regar'){ t.p = null; t.ev++; avancar(t, 0, irrigado(x, z)); ganharXP(1, pos); avancarTut(1); }
+  if (tipo === 'regar'){ t.p = null; t.ev++; avancar(t, 0, irrigado(x, z)); ganharXP(1, pos); pagarRegas(pos); avancarTut(1); }
   if (tipo === 'colher'){
     const c = CULTURAS[t.c], prod = c.produto || t.c, rend = rendCultura(t.c);
     S.celeiro[prod] = (S.celeiro[prod] || 0) + rend; contar('colhido', prod, rend);
@@ -3558,6 +3564,7 @@ function executar(tarefa){
       evs.sort((a, b) => a[0] - b[0]);
       Object.assign(t, { e: 'plantado', c: tarefa.param, prog: 0, evs, ev: 0, p: null });
       if (avancar(t, 0, irrigado(alvo.x, alvo.z))) irrigadorJato(loteDe(alvo.x, alvo.z));
+      pagarRegas(pos);
       avancarTut(0);
       break;
     }
@@ -3565,7 +3572,7 @@ function executar(tarefa){
       if (t.p === 'sede') aplicarCanteiro('regar', alvo.x, alvo.z);
       if (degrau('regador')) espalhar('regar', alvo.x, alvo.z, degrau('regador').raio);
       break;
-    case 'capinar': if (t.p === 'mato'){ t.p = null; t.ev++; if (avancar(t, 0, irrigado(alvo.x, alvo.z))) irrigadorJato(loteDe(alvo.x, alvo.z)); ganharXP(2, pos); } break;
+    case 'capinar': if (t.p === 'mato'){ t.p = null; t.ev++; if (avancar(t, 0, irrigado(alvo.x, alvo.z))) irrigadorJato(loteDe(alvo.x, alvo.z)); ganharXP(2, pos); pagarRegas(pos); } break;
     case 'colher':
       aplicarCanteiro('colher', alvo.x, alvo.z);
       if (degrau('carrinho')) espalhar('colher', alvo.x, alvo.z, degrau('carrinho').raio);
@@ -3661,7 +3668,7 @@ const pedidoCompleto = p => !!p && !!p.itens && p.itens.every(([k, q]) => (S.cel
 const pedidosDe = mercado => S.pedidos.map((p, i) => [p, i]).filter(([p]) => p && p.itens && (mercado ? p.quem !== 'pelucio' : p.quem === 'pelucio'));
 function diaHoje(){ const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); }
 function ofertaDoDia(){ const disp = produtosLiberados(); return disp[Math.floor(hash(diaHoje(), 3, 7) * disp.length)]; }
-const preco = p => Math.round(PRODUTOS[p].venda * (p === ofertaDoDia() ? 1.5 : 1));
+const preco = p => Math.round(PRODUTOS[p].venda * (p === ofertaDoDia() || vendeMaisNaEstacao(p) ? 1.5 : 1));
 
 // ================= interface: HUD
 function hud(){
@@ -4028,7 +4035,7 @@ function abrirLoja(aba){
     for (const k of ORDEM_CULTURAS){
       const c = CULTURAS[k], bloq = c.nivel > n, tem = S.bolsa[k] || 0;
       corpo += `<div class="cartao${bloq ? ' bloq' : ''}${daEstacao(k) && !bloq ? ' oferta' : ''}"><div class="cab"><img src="${icone(k)}" alt=""><div><h4>${c.nome}${daEstacao(k) ? `<span class="selo">${estacaoAtual().nome.toLowerCase()}</span>` : ''}</h4><div class="info">${bloq ? `libera no nível ${c.nivel}` : `${tem} na bolsa`}</div></div></div>
-        <div class="info">${reais(c.semente)} a semente · cresce em ${tempo(c.tempo)} · ${c.produto ? `dá ${c.rend} ${c.plural}; secas valem ${reais(c.venda)} cada` : `dá ${c.rend} × ${reais(c.venda)}`}</div>
+        <div class="info">${reais(c.semente)} a semente · cresce em ${tempo(c.tempo)} · ${c.produto ? `dá ${c.rend} ${c.plural}; secas valem ${reais(c.venda)} cada` : `dá ${c.rend} × ${vendeMaisNaEstacao(k) ? reais(Math.round(c.venda * BONUS_ESTACAO)) + ' (preço da estação)' : reais(c.venda)}`}</div>
         <div class="botoes">${bloq ? '' : `<button class="botao mini" data-comprar="${k}" data-q="1" type="button"${S.dinheiro < c.semente ? ' disabled' : ''}>+1</button><button class="botao mini" data-comprar="${k}" data-q="5" type="button"${S.dinheiro < c.semente * 5 ? ' disabled' : ''}>+5 · ${reais(c.semente * 5)}</button>`}</div></div>`;
     }
   } else if (abaLoja === 'animais'){
@@ -4592,6 +4599,7 @@ function simular(dt){
     if (avancar(t, dt, irrigado(x, z))) irrigadorJato(loteDe(x, z));
     if (estagio(t) !== ep || t.p !== pp) atualizarCampo(x, z);
   }
+  pagarRegas();
   simularAnimais();
   simularFabricas();
   simularPomar();
@@ -4695,6 +4703,7 @@ async function iniciar(){
   // o tempo que passou com a página fechada
   const fora = novo ? 0 : Math.max(0, (Date.now() - (S.salvoEm || Date.now())) / 1000);
   for (const k in S.campo){ const t = S.campo[k]; if (t.e !== 'plantado') continue; const [x, z] = k.split(',').map(Number); avancar(t, fora, irrigado(x, z)); }
+  pagarRegas();
   simularAnimais();
   for (const k in S.campo){ const [x, z] = k.split(',').map(Number); atualizarCampo(x, z); }
   for (const a of ANI) a.atualizarBolha();
