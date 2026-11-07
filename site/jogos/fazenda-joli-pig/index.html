@@ -437,7 +437,7 @@ const COR = {
 };
 
 // ================= dados do jogo
-const W = 30, H = 18;
+const W = 36, H = 18;
 const CULTURAS = {
   cenoura:  { nome:'Cenoura',  plural:'cenouras',  semente:4,  tempo:40,  venda:3,   rend:4, xp:2,  nivel:1 },
   alface:   { nome:'Alface',   plural:'alfaces',   semente:6,  tempo:70,  venda:5,   rend:4, xp:3,  nivel:1 },
@@ -482,7 +482,16 @@ const FRUTIFERAS = {
   goiabeira:  { nome: 'Goiabeira', fruta: 'goiaba', cor: 0xb8d65a, cor2: 0xe0607a, nivel: 10, preco: 700, tempo: 600, rend: 4, xp: 5 },
   mangueira:  { nome: 'Mangueira', fruta: 'manga', cor: 0xf2b632, cor2: 0xe8603a, nivel: 12, preco: 1000, tempo: 900, rend: 4, xp: 7 },
 };
-const POMAR_SLOTS = [[24, 11], [26, 11], [28, 11], [24, 14], [26, 14], [28, 14]];
+// o pomar em blocos de seis covas: o primeiro vem com o pomar; os outros são terrenos de pomar comprados a leste
+const POMAR_BLOCOS = [
+  { slots: [[24, 11], [26, 11], [28, 11], [24, 14], [26, 14], [28, 14]] },
+  { nivel: 11, preco: 3000, x0: 30, z0: 6, x1: 35, z1: 10, slots: [[31, 7], [33, 7], [35, 7], [31, 9], [33, 9], [35, 9]] },
+  { nivel: 14, preco: 6000, x0: 30, z0: 11, x1: 35, z1: 15, slots: [[31, 12], [33, 12], [35, 12], [31, 14], [33, 14], [35, 14]] },
+];
+const POMAR_SLOTS = POMAR_BLOCOS.flatMap(b => b.slots);
+const blocoDoSlot = i => Math.floor(i / 6);
+const blocoComprado = b => b === 0 || !!(S.pomarBlocos || [])[b];
+const blocoEm = (x, z) => POMAR_BLOCOS.findIndex((b, k) => k > 0 && x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1);
 const COLMEIA_SLOTS = [[24, 9], [26, 9], [28, 9]];
 const COLMEIA = { nivel: 9, preco: 800, tempo: 720, rend: 2, xp: 4, ajuda: 0.1 };
 // construções de processamento: cada uma faz uma receita por vez, com até três na fila
@@ -593,7 +602,7 @@ function montarMapa(){
   for (const [x, z] of ARVORES) setT(x, z, 'arvore');
   for (const [x, z] of ARBUSTOS) setT(x, z, 'arvore');
   for (const [x, z] of FENOS) setT(x, z, 'feno');
-  for (const [x, z] of [...POMAR_SLOTS, ...COLMEIA_SLOTS]) setT(x, z, 'feno');
+  for (const [x, z] of [...POMAR_BLOCOS[0].slots, ...COLMEIA_SLOTS]) setT(x, z, 'feno');
   for (let x = 18; x <= 21; x++){ for (let z = 7; z <= 9; z++) if (tipo(x, z) === 'pastoG') PASTO_G.push([x, z]); for (let z = 11; z <= 15; z++) if (tipo(x, z) === 'pastoV') PASTO_V.push([x, z]); }
 }
 const andavel = (x, z) => { const t = tipo(x, z); return !!t && t !== 'cerca' && t !== 'predio' && t !== 'arvore' && t !== 'feno'; };
@@ -1518,7 +1527,7 @@ const geo = (chave, fn) => GEO[chave] || (GEO[chave] = fn());
 const CHAVE_SALVO = 'fazendaJoliPig.v1';
 let S = null;
 function estadoNovo(){
-  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedidos: [], versao: 2, feito: [], dicas: true, alimentador: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], colmeias: [], enfeites: [], guardados: {}, anotado: false, som: true, nAnimal: 0, vendeu: 0, salvoEm: Date.now() };
+  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedidos: [], versao: 2, feito: [], dicas: true, alimentador: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], pomarBlocos: [], colmeias: [], enfeites: [], guardados: {}, anotado: false, som: true, nAnimal: 0, vendeu: 0, salvoEm: Date.now() };
   const l = LOTES[2];
   for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) s.campo[x + ',' + z] = { e: 'grama' };
   for (const k of ['12,9', '13,9', '12,10', '13,10']) s.campo[k] = { e: 'arado' };
@@ -1854,6 +1863,7 @@ function montarSlot(lista, vis, slots, i, modelo, chaveGeo){
 }
 function montarPomar(i){
   const d = S.pomar[i];
+  if (!blocoComprado(blocoDoSlot(i))) return;
   if (!d) montarSlot('pomar', POMAR_VIS, POMAR_SLOTS, i, () => vCova().build(1 / 16, { origin: [8, 0, 8] }), 'cova');
   else montarSlot('pomar', POMAR_VIS, POMAR_SLOTS, i, () => vFrutifera(d.tipo, d.pronto).build(1 / 8, { origin: [4, 0, 4] }), 'fruta' + d.tipo + !!d.pronto);
   bolhaSlot(POMAR_VIS[i], POMAR_SLOTS[i], d && d.pronto ? FRUTIFERAS[d.tipo].fruta : '', 1.75);
@@ -1940,6 +1950,41 @@ function itensPomar(i){
   const ocupada = !!(POMAR_VIS[i] && POMAR_VIS[i].res);
   r.itens.push({ rotulo: 'Cortar a árvore', sub: ocupada ? 'alguém está colhendo agora' : `devolve ${reais(F.preco / 2)} e libera a cova`, icone: 'cova', perigo: true, off: ocupada, confirmar: 'Tocar de novo para cortar', fn: () => cortarArvore(i) });
   return r;
+}
+const PLACA_POMAR = [];
+function montarPlacasPomar(){
+  POMAR_BLOCOS.forEach((B, b) => {
+    if (b === 0) return;
+    if (PLACA_POMAR[b]){ scene.remove(PLACA_POMAR[b]); const k = pickaveis.indexOf(PLACA_POMAR[b]); if (k >= 0) pickaveis.splice(k, 1); PLACA_POMAR[b] = null; }
+    if (blocoComprado(b)) return;
+    const pl = malha(geo('placa', () => vPlaca().build(1 / 16, { origin: [8, 0, 8] })));
+    const tx = placaDeTexto(texturaTexto([['POMAR À VENDA', 1, '#c2365f'], [`nível ${B.nivel}`, 0.7, '#7a4a2a']], 256, 112, '#f3e3c3'), 13 / 16, 6 / 16);
+    tx.position.set(0, 11 / 16, 1.1 / 16); pl.add(tx);
+    pl.position.set((B.x0 + B.x1 + 1) / 2, 0, (B.z0 + B.z1 + 1) / 2);
+    scene.add(pl); PLACA_POMAR[b] = pl;
+    pl.traverse(o => { o.userData.alvo = { k: 'pomarLote', b }; }); pickaveis.push(pl);
+  });
+}
+function comprarPomarLote(b){
+  const B = POMAR_BLOCOS[b];
+  if (blocoComprado(b)) return;
+  if (nivel() < B.nivel){ aviso(`Esse terreno de pomar libera no nível ${B.nivel}`, 'ruim'); Som.erro(); return; }
+  if (S.dinheiro < B.preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return; }
+  gastar(B.preco); chipPulsa('chipDinheiro');
+  if (!S.pomarBlocos) S.pomarBlocos = [];
+  S.pomarBlocos[b] = true;
+  for (const [x, z] of B.slots) setT(x, z, 'feno');
+  montarPlacasPomar();
+  POMAR_SLOTS.forEach((_, i) => { if (blocoDoSlot(i) === b) montarPomar(i); });
+  for (let k = 0; k < 30; k++) particula(rnd(B.x0, B.x1 + 1), 0.3, rnd(B.z0, B.z1 + 1), [0x6fb24a, 0x8a5c3a][k % 2], 1.1);
+  Som.moeda();
+  aviso('Terreno de pomar novo! Seis covas para mais árvores.', 'grande', 3.5);
+  hud(); salvar();
+}
+function itensPomarLote(b){
+  const B = POMAR_BLOCOS[b], bloq = nivel() < B.nivel;
+  return { titulo: 'Terreno de pomar à venda', icone: 'cova', estado: `Seis covas para plantar mais árvores frutíferas.${bloq ? ` Libera no nível ${B.nivel}.` : ''}`,
+    itens: [{ rotulo: 'Comprar o terreno de pomar', sub: bloq ? `nível ${B.nivel}` : '6 covas novas', icone: 'moeda', preco: reais(B.preco), off: bloq || S.dinheiro < B.preco, fn: () => comprarPomarLote(b) }] };
 }
 function cortarArvore(i){
   const d = S.pomar[i];
@@ -2579,7 +2624,7 @@ const ENF_VIS = {};
 function livreParaEnfeite(x, z){
   const t = tipo(x, z);
   if (t !== 'grama' && t !== 'pastoV') return false;
-  if (loteDe(x, z) >= 0 || campo(x, z)) return false;
+  if (loteDe(x, z) >= 0 || campo(x, z) || blocoEm(x, z) > 0) return false;
   if (S.enfeites.some(e => e.x === x && e.z === z)) return false;
   if (Math.hypot(ed.pos.x - x - 0.5, ed.pos.y - z - 0.5) < 0.6) return false;
   return t === 'grama';
@@ -3121,6 +3166,7 @@ function subiuNivel(n){
   for (const tipo in FRUTIFERAS) if (FRUTIFERAS[tipo].nivel === n) libs.push(FRUTIFERAS[tipo].nome.toLowerCase());
   for (const id in ENFEITES) if (ENFEITES[id].nivel === n) libs.push(ENFEITES[id].nome.toLowerCase());
   if (n === COLMEIA.nivel) libs.push('colmeias');
+  if (POMAR_BLOCOS.some(B => B.nivel === n)) libs.push('mais um terreno de pomar');
   if (n === HUD.nivel){ libs.push('a ajuda do Hud'); setTimeout(() => aviso('O Hud, irmão caçula do Ed, pode regar, tirar o mato e colher por você. Toque na casa para chamar.', '', 6), 4200); }
   if (n === IRRIGADOR.nivel) libs.push('irrigador automático');
   for (const id in MELHORIAS) for (const d of MELHORIAS[id].degraus) if (d.nivel === n) libs.push(d.nome.toLowerCase());
@@ -3380,6 +3426,7 @@ function itensDoAlvoBase(alvo){
   if (alvo.k === 'hud') return itensHud();
   if (alvo.k === 'enfeite') return itensEnfeite(alvo.e);
   if (alvo.k === 'pomar') return itensPomar(alvo.i);
+  if (alvo.k === 'pomarLote') return itensPomarLote(alvo.b);
   if (alvo.k === 'colmeia') return itensColmeia(alvo.i);
   if (alvo.k === 'irrigador'){
     r.titulo = 'Irrigador automático'; r.icone = 'irrigador';
@@ -3856,7 +3903,7 @@ function mostrarAjuda(intro, aba){
   if (abaAjuda === 'producao') corpo = `
     <ul class="passos">
       <li><b>Construções</b>${nv(FABRICAS.moinho.nivel)}: moinho, queijaria, padaria, cozinha de doces e torrador ficam na área à direita. Toque numa delas, escolha a receita e o Ed leva os ingredientes. Cada uma faz até ${VAGAS_FAB} receitas em fila e continua com o jogo fechado; depois o Ed recolhe o que ficou pronto. Os produtos valem mais que os ingredientes.</li>
-      <li><b>Pomar</b>${nv(FRUTIFERAS.laranjeira.nivel)}: laranjeira, goiabeira e mangueira dão frutas de novo e de novo, sem replantar nem regar.</li>
+      <li><b>Pomar</b>${nv(FRUTIFERAS.laranjeira.nivel)}: laranjeira, goiabeira e mangueira dão frutas de novo e de novo, sem replantar nem regar. Nos níveis ${POMAR_BLOCOS[1].nivel} e ${POMAR_BLOCOS[2].nivel} dá para comprar terrenos de pomar com mais seis covas cada, e uma árvore pode ser cortada para dar lugar a outra.</li>
       <li><b>Colmeias</b>${nv(COLMEIA.nivel)}: dão mel, e cada colmeia deixa o pomar ${Math.round(COLMEIA.ajuda * 100)}% mais rápido.</li>
       <li><b>Café</b>${nv(CULTURAS.cafe.nivel)}: sai do pé em cereja e seca no terreiro. Só o Pelúcio, da Joli Coffee, compra o café seco, e paga mais pelo torrado.</li>
     </ul>`;
@@ -3947,7 +3994,8 @@ function alvoNaTela(cx, cy){
       const t = tipo(x, z);
       if (t === 'arvore') return { k: 'arvore', x, z, arbusto: ARBUSTOS.some(([a, b]) => a === x && b === z) };
       for (const tp in ALIMENTADOR) if (S.alimentador[tp] && ALIMENTADOR[tp].x === x && ALIMENTADOR[tp].z === z) return { k: 'alimentador', tp };
-      { const i = POMAR_SLOTS.findIndex(([a, b]) => a === x && b === z); if (i >= 0) return { k: 'pomar', i }; }
+      { const i = POMAR_SLOTS.findIndex(([a, b]) => a === x && b === z); if (i >= 0 && blocoComprado(blocoDoSlot(i))) return { k: 'pomar', i }; }
+      { const b = blocoEm(x, z); if (b > 0 && !blocoComprado(b)) return { k: 'pomarLote', b }; }
       { const i = COLMEIA_SLOTS.findIndex(([a, b]) => a === x && b === z); if (i >= 0) return { k: 'colmeia', i }; }
       return { k: 'tile', x, z };
     }
@@ -4116,7 +4164,7 @@ function quadro(agoraP){
   atualizarClima(dt);
   atualizarParticulas(dt);
   atualizarFalas();
-  if (menuAberto && ['tile', 'animal', 'predio', 'pomar', 'colmeia'].includes(menuAberto.alvo.k) && Math.floor(t * 2) !== Math.floor((t - dt) * 2)) atualizarEstadoMenu();
+  if (menuAberto && ['tile', 'animal', 'predio', 'pomar', 'colmeia', 'pomarLote'].includes(menuAberto.alvo.k) && Math.floor(t * 2) !== Math.floor((t - dt) * 2)) atualizarEstadoMenu();
   tSalvo += dt; if (tSalvo > 6){ tSalvo = 0; verificarFigurinhas(); salvar(); }
   renderer.render(scene, camera);
 }
@@ -4157,6 +4205,9 @@ async function iniciar(){
   for (const e of S.enfeites) montarEnfeite(e);
   if (!Array.isArray(S.pomar)) S.pomar = []; if (!Array.isArray(S.colmeias)) S.colmeias = [];
   simularPomar();
+  if (!Array.isArray(S.pomarBlocos)) S.pomarBlocos = [];
+  POMAR_BLOCOS.forEach((B, b) => { if (b > 0 && blocoComprado(b)) for (const [x, z] of B.slots) setT(x, z, 'feno'); });
+  montarPlacasPomar();
   POMAR_SLOTS.forEach((_, i) => montarPomar(i)); COLMEIA_SLOTS.forEach((_, i) => montarColmeia(i)); criarAbelhas();
   construirPersonagens();
   for (const tp in ALIMENTADOR) if (S.alimentador[tp]) montarAlimentador(tp);
@@ -4185,7 +4236,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   if (novo) setTimeout(() => mostrarAjuda(true), 300);
   else if (fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 iniciar();
 })();
