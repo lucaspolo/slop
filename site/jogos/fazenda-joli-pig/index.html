@@ -126,6 +126,8 @@ button{font:inherit;color:inherit}
 .item:focus-visible{outline:3px solid var(--rosa);outline-offset:1px}
 .item.off{opacity:.45;cursor:default;pointer-events:none}
 .item.leve{background:transparent;border-style:dashed}
+.item.perigo{margin-top:8px;background:transparent;border-style:dashed;border-color:#b5584a;color:#8a3a2e}
+.item.perigo.confirmar{background:#f8d2c9;border-style:solid}
 
 /* falas e números flutuantes */
 .fala{position:absolute;left:0;top:0;z-index:5;max-width:220px;padding:7px 11px;background:#fff;border:3px solid var(--borda);border-radius:14px;font-weight:700;font-size:13px;line-height:1.25;pointer-events:none;transform:translate(-50%,-100%);box-shadow:0 3px 0 var(--sombra);text-align:center}
@@ -254,7 +256,7 @@ a{color:var(--rosa)}
   .acao{flex:1 1 0;min-width:0;padding:5px 2px 4px;font-size:11px;white-space:normal;overflow-wrap:anywhere;align-content:start}
   .acao img,.acao svg{width:30px;height:30px}
   .acao .bolinha{margin-left:22px}
-  .camera-ctl{top:calc(env(safe-area-inset-top,0px) + 118px);transform:none;grid-template-columns:1fr}
+  .camera-ctl{top:calc(env(safe-area-inset-top,0px) + 162px);transform:none;grid-template-columns:1fr}
   .cam{width:38px;height:38px}
   .xp-texto{display:none}
 }
@@ -2593,7 +2595,7 @@ function comprarEnfeite(id){
 }
 function ligarModoEnfeite(id){
   fecharJanela();
-  modo = { tipo: 'enfeite', param: id };
+  modo = { tipo: 'enfeite', param: id }; clearTimeout(modoTimer);
   $('modoTexto').textContent = `${ENFEITES[id].nome}: toque num gramado livre`;
   $('modoIcone').src = icone(id === 'canteiroFlor' ? 'flores' : id);
   $('modo').hidden = false;
@@ -3312,7 +3314,7 @@ function itensDoAlvoBase(alvo){
       } else {
         r.estado = `Crescendo · pronto em ${tempo(faltaSegundos(t))}`;
       }
-      r.itens.push({ rotulo: 'Arrancar', sub: 'perde a plantação', icone: 'mato', leve: true, fn: () => enfileirar('arrancar', alvo) });
+      r.itens.push({ rotulo: 'Arrancar', sub: 'perde a plantação', icone: 'mato', perigo: true, confirmar: 'Tocar de novo para arrancar', fn: () => enfileirar('arrancar', alvo) });
       return r;
     }
     const tp = tipo(x, z);
@@ -3434,22 +3436,38 @@ function abrirMenu(alvo, px, py){
   if (r.prog != null && r.prog < 1) h += `<div class="prog"><i style="width:${Math.round(clamp(r.prog, 0, 1) * 100)}%"></i></div>`;
   h += '<div class="itens">';
   r.itens.forEach((it, i) => {
-    h += `<button class="item${it.off ? ' off' : ''}${it.leve ? ' leve' : ''}" type="button" role="menuitem" data-i="${i}"${it.off ? ' aria-disabled="true"' : ''}><img src="${icone(it.icone)}" alt=""><span>${esc(it.rotulo)}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>${it.preco ? `<b>${esc(it.preco)}</b>` : ''}</button>`;
+    h += `<button class="item${it.off ? ' off' : ''}${it.leve ? ' leve' : ''}${it.perigo ? ' perigo' : ''}" type="button" role="menuitem" data-i="${i}"${it.off ? ' aria-disabled="true"' : ''}><img src="${icone(it.icone)}" alt=""><span>${esc(it.rotulo)}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>${it.preco ? `<b>${esc(it.preco)}</b>` : ''}</button>`;
   });
   h += '</div>';
   m.innerHTML = h;
   m.hidden = false;
   menuAberto = { alvo, r };
-  const w = m.offsetWidth, hh = m.offsetHeight;
-  let x = px + 14, y = py - 20;
-  if (x + w > innerWidth - 12) x = px - w - 14;
-  x = clamp(x, 12, innerWidth - w - 12); y = clamp(y, 12, innerHeight - hh - 12);
+  // o menu nunca fica embaixo do dedo: ao lado do toque quando cabe; senão, acima ou abaixo dele
+  const w = m.offsetWidth, hh = m.offsetHeight, folga = 28;
+  let x, y;
+  if (px + folga + w <= innerWidth - 12){ x = px + folga; y = py - 20; }
+  else if (px - folga - w >= 12){ x = px - folga - w; y = py - 20; }
+  else {
+    x = clamp(px - w / 2, 12, innerWidth - w - 12);
+    const cimaY = py - folga - hh, baixoY = py + folga;
+    y = (baixoY + hh <= innerHeight - 12) ? baixoY : (cimaY >= 12 ? cimaY : (innerHeight - py > py ? baixoY : cimaY));
+  }
+  y = clamp(y, 12, Math.max(12, innerHeight - hh - 12));
   m.style.left = x + 'px'; m.style.top = y + 'px';
   if (alvo.k === 'tile') marcar(marcaSel, alvo.x, alvo.z);
+  const abertoEm = performance.now();
   m.querySelectorAll('.item').forEach(b => b.addEventListener('click', ev => {
     ev.stopPropagation();
+    // o mesmo toque que abriu o menu (ou um toque duplo sem querer) não escolhe nada
+    if (performance.now() - abertoEm < 450) return;
     const it = r.itens[+b.dataset.i];
     if (it.off) return;
+    if (it.confirmar && !b.classList.contains('confirmar')){
+      b.classList.add('confirmar');
+      b.querySelector('span').innerHTML = `${esc(it.confirmar)}<small>${esc(it.sub || '')}</small>`;
+      Som.erro();
+      return;
+    }
     fecharMenu();
     const antes = fila.length;
     it.fn();
@@ -3463,10 +3481,14 @@ function ligarModo(m, it){
   modo = m;
   const nome = m.tipo === 'plantar' ? `Plantando ${CULTURAS[m.param].nome.toLowerCase()}` : { arar: 'Arando', regar: 'Regando', capinar: 'Tirando mato', colher: 'Colhendo', alimentar: 'Alimentando', coletar: 'Coletando' }[m.tipo];
   $('modoTexto').textContent = `${nome}: toque em outros para repetir`;
+  renovarModo();
   $('modoIcone').src = icone(it.icone);
   $('modo').hidden = false;
 }
-function desligarModo(){ modo = null; $('modo').hidden = true; }
+function desligarModo(){ modo = null; $('modo').hidden = true; clearTimeout(modoTimer); }
+// a ação repetida (ex.: plantar cenoura em vários canteiros) desliga sozinha depois de 20 s sem uso
+let modoTimer = 0;
+const renovarModo = () => { clearTimeout(modoTimer); modoTimer = setTimeout(desligarModo, 20000); };
 
 // ================= janelas
 function algumaJanela(){ return !$('modal').hidden; }
@@ -3842,7 +3864,7 @@ function tocou(cx, cy){
   }
   if (modo){
     if ((alvo.k === 'tile' || alvo.k === 'animal') && !reservado(alvo)){
-      if (checar(modo.tipo, alvo, modo.param).ok){ if (enfileirar(modo.tipo, alvo, modo.param)){ if (alvo.k === 'tile') { marcar(marcaHover, alvo.x, alvo.z); } return; } }
+      if (checar(modo.tipo, alvo, modo.param).ok){ if (enfileirar(modo.tipo, alvo, modo.param)){ renovarModo(); if (alvo.k === 'tile') { marcar(marcaHover, alvo.x, alvo.z); } return; } }
     }
     desligarModo();
   }
