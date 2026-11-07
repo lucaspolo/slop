@@ -447,6 +447,8 @@ PRODUTOS.ovo = { nome:'Ovo', plural:'ovos', venda:9, nivel:1 };
 PRODUTOS.leite = { nome:'Leite', plural:'garrafas de leite', venda:28, nivel:3 };
 const ORDEM_PRODUTOS = [...ORDEM_CULTURAS, 'ovo', 'leite'];
 const PRECO_RACAO = 3;
+// irrigador automático: um por terreno, rega sozinho os 16 canteiros dele (o mato continua por conta do Ed)
+const IRRIGADOR = { nivel: 10, preco: 2000 };
 const ALIMENTADOR = {
   galinha: { nivel: 4, preco: 1000, x: 23, z: 9, lugar: 'galinheiro' },
   vaca:    { nivel: 5, preco: 1000, x: 23, z: 14, lugar: 'curral' },
@@ -1011,6 +1013,21 @@ function vAlimentador(vaca){
   if (vaca) for (const [x, z] of [[-8, 7], [-5, 9], [-4, 7], [-7, 9]]) v.set(x, 4, z, grao);
   return v;
 }
+function vIrrigadorBase(){
+  const v = new Vox();
+  v.box(-2, 0, -2, 2, 1, 2, 0xa9a196);
+  v.box(-1, 2, -1, 0, 9, 0, 0x8e99a3);
+  v.box(-1, 5, 1, 0, 5, 1, 0x8e99a3); v.box(-2, 4, 2, 1, 6, 2, 0xd0503f); v.set(-1, 5, 3, 0xb8433a); v.set(0, 5, 3, 0xb8433a);
+  return v;
+}
+function vIrrigadorCabeca(){
+  const v = new Vox();
+  v.box(-1, 0, -1, 0, 1, 0, 0xd9a520);
+  v.box(-5, 1, -1, 4, 1, 0, 0xc9951a);
+  v.box(-6, 1, -1, -6, 2, 0, 0x4aa6e0); v.box(5, 1, -1, 5, 2, 0, 0x4aa6e0);
+  v.set(-1, 2, -1, 0xe9bf3a); v.set(0, 2, 0, 0xe9bf3a);
+  return v;
+}
 function vEnxada(){ const v = new Vox(); v.box(0, -3, 0, 0, 12, 0, 0x9c6a40); v.box(-1, 11, 1, 1, 12, 3, 0x9aa3ad); return v; }
 function vRegador(){ const v = new Vox(); v.box(-2, -6, -2, 2, -1, 2, 0x5aa86a); v.box(0, -3, 3, 0, -2, 6, 0x4c9a5c); v.set(0, -1, 6, 0x4c9a5c); v.box(-1, 0, 0, 1, 0, 0, 0x3f7f4c); v.box(0, 0, -3, 0, -1, -3, 0x3f7f4c); return v; }
 function vCesta(){ const v = new Vox(); v.box(-3, -7, -2, 3, -3, 2, (x, y) => y % 2 ? 0xb7864e : 0xa47442); v.box(-3, -2, 0, -3, 0, 0, 0x8a5a36); v.box(3, -2, 0, 3, 0, 0, 0x8a5a36); v.box(-3, 1, 0, 3, 1, 0, 0x8a5a36); v.box(-2, -3, -1, 2, -3, 1, COR.laranja); return v; }
@@ -1040,6 +1057,7 @@ const VI = {
   xicara(){ const v = new Vox(); for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++) if (x * x + z * z <= 17) v.box(x, 0, z, x, 6, z, (X, Y) => Y === 3 ? 0xf28fac : 0xfdf8ef); for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) if (x * x + z * z <= 10) v.set(x, 6, z, 0x6b4226); v.box(5, 2, 0, 6, 2, 0, 0xfdf8ef); v.box(5, 5, 0, 6, 5, 0, 0xfdf8ef); v.box(6, 2, 0, 6, 5, 0, 0xfdf8ef); return v; },
   caminhao(){ return vCaminhao(); }, celeiro(){ return vCeleiro(); }, casa(){ return vCasa(); }, poco(){ return vPoco(); },
   alimentador(){ return vAlimentador(false); },
+  irrigador(){ const v = vIrrigadorBase(); for (const e of vIrrigadorCabeca().m.values()) v.set(e.x, e.y + 10, e.z, e.c); for (const [x, y, z] of [[-8, 12, 0], [-9, 11, -1], [7, 12, 0], [8, 11, -1], [-10, 9, 0], [9, 9, 0]]) v.set(x, y, z, 0x8fd3f5); return v; },
   jaca(){ return vJaca(true); },
   caderno(){ const v = new Vox(); v.box(-5, 0, -1, 5, 14, -1, 0xfdf8ef); v.box(-5, 0, 0, 5, 14, 0, 0xf28fac); for (let y = 1; y <= 13; y += 2){ v.set(-6, y, 0, 0x5a5a5a); v.set(-6, y, -1, 0x5a5a5a); } v.ell(1, 8, 1, 2.6, 2.6, 0.5, 0xf3e0c6); v.box(0, 6, 2, 2, 7, 2, 0xf2b3a8); v.box(-3, 2, 1, 4, 2, 1, 0x2f6fb3); return v; },
   lote(){ const v = vSolo(false); v.box(6, 2, 6, 6, 5, 6, 0x8a5a36); v.box(3, 5, 6, 9, 8, 6, 0xf3e3c3); return v; },
@@ -1176,7 +1194,7 @@ const geo = (chave, fn) => GEO[chave] || (GEO[chave] = fn());
 const CHAVE_SALVO = 'fazendaJoliPig.v1';
 let S = null;
 function estadoNovo(){
-  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedido: null, feito: [], dicas: true, alimentador: {}, anotado: false, som: true, nAnimal: 0, vendeu: 0, salvoEm: Date.now() };
+  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedido: null, feito: [], dicas: true, alimentador: {}, irrigador: {}, anotado: false, som: true, nAnimal: 0, vendeu: 0, salvoEm: Date.now() };
   const l = LOTES[2];
   for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) s.campo[x + ',' + z] = { e: 'grama' };
   for (const k of ['12,9', '13,9', '12,10', '13,10']) s.campo[k] = { e: 'arado' };
@@ -1361,23 +1379,111 @@ function comprarLote(i){
   hud(); salvar();
 }
 
+// ================= irrigadores
+const IRRIG = {};
+function montarIrrigador(l){
+  if (IRRIG[l]) return IRRIG[l];
+  const L = LOTES[l];
+  const base = colocar(malha(geo('irrigBase', () => vIrrigadorBase().build(1 / 16, { origin: [0, 0, 0] }))), L.x + 2, 0, L.z + 2);
+  const cabeca = malha(geo('irrigCabeca', () => vIrrigadorCabeca().build(1 / 16, { origin: [0, 0, 0] })));
+  cabeca.position.set(-0.5 / 16, 10 / 16, -0.5 / 16); base.add(cabeca);
+  base.traverse(o => { o.userData.alvo = { k: 'irrigador', l }; });
+  pickaveis.push(base);
+  IRRIG[l] = { base, cabeca, jato: 0, giro: hash(l, 2, 9) * 6, som: 0 };
+  return IRRIG[l];
+}
+function irrigadorJato(l){
+  const I = IRRIG[l];
+  if (!I) return;
+  if (I.jato <= 0 && performance.now() - I.som > 1500){ I.som = performance.now(); Som.ruido(0.6, 0.06, 2800); }
+  I.jato = 1.8;
+}
+function atualizarIrrigadores(dt){
+  for (const l in IRRIG){
+    const I = IRRIG[l];
+    I.giro += dt * (I.jato > 0 ? 7 : 0.5);
+    I.cabeca.rotation.y = I.giro;
+    if (I.jato > 0){
+      I.jato -= dt;
+      const p = I.base.position, y = p.y + 12 / 16;
+      for (const lado of [1, -1]){
+        if (Math.random() > 0.75) continue;
+        const a = I.giro + (lado > 0 ? 0 : Math.PI), dx = Math.cos(a), dz = -Math.sin(a), vel = rnd(1.4, 2.6);
+        gotinha(p.x + dx * 0.36, y, p.z + dz * 0.36, dx * vel, rnd(0.9, 1.6), dz * vel);
+      }
+    }
+  }
+}
+function gotinha(x, y, z, vx, vy, vz){
+  const cor = Math.random() < 0.5 ? 0x6fc3f5 : 0xa8dcfa;
+  const mat = matsPart[cor] || (matsPart[cor] = new THREE.MeshLambertMaterial({ color: cor }));
+  const m = new THREE.Mesh(geoPart, mat);
+  m.position.set(x, y, z); m.scale.setScalar(0.7); scene.add(m);
+  PART.push({ m, v: new THREE.Vector3(vx, vy, vz), vida: 0.9 });
+}
+function comprarIrrigador(l){
+  if (S.irrigador[l] || !S.lotes[l]) return;
+  if (nivel() < IRRIGADOR.nivel){ aviso(`O irrigador libera no nível ${IRRIGADOR.nivel}`, 'ruim'); Som.erro(); return; }
+  if (S.dinheiro < IRRIGADOR.preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return; }
+  gastar(IRRIGADOR.preco); S.irrigador[l] = true;
+  montarIrrigador(l);
+  // o que estava com sede é regado na hora, e as regas que o Ed ia fazer ali saem da fila
+  for (const tf of fila.slice()) if (tf.tipo === 'regar' && tf.alvo.k === 'tile' && loteDe(tf.alvo.x, tf.alvo.z) === l) cancelar(tf);
+  const L = LOTES[l];
+  for (let x = L.x; x < L.x + 4; x++) for (let z = L.z; z < L.z + 4; z++){ const t = campo(x, z); if (t && t.e === 'plantado'){ avancar(t, 0, true); atualizarCampo(x, z); } }
+  irrigadorJato(l);
+  Som.moeda(); chipPulsa('chipDinheiro');
+  flutuar(new THREE.Vector3(L.x + 2, 0.9, L.z + 2), '−' + reais(IRRIGADOR.preco), 'ouro');
+  aviso('Irrigador instalado! Este terreno agora se rega sozinho.', 'grande', 3.5);
+  hud(); salvar();
+}
+function itensIrrigador(r, alvo){
+  const l = loteDe(alvo.x, alvo.z), t = campo(alvo.x, alvo.z);
+  if (l < 0 || !S.lotes[l] || !t || r.titulo === 'Na fila do Ed') return;
+  if (S.irrigador[l]){
+    if (t.e === 'plantado' && !t.p && t.prog < 1) r.estado += ' · o irrigador cuida da água';
+    return;
+  }
+  if (nivel() < IRRIGADOR.nivel - 1) return;
+  const bloq = nivel() < IRRIGADOR.nivel;
+  r.itens.push({ rotulo: 'Irrigador automático', sub: bloq ? `nível ${IRRIGADOR.nivel}` : 'rega este terreno sozinho', icone: 'irrigador', preco: reais(IRRIGADOR.preco), leve: true, off: bloq || S.dinheiro < IRRIGADOR.preco, fn: () => comprarIrrigador(l) });
+}
+// mapinha dos seis terrenos, na mesma posição da vista inicial da câmera
+function mapaLotes(destaque){
+  const pt = (x, z) => `${(x - z) * 2.2 + 30.5},${(x + z - 9) * 1.15 + 1.5}`;
+  let h = '';
+  LOTES.forEach((L, i) => {
+    const pts = [pt(L.x, L.z), pt(L.x + 4, L.z), pt(L.x + 4, L.z + 4), pt(L.x, L.z + 4)].join(' ');
+    const cor = i === destaque ? '#f7c3d6' : S.lotes[i] ? '#9fd27a' : '#e2d7bd';
+    h += `<polygon points="${pts}" fill="${cor}" stroke="${i === destaque ? '#e0408a' : '#3b2a20'}" stroke-width="${i === destaque ? 2.4 : 1.2}" stroke-linejoin="round"/>`;
+    if (S.irrigador[i]){ const [cx, cy] = pt(L.x + 2, L.z + 2).split(',').map(Number); h += `<circle cx="${cx}" cy="${cy}" r="2.6" fill="#4aa6e0" stroke="#3b2a20" stroke-width="1"/>`; }
+  });
+  return `<svg viewBox="0 0 48 27" width="68" height="38" aria-hidden="true" style="flex:none">${h}</svg>`;
+}
+
 // ================= canteiros
 const VIS = {};
 function estagio(t){ if (t.e !== 'plantado') return -1; if (t.prog >= 1) return 3; if (t.prog >= 0.55) return 2; if (t.prog >= 0.2) return 1; return 0; }
-function avancar(t, dt){
+// devolve true se o irrigador regou a planta neste passo
+function avancar(t, dt, irrig){
   const c = CULTURAS[t.c];
-  let resta = dt;
-  while (resta > 0 && !t.p && t.prog < 1){
-    const prox = t.ev < t.evs.length ? t.evs[t.ev] : null;
-    const alvo = prox ? prox[0] : 1;
-    if (prox && t.prog >= alvo){ t.p = prox[1]; break; }
-    const precisa = (alvo - t.prog) * c.tempo;
-    if (resta >= precisa){ t.prog = alvo; resta -= precisa; if (prox) t.p = prox[1]; }
-    else { t.prog += resta / c.tempo; resta = 0; }
+  let resta = dt, regou = false;
+  for (;;){
+    while (resta > 0 && !t.p && t.prog < 1){
+      const prox = t.ev < t.evs.length ? t.evs[t.ev] : null;
+      const alvo = prox ? prox[0] : 1;
+      if (prox && t.prog >= alvo){ t.p = prox[1]; break; }
+      const precisa = (alvo - t.prog) * c.tempo;
+      if (resta >= precisa){ t.prog = alvo; resta -= precisa; if (prox) t.p = prox[1]; }
+      else { t.prog += resta / c.tempo; resta = 0; }
+    }
+    if (t.prog >= 1) t.prog = 1;
+    if (!t.p && t.ev < t.evs.length && t.prog >= t.evs[t.ev][0]) t.p = t.evs[t.ev][1];
+    if (irrig && t.p === 'sede'){ t.p = null; t.ev++; regou = true; continue; }
+    return regou;
   }
-  if (t.prog >= 1) t.prog = 1;
-  if (!t.p && t.ev < t.evs.length && t.prog >= t.evs[t.ev][0]) t.p = t.evs[t.ev][1];
 }
+const irrigado = (x, z) => { const l = loteDe(x, z); return l >= 0 && !!S.irrigador[l]; };
 function faltaSegundos(t){ return (1 - t.prog) * CULTURAS[t.c].tempo; }
 function atualizarCampo(x, z){
   const t = campo(x, z), k = chave(x, z);
@@ -1975,12 +2081,12 @@ function executar(tarefa){
       if (Math.random() < 0.35) evs.push([rnd(0.22, 0.85), 'mato']);
       evs.sort((a, b) => a[0] - b[0]);
       Object.assign(t, { e: 'plantado', c: tarefa.param, prog: 0, evs, ev: 0, p: null });
-      avancar(t, 0);
+      if (avancar(t, 0, irrigado(alvo.x, alvo.z))) irrigadorJato(loteDe(alvo.x, alvo.z));
       avancarTut(0);
       break;
     }
-    case 'regar': if (t.p === 'sede'){ t.p = null; t.ev++; avancar(t, 0); ganharXP(1, pos); avancarTut(1); } break;
-    case 'capinar': if (t.p === 'mato'){ t.p = null; t.ev++; avancar(t, 0); ganharXP(2, pos); } break;
+    case 'regar': if (t.p === 'sede'){ t.p = null; t.ev++; avancar(t, 0, irrigado(alvo.x, alvo.z)); ganharXP(1, pos); avancarTut(1); } break;
+    case 'capinar': if (t.p === 'mato'){ t.p = null; t.ev++; if (avancar(t, 0, irrigado(alvo.x, alvo.z))) irrigadorJato(loteDe(alvo.x, alvo.z)); ganharXP(2, pos); } break;
     case 'colher': {
       const c = CULTURAS[t.c];
       S.celeiro[t.c] = (S.celeiro[t.c] || 0) + c.rend;
@@ -2012,6 +2118,7 @@ function subiuNivel(n){
   for (const k in ANIMAIS) if (ANIMAIS[k].nivel === n) libs.push(ANIMAIS[k].nome);
   if (n <= PRECO_LOTE.length) libs.push('mais um terreno');
   for (const tp in ALIMENTADOR) if (ALIMENTADOR[tp].nivel === n) libs.push(`alimentador automático do ${ALIMENTADOR[tp].lugar}`);
+  if (n === IRRIGADOR.nivel) libs.push('irrigador automático');
   aviso(`Nível ${n}!` + (libs.length ? ` Liberou: ${libs.join(', ')}` : ''), 'grande', 4);
   falar(ed, 'Oinc! Subi de nível!', 2);
 }
@@ -2122,6 +2229,11 @@ marcaSel.visible = marcaHover.visible = false;
 function marcar(m, x, z){ m.position.set(x + 0.5, (campo(x, z) && campo(x, z).e !== 'grama') ? 0.15 : 0.02, z + 0.5); m.visible = true; }
 
 function itensDoAlvo(alvo){
+  const r = itensDoAlvoBase(alvo);
+  if (r && alvo.k === 'tile') itensIrrigador(r, alvo);
+  return r;
+}
+function itensDoAlvoBase(alvo){
   // devolve { titulo, icone, estado, classe, prog, itens:[{rotulo, sub, icone, preco, fn, off, modo}] }
   const r = { itens: [] };
   if (alvo.k === 'tile'){
@@ -2217,6 +2329,12 @@ function itensDoAlvo(alvo){
     r.titulo = 'Ligar para quem?'; r.icone = 'caminhao';
     r.itens.push({ rotulo: 'Beto', sub: 'Joli Market · compra o que a fazenda produz', icone: 'beto', fn: chamarBeto });
     r.itens.push({ rotulo: 'Pelúcio', sub: cafe ? `Joli Coffee · você tem ${cafe} ${cafe > 1 ? 'saquinhos' : 'saquinho'} de café seco` : 'Joli Coffee · só compra café seco', icone: 'pelucio', fn: chamarPelucio });
+    return r;
+  }
+  if (alvo.k === 'irrigador'){
+    r.titulo = 'Irrigador automático'; r.icone = 'irrigador';
+    r.estado = 'Rega sozinho os 16 canteiros deste terreno. O mato continua por conta do Ed.';
+    r.classe = 'bom';
     return r;
   }
   if (alvo.k === 'alimentador'){
@@ -2343,7 +2461,7 @@ let abaLoja = 'sementes';
 function abrirLoja(aba){
   if (aba) abaLoja = aba;
   const n = nivel();
-  let corpo = `<div class="abas" role="tablist">${[['sementes', 'Sementes'], ['animais', 'Bichos'], ['racao', 'Ração']].map(([k, r]) => `<button class="aba" role="tab" aria-selected="${abaLoja === k}" data-aba="${k}" type="button">${r}</button>`).join('')}</div><div class="grade">`;
+  let corpo = `<div class="abas" role="tablist">${[['sementes', 'Sementes'], ['animais', 'Bichos'], ['racao', 'Ração'], ['irrigacao', 'Irrigação']].map(([k, r]) => `<button class="aba" role="tab" aria-selected="${abaLoja === k}" data-aba="${k}" type="button">${r}</button>`).join('')}</div><div class="grade">`;
   if (abaLoja === 'sementes'){
     for (const k of ORDEM_CULTURAS){
       const c = CULTURAS[k], bloq = c.nivel > n, tem = S.bolsa[k] || 0;
@@ -2364,6 +2482,16 @@ function abrirLoja(aba){
         <div class="info">Dá ração sozinho para ${tp === 'galinha' ? 'as galinhas' : 'as vacas'} quando sentem fome. Usa a ração do estoque.</div>
         <div class="botoes">${bloq || tem ? '' : `<button class="botao mini" data-alim="${tp}" type="button"${S.dinheiro < AL.preco ? ' disabled' : ''}>Comprar · ${reais(AL.preco)}</button>`}</div></div>`;
     }
+  } else if (abaLoja === 'irrigacao'){
+    const bloq = nivel() < IRRIGADOR.nivel;
+    corpo += `<div class="cartao" style="grid-column:1/-1"><div class="cab"><img src="${icone('irrigador')}" alt=""><div><h4>Irrigador automático</h4><div class="info">${bloq ? `libera no nível ${IRRIGADOR.nivel}` : `${reais(IRRIGADOR.preco)} por terreno`}</div></div></div>
+      <div class="info">Rega sozinho os 16 canteiros de um terreno, até com o jogo fechado. Cada terreno precisa do seu. O mato continua por conta do Ed. Também dá para comprar tocando num canteiro do terreno.</div></div>`;
+    LOTES.forEach((L, i) => {
+      if (!S.lotes[i]) return;
+      const tem = S.irrigador[i];
+      corpo += `<div class="cartao${bloq ? ' bloq' : ''}"><div class="cab">${mapaLotes(i)}<div><h4>Terreno ${i + 1}</h4><div class="info">${tem ? 'irrigador instalado' : 'sem irrigador'}</div></div></div>
+        <div class="botoes">${tem || bloq ? '' : `<button class="botao mini" data-irrig="${i}" type="button"${S.dinheiro < IRRIGADOR.preco ? ' disabled' : ''}>Comprar · ${reais(IRRIGADOR.preco)}</button>`}</div></div>`;
+    });
   } else {
     for (const [q, p] of [[5, 15], [20, 54], [50, 125]]){
       corpo += `<div class="cartao"><div class="cab"><img src="${icone('racao')}" alt=""><div><h4>${q} rações</h4><div class="info">você tem ${S.racao}</div></div></div>
@@ -2382,6 +2510,7 @@ function abrirLoja(aba){
   }));
   j.querySelectorAll('[data-animal]').forEach(b => b.addEventListener('click', () => { comprarAnimal(b.dataset.animal); abrirLoja(); }));
   j.querySelectorAll('[data-alim]').forEach(b => b.addEventListener('click', () => { comprarAlimentador(b.dataset.alim); abrirLoja(); }));
+  j.querySelectorAll('[data-irrig]').forEach(b => b.addEventListener('click', () => { comprarIrrigador(+b.dataset.irrig); abrirLoja(); }));
   j.querySelectorAll('[data-racao]').forEach(b => b.addEventListener('click', () => {
     const q = +b.dataset.racao, p = +b.dataset.p;
     if (S.dinheiro < p) return;
@@ -2577,7 +2706,7 @@ function mostrarAjuda(intro){
     <p>Este é o Ed. Ele cuida da fazendinha e o irmão dele, o Beto, tem um mercado na cidade: o Joli Market.</p>
     <ol class="passos">
       <li><b>Toque no chão</b> para ver o que dá para fazer. O Ed anda até lá e faz.</li>
-      <li><b>Are, plante e regue.</b> A semente precisa de água para brotar e de mais água no meio do caminho. Se nascer mato, tire.</li>
+      <li><b>Are, plante e regue.</b> A semente precisa de água para brotar e de mais água no meio do caminho. Se nascer mato, tire. No nível 10 dá para pôr um irrigador automático em cada terreno.</li>
       <li><b>Cuide dos bichos.</b> Galinhas e vacas comem ração e dão ovos e leite. Mais tarde dá para comprar um alimentador automático.</li>
       <li><b>Colha</b> e tudo vai para o celeiro.</li>
       <li><b>Chame o Beto</b> para vender. Ele também traz pedidos que pagam mais, e o Ed anota tudo no caderno. Às vezes quem vem é o Jaca, o melhor amigo e sócio do Beto, e ele sempre traz um presentinho.</li>
@@ -2741,8 +2870,9 @@ function simular(dt){
     const t = S.campo[k];
     if (t.e !== 'plantado') continue;
     const ep = estagio(t), pp = t.p;
-    avancar(t, dt);
-    if (estagio(t) !== ep || t.p !== pp){ const [x, z] = k.split(',').map(Number); atualizarCampo(x, z); }
+    const [x, z] = k.split(',').map(Number);
+    if (avancar(t, dt, irrigado(x, z))) irrigadorJato(loteDe(x, z));
+    if (estagio(t) !== ep || t.p !== pp) atualizarCampo(x, z);
   }
   simularAnimais();
 }
@@ -2766,6 +2896,7 @@ function quadro(agoraP){
   for (const b of BOLHAS){ b.position.y = b.userData.base + Math.sin(t * 3 + (b.userData.fase || 0)) * 0.04; }
   marcadores.forEach((m, i) => { const tf = fila.find(f => f.marca === m); if (!tf) return; const [x, z] = alvoMundo(tf.alvo); m.position.set(x, 1.15 + Math.sin(t * 5 + i) * 0.05, z); m.rotation.y = t * 2; });
   for (const k in VIS){ const p = VIS[k].planta; if (p && p.scale.x < 1) p.scale.setScalar(Math.min(1, p.scale.x + dt * 2.5)); }
+  atualizarIrrigadores(dt);
   atualizarParticulas(dt);
   atualizarFalas();
   if (menuAberto && (menuAberto.alvo.k === 'tile' || menuAberto.alvo.k === 'animal') && Math.floor(t * 2) !== Math.floor((t - dt) * 2)) atualizarEstadoMenu();
@@ -2800,11 +2931,13 @@ async function iniciar(){
   montarLotes();
   construirPersonagens();
   for (const tp in ALIMENTADOR) if (S.alimentador[tp]) montarAlimentador(tp);
+  if (!S.irrigador) S.irrigador = {};
+  for (const l in S.irrigador) if (S.irrigador[l] && S.lotes[l]) montarIrrigador(+l);
   for (const d of S.animais){ if (d.x < 17 || d.x > 22){ const [x, z] = sorteia(d.tipo === 'galinha' ? PASTO_G : PASTO_V); d.x = x + 0.5; d.z = z + 0.5; } ANI.push(new Bicho(d)); }
   if (novo){ novoAnimal('galinha', 18.6, 8.4); novoAnimal('galinha', 19.4, 7.6); novoPedido(); }
   // o tempo que passou com a página fechada
   const fora = novo ? 0 : Math.max(0, (Date.now() - (S.salvoEm || Date.now())) / 1000);
-  for (const k in S.campo){ const t = S.campo[k]; if (t.e === 'plantado') avancar(t, fora); }
+  for (const k in S.campo){ const t = S.campo[k]; if (t.e !== 'plantado') continue; const [x, z] = k.split(',').map(Number); avancar(t, fora, irrigado(x, z)); }
   simularAnimais();
   for (const k in S.campo){ const [x, z] = k.split(',').map(Number); atualizarCampo(x, z); }
   for (const a of ANI) a.atualizarBolha();
@@ -2815,7 +2948,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   if (novo) setTimeout(() => mostrarAjuda(true), 300);
   else if (fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 iniciar();
 })();
