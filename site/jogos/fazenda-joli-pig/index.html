@@ -447,6 +447,22 @@ PRODUTOS.ovo = { nome:'Ovo', plural:'ovos', venda:9, nivel:1 };
 PRODUTOS.leite = { nome:'Leite', plural:'garrafas de leite', venda:28, nivel:3 };
 const ORDEM_PRODUTOS = [...ORDEM_CULTURAS, 'ovo', 'leite'];
 const PRECO_RACAO = 3;
+// melhorias do Ed: cada uma tem degraus comprados em ordem; o tempo do Ed é o recurso que mais limita a fazenda
+const MELHORIAS = {
+  enxada:   { icone: 'enxada', degraus: [
+    { nome: 'Enxada afiada', nivel: 3, preco: 300, desc: 'Ao arar, o Ed ara também os canteiros vizinhos em cruz.', raio: 'cruz' } ] },
+  botas:    { icone: 'botas', degraus: [
+    { nome: 'Botas de borracha', nivel: 4, preco: 500, desc: 'O Ed anda 25% mais rápido.', vel: 3.4 },
+    { nome: 'Botas de corrida', nivel: 9, preco: 3000, desc: 'O Ed anda 50% mais rápido.', vel: 4.05 } ] },
+  regador:  { icone: 'regador', degraus: [
+    { nome: 'Regador grande', nivel: 6, preco: 1500, desc: 'Ao regar, rega também os vizinhos em cruz.', raio: 'cruz' },
+    { nome: 'Regador gigante', nivel: 11, preco: 6000, desc: 'Ao regar, rega o quadrado 3×3 em volta.', raio: 'quadrado' } ] },
+  carrinho: { icone: 'carrinho', degraus: [
+    { nome: 'Carrinho de mão', nivel: 8, preco: 2500, desc: 'Ao colher, colhe também os vizinhos prontos em cruz.', raio: 'cruz' },
+    { nome: 'Carrinho grande', nivel: 12, preco: 8000, desc: 'Ao colher, colhe o quadrado 3×3 em volta.', raio: 'quadrado' } ] },
+};
+const degrau = id => { const n = (S.melhorias || {})[id] || 0; return n ? MELHORIAS[id].degraus[n - 1] : null; };
+const velEd = () => (degrau('botas') || { vel: 2.7 }).vel;
 // irrigador automático: um por terreno, rega sozinho os 16 canteiros dele (o mato continua por conta do Ed)
 const IRRIGADOR = { nivel: 10, preco: 2000 };
 const ALIMENTADOR = {
@@ -1041,6 +1057,41 @@ function vIrrigadorCabeca(){
   v.set(-1, 2, -1, 0xe9bf3a); v.set(0, 2, 0, 0xe9bf3a);
   return v;
 }
+function vPeBota(cor, sola){
+  const v = new Vox();
+  v.ell(0, -5, 0.5, 4.5, 4.6, 4.8, (x, y) => y <= -8 ? sola : cor, (x, y) => y <= 0 && y >= -9);
+  v.ell(0, -7, 4.5, 4, 2.6, 2.8, (x, y) => y <= -8 ? sola : cor, (x, y) => y >= -9);
+  v.box(-4, -1, -3, 4, 0, 3, new THREE.Color(cor).multiplyScalar(0.85).getHex());
+  return v;
+}
+function vCarrinho(){
+  const v = new Vox();
+  for (let x = -3; x <= 3; x++) for (let y = -3; y <= 3; y++) if (x * x + y * y <= 10) v.box(0, y + 3, x + 8, 1, y + 3, x + 8, (x * x + y * y <= 2) ? 0x9a9aa0 : 0x3a3a3e);
+  v.box(-5, 5, -4, 6, 6, 9, 0x58a8d8); v.box(-6, 7, -5, 7, 10, -5, 0x4a8fc0); v.box(-6, 7, 10, 7, 10, 10, 0x4a8fc0);
+  v.box(-6, 7, -5, -6, 10, 10, 0x4a8fc0); v.box(7, 7, -5, 7, 10, 10, 0x4a8fc0);
+  v.box(-5, 9, -4, 6, 9, 9, 0xf08a2c); v.set(-2, 10, 2, COR.vermelho); v.set(3, 10, 5, 0xf5d142);
+  v.box(-5, 5, -12, -4, 6, -5, 0x9c6a40); v.box(5, 5, -12, 6, 6, -5, 0x9c6a40);
+  v.box(-5, 0, -6, -5, 4, -6, 0x7a5232); v.box(6, 0, -6, 6, 4, -6, 0x7a5232);
+  return v;
+}
+function calcarEd(){
+  ed.vel = velEd();
+  const n = S.melhorias.botas || 0;
+  if (n === 1) ed.trocarPes('botaVerde', () => vPeBota(0x46a352, 0x2c6e35));
+  if (n === 2) ed.trocarPes('botaVermelha', () => vPeBota(0xd9483c, 0x8a2a24));
+}
+function comprarMelhoria(id){
+  const M = MELHORIAS[id], n = S.melhorias[id] || 0, d = M.degraus[n];
+  if (!d) return;
+  if (nivel() < d.nivel){ aviso(`${d.nome} libera no nível ${d.nivel}`, 'ruim'); Som.erro(); return; }
+  if (S.dinheiro < d.preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return; }
+  gastar(d.preco); S.melhorias[id] = n + 1;
+  if (id === 'botas') calcarEd();
+  ed.pulo = 0.45; Som.moeda(); Som.nivel(); chipPulsa('chipDinheiro');
+  falar(ed, sorteia(['Oinc! Ferramenta nova!', 'Agora sim, hein?', 'Que beleza!']), 2.2);
+  aviso(`${d.nome}! ${d.desc}`, 'grande', 4);
+  hud(); salvar();
+}
 function vEnxada(){ const v = new Vox(); v.box(0, -3, 0, 0, 12, 0, 0x9c6a40); v.box(-1, 11, 1, 1, 12, 3, 0x9aa3ad); return v; }
 function vRegador(){ const v = new Vox(); v.box(-2, -6, -2, 2, -1, 2, 0x5aa86a); v.box(0, -3, 3, 0, -2, 6, 0x4c9a5c); v.set(0, -1, 6, 0x4c9a5c); v.box(-1, 0, 0, 1, 0, 0, 0x3f7f4c); v.box(0, 0, -3, 0, -1, -3, 0x3f7f4c); return v; }
 function vCesta(){ const v = new Vox(); v.box(-3, -7, -2, 3, -3, 2, (x, y) => y % 2 ? 0xb7864e : 0xa47442); v.box(-3, -2, 0, -3, 0, 0, 0x8a5a36); v.box(3, -2, 0, 3, 0, 0, 0x8a5a36); v.box(-3, 1, 0, 3, 1, 0, 0x8a5a36); v.box(-2, -3, -1, 2, -3, 1, COR.laranja); return v; }
@@ -1070,6 +1121,8 @@ const VI = {
   xicara(){ const v = new Vox(); for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++) if (x * x + z * z <= 17) v.box(x, 0, z, x, 6, z, (X, Y) => Y === 3 ? 0xf28fac : 0xfdf8ef); for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) if (x * x + z * z <= 10) v.set(x, 6, z, 0x6b4226); v.box(5, 2, 0, 6, 2, 0, 0xfdf8ef); v.box(5, 5, 0, 6, 5, 0, 0xfdf8ef); v.box(6, 2, 0, 6, 5, 0, 0xfdf8ef); return v; },
   caminhao(){ return vCaminhao(); }, celeiro(){ return vCeleiro(); }, casa(){ return vCasa(); }, poco(){ return vPoco(); },
   alimentador(){ return vAlimentador(false); },
+  botas(){ const v = new Vox(); for (const e of vPeBota(0x46a352, 0x2c6e35).m.values()) v.set(e.x - 6, e.y, e.z, e.c); for (const e of vPeBota(0x46a352, 0x2c6e35).m.values()) v.set(e.x + 6, e.y, e.z - 2, e.c); return v; },
+  carrinho(){ return vCarrinho(); },
   irrigador(){ const v = vIrrigadorBase(); for (const e of vIrrigadorCabeca().m.values()) v.set(e.x, e.y + 10, e.z, e.c); for (const [x, y, z] of [[-8, 12, 0], [-9, 11, -1], [7, 12, 0], [8, 11, -1], [-10, 9, 0], [9, 9, 0]]) v.set(x, y, z, 0x8fd3f5); return v; },
   jaca(){ return vJaca(true); },
   caderno(){ const v = new Vox(); v.box(-5, 0, -1, 5, 14, -1, 0xfdf8ef); v.box(-5, 0, 0, 5, 14, 0, 0xf28fac); for (let y = 1; y <= 13; y += 2){ v.set(-6, y, 0, 0x5a5a5a); v.set(-6, y, -1, 0x5a5a5a); } v.ell(1, 8, 1, 2.6, 2.6, 0.5, 0xf3e0c6); v.box(0, 6, 2, 2, 7, 2, 0xf2b3a8); v.box(-3, 2, 1, 4, 2, 1, 0x2f6fb3); return v; },
@@ -1207,7 +1260,7 @@ const geo = (chave, fn) => GEO[chave] || (GEO[chave] = fn());
 const CHAVE_SALVO = 'fazendaJoliPig.v1';
 let S = null;
 function estadoNovo(){
-  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedido: null, versao: 2, feito: [], dicas: true, alimentador: {}, irrigador: {}, anotado: false, som: true, nAnimal: 0, vendeu: 0, salvoEm: Date.now() };
+  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedido: null, versao: 2, feito: [], dicas: true, alimentador: {}, irrigador: {}, melhorias: {}, anotado: false, som: true, nAnimal: 0, vendeu: 0, salvoEm: Date.now() };
   const l = LOTES[2];
   for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) s.campo[x + ',' + z] = { e: 'grama' };
   for (const k of ['12,9', '13,9', '12,10', '13,10']) s.campo[k] = { e: 'arado' };
@@ -1561,7 +1614,7 @@ class Porco {
     this.pE = new THREE.Group(); this.pE.position.set(-qx * s, qy * s, 0); this.pE.add(malha(gp)); this.g.add(this.pE);
     this.pD = new THREE.Group(); this.pD.position.set(qx * s, qy * s, 0); this.pD.add(malha(gp)); this.g.add(this.pD);
     this.mao = new THREE.Group(); this.mao.position.set(0, M.mao[0] * s, M.mao[1] * s); this.bD.add(this.mao);
-    this.altura = M.altura; this.aceno = 0;
+    this.altura = M.altura; this.aceno = 0; this.escala = s;
     this.ferramentas = {};
     this.pos = new THREE.Vector2(); this.pontos = []; this.vel = 2.7; this.ang = 0; this.angAlvo = 0; this.fase = 0; this.estado = 'parado';
     this.trab = null; this.aoChegar = null; this.pulo = 0;
@@ -1615,6 +1668,10 @@ class Porco {
     } else this.mao.rotation.x = 0;
   }
   topo(){ return new THREE.Vector3(this.pos.x, this.altura, this.pos.y); }
+  trocarPes(chave, fn){
+    const g = geo(chave, () => fn().build(this.escala, { origin: [0.5, 0, 0.5], jitter: 0.015, ao: AO_SUAVE }));
+    for (const pe of [this.pE, this.pD]){ pe.clear(); pe.add(malha(g)); }
+  }
 }
 
 // animais
@@ -2086,6 +2143,48 @@ function efeitoDuranteTrabalho(tarefa){
   const cor = { arar: [0x8a5c3a, 0xa47448], regar: [0x6fc3f5, 0xa8dcfa], capinar: [0x3f7a2a, 0x5a9e3c], colher: [0xffe066, 0xffffff], plantar: [0x5e3a22], alimentar: [0xf5d142, 0xe2cfa0], arrancar: [0x6cbf47, 0x8a5c3a] }[tarefa.tipo] || [0xffffff];
   for (let i = 0; i < n; i++) setTimeout(() => particula(x + rnd(-0.3, 0.3), tarefa.tipo === 'regar' ? 0.7 : 0.15, z + rnd(-0.3, 0.3), cor[i % cor.length], tarefa.tipo === 'regar' ? -0.5 : 1.4), i * 45);
 }
+// canteiros vizinhos do mesmo terreno: em cruz (4) ou no quadrado em volta (8)
+function vizinhos(x, z, raio){
+  const l = loteDe(x, z), out = [];
+  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++){
+    if (!dx && !dz) continue;
+    if (raio === 'cruz' && dx && dz) continue;
+    if (loteDe(x + dx, z + dz) === l) out.push([x + dx, z + dz]);
+  }
+  return out;
+}
+const CONDICAO = {
+  arar: t => t.e === 'grama',
+  regar: t => t.e === 'plantado' && t.p === 'sede',
+  colher: t => t.e === 'plantado' && t.prog >= 1 && !t.p,
+};
+// aplica a mesma ação nos vizinhos que precisam dela; tarefas iguais já na fila para esses canteiros saem da fila
+function espalhar(tipo, x0, z0, raio){
+  for (const [x, z] of vizinhos(x0, z0, raio)){
+    const t = campo(x, z);
+    if (!t || !CONDICAO[tipo](t)) continue;
+    const res = VIS[chave(x, z)] && VIS[chave(x, z)].res;
+    if (res){ if (res.tipo !== tipo || res === tarefaAtual) continue; cancelar(res); }
+    aplicarCanteiro(tipo, x, z);
+    const n = { arar: 6, regar: 8, colher: 4 }[tipo], cor = { arar: [0x8a5c3a, 0xa47448], regar: [0x6fc3f5, 0xa8dcfa], colher: [0xffe066, 0xffffff] }[tipo];
+    for (let i = 0; i < n; i++) particula(x + 0.5 + rnd(-0.3, 0.3), tipo === 'regar' ? 0.6 : 0.15, z + 0.5 + rnd(-0.3, 0.3), cor[i % 2], tipo === 'regar' ? -0.5 : 1.2);
+    atualizarCampo(x, z);
+  }
+}
+// arar, regar e colher num canteiro, com xp e o que mais vier; usado pelo Ed e pelas ferramentas
+function aplicarCanteiro(tipo, x, z){
+  const t = campo(x, z), pos = new THREE.Vector3(x + 0.5, 0.6, z + 0.5);
+  if (tipo === 'arar'){ t.e = 'arado'; ganharXP(1, pos); }
+  if (tipo === 'regar'){ t.p = null; t.ev++; avancar(t, 0, irrigado(x, z)); ganharXP(1, pos); avancarTut(1); }
+  if (tipo === 'colher'){
+    const c = CULTURAS[t.c];
+    S.celeiro[t.c] = (S.celeiro[t.c] || 0) + c.rend;
+    flutuar(pos, '+' + c.rend, '', t.c);
+    ganharXP(c.xp, pos.clone().add(new THREE.Vector3(0, 0.25, 0)));
+    Object.assign(t, { e: 'arado', c: null, prog: 0, evs: [], ev: 0, p: null });
+    avancarTut(3);
+  }
+}
 function executar(tarefa){
   const alvo = tarefa.alvo, tp = tarefa.tipo;
   if (alvo.k === 'animal'){
@@ -2097,7 +2196,10 @@ function executar(tarefa){
   const t = campo(alvo.x, alvo.z), pos = new THREE.Vector3(alvo.x + 0.5, 0.6, alvo.z + 0.5);
   if (!t) return;
   switch (tp){
-    case 'arar': t.e = 'arado'; ganharXP(1, pos); break;
+    case 'arar':
+      aplicarCanteiro('arar', alvo.x, alvo.z);
+      if (degrau('enxada')) espalhar('arar', alvo.x, alvo.z, degrau('enxada').raio);
+      break;
     case 'plantar': {
       // as culturas longas (abóbora em diante) só pedem água no plantio: dá para plantar e sair
       const evs = CULTURAS[tarefa.param].tempo >= 300 ? [[0, 'sede']] : [[0, 'sede'], [0.5, 'sede']];
@@ -2108,17 +2210,16 @@ function executar(tarefa){
       avancarTut(0);
       break;
     }
-    case 'regar': if (t.p === 'sede'){ t.p = null; t.ev++; avancar(t, 0, irrigado(alvo.x, alvo.z)); ganharXP(1, pos); avancarTut(1); } break;
-    case 'capinar': if (t.p === 'mato'){ t.p = null; t.ev++; if (avancar(t, 0, irrigado(alvo.x, alvo.z))) irrigadorJato(loteDe(alvo.x, alvo.z)); ganharXP(2, pos); } break;
-    case 'colher': {
-      const c = CULTURAS[t.c];
-      S.celeiro[t.c] = (S.celeiro[t.c] || 0) + c.rend;
-      flutuar(pos, '+' + c.rend, '', t.c);
-      ganharXP(c.xp, pos.clone().add(new THREE.Vector3(0, 0.25, 0)));
-      Object.assign(t, { e: 'arado', c: null, prog: 0, evs: [], ev: 0, p: null });
-      Som.colher(); avancarTut(3);
+    case 'regar':
+      if (t.p === 'sede') aplicarCanteiro('regar', alvo.x, alvo.z);
+      if (degrau('regador')) espalhar('regar', alvo.x, alvo.z, degrau('regador').raio);
       break;
-    }
+    case 'capinar': if (t.p === 'mato'){ t.p = null; t.ev++; if (avancar(t, 0, irrigado(alvo.x, alvo.z))) irrigadorJato(loteDe(alvo.x, alvo.z)); ganharXP(2, pos); } break;
+    case 'colher':
+      aplicarCanteiro('colher', alvo.x, alvo.z);
+      if (degrau('carrinho')) espalhar('colher', alvo.x, alvo.z, degrau('carrinho').raio);
+      Som.colher();
+      break;
     case 'arrancar': Object.assign(t, { e: 'arado', c: null, prog: 0, evs: [], ev: 0, p: null }); break;
   }
   atualizarCampo(alvo.x, alvo.z);
@@ -2142,6 +2243,7 @@ function subiuNivel(n){
   if (n > 1 && NIVEL_LOTE.includes(n)) libs.push('mais um terreno');
   for (const tp in ALIMENTADOR) if (ALIMENTADOR[tp].nivel === n) libs.push(`alimentador automático do ${ALIMENTADOR[tp].lugar}`);
   if (n === IRRIGADOR.nivel) libs.push('irrigador automático');
+  for (const id in MELHORIAS) for (const d of MELHORIAS[id].degraus) if (d.nivel === n) libs.push(d.nome.toLowerCase());
   aviso(`Nível ${n}!` + (libs.length ? ` Liberou: ${libs.join(', ')}` : ''), 'grande', 4);
   falar(ed, 'Oinc! Subi de nível!', 2);
 }
@@ -2486,7 +2588,7 @@ let abaLoja = 'sementes';
 function abrirLoja(aba){
   if (aba) abaLoja = aba;
   const n = nivel();
-  let corpo = `<div class="abas" role="tablist">${[['sementes', 'Sementes'], ['animais', 'Bichos'], ['racao', 'Ração'], ['irrigacao', 'Irrigação']].map(([k, r]) => `<button class="aba" role="tab" aria-selected="${abaLoja === k}" data-aba="${k}" type="button">${r}</button>`).join('')}</div><div class="grade">`;
+  let corpo = `<div class="abas" role="tablist">${[['sementes', 'Sementes'], ['animais', 'Bichos'], ['racao', 'Ração'], ['irrigacao', 'Irrigação'], ['ed', 'Ferramentas']].map(([k, r]) => `<button class="aba" role="tab" aria-selected="${abaLoja === k}" data-aba="${k}" type="button">${r}</button>`).join('')}</div><div class="grade">`;
   if (abaLoja === 'sementes'){
     for (const k of ORDEM_CULTURAS){
       const c = CULTURAS[k], bloq = c.nivel > n, tem = S.bolsa[k] || 0;
@@ -2506,6 +2608,14 @@ function abrirLoja(aba){
       corpo += `<div class="cartao${bloq ? ' bloq' : ''}"><div class="cab"><img src="${icone('alimentador')}" alt=""><div><h4>Alimentador do ${AL.lugar}</h4><div class="info">${tem ? 'já instalado' : bloq ? `libera no nível ${AL.nivel}` : 'automático'}</div></div></div>
         <div class="info">Dá ração sozinho para ${tp === 'galinha' ? 'as galinhas' : 'as vacas'} quando sentem fome. Usa a ração do estoque.</div>
         <div class="botoes">${bloq || tem ? '' : `<button class="botao mini" data-alim="${tp}" type="button"${S.dinheiro < AL.preco ? ' disabled' : ''}>Comprar · ${reais(AL.preco)}</button>`}</div></div>`;
+    }
+  } else if (abaLoja === 'ed'){
+    for (const id in MELHORIAS){
+      const M = MELHORIAS[id], n = S.melhorias[id] || 0, atual = M.degraus[n - 1], prox = M.degraus[n];
+      const bloq = prox && prox.nivel > nivel();
+      corpo += `<div class="cartao${bloq ? ' bloq' : ''}"><div class="cab"><img src="${icone(M.icone)}" alt=""><div><h4>${prox ? prox.nome : atual.nome}</h4><div class="info">${!prox ? 'já é o melhor' : bloq ? `libera no nível ${prox.nivel}` : atual ? `troca a ${atual.nome.toLowerCase()}` : 'nova ferramenta'}</div></div></div>
+        <div class="info">${prox ? prox.desc : atual.desc}</div>
+        <div class="botoes">${prox && !bloq ? `<button class="botao mini" data-melhoria="${id}" type="button"${S.dinheiro < prox.preco ? ' disabled' : ''}>Comprar · ${reais(prox.preco)}</button>` : ''}</div></div>`;
     }
   } else if (abaLoja === 'irrigacao'){
     const bloq = nivel() < IRRIGADOR.nivel;
@@ -2535,6 +2645,7 @@ function abrirLoja(aba){
   }));
   j.querySelectorAll('[data-animal]').forEach(b => b.addEventListener('click', () => { comprarAnimal(b.dataset.animal); abrirLoja(); }));
   j.querySelectorAll('[data-alim]').forEach(b => b.addEventListener('click', () => { comprarAlimentador(b.dataset.alim); abrirLoja(); }));
+  j.querySelectorAll('[data-melhoria]').forEach(b => b.addEventListener('click', () => { comprarMelhoria(b.dataset.melhoria); abrirLoja(); }));
   j.querySelectorAll('[data-irrig]').forEach(b => b.addEventListener('click', () => { comprarIrrigador(+b.dataset.irrig); abrirLoja(); }));
   j.querySelectorAll('[data-racao]').forEach(b => b.addEventListener('click', () => {
     const q = +b.dataset.racao, p = +b.dataset.p;
@@ -2957,6 +3068,8 @@ async function iniciar(){
   construirPersonagens();
   for (const tp in ALIMENTADOR) if (S.alimentador[tp]) montarAlimentador(tp);
   if (!S.irrigador) S.irrigador = {};
+  if (!S.melhorias) S.melhorias = {};
+  calcarEd();
   for (const l in S.irrigador) if (S.irrigador[l] && S.lotes[l]) montarIrrigador(+l);
   for (const d of S.animais){ if (d.x < 17 || d.x > 22){ const [x, z] = sorteia(d.tipo === 'galinha' ? PASTO_G : PASTO_V); d.x = x + 0.5; d.z = z + 0.5; } ANI.push(new Bicho(d)); }
   if (novo){ novoAnimal('galinha', 18.6, 8.4); novoAnimal('galinha', 19.4, 7.6); novoPedido(); }
@@ -2973,7 +3086,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   if (novo) setTimeout(() => mostrarAjuda(true), 300);
   else if (fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 iniciar();
 })();
