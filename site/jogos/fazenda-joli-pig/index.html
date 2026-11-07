@@ -116,6 +116,20 @@ button{font:inherit;color:inherit}
 .menu .estado.bom{color:var(--verde-escuro)}
 .menu .prog{height:9px;border:2px solid var(--borda);border-radius:999px;background:var(--papel-2);overflow:hidden;margin:0 0 8px}
 .menu .prog i{display:block;height:100%;background:var(--verde)}
+/* fila das construções: uma caixinha por vaga */
+.vagas{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:2px 0 8px}
+.vaga{border:2px solid var(--borda);border-radius:10px;background:var(--papel-2);padding:4px 3px 5px;text-align:center;font-weight:800;font-size:11px;line-height:1.15;min-width:0}
+.vaga img{width:28px;height:28px;display:block;margin:0 auto 1px}
+.vaga .n{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vaga .t{display:block;font-weight:700;font-size:10px;color:var(--tinta-suave);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vaga .barra{height:5px;border-radius:999px;background:#fff;border:1px solid var(--borda);margin:3px 2px 0;overflow:hidden}
+.vaga .barra i{display:block;height:100%;background:var(--verde)}
+.vaga.fazendo{background:#e3f3d4}
+.vaga.levando{background:#fff1b8}
+.vaga.livre{background:transparent;border-style:dashed;color:var(--tinta-suave)}
+.vaga.livre .vazio{width:28px;height:28px;margin:0 auto 1px;border:2px dashed #c9b9a0;border-radius:8px}
+.vagas-resumo{display:flex;justify-content:space-between;font-weight:800;font-size:12px;margin:0 0 3px}
+.vagas-resumo .pronto{color:var(--verde-escuro)}
 .menu .itens{display:grid;gap:5px}
 .item{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;border:2px solid var(--borda);background:var(--papel-2);cursor:pointer;font-weight:800;font-size:14px;line-height:1.15}
 .item img{width:30px;height:30px;flex:none}
@@ -1965,14 +1979,30 @@ function itensFabrica(id){
     if (id !== 'terreiro') r.itens.push({ rotulo: `Construir ${F.nome.toLowerCase()}`, sub: nivel() < F.nivel ? `nível ${F.nivel}` : 'pronto na hora', icone: id, preco: reais(F.preco), off: nivel() < F.nivel || S.dinheiro < F.preco, fn: () => construirFabrica(id) });
     return r;
   }
-  const agora = Date.now(), naFila = fila.filter(t => t.tipo === 'produzir' && t.alvo.id === id).length;
-  if (st.fila.length){
-    const atual = st.fila[0], R = RECEITAS[atual.r];
-    r.estado = `Fazendo ${R.nome.toLowerCase()} · pronto em ${tempo((atual.fim - agora) / 1000)}` + (st.fila.length > 1 ? ` · mais ${st.fila.length - 1} na fila` : '');
-    r.prog = 1 - (atual.fim - agora) / (R.tempo * 1000);
-  } else r.estado = st.feitos.length ? 'Terminou! Recolha o que ficou pronto.' : (st.repetir ? `Esperando ingredientes para ${RECEITAS[st.repetir].nome.toLowerCase()}.` : 'Parado. Escolha o que fazer:');
-  if (st.repetir) r.estado += ` · repete ${RECEITAS[st.repetir].nome.toLowerCase()}`;
-  if (st.esteira) r.estado += ' · esteira para o celeiro';
+  const agora = Date.now(), levando = fila.filter(t => t.tipo === 'produzir' && t.alvo.id === id), naFila = levando.length;
+  const ocupadas = st.fila.length + naFila;
+  if (st.fila.length) r.estado = `Fazendo ${RECEITAS[st.fila[0].r].nome.toLowerCase()}.`;
+  else r.estado = st.feitos.length ? 'Terminou! Recolha o que ficou pronto.' : naFila ? 'O Ed está levando os ingredientes.' : (st.repetir ? `Esperando ingredientes para ${RECEITAS[st.repetir].nome.toLowerCase()}.` : 'Parado. Escolha o que fazer:');
+  if (st.repetir) r.estado += ` Repete ${RECEITAS[st.repetir].nome.toLowerCase()}.`;
+  if (st.esteira) r.estado += ' Esteira para o celeiro.';
+  // as três vagas: fazendo agora, esperando na fila, o Ed levando os ingredientes, ou livre
+  const icReceita = rid => { const sai = Object.keys(RECEITAS[rid].sai)[0]; return icone(sai === 'racao' ? 'racao' : sai); };
+  let vagas = '';
+  for (let i = 0; i < VAGAS_FAB; i++){
+    const f = st.fila[i];
+    if (f){
+      const R = RECEITAS[f.r], falta = Math.max(0, (f.fim - agora) / 1000);
+      if (i === 0){
+        const prog = clamp(1 - falta / R.tempo, 0, 1);
+        vagas += `<div class="vaga fazendo"><img src="${icReceita(f.r)}" alt=""><span class="n">${R.nome}</span><span class="t">faltam ${tempo(falta)}</span><div class="barra"><i style="width:${Math.round(prog * 100)}%"></i></div></div>`;
+      } else vagas += `<div class="vaga"><img src="${icReceita(f.r)}" alt=""><span class="n">${R.nome}</span><span class="t">na fila · ${tempo(falta)}</span></div>`;
+    } else if (i < ocupadas){
+      const t = levando[i - st.fila.length];
+      vagas += `<div class="vaga levando"><img src="${icReceita(t.param)}" alt=""><span class="n">${RECEITAS[t.param].nome}</span><span class="t">Ed levando</span></div>`;
+    } else vagas += `<div class="vaga livre"><div class="vazio"></div><span class="n">livre</span><span class="t">escolha abaixo</span></div>`;
+  }
+  const prontos = st.feitos.length;
+  r.extraHTML = `<div class="vagas-resumo"><span>Vagas: ${ocupadas} de ${VAGAS_FAB} ocupadas</span><span class="${prontos ? 'pronto' : ''}">${prontos ? `Prontos: ${prontos}` : st.esteira ? 'Esteira ligada' : 'Prontos: 0'}</span></div><div class="vagas">${vagas}</div>`;
   if (st.feitos.length){
     const recolhendo = fila.some(t => t.tipo === 'recolher' && t.alvo.id === id);
     r.classe = 'bom';
@@ -3761,7 +3791,8 @@ function abrirMenu(alvo, px, py){
   const m = $('menu');
   let h = `<h3>${r.icone ? `<img src="${icone(r.icone)}" alt="">` : ''}${esc(r.titulo)}</h3>`;
   if (r.estado) h += `<div class="estado ${r.classe || ''}">${esc(r.estado)}</div>`;
-  if (r.prog != null && r.prog < 1) h += `<div class="prog"><i style="width:${Math.round(clamp(r.prog, 0, 1) * 100)}%"></i></div>`;
+  if (r.extraHTML) h += `<div class="extra">${r.extraHTML}</div>`;
+  else if (r.prog != null && r.prog < 1) h += `<div class="prog"><i style="width:${Math.round(clamp(r.prog, 0, 1) * 100)}%"></i></div>`;
   h += '<div class="itens">';
   r.itens.forEach((it, i) => {
     h += `<button class="item${it.off ? ' off' : ''}${it.leve ? ' leve' : ''}${it.perigo ? ' perigo' : ''}" type="button" role="menuitem" data-i="${i}"${it.off ? ' aria-disabled="true"' : ''}><img src="${icone(it.icone)}" alt=""><span>${esc(it.rotulo)}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>${it.preco ? `<b>${esc(it.preco)}</b>` : ''}</button>`;
@@ -4451,6 +4482,8 @@ function atualizarEstadoMenu(){
     e.textContent = r.estado;
   }
   if (p && r.prog != null) p.style.width = Math.round(clamp(r.prog, 0, 1) * 100) + '%';
+  const ex = $('menu').querySelector('.extra');
+  if (ex && r.extraHTML != null && ex.innerHTML !== r.extraHTML) ex.innerHTML = r.extraHTML;
 }
 
 // ================= início
