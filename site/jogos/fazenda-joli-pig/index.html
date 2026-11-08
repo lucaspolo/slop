@@ -523,7 +523,13 @@ PRODUTOS.caju = { nome:'Caju', plural:'cajus', venda:46, nivel:20 };
 PRODUTOS.mel = { nome:'Mel', plural:'potes de mel', venda:35, nivel:10 };
 PRODUTOS.goiabada = { nome:'Goiabada', plural:'goiabadas', venda:130, nivel:14, fab:'cozinha' };
 PRODUTOS.bolomel = { nome:'Bolo de mel', plural:'bolos de mel', venda:220, nivel:11, fab:'padaria' };
-const ORDEM_PRODUTOS = [...ORDEM_CULTURAS.filter(k => k !== 'cafe'), 'ovo', 'leite', 'laranja', 'limao', 'banana', 'goiaba', 'abacate', 'manga', 'coco', 'jabuticaba', 'caju', 'mel', 'fuba', 'queijo', 'bolo', 'paodequeijo', 'bolomel', 'geleia', 'doce', 'goiabada', 'cereja', 'cafe', 'torrado'];
+// a floresta nativa: o Ed só coleta das árvores que já estão lá, sem plantar nem cortar
+const NATIVAS = {
+  cacaueiro:   { nome: 'Cacaueiro', produto: 'cacau', nomeP: 'Cacau', plural: 'frutos de cacau', venda: 30, nivel: 20, tempo: 720, rend: 6, xp: 14 },
+  seringueira: { nome: 'Seringueira', produto: 'latex', nomeP: 'Látex', plural: 'baldinhos de látex', venda: 55, nivel: 20, tempo: 900, rend: 4, xp: 15, alto: 2.1 },
+};
+for (const t in NATIVAS){ const N = NATIVAS[t]; PRODUTOS[N.produto] = { nome: N.nomeP, plural: N.plural, venda: N.venda, nivel: N.nivel, nativa: t }; }
+const ORDEM_PRODUTOS = [...ORDEM_CULTURAS.filter(k => k !== 'cafe'), 'ovo', 'leite', 'laranja', 'limao', 'banana', 'goiaba', 'abacate', 'manga', 'coco', 'jabuticaba', 'caju', ...Object.values(NATIVAS).map(N => N.produto), 'mel', 'fuba', 'queijo', 'bolo', 'paodequeijo', 'bolomel', 'geleia', 'doce', 'goiabada', 'cereja', 'cafe', 'torrado'];
 const FRUTIFERAS = {
   laranjeira: { nome: 'Laranjeira', fem: true, fruta: 'laranja', cor: 0xf08a2c, cor2: 0xf6a23c, nivel: 9, preco: 400, tempo: 480, rend: 4, xp: 4 },
   limoeiro:   { nome: 'Limoeiro', fruta: 'limao', cor: 0xd7e04a, cor2: 0xb9d03c, nivel: 10, preco: 550, tempo: 420, rend: 4, xp: 4 },
@@ -659,11 +665,14 @@ const ARBUSTOS = [[7,1],[12,6],[1,10],[16,2]];
 const Z_ORLA = 18, Z_MATA = 21, X_FIM_MATA = 15;
 // a floresta à venda, da coluna 0 até o arco; cada parcela tem uma trilha reta na coluna col, e a de trás continua a da frente
 const PARCELAS = [
-  { nivel: 20, preco: 15000, x0: 8, z0: 21, x1: 15, z1: 28, col: 12 },
-  { nivel: 22, preco: 20000, x0: 0, z0: 21, x1: 7, z1: 28, col: 4 },
-  { nivel: 24, preco: 28000, x0: 8, z0: 29, x1: 15, z1: 36, col: 12 },
-  { nivel: 26, preco: 40000, x0: 0, z0: 29, x1: 7, z1: 36, col: 4 },
+  { nivel: 20, preco: 15000, x0: 8, z0: 21, x1: 15, z1: 28, col: 12, arvores: ['cacaueiro', 'seringueira', 'seringueira', 'cacaueiro', 'cacaueiro', 'seringueira'] },
+  { nivel: 22, preco: 20000, x0: 0, z0: 21, x1: 7, z1: 28, col: 4, arvores: [] },
+  { nivel: 24, preco: 28000, x0: 8, z0: 29, x1: 15, z1: 36, col: 12, arvores: [] },
+  { nivel: 26, preco: 40000, x0: 0, z0: 29, x1: 7, z1: 36, col: 4, arvores: [] },
 ];
+// duas árvores por fileira, uma de cada lado da trilha; o Ed colhe em pé na trilha
+const MATA_SLOTS = PARCELAS.flatMap((P, p) => P.arvores.map((tipo, k) => { const z = P.z0 + 1 + (k >> 1) * 2; return { x: P.col + (k % 2 ? 1 : -1), z, pe: [P.col, z], tipo, p }; }));
+const MATA_XZ = MATA_SLOTS.map(s => [s.x, s.z]);
 const FENOS = [[12,3],[12,4]];
 const FLORES = [[7,3],[2,3],[8,6],[14,6],[1,7],[0,4],[10,15],[4,15],[16,6],[20,4],[26,4],[27,6]];
 const PASTO_G = [], PASTO_V = [];
@@ -1245,6 +1254,24 @@ function vCopa(tipoA){
   else v.ell(3.5, 7.5, 3.5, 4.1, 2.4, 4.1, cor);
   return v;
 }
+function vNativa(tipoA, comFruta){
+  const v = new Vox(), cor = (x, y, z) => [0x2f7a3a, 0x276b33, 0x3c8f45][Math.floor(hash(x, y, z) * 3)];
+  switch (tipoA){
+    case 'cacaueiro': // o cacau nasce direto no tronco
+      v.box(3, 0, 3, 4, 7, 4, 0x7a5a3a);
+      v.ell(3.5, 9.6, 3.5, 3.8, 2.8, 3.8, cor);
+      for (const [x, y, z] of [[2, 2, 3], [5, 4, 4], [3, 3, 5], [4, 5, 2], [2, 5, 4], [5, 2, 3]]) v.box(x, y, z, x, y + 1, z, comFruta ? (y % 2 ? 0xe8a32c : 0xd9802a) : 0xa8c85a);
+      break;
+    case 'seringueira': // tronco claro com o corte em diagonal e a canequinha que recolhe o látex
+      v.box(3, 0, 3, 4, 10, 4, 0xcbb898);
+      v.ell(3.5, 12.6, 3.5, 3, 2.8, 3, cor);
+      for (const [x, y] of [[3, 6], [4, 5], [3, 4], [4, 3]]) v.set(x, y, 4, 0x8a6a4a);
+      v.box(3, 1, 5, 4, 2, 5, 0xb0683a);
+      if (comFruta) v.box(3, 2, 5, 4, 2, 5, 0xfff7ee);
+      break;
+  }
+  return v;
+}
 function vArbusto(){ const v = new Vox(); v.ell(3.5, 2.6, 3.5, 3.6, 2.9, 3.6, (x, y, z) => hash(x, y, z) < 0.08 ? 0xf27fa4 : (hash(z, x, y) < 0.5 ? 0x5aa845 : 0x4f9a3d)); return v; }
 function vFeno(){ const v = new Vox(); v.box(2, 0, 3, 13, 7, 12, (x, y) => y % 3 === 0 ? 0xdcb550 : 0xeccb62); v.box(5, 0, 2, 5, 8, 13, 0xb8893f); v.box(10, 0, 2, 10, 8, 13, 0xb8893f); return v; }
 function vCorreio(){
@@ -1795,6 +1822,9 @@ const VI = {
   alcachofra(){ const v = new Vox(); v.ell(0, 5, 0, 3.8, 4.4, 3.8, (x, y, z) => (x + y + z + 30) % 2 ? 0x7aa06e : 0x9c6aa8); v.box(0, 0, 0, 0, 1, 0, 0x7f9f6a); return v; },
   pitaya(){ const v = new Vox(); v.ell(0, 4, 0, 3.6, 4.2, 3.6, (x, y, z) => (x + z + y * 2 + 40) % 5 === 0 ? 0x8fd06a : 0xe83d8a); v.box(0, 8, 0, 0, 9, 0, 0x8fd06a); return v; },
   mata(){ return vCopa(0); },
+  cacau(){ const v = new Vox(); v.ell(0, 5, 0, 3, 5, 3, (x, y, z) => (x + z + 20) % 2 ? 0xe8a32c : 0xd9802a); v.box(0, 10, 0, 0, 11, 0, 0x7a5a3a); return v; },
+  latex(){ const v = new Vox(); v.box(-3, 0, -3, 3, 5, 3, 0xb0683a); v.box(-2, 5, -2, 2, 5, 2, 0xfff7ee); v.box(-4, 6, 0, -4, 8, 0, 0x6a6a6a); v.box(4, 6, 0, 4, 8, 0, 0x6a6a6a); v.box(-4, 9, 0, 4, 9, 0, 0x6a6a6a); return v; },
+  cacaueiro(){ return vNativa('cacaueiro', true); }, seringueira(){ return vNativa('seringueira', true); },
   maca(){ const v = new Vox(); v.ell(0, 3, 0, 3.4, 3.2, 3.4, (x, y) => x <= -1 && y >= 4 ? 0xf0695c : 0xd9362e); v.box(0, 6, 0, 0, 8, 0, 0x7a4c2c); v.box(1, 7, 0, 3, 7, 0, 0x6cbf52); return v; },
   laranja(){ const v = new Vox(); v.ell(0, 3, 0, 3.4, 3.2, 3.4, 0xf08a2c); v.set(0, 6, 0, 0x5a8f3a); v.box(1, 6, 0, 2, 6, 0, 0x6cbf52); return v; },
   goiaba(){ const v = new Vox(); v.ell(0, 3, 0, 3, 3.6, 3, (x, y, z) => z > 1 && x > 0 ? 0xe0607a : 0xb8d65a); v.set(0, 7, 0, 0x7a5232); return v; },
@@ -1966,7 +1996,7 @@ const geo = (chave, fn) => GEO[chave] || (GEO[chave] = fn());
 const CHAVE_SALVO = 'fazendaJoliPig.v1';
 let S = null;
 function estadoNovo(){
-  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedidos: [], versao: 3, feito: [], dicas: true, alimentador: {}, coletor: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], pomarBlocos: [], colmeias: [], enfeites: [], guardados: {}, parcelas: [], maca: null, macaAte: 0, anotado: false, som: true, nAnimal: 0, vendeu: 0, viuCineInicio: false, salvoEm: Date.now() };
+  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedidos: [], versao: 3, feito: [], dicas: true, alimentador: {}, coletor: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], pomarBlocos: [], colmeias: [], enfeites: [], guardados: {}, parcelas: [], mata: [], maca: null, macaAte: 0, anotado: false, som: true, nAnimal: 0, vendeu: 0, viuCineInicio: false, salvoEm: Date.now() };
   const l = LOTES[2];
   for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) s.campo[x + ',' + z] = { e: 'grama' };
   for (const k of ['12,9', '13,9', '12,10', '13,10']) s.campo[k] = { e: 'arado' };
@@ -2164,6 +2194,7 @@ function abrirParcela(p){
   for (let z = P.z0; z <= P.z1; z++) setT(P.col, z, 'trilha');
   MATA_CORREDOR[p].visible = false;
   montarTrilha(p);
+  MATA_SLOTS.forEach((s, i) => { if (s.p === p){ if (!S.mata[i]) S.mata[i] = { pronto: true }; montarNativa(i); } });
 }
 function montarPlacasMata(){
   PARCELAS.forEach((P, p) => {
@@ -2207,10 +2238,45 @@ function comprarParcela(p){
   hud(); salvar();
   return true;
 }
+const MATA_VIS = [];
+function montarNativa(i){
+  const s = MATA_SLOTS[i], d = S.mata[i], N = NATIVAS[s.tipo];
+  montarSlot('mata', MATA_VIS, MATA_XZ, i, () => vNativa(s.tipo, d.pronto).build(1 / 8, { origin: [4, 0, 4] }), 'nativa' + s.tipo + !!d.pronto);
+  bolhaSlot(MATA_VIS[i], MATA_XZ[i], d.pronto ? N.produto : '', N.alto || 1.75);
+  plaquinha(MATA_VIS[i], s.x, s.z, d.pronto ? '' : N.produto);
+}
+function simularMata(){
+  const agora = Date.now();
+  (S.mata || []).forEach((d, i) => { if (d && !d.pronto && agora >= d.fim){ d.pronto = true; montarNativa(i); } });
+}
+function executarMata(tarefa){
+  const i = tarefa.alvo.i, s = MATA_SLOTS[i], d = S.mata[i], N = NATIVAS[s.tipo], pos = new THREE.Vector3(s.x + 0.5, 1.3, s.z + 0.5);
+  if (!d.pronto) return;
+  S.celeiro[N.produto] = (S.celeiro[N.produto] || 0) + N.rend; contar('colhido', N.produto, N.rend);
+  flutuar(pos, '+' + N.rend, '', N.produto); ganharXP(N.xp, pos.clone().add(new THREE.Vector3(0, 0.3, 0)));
+  d.pronto = false; d.fim = Date.now() + N.tempo * 1000;
+  montarNativa(i);
+  Som.colher(); hud(); salvar();
+}
+function itensNativa(i){
+  const s = MATA_SLOTS[i], d = S.mata[i], N = NATIVAS[s.tipo], alvo = { k: 'mata', i }, r = { titulo: N.nome, icone: s.tipo, itens: [] };
+  const res = visSlot(alvo).res;
+  if (res){ r.estado = res.hud ? 'O Hud já está indo buscar.' : 'Na fila do Ed: coletar.'; if (!res.hud) r.itens.push({ rotulo: 'Cancelar', icone: 'ed', fn: () => cancelar(res) }); return r; }
+  if (d.pronto){
+    r.estado = `Hora de coletar ${PRODUTOS[N.produto].plural}.`; r.classe = 'bom';
+    r.itens.push({ rotulo: 'Coletar', sub: `+${N.rend} ${PRODUTOS[N.produto].plural} · +${N.xp} xp`, icone: N.produto, fn: () => enfileirar('coletarMata', alvo) });
+    const prontas = (S.mata || []).filter(Boolean).filter(p => p.pronto).length;
+    if (prontas > 1) r.itens.push({ rotulo: `Coletar todas (${prontas})`, icone: 'cesta', leve: true, fn: () => S.mata.forEach((p, k) => { if (p && p.pronto) enfileirar('coletarMata', { k: 'mata', i: k }, undefined, true); }) });
+    return r;
+  }
+  const falta = (d.fim - Date.now()) / 1000;
+  r.estado = `Dá ${N.rend} ${PRODUTOS[N.produto].plural} em ${tempo(falta)}.`; r.prog = 1 - falta / N.tempo;
+  return r;
+}
 function itensParcela(p){
-  const P = PARCELAS[p], motivo = motivoParcela(p);
-  return { titulo: 'Mata à venda', icone: 'mata', estado: `Parcela ${p + 1} da floresta nativa. A mata é protegida: aqui só se colhe o que ela oferece.`,
-    itens: [{ rotulo: 'Comprar a parcela', sub: motivo || 'abre uma trilha na mata', icone: 'moeda', preco: reais(P.preco), off: !!motivo, fn: () => comprarParcela(p) }] };
+  const P = PARCELAS[p], motivo = motivoParcela(p), tem = [...new Set(P.arvores)].map(t => NATIVAS[t].nome.toLowerCase()).join(', ');
+  return { titulo: 'Mata à venda', icone: 'mata', estado: `Parcela ${p + 1} da floresta nativa, com ${tem}. A mata é protegida: aqui só se colhe o que ela oferece.`,
+    itens: [{ rotulo: 'Comprar a parcela', sub: motivo || `${P.arvores.length} árvores para coletar`, icone: 'moeda', preco: reais(P.preco), off: !!motivo, fn: () => comprarParcela(p) }] };
 }
 function itensFloresta(x, z){
   const p = parcelaEm(x, z);
@@ -5079,18 +5145,19 @@ function itensHud(){
 
 // ================= tarefas do Ed
 const fila = [];
-const NOMES_ACAO = { colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã' };
-const DUR = { colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2 };
-const FERR = { colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca' };
+const NOMES_ACAO = { colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', coletarMata:'Coletar' };
+const DUR = { colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, coletarMata: 1.0 };
+const FERR = { colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', coletarMata: 'cesta' };
 const mesmoAlvo = (a, b) => a.k === b.k && (a.k === 'animal' ? a.a === b.a : a.x === b.x && a.z === b.z);
-function reservado(alvo){ if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
-const visSlot = alvo => { const L = alvo.k === 'pomar' ? POMAR_VIS : COLMEIA_VIS; return L[alvo.i] || (L[alvo.i] = {}); };
-function setReserva(alvo, v){ if (alvo.k === 'maca' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
+function reservado(alvo){ if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
+const visSlot = alvo => { const L = alvo.k === 'pomar' ? POMAR_VIS : alvo.k === 'mata' ? MATA_VIS : COLMEIA_VIS; return L[alvo.i] || (L[alvo.i] = {}); };
+function setReserva(alvo, v){ if (alvo.k === 'maca' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
 // diz se a ação vale para o alvo; devolve o custo ou um motivo
 function checar(tipoA, alvo, param){
   if (alvo.k === 'maca') return { ok: tipoA === 'comerMaca' && !!S.maca, custo: {} };
   if (alvo.k === 'composteira') return checarComposteira(tipoA, param);
   if (alvo.k === 'coletor') return { ok: tipoA === 'esvaziar' && !!S.coletor[alvo.tp] && naCaixa(alvo.tp) > 0, custo: {} };
+  if (alvo.k === 'mata') return { ok: tipoA === 'coletarMata' && !!S.mata[alvo.i] && S.mata[alvo.i].pronto, custo: {} };
   if (alvo.k === 'pomar') return { ok: tipoA === 'colherFruta' && !!S.pomar[alvo.i] && S.pomar[alvo.i].pronto, custo: {} };
   if (alvo.k === 'colmeia') return { ok: tipoA === 'coletarMel' && !!S.colmeias[alvo.i] && S.colmeias[alvo.i].pronto, custo: {} };
   if (alvo.k === 'fabrica'){
@@ -5191,6 +5258,7 @@ function frenteColetor(tp){
 }
 function alvoMundo(alvo){
   if (alvo.k === 'coletor') return frenteColetor(alvo.tp);
+  if (alvo.k === 'mata'){ const [x, z] = MATA_SLOTS[alvo.i].pe; return [x + 0.5, z + 0.5]; }
   if (alvo.k === 'composteira') return [COMPOSTEIRA.porta[0] + 0.5, COMPOSTEIRA.porta[1] + 0.5];
   if (alvo.k === 'fabrica'){ const pt = PREDIO[alvo.id].porta; return [pt[0] + 0.5, pt[1] + 0.5]; }
   if (alvo.k === 'pomar' || alvo.k === 'colmeia'){ const [x, z] = (alvo.k === 'pomar' ? POMAR_SLOTS : COLMEIA_SLOTS)[alvo.i]; return [x + 0.5, z + 1.5]; }
@@ -5224,7 +5292,7 @@ function proximaTarefa(){
   }
   ed.ir(pts, () => {
     if (tarefa.tipo === 'andar'){ fila.shift(); tarefaAtual = null; hud(); return; }
-    const al = tarefa.alvo, sl = al.k === 'pomar' ? POMAR_SLOTS[al.i] : al.k === 'colmeia' ? COLMEIA_SLOTS[al.i] : null;
+    const al = tarefa.alvo, sl = al.k === 'pomar' ? POMAR_SLOTS[al.i] : al.k === 'colmeia' ? COLMEIA_SLOTS[al.i] : al.k === 'mata' ? MATA_XZ[al.i] : null;
     const [ax, az] = al.k === 'composteira' ? centroComposteira() : al.k === 'fabrica' ? centroPredio(PREDIO[al.id]) : sl ? [sl[0] + 0.5, sl[1] + 0.5] : al.k === 'coletor' ? [COLETOR[al.tp].x + 0.5, COLETOR[al.tp].z + 0.5] : alvoMundo(al); ed.olhar(ax, az);
     if (!checar(tarefa.tipo, tarefa.alvo, tarefa.param).ok && !(tarefa.custo && Object.keys(tarefa.custo).length)){ fila.shift(); liberar(tarefa, true); tarefaAtual = null; hud(); return; }
     const sons = { arar: () => Som.arar(), regar: () => Som.regar(), plantar: () => Som.plantar(), alimentar: () => Som.ruido(0.3, 0.12, 1800) };
@@ -5307,6 +5375,7 @@ function executar(tarefa){
     atualizarCampo(alvo.x, alvo.z); salvar(); return;
   }
   if (alvo.k === 'maca'){ comerMaca(); return; }
+  if (alvo.k === 'mata'){ executarMata(tarefa); return; }
   if (alvo.k === 'coletor'){ esvaziarCaixa(alvo.tp); return; }
   if (alvo.k === 'composteira'){ executarComposteira(tarefa); return; }
   if (alvo.k === 'fabrica'){ executarFabrica(tarefa); return; }
@@ -5474,7 +5543,7 @@ function gastar(v){ S.dinheiro -= v; hud(); }
 function chipPulsa(id){ const e = $(id); e.classList.remove('pulsa'); void e.offsetWidth; e.classList.add('pulsa'); }
 
 // pedidos e oferta do dia
-function produtosLiberados(){ const n = nivel(); return ORDEM_PRODUTOS.filter(p => PRODUTOS[p].nivel <= n && !PRODUTOS[p].so && (!PRODUTOS[p].fab || estFab(PRODUTOS[p].fab).feita)); }
+function produtosLiberados(){ const n = nivel(); return ORDEM_PRODUTOS.filter(p => PRODUTOS[p].nivel <= n && !PRODUTOS[p].so && (!PRODUTOS[p].fab || estFab(PRODUTOS[p].fab).feita) && (!PRODUTOS[p].nativa || (S.mata || []).some((d, i) => d && MATA_SLOTS[i].tipo === PRODUTOS[p].nativa))); }
 // ================= mural de pedidos
 // até três pedidos do Beto e do Jaca ao mesmo tempo (um por vez no começo, dois do nível 5, três do 10). O Pelúcio ganha
 // uma quarta vaga própria, só de café, depois da cena dele. Cada item pede no máximo MAX_ITEM_PEDIDO unidades. Cada pedido tem prazo; entregue ou vencido, outro chega alguns minutos depois.
@@ -5780,6 +5849,7 @@ function itensDoAlvoBase(alvo){
   if (alvo.k === 'ed'){ falar(ed, sorteia(['Oinc! Bora trabalhar.', 'Essa fazenda não se cuida sozinha.', 'Será que o Beto vem hoje?', 'Cenoura é vida.', 'Toque no chão que eu vou até lá.']), 2); Som.oinc(); return null; }
   if (alvo.k === 'floresta') return itensFloresta(alvo.x, alvo.z);
   if (alvo.k === 'parcela') return itensParcela(alvo.p);
+  if (alvo.k === 'mata') return itensNativa(alvo.i);
   if (alvo.k === 'maca'){
     r.titulo = 'Maçã'; r.icone = 'maca';
     const tarefa = fila.find(t => t.tipo === 'comerMaca');
@@ -6574,6 +6644,7 @@ function simular(dt){
   simularAnimais();
   simularFabricas();
   simularPomar();
+  simularMata();
   simularComposteira();
   atualizarPedidos();
 }
@@ -6611,7 +6682,7 @@ function quadro(agoraP){
   atualizarClima(dt);
   atualizarParticulas(dt);
   atualizarFalas();
-  if (menuAberto && ['tile', 'animal', 'predio', 'pomar', 'colmeia', 'pomarLote', 'coletor', 'composteira'].includes(menuAberto.alvo.k) && Math.floor(t * 2) !== Math.floor((t - dt) * 2)) atualizarEstadoMenu();
+  if (menuAberto && ['tile', 'animal', 'predio', 'pomar', 'colmeia', 'pomarLote', 'coletor', 'composteira', 'mata'].includes(menuAberto.alvo.k) && Math.floor(t * 2) !== Math.floor((t - dt) * 2)) atualizarEstadoMenu();
   tSalvo += dt; if (tSalvo > 6){ tSalvo = 0; verificarFigurinhas(); salvar(); }
   renderer.render(scene, camera);
 }
@@ -6651,7 +6722,7 @@ async function iniciar(){
   construirChao();
   construirCenario();
   montarMata();
-  if (!Array.isArray(S.parcelas)) S.parcelas = [];
+  if (!Array.isArray(S.parcelas)) S.parcelas = []; if (!Array.isArray(S.mata)) S.mata = [];
   PARCELAS.forEach((_, p) => { if (parcelaComprada(p)) abrirParcela(p); });
   montarPlacasMata();
   montarLotes();
@@ -6707,7 +6778,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // o Safari do iPhone ignora o user-scalable do viewport: sem isso a pinça amplia a página e as janelas saem da tela
 for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
