@@ -68,6 +68,10 @@ Alguns projetos nasceram como artefato no claude.ai e vieram para cá como pági
 - Tire tudo o que usa `window.claude` (salvar no banco do artefato, `downloads`, `hot`) e os textos que mandam falar com o Claude. Progresso fica no `localStorage`; arquivo sai por link `blob:`.
 - No site, o helicóptero do Milton se chama PIG-MTP, não PY2MTP. Troque nos artefatos que trouxerem o nome antigo.
 
+### Visualizador de modelos da Fazenda Joli Pig
+
+Os desenhos ficam dentro do script do jogo, então o visualizador é um modo da própria página: `jogos/fazenda-joli-pig/?modelos`, e `jogos/fazenda-joli-pig/modelos/` só encaminha para lá. Nesse modo o jogo não carrega nem grava o save. Modelo novo entra em `catalogoModelos`; o que estiver em `VI` e não for usado no catálogo aparece sozinho no grupo Ícones.
+
 ### Geradores de impressão 3D
 
 - Cada gerador é uma página inteira e independente, com visual próprio e modo escuro; não usa `style.css`.
