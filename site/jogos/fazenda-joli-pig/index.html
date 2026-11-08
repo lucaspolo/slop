@@ -6445,6 +6445,54 @@ function aplicarFazenda(texto, guardarAtual){
 }
 function fazendaAnterior(){ try { return localStorage.getItem(CHAVE_ANTERIOR); } catch (e){ return null; } }
 
+// números quebrados em 3 casas (progresso, posição dos bichos): o link fica mais curto e cabe em mais aplicativos
+function saveCompacto(){
+  salvar();
+  return JSON.stringify(JSON.parse(localStorage.getItem(CHAVE_SALVO)), (k, v) => typeof v === 'number' && !Number.isInteger(v) ? Math.round(v * 1000) / 1000 : v);
+}
+async function gerarLinkFazenda(){
+  if (!window.CompressionStream) return null;
+  const b = new Uint8Array(await new Response(new Blob([saveCompacto()]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer());
+  let bin = '';
+  for (const x of b) bin += String.fromCharCode(x);
+  return location.origin + location.pathname + '#' + FORMATO_LINK + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function baixarFazenda(){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([saveCompacto()], { type: 'application/json' }));
+  a.download = `fazenda-joli-pig-nivel-${nivel()}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+async function abrirLevarFazenda(){
+  // o link sai antes de abrir a janela: compartilhar e copiar exigem o gesto do toque, e o Safari o perde depois de uma espera
+  let link = null;
+  try { link = await gerarLinkFazenda(); } catch (e){}
+  const linha = (texto, id, botao, classe = '') => `<div class="ajuste"><span>${texto}</span><button class="botao mini ${classe}" id="${id}" type="button">${botao}</button></div>`;
+  abrirJanela(topo('caminhao', 'Levar a fazenda', 'Para outro aparelho') + `<div class="janela-corpo">
+    <p>${link ? 'Mande o link para você mesmo e abra no outro aparelho.' : 'Baixe o arquivo e abra no outro aparelho.'} A partir daí cada aparelho segue sozinho: o que você jogar em um não aparece no outro até levar a fazenda de novo.</p>
+    ${link && navigator.share ? linha('Mandar o link', 'jCompartilhar', 'compartilhar', 'verde') : ''}
+    ${link ? linha('Copiar o link', 'jCopiar', 'copiar') : ''}
+    <textarea id="jLinkTexto" readonly hidden rows="3" style="width:100%;box-sizing:border-box;user-select:text;-webkit-user-select:text"></textarea>
+    ${linha('Guardar num arquivo', 'jBaixar', 'baixar')}
+    ${linha('Trazer de um arquivo', 'jImportar', 'escolher')}
+    <input id="jArquivo" type="file" accept=".json,application/json" hidden></div>`);
+  const mostrarLink = () => { const t = $('jLinkTexto'); t.value = link; t.hidden = false; t.select(); };
+  if ($('jCompartilhar')) $('jCompartilhar').addEventListener('click', () => navigator.share({ title: 'Fazenda Joli Pig', url: link }).catch(() => {}));
+  if ($('jCopiar')) $('jCopiar').addEventListener('click', () => {
+    if (!navigator.clipboard){ mostrarLink(); return; }
+    navigator.clipboard.writeText(link).then(() => aviso('Link copiado!'), mostrarLink);
+  });
+  $('jBaixar').addEventListener('click', baixarFazenda);
+  $('jImportar').addEventListener('click', () => $('jArquivo').click());
+  $('jArquivo').addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    if (f.size > LIMITE_SAVE){ receberFazenda({ erro: 'Esse arquivo é grande demais para ser uma fazenda.' }); return; }
+    f.text().then(t => receberFazenda(avaliarFazenda(t)), () => receberFazenda({ erro: 'Não deu para ler esse arquivo.' }));
+  });
+}
+
 function abrirAjustes(){
   abrirJanela(topo('casa', 'Ajustes', 'Fazenda Joli Pig') + `<div class="janela-corpo">
     <div class="ajuste"><span>Som</span><button class="botao mini" id="jSom" type="button">${S.som ? 'ligado' : 'desligado'}</button></div>
@@ -6452,6 +6500,7 @@ function abrirAjustes(){
     <div class="ajuste"><span>Dicas</span><button class="botao mini" id="jDicas" type="button">${S.dicas ? 'ligadas' : 'desligadas'}</button></div>
     <div class="ajuste"><span>Como jogar</span><button class="botao mini" id="jAjuda" type="button">abrir</button></div>
     <div class="ajuste"><span>Rever as cenas</span><button class="botao mini" id="jCenas" type="button"><img src="${icone('claquete')}" alt="" style="width:20px;height:20px;vertical-align:-5px;margin-right:4px">abrir</button></div>
+    <div class="ajuste"><span>Levar a fazenda para outro aparelho</span><button class="botao mini" id="jLevar" type="button">abrir</button></div>
     ${fazendaAnterior() ? '<div class="ajuste"><span>Voltar para a fazenda anterior</span><button class="botao mini" id="jVoltar" type="button">voltar</button></div>' : ''}
     <div class="ajuste"><span>Recomeçar a fazenda do zero</span><button class="botao mini rosa" id="jZerar" type="button">recomeçar</button></div>
     <p style="margin-top:14px"><a href="../">← voltar para os jogos do slop</a></p></div>`);
@@ -6465,6 +6514,7 @@ function abrirAjustes(){
   $('jDicas').addEventListener('click', () => { S.dicas = !S.dicas; atualizarDica(); salvar(); abrirAjustes(); });
   $('jAjuda').addEventListener('click', mostrarAjuda);
   $('jCenas').addEventListener('click', () => { Som.clique(); abrirCenas(); });
+  $('jLevar').addEventListener('click', () => { Som.clique(); abrirLevarFazenda(); });
   const voltar = $('jVoltar');
   if (voltar) voltar.addEventListener('click', () => {
     if (!voltar.dataset.certeza){ voltar.dataset.certeza = '1'; voltar.textContent = 'tocar de novo para voltar'; return; }
@@ -6542,6 +6592,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Figurinhas:</b> metas de longo prazo no caderno, que dão xp.</li>
       <li><b>Floresta</b>${nv(PARCELAS[0].nivel)}: do outro lado da estrada há uma mata nativa protegida, vendida em ${PARCELAS.length} parcelas, nos níveis ${PARCELAS.map(P => P.nivel).join(', ')}. O Ed só coleta das árvores que já estão lá, sem plantar nem cortar: ${Object.values(NATIVAS).map(N => N.nomeP.toLowerCase()).join(', ')}. Cada árvore guarda uma coleta pronta, mesmo com o jogo fechado.</li>
       <li><b>Maçã:</b> de vez em quando uma árvore deixa cair uma maçã. Toque nela para o Ed comer: ele agradece à árvore e anda ${MACA.fator}× mais rápido por ${MACA.minutos} minutos de jogo.</li>
+      <li><b>Outro aparelho:</b> a fazenda fica salva só neste navegador. Para jogar em outro aparelho, abra os Ajustes, escolha Levar a fazenda e mande o link para você mesmo. Depois disso, cada aparelho segue sozinho.</li>
       <li><b>Cenas:</b> as cenas da história ficam guardadas e podem ser revistas nos Ajustes ou no caderno do Ed. Rever uma cena não muda nada na fazenda. De vez em quando o Ed para para um cafezinho na frente da casa, às vezes com visita. Para chamar na hora, toque na casa e escolha Tomar um lanchinho.</li>
       <li><b>Pista do Milton:</b> atrás da fazenda, o Milton, irmão do Ed, pousa de tempos em tempos o teco-teco PIG-MTP. Ele traz sementes ou ração e paga uma taxa pelo uso da pista. O primeiro pouso vem depois da primeira venda ao Joli Market. Só acontece com o jogo aberto.</li>
       <li><b>Enfeites</b>: comprados na loja e colocados em qualquer gramado livre. Dão xp só na compra.</li>
@@ -6905,7 +6956,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // o Safari do iPhone ignora o user-scalable do viewport: sem isso a pinça amplia a página e as janelas saem da tela
 for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
