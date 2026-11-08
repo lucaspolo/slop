@@ -465,7 +465,7 @@ const COR = {
 };
 
 // ================= dados do jogo
-const W = 36, H = 18;
+const W = 36, H = 37;
 const CULTURAS = {
   cenoura:  { nome:'Cenoura',  plural:'cenouras',  semente:4,  tempo:40,  venda:3,   rend:4, xp:2,  nivel:1 },
   alface:   { nome:'Alface',   plural:'alfaces',   semente:6,  tempo:70,  venda:5,   rend:4, xp:3,  nivel:1 },
@@ -656,10 +656,20 @@ const PREDIOS = [
 const PREDIO = {}; PREDIOS.forEach(p => { PREDIO[p.id] = p; });
 const ARVORES = [[0,1,0],[1,5,1],[0,9,2],[1,13,0],[11,1,1],[20,0,0],[23,4,1],[23,8,0],[23,13,2],[2,0,1],[8,0,0],[23,0,1],[0,15,1],[26,0,2],[29,4,1],[29,0,0]];
 const ARBUSTOS = [[7,1],[12,6],[1,10],[16,2]];
+const Z_ORLA = 18, Z_MATA = 21, X_FIM_MATA = 15;
+// a floresta à venda, da coluna 0 até o arco; cada parcela tem uma trilha reta na coluna col, e a de trás continua a da frente
+const PARCELAS = [
+  { nivel: 20, preco: 15000, x0: 8, z0: 21, x1: 15, z1: 28, col: 12 },
+  { nivel: 22, preco: 20000, x0: 0, z0: 21, x1: 7, z1: 28, col: 4 },
+  { nivel: 24, preco: 28000, x0: 8, z0: 29, x1: 15, z1: 36, col: 12 },
+  { nivel: 26, preco: 40000, x0: 0, z0: 29, x1: 7, z1: 36, col: 4 },
+];
 const FENOS = [[12,3],[12,4]];
 const FLORES = [[7,3],[2,3],[8,6],[14,6],[1,7],[0,4],[10,15],[4,15],[16,6],[20,4],[26,4],[27,6]];
 const PASTO_G = [], PASTO_V = [];
 function montarMapa(){
+  // a orla não tem árvores altas, que esconderiam a estrada e o arco na câmera inclinada
+  for (let z = Z_ORLA; z < H; z++) for (let x = 0; x < W; x++) setT(x, z, z >= Z_MATA ? 'mata' : x <= X_FIM_MATA ? 'orla' : 'orlaF');
   for (let x = 0; x < W; x++){ setT(x, 17, 'estrada'); setT(x, 16, 'cerca'); }
   setT(15, 16, 'portao');
   for (let z = 5; z <= 15; z++) setT(15, z, 'caminho');
@@ -680,7 +690,7 @@ function montarMapa(){
   for (const [x, z] of [...POMAR_BLOCOS[0].slots, ...COLMEIA_SLOTS]) setT(x, z, 'feno');
   for (let x = 18; x <= 21; x++){ for (let z = 7; z <= 9; z++) if (tipo(x, z) === 'pastoG') PASTO_G.push([x, z]); for (let z = 11; z <= 15; z++) if (tipo(x, z) === 'pastoV') PASTO_V.push([x, z]); }
 }
-const andavel = (x, z) => { const t = tipo(x, z); return !!t && t !== 'cerca' && t !== 'predio' && t !== 'arvore' && t !== 'feno'; };
+const andavel = (x, z) => { const t = tipo(x, z); return !!t && t !== 'cerca' && t !== 'predio' && t !== 'arvore' && t !== 'feno' && t !== 'mata' && t !== 'orlaF'; };
 
 function rota(sx, sz, gx, gz){
   if (!andavel(gx, gz)) return null;
@@ -1224,6 +1234,15 @@ function vArvore(tipoA){
   v.ell(3.5, 10, 3.5, 4.6, 4, 4.6, cor);
   v.ell(3.5, 13.5, 3.5, 3.2, 2.6, 3.2, cor);
   if (tipoA !== 1) for (const e of v.m.values()) if (e.y >= 8 && hash(e.x, e.y + 5, e.z) < 0.07) e.c = tipoA === 0 ? 0xe0483c : 0xf2902f;
+  return v;
+}
+function vCopa(tipoA){
+  const v = new Vox(), verdes = [[0x2f7a3a, 0x3c8f45, 0x276b33], [0x3f8f3a, 0x357f31, 0x2c6e33], [0x4e8f3a, 0x437f31, 0x356b2c]][tipoA];
+  const cor = (x, y, z) => verdes[Math.floor(hash(x, y, z) * 3)];
+  v.box(3, 0, 3, 4, 6, 4, 0x5e4028);
+  if (tipoA === 0) v.ell(3.5, 8.5, 3.5, 3.5, 3.4, 3.5, cor);
+  else if (tipoA === 1) v.ell(3.5, 10, 3.5, 2.7, 4.4, 2.7, cor);
+  else v.ell(3.5, 7.5, 3.5, 4.1, 2.4, 4.1, cor);
   return v;
 }
 function vArbusto(){ const v = new Vox(); v.ell(3.5, 2.6, 3.5, 3.6, 2.9, 3.6, (x, y, z) => hash(x, y, z) < 0.08 ? 0xf27fa4 : (hash(z, x, y) < 0.5 ? 0x5aa845 : 0x4f9a3d)); return v; }
@@ -1853,7 +1872,6 @@ function iniciarRender(){
   camera = new THREE.OrthographicCamera(-10, 10, 10, -10, -100, 300);
   ceuLuz = new THREE.HemisphereLight(0xfffaf0, 0xa89a78, 0.58); scene.add(ceuLuz);
   sol = new THREE.DirectionalLight(0xfff0d8, 0.68);
-  sol.position.set(W / 2 + 14, 26, H / 2 + 8); sol.target.position.set(W / 2, 0, H / 2);
   sol.castShadow = true; sol.shadow.mapSize.set(2048, 2048);
   Object.assign(sol.shadow.camera, { left: -22, right: 22, top: 22, bottom: -22, near: 1, far: 80 });
   sol.shadow.bias = -0.0006; sol.shadow.normalBias = 0.02;
@@ -1873,6 +1891,9 @@ function redimensionar(){
 function posicionarCamera(){
   const d = new THREE.Vector3(Math.sin(cam.az) * Math.cos(cam.el), Math.sin(cam.el), Math.cos(cam.az) * Math.cos(cam.el));
   camera.position.copy(cam.alvo).addScaledVector(d, 60);
+  // a sombra cobre um quadrado em volta da câmera, porque o mapa inteiro não caberia nela com nitidez; anda de ladrilho em ladrilho para não tremer
+  const sx = Math.round(cam.alvo.x), sz = Math.round(cam.alvo.z);
+  sol.position.set(sx + 14, 26, sz + 8); sol.target.position.set(sx, 0, sz);
   camera.lookAt(cam.alvo);
   const a = innerWidth / innerHeight;
   camera.left = -cam.vista * a / 2; camera.right = cam.vista * a / 2; camera.top = cam.vista / 2; camera.bottom = -cam.vista / 2;
@@ -2042,6 +2063,8 @@ function corChao(t, gx, gz){
   const r = hash(gx, 1, gz), r2 = hash(gx >> 1, 2, gz >> 1);
   switch (t){
     case 'caminho': return r < 0.5 ? 0xdcc08a : 0xd2b47c;
+    case 'orla': case 'orlaF': return r2 < 0.5 ? (r < 0.5 ? 0x68ae4a : 0x62a646) : (r < 0.5 ? 0x70b64e : 0x6aae4a);
+    case 'mata': return r2 < 0.5 ? (r < 0.5 ? 0x3f6e34 : 0x3a6630) : (r < 0.5 ? 0x4a7a3a : 0x5a7a38);
     case 'pista': {
       // terra batida com faixa central tracejada e marcas brancas nas pontas
       const meio = (PISTA_Z0 + PISTA_Z1 + 1) * 2;
@@ -2085,13 +2108,40 @@ function construirChao(){
   const tf = new Vox();
   for (let gz = Z_PISTA * 16; gz < H * 16; gz++) for (let gx = 0; gx < W * 16; gx++){
     const t = tipoChao(gx >> 4, Math.floor(gz / 16));
-    if (t !== 'grama' && t !== 'pastoV') continue;
+    if (t !== 'grama' && t !== 'pastoV' && t !== 'orla' && t !== 'orlaF') continue;
     const r = hash(gx, 5, gz);
     if (r < 0.012){ const h = 1 + (r < 0.005 ? 1 : 0); tf.box(gx, 0, gz, gx, h - 1, gz, r < 0.006 ? 0x5ea341 : 0x6db74a); if (r < 0.0012) tf.set(gx, h, gz, sorteiaH([0xf2d14a, 0xffffff, 0xf27fa4], gx, gz)); }
   }
   const mt = new THREE.Mesh(tf.build(1 / 16, { origin: [0, 0, 0], jitter: 0.02 }), MAT); mt.receiveShadow = true; scene.add(mt);
 }
 function colocar(m, x, y, z, ry = 0){ m.position.set(x, y, z); m.rotation.y = ry; scene.add(m); return m; }
+// a floresta do outro lado da estrada: a mata é desenhada por instâncias, centenas de árvores em poucas chamadas de desenho.
+// Não projeta sombra (o chão escuro faz esse papel), porque a passada de sombra dobraria os triângulos num celular
+const MATA_MODELOS = 3;
+const MATA_CORREDOR = [];
+function instanciasMata(geom, lista){
+  const im = new THREE.InstancedMesh(geom, MAT, lista.length), M = new THREE.Matrix4(), q = new THREE.Quaternion(), eixo = new THREE.Vector3(0, 1, 0);
+  lista.forEach(([x, z, ry, s], i) => im.setMatrixAt(i, M.compose(new THREE.Vector3(x, 0, z), q.setFromAxisAngle(eixo, ry), new THREE.Vector3(s, s, s))));
+  // a esfera de recorte da geometria fica na origem e esconderia as instâncias
+  im.frustumCulled = false; im.receiveShadow = true;
+  scene.add(im);
+  return im;
+}
+function montarMata(){
+  const modelos = Array.from({ length: MATA_MODELOS }, () => []);
+  const corredores = PARCELAS.map(() => []);
+  for (let z = Z_MATA; z < H; z++) for (let x = 0; x < W; x++){
+    if (hash(x, 31, z) > 0.74) continue;
+    const item = [x + 0.5 + (hash(x, 32, z) - 0.5) * 0.4, z + 0.5 + (hash(x, 33, z) - 0.5) * 0.4, Math.floor(hash(x, 34, z) * 4) * Math.PI / 2, 0.9 + hash(x, 35, z) * 0.3];
+    const p = PARCELAS.findIndex(P => x >= P.x0 && x <= P.x1 && z >= P.z0 && z <= P.z1);
+    if (p >= 0 && Math.abs(x - PARCELAS[p].col) <= 1) corredores[p].push(item);
+    else modelos[Math.floor(hash(x, 36, z) * MATA_MODELOS)].push(item);
+  }
+  const g = i => geo('copa' + i, () => vCopa(i).build(1 / 8, { origin: [4, 0, 4] }));
+  modelos.forEach((lista, i) => instanciasMata(g(i), lista));
+  corredores.forEach((lista, p) => { MATA_CORREDOR[p] = instanciasMata(g(0), lista); });
+}
+
 function construirCenario(){
   for (const p of PREDIOS){
     if (p.fab) continue;
@@ -5651,6 +5701,7 @@ function itensDoAlvoBase(alvo){
     return r;
   }
   if (alvo.k === 'ed'){ falar(ed, sorteia(['Oinc! Bora trabalhar.', 'Essa fazenda não se cuida sozinha.', 'Será que o Beto vem hoje?', 'Cenoura é vida.', 'Toque no chão que eu vou até lá.']), 2); Som.oinc(); return null; }
+  if (alvo.k === 'floresta'){ r.titulo = 'Mata nativa'; r.icone = 'mato'; r.estado = 'Floresta protegida: aqui ninguém corta nem planta.'; return r; }
   if (alvo.k === 'maca'){
     r.titulo = 'Maçã'; r.icone = 'maca';
     const tarefa = fila.find(t => t.tipo === 'comerMaca');
@@ -6300,6 +6351,7 @@ function alvoNaTela(cx, cy){
       const p = PREDIO_EM[iT(x, z)];
       if (p) return { k: 'predio', p };
       const t = tipo(x, z);
+      if (t === 'mata' || t === 'orlaF') return { k: 'floresta', x, z };
       if (t === 'arvore') return { k: 'arvore', x, z, arbusto: ARBUSTOS.some(([a, b]) => a === x && b === z) };
       for (const tp in COLETOR) if (S.coletor[tp] && COLETOR[tp].x === x && COLETOR[tp].z === z) return { k: 'coletor', tp };
       for (const tp in ALIMENTADOR) if (S.alimentador[tp] && ALIMENTADOR[tp].x === x && ALIMENTADOR[tp].z === z) return { k: 'alimentador', tp };
@@ -6520,6 +6572,7 @@ async function iniciar(){
   scene.add(marcaSel); scene.add(marcaHover);
   construirChao();
   construirCenario();
+  montarMata();
   montarLotes();
   // o terreiro chega junto com o café, depois da cena do Pelúcio
   if (S.viuCinePelucio) estFab('terreiro').feita = true;
@@ -6573,7 +6626,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // o Safari do iPhone ignora o user-scalable do viewport: sem isso a pinça amplia a página e as janelas saem da tela
 for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
