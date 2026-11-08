@@ -6366,6 +6366,85 @@ function entregarPedido(i){
   falaBeto = dadosVisita().pedido || 'Perfeito, irmão! Era isso mesmo.';
   hud(); salvar(); reabrirBeto();
 }
+// ================= levar a fazenda para outro aparelho
+// o save viaja depois do # do link, parte que o navegador não envia a servidor nenhum
+const CHAVE_ANTERIOR = CHAVE_SALVO + '.anterior', FORMATO_LINK = 'fazenda=1.', LIMITE_SAVE = 256 * 1024;
+let fazendaNova = false;
+function problemaNoSave(d){
+  const obj = v => !!v && typeof v === 'object' && !Array.isArray(v), num = v => typeof v === 'number' && isFinite(v);
+  const tem = (tab, k) => Object.prototype.hasOwnProperty.call(tab, k), numeros = o => o === undefined || (obj(o) && Object.values(o).every(num));
+  // o jogo só grava identificadores: um link alterado não pode levar HTML para as janelas que mostram esses valores
+  const limpo = v => typeof v === 'string' ? /^[\w ,.-]*$/.test(v) : Array.isArray(v) ? v.every(limpo) : obj(v) ? Object.entries(v).every(([k, x]) => k !== '__proto__' && limpo(k) && limpo(x)) : true;
+  const corrompido = 'Esse save está corrompido.';
+  if (!obj(d) || !obj(d.campo) || !num(d.xp) || !num(d.dinheiro) || !limpo(d)) return corrompido;
+  if ((d.versao || 1) > estadoNovo().versao) return 'Esse save veio de uma versão mais nova do jogo. Recarregue a página e tente de novo.';
+  if ((d.racao !== undefined && !num(d.racao)) || (d.adubo !== undefined && !num(d.adubo)) || !numeros(d.bolsa) || !numeros(d.celeiro) || !numeros(d.guardados)) return corrompido;
+  // uma chave que o jogo não conhece quebraria o carregamento
+  if (!Object.values(d.campo).every(t => obj(t) && (t.c == null || tem(CULTURAS, t.c)))) return corrompido;
+  if (!Object.keys(d.bolsa || {}).every(k => tem(CULTURAS, k)) || !Object.keys(d.celeiro || {}).every(k => tem(PRODUTOS, k))) return corrompido;
+  if (!(d.animais || []).every(a => obj(a) && tem(ANIMAIS, a.tipo) && num(a.x) && num(a.z))) return corrompido;
+  if (!(d.pomar || []).every(p => !p || tem(FRUTIFERAS, p.tipo))) return corrompido;
+  if (!(d.enfeites || []).every(e => obj(e) && tem(ENFEITES, e.tipo) && num(e.x) && num(e.z))) return corrompido;
+  return null;
+}
+function avaliarFazenda(texto){
+  try {
+    const d = JSON.parse(texto), erro = problemaNoSave(d);
+    return erro ? { erro } : { texto, d };
+  } catch (e){ return { erro: 'Esse save está corrompido.' }; }
+}
+// lê aos poucos para parar no limite: alguns KB comprimidos podem virar gigabytes
+async function descomprimir(bytes){
+  const leitor = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader(), partes = [];
+  let total = 0;
+  for (;;){
+    const { done, value } = await leitor.read();
+    if (done) break;
+    total += value.length;
+    if (total > LIMITE_SAVE){ leitor.cancel(); throw new Error('grande demais'); }
+    partes.push(value);
+  }
+  return new TextDecoder().decode(await new Blob(partes).arrayBuffer());
+}
+function codigoNoEndereco(){
+  const h = location.hash.slice(1);
+  if (!h.startsWith('fazenda=')) return null;
+  // sai do endereço na hora, senão recarregar a página repetiria a pergunta
+  history.replaceState(null, '', location.pathname + location.search);
+  return h;
+}
+async function decodificarFazenda(codigo){
+  if (!window.DecompressionStream) return { erro: 'Este navegador não abre links de fazenda. Use o arquivo.' };
+  if (!codigo.startsWith(FORMATO_LINK)) return { erro: 'Esse link veio de uma versão mais nova do jogo. Recarregue a página e tente de novo.' };
+  try {
+    const b64 = codigo.slice(FORMATO_LINK.length).replace(/-/g, '+').replace(/_/g, '/');
+    return avaliarFazenda(await descomprimir(Uint8Array.from(atob(b64), c => c.charCodeAt(0))));
+  } catch (e){ return { erro: 'Esse link está incompleto ou corrompido.' }; }
+}
+const quandoSalvo = t => t ? new Date(t).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'data desconhecida';
+function receberFazenda(r){
+  if (r.erro){ setTimeout(() => aviso(r.erro, 'ruim', 5), 400); return; }
+  const { texto, d } = r, salvoAqui = S.salvoEm || 0, temFazenda = !fazendaNova || S.xp > 0;
+  const cartao = (titulo, f, em) => `<div class="cartao"><div class="cab"><img src="${icone('casa')}" alt=""><div><h4>${titulo}</h4><div class="info">Nível ${nivelDe(f.xp)} · ${reais(f.dinheiro)} · salva em ${quandoSalvo(em)}</div></div></div></div>`;
+  abrirJanela(topo('casa', 'Trazer esta fazenda?', 'De outro aparelho') + `<div class="janela-corpo">
+    ${cartao('A fazenda que chegou', d, d.salvoEm)}
+    ${temFazenda ? `<div style="height:8px"></div>${cartao('A fazenda deste aparelho', S, salvoAqui)}` : ''}
+    ${temFazenda && (d.salvoEm || 0) < salvoAqui ? '<p style="color:var(--vermelho);font-weight:800">A fazenda que chegou é mais antiga que a deste aparelho.</p>' : ''}
+    <p>${temFazenda ? 'Ela substitui a fazenda deste aparelho. Se mudar de ideia, dá para voltar nos Ajustes.' : 'Ela vai ser a sua fazenda neste aparelho.'}</p>
+    <div class="ajuste"><button class="botao mini claro" type="button" data-fechar>agora não</button><button class="botao mini verde" id="jTrazer" type="button">trazer</button></div></div>`);
+  $('jTrazer').addEventListener('click', () => aplicarFazenda(texto, temFazenda));
+}
+function aplicarFazenda(texto, guardarAtual){
+  try {
+    if (guardarAtual){ salvar(); localStorage.setItem(CHAVE_ANTERIOR, localStorage.getItem(CHAVE_SALVO)); }
+    localStorage.setItem(CHAVE_SALVO, texto);
+  } catch (e){ aviso('Não deu para gravar a fazenda neste aparelho.', 'ruim', 5); return; }
+  // como no recomeçar: o salvamento ao fechar a página sobrescreveria a fazenda que acabou de chegar
+  zerando = true;
+  location.reload();
+}
+function fazendaAnterior(){ try { return localStorage.getItem(CHAVE_ANTERIOR); } catch (e){ return null; } }
+
 function abrirAjustes(){
   abrirJanela(topo('casa', 'Ajustes', 'Fazenda Joli Pig') + `<div class="janela-corpo">
     <div class="ajuste"><span>Som</span><button class="botao mini" id="jSom" type="button">${S.som ? 'ligado' : 'desligado'}</button></div>
@@ -6373,6 +6452,7 @@ function abrirAjustes(){
     <div class="ajuste"><span>Dicas</span><button class="botao mini" id="jDicas" type="button">${S.dicas ? 'ligadas' : 'desligadas'}</button></div>
     <div class="ajuste"><span>Como jogar</span><button class="botao mini" id="jAjuda" type="button">abrir</button></div>
     <div class="ajuste"><span>Rever as cenas</span><button class="botao mini" id="jCenas" type="button"><img src="${icone('claquete')}" alt="" style="width:20px;height:20px;vertical-align:-5px;margin-right:4px">abrir</button></div>
+    ${fazendaAnterior() ? '<div class="ajuste"><span>Voltar para a fazenda anterior</span><button class="botao mini" id="jVoltar" type="button">voltar</button></div>' : ''}
     <div class="ajuste"><span>Recomeçar a fazenda do zero</span><button class="botao mini rosa" id="jZerar" type="button">recomeçar</button></div>
     <p style="margin-top:14px"><a href="../">← voltar para os jogos do slop</a></p></div>`);
   $('jSom').addEventListener('click', () => { S.som = !S.som; Som.ligar(); Som.clique(); salvar(); abrirAjustes(); });
@@ -6385,6 +6465,11 @@ function abrirAjustes(){
   $('jDicas').addEventListener('click', () => { S.dicas = !S.dicas; atualizarDica(); salvar(); abrirAjustes(); });
   $('jAjuda').addEventListener('click', mostrarAjuda);
   $('jCenas').addEventListener('click', () => { Som.clique(); abrirCenas(); });
+  const voltar = $('jVoltar');
+  if (voltar) voltar.addEventListener('click', () => {
+    if (!voltar.dataset.certeza){ voltar.dataset.certeza = '1'; voltar.textContent = 'tocar de novo para voltar'; return; }
+    aplicarFazenda(fazendaAnterior(), true);
+  });
   // confirmação dentro do jogo: o primeiro toque pede certeza, o segundo apaga
   $('jZerar').addEventListener('click', e => {
     const b = e.currentTarget;
@@ -6753,7 +6838,9 @@ async function iniciar(){
   gerarIcones();
   document.querySelectorAll('img[data-icone]').forEach(i => { i.src = icone(i.dataset.icone); });
   montarMapa();
+  const codigo = codigoNoEndereco(), chegando = codigo ? await decodificarFazenda(codigo) : null;
   const novo = carregar();
+  fazendaNova = novo;
   proxCafezinho = sorteioCafezinho();
   // o tempo do Hud e o prazo dos pedidos ficam parados enquanto o jogo está fechado
   if (!novo && S.salvoEm) pausarRelogios(Date.now() - S.salvoEm);
@@ -6814,10 +6901,11 @@ async function iniciar(){
   hud(); atualizarDica();
   $('carregando').hidden = true;
   ultimoReal = Date.now();
+  if (chegando) receberFazenda(chegando);
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // o Safari do iPhone ignora o user-scalable do viewport: sem isso a pinça amplia a página e as janelas saem da tela
 for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
