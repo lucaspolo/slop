@@ -2678,8 +2678,8 @@ function montarColetor(tp){
   // um enfeite que estivesse no lugar volta para a loja
   // (e também os que estiverem em volta, para o Ed conseguir chegar)
   const voltaram = [];
-  for (const e of S.enfeites.slice()) if (perto1(C, e.x, e.z)){ removerEnfeite(e); S.guardados[e.tipo] = (S.guardados[e.tipo] || 0) + 1; voltaram.push(ENFEITES[e.tipo].nome.toLowerCase()); }
-  if (voltaram.length) aviso(voltaram.length === 1 ? `O ${voltaram[0]} estava no caminho do coletor e voltou para a loja, em Enfeites` : `Alguns enfeites estavam no caminho do coletor e voltaram para a loja, em Enfeites`, 'ruim', 5);
+  for (const e of S.enfeites.slice()) if (perto1(C, e.x, e.z)){ removerEnfeite(e); S.guardados[e.tipo] = (S.guardados[e.tipo] || 0) + 1; voltaram.push(ENFEITES[e.tipo].art.toUpperCase() + ' ' + ENFEITES[e.tipo].nome[0].toLowerCase() + ENFEITES[e.tipo].nome.slice(1)); }
+  if (voltaram.length) aviso(voltaram.length === 1 ? `${voltaram[0]} estava no caminho do coletor e voltou para a loja, em Enfeites` : `Alguns enfeites estavam no caminho do coletor e voltaram para a loja, em Enfeites`, 'ruim', 5);
   const m = colocar(malha(geo('col' + tp, () => vColetor(tp === 'vaca').build(1 / 16, { origin: [8, 0, 8] }))), C.x + 0.5, 0, C.z + 0.5);
   m.traverse(o => { o.userData.alvo = { k: 'coletor', tp }; }); pickaveis.push(m); COL_MALHA[tp] = m;
   setT(C.x, C.z, 'feno');
@@ -2984,27 +2984,28 @@ function encerrarCine(){
 // ================= enfeites: comprados na loja, colocados em qualquer gramado livre
 // o espantalho espanta o mato dos canteiros em volta; os outros só deixam a fazenda bonita (e dão um pouquinho de xp, só na compra)
 const ENFEITES = {
-  canteiroFlor: { nome: 'Canteiro de flores', preco: 60, nivel: 2, xp: 1 },
-  banco:        { nome: 'Banco de praça', preco: 150, nivel: 3, xp: 2 },
-  espantalho:   { nome: 'Espantalho', preco: 400, nivel: 5, xp: 3, desc: 'Os canteiros a até 3 passos dele não dão mato.' },
-  poste:        { nome: 'Poste de luz', preco: 300, nivel: 6, xp: 2 },
-  fonte:        { nome: 'Chafariz', preco: 1500, nivel: 9, xp: 6 },
-  estatua:      { nome: 'Estátua do Ed', preco: 5000, nivel: 14, xp: 15 },
+  canteiroFlor: { nome: 'Canteiro de flores', art: 'o', preco: 60, nivel: 2, xp: 1 },
+  banco:        { nome: 'Banco de praça', art: 'o', preco: 150, nivel: 3, xp: 2 },
+  espantalho:   { nome: 'Espantalho', art: 'o', preco: 400, nivel: 5, xp: 3, desc: 'Os canteiros a até 3 passos dele não dão mato.' },
+  poste:        { nome: 'Poste de luz', art: 'o', preco: 300, nivel: 6, xp: 2 },
+  fonte:        { nome: 'Chafariz', art: 'o', preco: 1500, nivel: 9, xp: 6 },
+  estatua:      { nome: 'Estátua do Ed', art: 'a', preco: 5000, nivel: 14, xp: 15 },
 };
 const RAIO_ESPANTALHO = 3;
 const ENF_VIS = {};
 // o Ed precisa chegar ao coletor: os ladrilhos em volta dele (diagonais também) ficam livres
 const perto1 = (a, x, z) => Math.max(Math.abs(a.x - x), Math.abs(a.z - z)) <= 1;
 const pertoDoColetor = (x, z) => Object.values(COLETOR).some(C => perto1(C, x, z));
-function livreParaEnfeite(x, z){
+// as regras de sempre, sem a do coletor
+function livreSemColetor(x, z){
   const t = tipo(x, z);
   if (t !== 'grama' && t !== 'pastoV') return false;
   if (loteDe(x, z) >= 0 || campo(x, z) || blocoEm(x, z) > 0) return false;
   if (S.enfeites.some(e => e.x === x && e.z === z)) return false;
-  if (pertoDoColetor(x, z)) return false;
   if (Math.hypot(ed.pos.x - x - 0.5, ed.pos.y - z - 0.5) < 0.6) return false;
   return t === 'grama';
 }
+const livreParaEnfeite = (x, z) => livreSemColetor(x, z) && !pertoDoColetor(x, z);
 function montarEnfeite(e){
   const k = e.x + ',' + e.z;
   if (ENF_VIS[k]){ scene.remove(ENF_VIS[k]); const i = pickaveis.indexOf(ENF_VIS[k]); if (i >= 0) pickaveis.splice(i, 1); }
@@ -3039,7 +3040,7 @@ function ligarModoEnfeite(id){
 }
 function colocarEnfeite(id, x, z){
   if (!S.guardados[id]) return false;
-  if (pertoDoColetor(x, z)){ Som.erro(); aviso('Aí fica o caminho do Ed até o coletor', 'ruim'); return false; }
+  if (livreSemColetor(x, z) && pertoDoColetor(x, z)){ Som.erro(); aviso('Aí fica o caminho do Ed até o coletor', 'ruim'); return false; }
   if (!livreParaEnfeite(x, z)){ Som.erro(); aviso('Escolha um gramado livre, fora dos canteiros e caminhos', 'ruim'); return false; }
   S.guardados[id]--; if (!S.guardados[id]) delete S.guardados[id];
   const e = { tipo: id, x, z, rot: Math.floor(hash(x, 7, z) * 4) };
@@ -4052,7 +4053,10 @@ function animaisEmLote(tipoA, tp, cond){
   if (n) Som.clique();
   else { Som.erro(); if (tipoA === 'alimentar') aviso('Falta ração', 'ruim'); }
 }
-function abrirMenu(alvo, px, py){
+// manter: redesenho ao vivo do mesmo menu; fica no mesmo lugar, com a mesma trava de toque e a mesma confirmação
+function abrirMenu(alvo, px, py, manter){
+  const ant = manter && menuAberto ? menuAberto : null;
+  const posAnt = ant ? [parseFloat($('menu').style.left), parseFloat($('menu').style.top)] : null;
   fecharMenu();
   const r = itensDoAlvo(alvo);
   if (!r) return;
@@ -4069,11 +4073,12 @@ function abrirMenu(alvo, px, py){
   h += '</div>';
   m.innerHTML = h;
   m.hidden = false;
-  menuAberto = { alvo, r };
+  const est = menuAberto = { alvo, r, abertoEm: ant ? ant.abertoEm : performance.now(), conf: ant ? ant.conf : -1 };
   // o menu nunca fica embaixo do dedo: ao lado do toque quando cabe; senão, acima ou abaixo dele
   const w = m.offsetWidth, hh = m.offsetHeight, folga = 28;
   let x, y;
-  if (px + folga + w <= innerWidth - 12){ x = px + folga; y = py - 20; }
+  if (posAnt){ x = clamp(posAnt[0], 12, Math.max(12, innerWidth - w - 12)); y = posAnt[1]; }
+  else if (px + folga + w <= innerWidth - 12){ x = px + folga; y = py - 20; }
   else if (px - folga - w >= 12){ x = px - folga - w; y = py - 20; }
   else {
     x = clamp(px - w / 2, 12, innerWidth - w - 12);
@@ -4083,16 +4088,21 @@ function abrirMenu(alvo, px, py){
   y = clamp(y, 12, Math.max(12, innerHeight - hh - 12));
   m.style.left = x + 'px'; m.style.top = y + 'px';
   if (alvo.k === 'tile') marcar(marcaSel, alvo.x, alvo.z);
-  const abertoEm = performance.now();
+  const marcarConfirmar = b => {
+    const it = r.itens[+b.dataset.i];
+    b.classList.add('confirmar');
+    b.querySelector('span').innerHTML = `${esc(it.confirmar)}<small>${esc(it.sub || '')}</small>`;
+  };
+  const bc = est.conf >= 0 && m.querySelector(`.item[data-i="${est.conf}"]`);
+  if (bc && r.itens[est.conf].confirmar && !r.itens[est.conf].off) marcarConfirmar(bc); else est.conf = -1;
   m.querySelectorAll('.item').forEach(b => b.addEventListener('click', ev => {
     ev.stopPropagation();
     // o mesmo toque que abriu o menu (ou um toque duplo sem querer) não escolhe nada
-    if (performance.now() - abertoEm < 450) return;
+    if (performance.now() - est.abertoEm < 450) return;
     const it = r.itens[+b.dataset.i];
     if (it.off) return;
     if (it.confirmar && !b.classList.contains('confirmar')){
-      b.classList.add('confirmar');
-      b.querySelector('span').innerHTML = `${esc(it.confirmar)}<small>${esc(it.sub || '')}</small>`;
+      marcarConfirmar(b); est.conf = +b.dataset.i;
       Som.erro();
       return;
     }
@@ -4102,7 +4112,7 @@ function abrirMenu(alvo, px, py){
     if (it.modo && fila.length > antes) ligarModo(it.modo, it);
   }));
   const primeiro = m.querySelector('.item:not(.off)');
-  if (primeiro && !matchMedia('(pointer:coarse)').matches) primeiro.focus({ preventScroll: true });
+  if (primeiro && !manter && !matchMedia('(pointer:coarse)').matches) primeiro.focus({ preventScroll: true });
 }
 function fecharMenu(){ $('menu').hidden = true; menuAberto = null; marcaSel.visible = false; }
 function ligarModo(m, it){
@@ -4756,10 +4766,10 @@ function atualizarEstadoMenu(){
   if (!r) return;
   // botões que mudaram (xp, "o Ed já vai", ligado ou desligado): só reabre se algo for diferente
   const assina = x => JSON.stringify(x.itens.map(i => [i.rotulo, i.sub, !!i.off]));
-  if (assina(r) !== assina(menuAberto.r)){ const m = $('menu'); abrirMenu(menuAberto.alvo, parseFloat(m.style.left) - 14, parseFloat(m.style.top) + 20); return; }
+  if (assina(r) !== assina(menuAberto.r)){ const m = $('menu'); abrirMenu(menuAberto.alvo, 0, 0, true); return; }
   const e = $('menu').querySelector('.estado'), p = $('menu').querySelector('.prog i');
   if (e && r.estado && e.textContent !== r.estado){
-    if (r.itens.length !== menuAberto.r.itens.length){ const m = $('menu'); abrirMenu(menuAberto.alvo, parseFloat(m.style.left) - 14, parseFloat(m.style.top) + 20); return; }
+    if (r.itens.length !== menuAberto.r.itens.length){ const m = $('menu'); abrirMenu(menuAberto.alvo, 0, 0, true); return; }
     e.textContent = r.estado;
   }
   if (p && r.prog != null) p.style.width = Math.round(clamp(r.prog, 0, 1) * 100) + '%';
