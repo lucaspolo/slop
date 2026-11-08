@@ -3079,7 +3079,17 @@ const CAFE_LUGARES = [[11, 4.5], [8, 4.5], [10.5, 5], [9.5, 5]];
 const CAFE_ASSENTO = { ed: [0, -0.85], hud: [-0.85, 0], conv: [0.85, 0] };
 const CAFE_BANCO = 6 / 19, CAFE_TOPO = 11 / 19, CAFE_PRATO = [-0.25, 0.15], CAFE_CANECA = [0.28, 0.15], CAFE_GIRO = Math.PI / 4;
 const cafeXZ = (dx, dz) => [cafe.cx + (dx + dz) * Math.SQRT1_2, cafe.cz + (dz - dx) * Math.SQRT1_2];
-let cafe = null, proxCafezinho = 0, cafeForca = null, edParadoDesde = 0;
+let cafe = null, proxCafezinho = 0, cafeForca = null, edParadoDesde = 0, lanchePedido = false;
+// "Tomar um lanchinho", no toque na casa: o cafezinho começa assim que o Ed estiver livre, sem esperar o relógio
+function itemLanche(){
+  const motivo = nivel() < 3 ? 'nível 3' : lanchePedido ? 'o Ed já vai' : voo.estado !== 'fora' ? 'quando o Milton decolar' : !lugarCafe() ? 'falta um cantinho livre' : null;
+  return { rotulo: 'Tomar um lanchinho', sub: motivo || 'chocolate quente na frente da casa', icone: 'caneca', off: !!motivo, fn: pedirLanche };
+}
+function pedirLanche(){
+  lanchePedido = true;
+  if (caminhaoE.estado !== 'longe') aviso('O Ed vai lanchar quando o caminhão for embora.');
+  else if (ed.estado !== 'parado' || tarefaAtual) aviso('O Ed vai lanchar quando terminar o que está fazendo.');
+}
 const sorteioCafezinho = () => Date.now() + rnd(10, 20) * 60000;
 // o lugar serve se a mesa, os cantos dela e os banquinhos caírem em ladrilhos livres (sem construção, árvore, feno, terreno nem enfeite)
 const lugarCafe = () => CAFE_LUGARES.find(([x, z]) => [[0, 0], [0.52, 0.52], [-0.52, 0.52], [0.52, -0.52], [-0.52, -0.52], ...Object.values(CAFE_ASSENTO)].every(([dx, dz]) => {
@@ -3707,9 +3717,10 @@ const CENAS = {
   cafezinho: {
     flag: 'viuCafezinho', nivel: () => 3, repete: true, icone: 'caneca',
     get falas(){ return cafe ? cafe.falas : []; },
-    titulo: 'Um cafezinho', desc: 'O Ed faz uma pausa na frente da casa.', trancada: 'acontece de vez em quando, a partir do nível 3',
-    // de vez em quando: relógio vencido, nível 3, Ed parado há 20 s sem nada para fazer, avião fora e um cantinho livre
-    pronta: () => Date.now() >= proxCafezinho && nivel() >= 3 && !!S.viuCineInicio && voo.estado === 'fora' && !!edParadoDesde && performance.now() - edParadoDesde >= 20000 && !!lugarCafe(),
+    titulo: 'Um cafezinho', desc: 'O Ed faz uma pausa na frente da casa.', trancada: 'acontece de vez em quando a partir do nível 3, ou toque na casa e escolha "Tomar um lanchinho"',
+    // nível 3, avião fora e um cantinho livre; e então o lanchinho pedido na casa (fora do modo enfeite) ou, de vez em quando, relógio vencido com o Ed parado há 20 s sem nada para fazer
+    pronta: () => nivel() >= 3 && !!S.viuCineInicio && voo.estado === 'fora' && !!lugarCafe()
+      && (lanchePedido ? !modo : Date.now() >= proxCafezinho && !!edParadoDesde && performance.now() - edParadoDesde >= 20000),
     podeRever: () => (voo.estado !== 'fora' ? 'Dá para rever quando o Milton decolar.' : !lugarCafe() ? 'Falta um cantinho livre na frente da casa.' : null),
     foco: () => (cafe.mesaOn ? new THREE.Vector3(cafe.cx - 0.05, 0.5, cafe.cz - 0.1) : new THREE.Vector3(ed.pos.x, 0.4, ed.pos.y)), // até a mesa surgir, a câmera segue o Ed
     cameraRapida: c => c.passo === 'c-monta',
@@ -3721,6 +3732,7 @@ const CENAS = {
       caminhaoE.estado = 'cine';
       cam.azAlvo = azPerto(Math.PI / 4);
       const [lx, lz] = lugarCafe() || CAFE_LUGARES[0], plano = sortearCafe();
+      lanchePedido = false;
       cafe = { cx: lx, cz: lz, mesaOn: false, plano, rel: 0, nasce: 0, agenda: [], gole: 3, vap: 0, comeu: false, encolhe: false, t0: Date.now() };
       // o Hud que está ajudando solta o canteiro e a tarefa e vem de onde estiver
       if (plano.hud && plano.hudModo !== 'casa' && irmaoHud.g.visible){
@@ -5377,7 +5389,7 @@ function itemAndar(alvo){ return { rotulo: 'Ir até aqui', icone: 'ed', leve: tr
 function itensPredio(p){
   if (p.fab) return itensFabrica(p.fab);
   const r = { titulo: p.nome, itens: [] };
-  if (p.id === 'casa'){ r.icone = 'casa'; r.estado = 'A casinha rosa do Ed.'; if (nivel() >= HUD.nivel - 1) r.itens.push(...itensHud().itens); r.itens.push({ rotulo: 'Como jogar', icone: 'ed', fn: mostrarAjuda }); r.itens.push({ rotulo: 'Ajustes', icone: 'casa', leve: true, fn: abrirAjustes }); }
+  if (p.id === 'casa'){ r.icone = 'casa'; r.estado = 'A casinha rosa do Ed.'; if (nivel() >= HUD.nivel - 1) r.itens.push(...itensHud().itens); if (S.viuCineInicio) r.itens.push(itemLanche()); r.itens.push({ rotulo: 'Como jogar', icone: 'ed', fn: mostrarAjuda }); r.itens.push({ rotulo: 'Ajustes', icone: 'casa', leve: true, fn: abrirAjustes }); }
   if (p.id === 'celeiro'){ r.icone = 'celeiro'; r.estado = 'Onde fica guardado tudo o que o Ed colhe.'; r.itens.push({ rotulo: 'Abrir o celeiro', icone: 'celeiro', fn: abrirCeleiro }); r.itens.push(itemBeto()); }
   if (p.id === 'poco'){ r.icone = 'poco'; r.estado = 'Água fresquinha. O Ed enche o regador aqui.'; r.itens.push({ rotulo: 'Ir até o poço', icone: 'regador', leve: true, fn: () => enfileirar('andar', { k: 'tile', x: 9, z: 4 }) }); }
   if (p.id === 'correio'){ r.icone = 'caderno'; r.estado = 'O Ed anota os pedidos do Joli Market no caderno.'; r.itens.push({ rotulo: 'Abrir o caderno do Ed', icone: 'caderno', fn: abrirCaderno }); r.itens.push(itemBeto()); }
@@ -5923,7 +5935,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Oferta do dia:</b> um produto vale 50% a mais naquele dia.</li>
       <li><b>Estações:</b> seguem o calendário. As culturas da estação colhem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais. ${nomesRend1()}, que rendem 1, valem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais no Beto e no Jaca, mas esse bônus de preço não soma com a oferta do dia. Toque no selo da estação para ver quais.</li>
       <li><b>Figurinhas:</b> metas de longo prazo no caderno, que dão xp.</li>
-      <li><b>Cenas:</b> as cenas da história ficam guardadas e podem ser revistas nos Ajustes ou no caderno do Ed. Rever uma cena não muda nada na fazenda. De vez em quando o Ed para para um cafezinho na frente da casa, às vezes com visita.</li>
+      <li><b>Cenas:</b> as cenas da história ficam guardadas e podem ser revistas nos Ajustes ou no caderno do Ed. Rever uma cena não muda nada na fazenda. De vez em quando o Ed para para um cafezinho na frente da casa, às vezes com visita. Para chamar na hora, toque na casa e escolha Tomar um lanchinho.</li>
       <li><b>Pista do Milton:</b> atrás da fazenda, o Milton, irmão do Ed, pousa de tempos em tempos o teco-teco PIG-MTP. Ele traz sementes ou ração e paga uma taxa pelo uso da pista. O primeiro pouso vem depois da primeira venda ao Joli Market. Só acontece com o jogo aberto.</li>
       <li><b>Enfeites</b>: comprados na loja e colocados em qualquer gramado livre. Dão xp só na compra.</li>
     </ul>`;
@@ -6273,7 +6285,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // o Safari do iPhone ignora o user-scalable do viewport: sem isso a pinça amplia a página e as janelas saem da tela
 for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
