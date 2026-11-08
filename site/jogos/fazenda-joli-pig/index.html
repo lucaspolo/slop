@@ -2060,7 +2060,7 @@ function itensFabrica(id){
       if (i === 0){
         const prog = clamp(1 - falta / R.tempo, 0, 1);
         vagas += `<div class="vaga fazendo"><img src="${icReceita(f.r)}" alt=""><span class="n">${R.nome}</span><span class="t">faltam ${tempo(falta)}</span><div class="barra"><i style="width:${Math.round(prog * 100)}%"></i></div></div>`;
-      } else vagas += `<div class="vaga"><img src="${icReceita(f.r)}" alt=""><span class="n">${R.nome}</span><span class="t">na fila · ${tempo(falta)}</span></div>`;
+      } else vagas += `<div class="vaga"><img src="${icReceita(f.r)}" alt=""><span class="n">${R.nome}</span><span class="t">fila · ${tempo(falta)}</span></div>`;
     } else if (i < ocupadas){
       const t = levando[i - st.fila.length];
       vagas += `<div class="vaga levando"><img src="${icReceita(t.param)}" alt=""><span class="n">${RECEITAS[t.param].nome}</span><span class="t">Ed levando</span></div>`;
@@ -2621,6 +2621,7 @@ let avisoSemRacao = 0;
 function simularAnimais(){
   const agora = Date.now();
   let comeu = 0, falta = false;
+  const racao0 = S.racao;
   for (const a of ANI){
     const A0 = ANIMAIS[a.d.tipo];
     // com coletor, cada produção vai para a caixa (que guarda uma hora); com alimentador também, o ciclo se repete
@@ -2647,7 +2648,7 @@ function simularAnimais(){
       } else falta = true;
     }
   }
-  if (comeu){ hud(); chipPulsa('chipRacao'); }
+  if (comeu || S.racao !== racao0){ hud(); chipPulsa('chipRacao'); }
   for (const tp in COL_MALHA) atualizarBolhaColetor(tp);
   if (falta && agora - avisoSemRacao > 90000){ avisoSemRacao = agora; aviso('O alimentador automático ficou sem ração', 'ruim', 3.2); }
 }
@@ -2676,7 +2677,9 @@ function montarColetor(tp){
   const C = COLETOR[tp];
   // um enfeite que estivesse no lugar volta para a loja
   // (e também os que estiverem em volta, para o Ed conseguir chegar)
-  for (const e of S.enfeites.slice()) if (Math.max(Math.abs(e.x - C.x), Math.abs(e.z - C.z)) <= 1){ removerEnfeite(e); S.guardados[e.tipo] = (S.guardados[e.tipo] || 0) + 1; }
+  const voltaram = [];
+  for (const e of S.enfeites.slice()) if (perto1(C, e.x, e.z)){ removerEnfeite(e); S.guardados[e.tipo] = (S.guardados[e.tipo] || 0) + 1; voltaram.push(ENFEITES[e.tipo].nome.toLowerCase()); }
+  if (voltaram.length) aviso(voltaram.length === 1 ? `O ${voltaram[0]} estava no caminho do coletor e voltou para a loja, em Enfeites` : `Alguns enfeites estavam no caminho do coletor e voltaram para a loja, em Enfeites`, 'ruim', 5);
   const m = colocar(malha(geo('col' + tp, () => vColetor(tp === 'vaca').build(1 / 16, { origin: [8, 0, 8] }))), C.x + 0.5, 0, C.z + 0.5);
   m.traverse(o => { o.userData.alvo = { k: 'coletor', tp }; }); pickaveis.push(m); COL_MALHA[tp] = m;
   setT(C.x, C.z, 'feno');
@@ -2990,13 +2993,15 @@ const ENFEITES = {
 };
 const RAIO_ESPANTALHO = 3;
 const ENF_VIS = {};
+// o Ed precisa chegar ao coletor: os ladrilhos em volta dele (diagonais também) ficam livres
+const perto1 = (a, x, z) => Math.max(Math.abs(a.x - x), Math.abs(a.z - z)) <= 1;
+const pertoDoColetor = (x, z) => Object.values(COLETOR).some(C => perto1(C, x, z));
 function livreParaEnfeite(x, z){
   const t = tipo(x, z);
   if (t !== 'grama' && t !== 'pastoV') return false;
   if (loteDe(x, z) >= 0 || campo(x, z) || blocoEm(x, z) > 0) return false;
   if (S.enfeites.some(e => e.x === x && e.z === z)) return false;
-  // o Ed precisa chegar ao coletor: os ladrilhos em volta dele (diagonais também) ficam livres
-  for (const tp in COLETOR) if (Math.max(Math.abs(COLETOR[tp].x - x), Math.abs(COLETOR[tp].z - z)) <= 1) return false;
+  if (pertoDoColetor(x, z)) return false;
   if (Math.hypot(ed.pos.x - x - 0.5, ed.pos.y - z - 0.5) < 0.6) return false;
   return t === 'grama';
 }
@@ -3034,6 +3039,7 @@ function ligarModoEnfeite(id){
 }
 function colocarEnfeite(id, x, z){
   if (!S.guardados[id]) return false;
+  if (pertoDoColetor(x, z)){ Som.erro(); aviso('Aí fica o caminho do Ed até o coletor', 'ruim'); return false; }
   if (!livreParaEnfeite(x, z)){ Som.erro(); aviso('Escolha um gramado livre, fora dos canteiros e caminhos', 'ruim'); return false; }
   S.guardados[id]--; if (!S.guardados[id]) delete S.guardados[id];
   const e = { tipo: id, x, z, rot: Math.floor(hash(x, 7, z) * 4) };
@@ -3151,7 +3157,7 @@ function abrirEstacao(){
   const e = estacaoAtual();
   const min = chovendo() ? 0 : Math.max(0, Math.ceil((S.proxChuva - Date.now()) / 60000));
   abrirJanela(topo('semente', e.nome, 'A estação segue o calendário', 'azul') + `<div class="janela-corpo">
-    <p>${e.art} ${e.nome.toLowerCase()}, estas culturas rendem ${PCT_ESTACAO}% a mais na colheita.${e.culturas.some(c => CULTURAS[c].rend < 2) ? ` As que dão só 1 por colheita colhem o mesmo, mas o Beto e o Jaca pagam ${PCT_ESTACAO}% a mais.` : ''} O bônus não soma com a oferta do dia:</p>
+    <p>${e.art} ${e.nome.toLowerCase()}, estas culturas rendem ${PCT_ESTACAO}% a mais na colheita.${e.culturas.some(c => CULTURAS[c].rend < 2) ? ` As que dão só 1 por colheita colhem o mesmo, mas o Beto e o Jaca pagam ${PCT_ESTACAO}% a mais, e esse bônus de preço não soma com a oferta do dia.` : ''} São elas:</p>
     <div class="linhas">${e.culturas.filter(c => CULTURAS[c].nivel <= nivel() + 5).map(c => `<div class="linha"><img src="${icone(CULTURAS[c].produto || c)}" alt=""><div class="nome">${CULTURAS[c].nome}<small>${CULTURAS[c].rend < 2 ? `${reais(PRODUTOS[c].venda)} → ${reais(Math.round(PRODUTOS[c].venda * BONUS_ESTACAO))} cada` : `${CULTURAS[c].rend} → ${rendCultura(c)} por canteiro`}${CULTURAS[c].nivel > nivel() ? ` · nível ${CULTURAS[c].nivel}` : ''}</small></div></div>`).join('')}</div>
     <p style="margin-top:12px">${chovendo() ? 'Está chovendo agora: a chuva rega todos os canteiros.' : `A próxima chuva vem em mais ou menos ${min} min. Ela rega todos os canteiros sozinha.`}</p></div>`);
 }
@@ -3356,6 +3362,8 @@ function atualizarHudIrmao(dt, t){
     return;
   }
   Hd.update(dt, t);
+  // chegou em casa neste quadro: já sumiu, não repete a saída
+  if (!Hd.g.visible) return;
   if (tarefaHud || Hd.estado !== 'parado' || cine) return;
   if (!hudAtivo()){
     if (!Hd.saindo){
@@ -4133,7 +4141,7 @@ function abrirLoja(aba){
     for (const k of ORDEM_CULTURAS){
       const c = CULTURAS[k], bloq = c.nivel > n, tem = S.bolsa[k] || 0;
       corpo += `<div class="cartao${bloq ? ' bloq' : ''}${daEstacao(k) && !bloq ? ' oferta' : ''}"><div class="cab"><img src="${icone(k)}" alt=""><div><h4>${c.nome}${daEstacao(k) ? `<span class="selo">${estacaoAtual().nome.toLowerCase()}</span>` : ''}</h4><div class="info">${bloq ? `libera no nível ${c.nivel}` : `${tem} na bolsa`}</div></div></div>
-        <div class="info">${reais(c.semente)} a semente · cresce em ${tempo(c.tempo)} · ${c.produto ? `dá ${c.rend} ${c.plural}; secas valem ${reais(c.venda)} cada` : `dá ${rendCultura(k)} × ${vendeMaisNaEstacao(k) ? reais(Math.round(c.venda * BONUS_ESTACAO)) + ' (preço da estação)' : reais(c.venda)}`}</div>
+        <div class="info">${reais(c.semente)} a semente · cresce em ${tempo(c.tempo)} · ${c.produto ? `dá ${rendCultura(k)} ${c.plural}; secas valem ${reais(c.venda)} cada` : `dá ${rendCultura(k)} × ${vendeMaisNaEstacao(k) ? reais(Math.round(c.venda * BONUS_ESTACAO)) + ' (preço da estação)' : reais(c.venda)}`}</div>
         <div class="botoes">${bloq ? '' : `<button class="botao mini" data-comprar="${k}" data-q="1" type="button"${S.dinheiro < c.semente ? ' disabled' : ''}>+1</button><button class="botao mini" data-comprar="${k}" data-q="5" type="button"${S.dinheiro < c.semente * 5 ? ' disabled' : ''}>+5 · ${reais(c.semente * 5)}</button>`}</div></div>`;
     }
   } else if (abaLoja === 'animais'){
@@ -4483,7 +4491,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Terrenos:</b> o Ed começa com um; os outros são comprados nos níveis ${NIVEL_LOTE.slice(1).join(', ')}.</li>
       <li><b>Pedidos:</b> até três do Beto e do Jaca ao mesmo tempo, com prazo, que só corre com o jogo aberto. Depois da cena do Pelúcio, chega mais um dele, só de café. Cada item pede no máximo ${MAX_ITEM_PEDIDO} unidades. Pagam mais que o preço normal de cada coisa e às vezes trazem presente. O caderno do Ed mostra todos.</li>
       <li><b>Oferta do dia:</b> um produto vale 50% a mais naquele dia.</li>
-      <li><b>Estações:</b> seguem o calendário. As culturas da estação colhem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais. ${nomesRend1()}, que rendem 1, valem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais no Beto e no Jaca. O bônus não soma com a oferta do dia. Toque no selo da estação para ver quais.</li>
+      <li><b>Estações:</b> seguem o calendário. As culturas da estação colhem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais. ${nomesRend1()}, que rendem 1, valem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais no Beto e no Jaca, mas esse bônus de preço não soma com a oferta do dia. Toque no selo da estação para ver quais.</li>
       <li><b>Figurinhas:</b> metas de longo prazo no caderno, que dão xp.</li>
       <li><b>Pista do Milton:</b> atrás da fazenda, o Milton, irmão do Ed, pousa de tempos em tempos o teco-teco PIG-MTP. Ele traz sementes ou ração e paga uma taxa pelo uso da pista. Só acontece com o jogo aberto.</li>
       <li><b>Enfeites</b>: comprados na loja e colocados em qualquer gramado livre. Dão xp só na compra.</li>
@@ -4746,6 +4754,9 @@ function quadro(agoraP){
 function atualizarEstadoMenu(){
   const r = itensDoAlvo(menuAberto.alvo);
   if (!r) return;
+  // botões que mudaram (xp, "o Ed já vai", ligado ou desligado): só reabre se algo for diferente
+  const assina = x => JSON.stringify(x.itens.map(i => [i.rotulo, i.sub, !!i.off]));
+  if (assina(r) !== assina(menuAberto.r)){ const m = $('menu'); abrirMenu(menuAberto.alvo, parseFloat(m.style.left) - 14, parseFloat(m.style.top) + 20); return; }
   const e = $('menu').querySelector('.estado'), p = $('menu').querySelector('.prog i');
   if (e && r.estado && e.textContent !== r.estado){
     if (r.itens.length !== menuAberto.r.itens.length){ const m = $('menu'); abrirMenu(menuAberto.alvo, parseFloat(m.style.left) - 14, parseFloat(m.style.top) + 20); return; }
