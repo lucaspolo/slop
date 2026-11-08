@@ -318,6 +318,7 @@ a{color:var(--rosa)}
   </div>
 
   <div class="hud-base">
+    <div class="fila painel" id="macaPill" hidden><img data-icone="maca" alt=""><span id="macaTexto"></span></div>
     <div class="fila painel" id="hudPill" hidden style="cursor:pointer" role="button" tabindex="0" title="O que o Hud faz"><img data-icone="hud" alt=""><span id="hudTexto"></span></div>
     <div class="fila painel" id="fila" hidden><img data-icone="ed" alt=""><span id="filaTexto"></span><button class="botao mini claro" id="filaLimpar" type="button">limpar</button></div>
     <div class="dica painel" id="dica" hidden><img data-icone="ed" alt=""><span id="dicaTexto"></span><button class="x" id="dicaFechar" type="button" aria-label="Esconder as dicas">✕</button></div>
@@ -1597,6 +1598,7 @@ const VI = {
   moinho(){ const v = vMoinho(); for (const e of vPas().m.values()) v.set(e.x + 8, e.y + 19, 15, e.c); return v; },
   queijaria(){ return vQueijaria(); }, padaria(){ return vPadaria(); }, cozinha(){ return vCozinha(); },
   terreiro(){ return vTerreiro(true); }, torrador(){ return vTorrador(); }, obra(){ return vObra(); },
+  maca(){ const v = new Vox(); v.ell(0, 3, 0, 3.4, 3.2, 3.4, (x, y) => x <= -1 && y >= 4 ? 0xf0695c : 0xd9362e); v.box(0, 6, 0, 0, 8, 0, 0x7a4c2c); v.box(1, 7, 0, 3, 7, 0, 0x6cbf52); return v; },
   laranja(){ const v = new Vox(); v.ell(0, 3, 0, 3.4, 3.2, 3.4, 0xf08a2c); v.set(0, 6, 0, 0x5a8f3a); v.box(1, 6, 0, 2, 6, 0, 0x6cbf52); return v; },
   goiaba(){ const v = new Vox(); v.ell(0, 3, 0, 3, 3.6, 3, (x, y, z) => z > 1 && x > 0 ? 0xe0607a : 0xb8d65a); v.set(0, 7, 0, 0x7a5232); return v; },
   manga(){ const v = new Vox(); v.ell(0, 3, 0, 3, 3.8, 2.6, (x, y) => y > 4 ? 0xe8603a : 0xf2b632); v.set(0, 7, 0, 0x5a8f3a); return v; },
@@ -1765,7 +1767,7 @@ const geo = (chave, fn) => GEO[chave] || (GEO[chave] = fn());
 const CHAVE_SALVO = 'fazendaJoliPig.v1';
 let S = null;
 function estadoNovo(){
-  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedidos: [], versao: 3, feito: [], dicas: true, alimentador: {}, coletor: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], pomarBlocos: [], colmeias: [], enfeites: [], guardados: {}, anotado: false, som: true, nAnimal: 0, vendeu: 0, viuCineInicio: false, salvoEm: Date.now() };
+  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedidos: [], versao: 3, feito: [], dicas: true, alimentador: {}, coletor: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], pomarBlocos: [], colmeias: [], enfeites: [], guardados: {}, maca: null, macaAte: 0, anotado: false, som: true, nAnimal: 0, vendeu: 0, viuCineInicio: false, salvoEm: Date.now() };
   const l = LOTES[2];
   for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) s.campo[x + ',' + z] = { e: 'grama' };
   for (const k of ['12,9', '13,9', '12,10', '13,10']) s.campo[k] = { e: 'arado' };
@@ -1930,6 +1932,7 @@ function construirCenario(){
   for (const [x, z, t] of ARVORES){
     const m = colocar(malha(geo('arvore' + t, () => vArvore(t).build(1 / 8, { origin: [4, 0, 4] }))), x + 0.5, 0, z + 0.5, Math.floor(hash(x, 4, z) * 4) * Math.PI / 2);
     m.userData.alvo = { k: 'arvore', x, z }; pickaveis.push(m);
+    ARV_VIS[chave(x, z)] = m;
   }
   for (const [x, z] of ARBUSTOS){ const m = colocar(malha(geo('arbusto', () => vArbusto().build(1 / 8, { origin: [4, 0, 4] }))), x + 0.5, 0, z + 0.5); m.userData.alvo = { k: 'arvore', x, z, arbusto: true }; pickaveis.push(m); }
   for (const [x, z] of FENOS) colocar(malha(geo('feno', () => vFeno().build(1 / 16, { origin: [8, 0, 8] }))), x + 0.5, 0, z + 0.5, Math.PI / 2 * (z % 2));
@@ -2587,7 +2590,7 @@ class Porco {
     this.mao = new THREE.Group(); this.mao.position.set(0, M.mao[0] * s, M.mao[1] * s); this.bD.add(this.mao);
     this.altura = M.altura; this.aceno = 0; this.escala = s;
     this.ferramentas = {};
-    this.pos = new THREE.Vector2(); this.pontos = []; this.vel = 2.7; this.ang = 0; this.angAlvo = 0; this.fase = 0; this.estado = 'parado';
+    this.pos = new THREE.Vector2(); this.pontos = []; this.vel = 2.7; this.turbo = 1; this.ang = 0; this.angAlvo = 0; this.fase = 0; this.estado = 'parado';
     this.trab = null; this.aoChegar = null; this.pulo = 0;
     this.sentado = 0; this.quadrilY = M.quadril[1] * s; // sentado: altura do quadril num banquinho (cena do cafezinho)
     if (nome !== 'ed'){ this.g.traverse(o => { o.userData.alvo = { k: nome }; }); pickaveis.push(this.g); }
@@ -2599,7 +2602,7 @@ class Porco {
     for (const k in this.ferramentas) this.ferramentas[k].visible = false;
     if (!n) return;
     if (!this.ferramentas[n]){
-      const fn = { enxada: vEnxada, regador: vRegador, cesta: vCesta, saco: vSaco, caneca: vCaneca }[n];
+      const fn = { enxada: vEnxada, regador: vRegador, cesta: vCesta, saco: vSaco, caneca: vCaneca, maca: VI.maca }[n];
       if (!fn) return; // 'comer' e afins: só o gesto, sem ferramenta
       const mm = malha(geo('ferr' + n, () => fn().build(1 / 19, { origin: [0.5, 0, 0.5] })));
       this.mao.add(mm); this.ferramentas[n] = mm;
@@ -2611,10 +2614,10 @@ class Porco {
     if (this.estado === 'andando'){
       const p = this.pontos[0];
       const dx = p[0] - this.pos.x, dz = p[1] - this.pos.y, d = Math.hypot(dx, dz);
-      const passo = this.vel * dt;
+      const passo = this.vel * this.turbo * dt;
       if (d <= passo){ this.pos.set(p[0], p[1]); this.pontos.shift(); if (!this.pontos.length){ this.estado = 'parado'; const cb = this.aoChegar; this.aoChegar = null; if (cb) cb(); } }
       else { this.pos.x += dx / d * passo; this.pos.y += dz / d * passo; this.angAlvo = Math.atan2(dx, dz); }
-      this.fase += dt * 11;
+      this.fase += dt * 11 * this.turbo;
     }
     this.ang = anguloPerto(this.ang, this.angAlvo, Math.min(1, dt * 12));
     this.g.position.set(this.pos.x, 0, this.pos.y);
@@ -2637,7 +2640,7 @@ class Porco {
         case 'regador': this.bD.rotation.set(-1.1, 0, 0.35); this.mao.rotation.x = 0.5 + Math.sin(t * 6) * 0.15; break;
         case 'cesta': case null: this.corpo.rotation.x = 0.28 + Math.sin(k) * 0.08; this.bD.rotation.set(-1 + Math.sin(k) * 0.5, 0, 0.3); this.bE.rotation.set(-1 - Math.sin(k) * 0.5, 0, -0.3); break;
         case 'caneca': this.bD.rotation.set(-2.5, 0, 0.3); this.mao.rotation.x = 1.8; this.corpo.rotation.x = -0.05; break;
-        case 'comer': this.bD.rotation.set(-2.4 + Math.sin(k * 0.6) * 0.1, 0, 0.3); this.corpo.rotation.x = -0.04; break;
+        case 'comer': case 'maca': this.bD.rotation.set(-2.4 + Math.sin(k * 0.6) * 0.1, 0, 0.3); this.corpo.rotation.x = -0.04; break;
         case 'saco': this.bD.rotation.set(-1.2 + Math.sin(k * 0.8) * 0.5, 0, 0.3); this.bE.rotation.set(-0.9, 0, -0.4); break;
       }
       if (w.t >= w.dur){ this.estado = 'parado'; this.mao.rotation.x = 0; this.ferramenta(null); const cb = w.aoFim; this.trab = null; if (cb) cb(); }
@@ -4773,15 +4776,16 @@ function itensHud(){
 
 // ================= tarefas do Ed
 const fila = [];
-const NOMES_ACAO = { colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida' };
-const DUR = { colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9 };
-const FERR = { colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco' };
+const NOMES_ACAO = { colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã' };
+const DUR = { colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2 };
+const FERR = { colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca' };
 const mesmoAlvo = (a, b) => a.k === b.k && (a.k === 'animal' ? a.a === b.a : a.x === b.x && a.z === b.z);
-function reservado(alvo){ if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
+function reservado(alvo){ if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
 const visSlot = alvo => { const L = alvo.k === 'pomar' ? POMAR_VIS : COLMEIA_VIS; return L[alvo.i] || (L[alvo.i] = {}); };
-function setReserva(alvo, v){ if (alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
+function setReserva(alvo, v){ if (alvo.k === 'maca' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
 // diz se a ação vale para o alvo; devolve o custo ou um motivo
 function checar(tipoA, alvo, param){
+  if (alvo.k === 'maca') return { ok: tipoA === 'comerMaca' && !!S.maca, custo: {} };
   if (alvo.k === 'composteira') return checarComposteira(tipoA, param);
   if (alvo.k === 'coletor') return { ok: tipoA === 'esvaziar' && !!S.coletor[alvo.tp] && naCaixa(alvo.tp) > 0, custo: {} };
   if (alvo.k === 'pomar') return { ok: tipoA === 'colherFruta' && !!S.pomar[alvo.i] && S.pomar[alvo.i].pronto, custo: {} };
@@ -4999,6 +5003,7 @@ function executar(tarefa){
     t.adub = true; ganharXP(1, pos); Som.plantar();
     atualizarCampo(alvo.x, alvo.z); salvar(); return;
   }
+  if (alvo.k === 'maca'){ comerMaca(); return; }
   if (alvo.k === 'coletor'){ esvaziarCaixa(alvo.tp); return; }
   if (alvo.k === 'composteira'){ executarComposteira(tarefa); return; }
   if (alvo.k === 'fabrica'){ executarFabrica(tarefa); return; }
@@ -5041,6 +5046,93 @@ function executar(tarefa){
   }
   atualizarCampo(alvo.x, alvo.z);
   salvar();
+}
+
+// ================= a maçã das árvores
+const MACA = { minutos: 10, fator: 2, esperaMin: 5, esperaMax: 12, queda: 0.7, quique: 0.35 };
+const FALAS_MACA = ['Obrigado, árvore!', 'Valeu, árvore! Estava uma delícia.', 'Brigadão, árvore! Agora eu corro!'];
+const ARV_VIS = {};
+const macaAtiva = () => !!S.macaAte && Date.now() < S.macaAte;
+const sorteioMaca = () => rnd(MACA.esperaMin, MACA.esperaMax) * 60;
+const alvoMaca = () => ({ k: 'maca', x: S.maca.x, z: S.maca.z });
+let macaEspera = Infinity, macaLigada = false, macaQueda = null, macaRastro = 0, macaMesh, macaHit, macaBolha;
+function montarMaca(){
+  macaMesh = malha(geo('maca', () => VI.maca().build(1 / 19, { origin: [0.5, 0, 0.5] })));
+  scene.add(macaMesh);
+  // a maçã é pequena e a copa pode ficar na frente dela: a área de toque cobre o ladrilho inteiro
+  macaHit = new THREE.Mesh(new THREE.BoxGeometry(1, 1.1, 1), new THREE.MeshBasicMaterial({ visible: false }));
+  macaHit.userData.alvo = { k: 'maca' };
+  scene.add(macaHit); pickaveis.push(macaHit);
+  macaBolha = novaBolha('maca'); macaBolha.userData.base = 0.8; macaBolha.userData.fase = 0;
+  scene.add(macaBolha); BOLHAS.push(macaBolha);
+  macaEspera = sorteioMaca();
+  posicionarMaca();
+}
+function posicionarMaca(){
+  if (!S.maca) return;
+  const x = S.maca.x + 0.5, z = S.maca.z + 0.5;
+  macaMesh.position.set(x, 0, z); macaHit.position.set(x, 0.55, z); macaBolha.position.x = x; macaBolha.position.z = z;
+  macaHit.userData.alvo = alvoMaca();
+}
+function lugarMaca(){
+  const sx = clamp(Math.floor(ed.pos.x), 0, W - 1), sz = clamp(Math.floor(ed.pos.y), 0, H - 1), ops = [];
+  for (const [ax, az] of ARVORES) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){
+    const x = ax + dx, z = az + dz;
+    if (livreParaEnfeite(x, z) && rota(sx, sz, x, z)) ops.push({ x, z, ax, az });
+  }
+  return ops.length ? sorteia(ops) : null;
+}
+function derrubarMaca(){
+  const l = lugarMaca();
+  if (!l){ macaEspera = 30; return false; }
+  S.maca = l; macaQueda = { t: 0 };
+  posicionarMaca();
+  for (let i = 0; i < 8; i++) particula(l.ax + 0.5 + rnd(-0.4, 0.4), 1.5, l.az + 0.5 + rnd(-0.4, 0.4), [0x5aa845, 0x66b54f][i % 2], -0.5);
+  Som.pop(); aviso('Caiu uma maçã de uma árvore!');
+  salvar();
+  return true;
+}
+function comerMaca(){
+  if (!S.maca) return;
+  const { ax, az } = S.maca;
+  S.maca = null; S.macaAte = Date.now() + MACA.minutos * 60000; macaEspera = sorteioMaca();
+  const fala = sorteia(FALAS_MACA), dur = tempoDeLeitura(fala);
+  ed.olhar(ax + 0.5, az + 0.5); ed.aceno = dur; ed.pulo = 0.45;
+  falar(ed, fala, dur);
+  // sem esta pausa a próxima tarefa da fila vira o Ed de costas no meio do agradecimento; o aviso espera porque cobriria o balão
+  ed.trabalhar(dur, 'agradecer', () => aviso(`O Ed está ${MACA.fator}× mais rápido por ${MACA.minutos} minutos!`));
+  Som.colher();
+  hud(); salvar();
+}
+function atualizarMaca(dt, t){
+  const ativa = macaAtiva();
+  ed.turbo = ativa && !cine ? MACA.fator : 1;
+  // nas cenas o Ed anda no passo normal, então o efeito não gasta
+  if (ativa && cine) S.macaAte += dt * 1000;
+  if (macaLigada && !ativa){ aviso('O efeito da maçã acabou.'); falar(ed, 'Ufa, voltei ao normal!', tempoDeLeitura('Ufa, voltei ao normal!')); }
+  macaLigada = ativa;
+  $('macaPill').hidden = !ativa;
+  if (ativa) $('macaTexto').textContent = `Ed veloz · ${tempo((S.macaAte - Date.now()) / 1000)}`;
+  if (ed.turbo > 1 && ed.estado === 'andando' && (macaRastro -= dt) <= 0){
+    macaRastro = 0.08;
+    particula(ed.pos.x + rnd(-0.15, 0.15), 0.1, ed.pos.y + rnd(-0.15, 0.15), sorteia([0xffe066, 0xffffff]), 0.35);
+  }
+  if (!S.maca && !ativa && !cine && (macaEspera -= dt) <= 0) derrubarMaca();
+  const comendo = !!tarefaAtual && tarefaAtual.tipo === 'comerMaca' && ed.estado === 'trabalhando';
+  macaMesh.visible = !!S.maca && !comendo;
+  macaHit.visible = !!S.maca;
+  macaBolha.visible = !!S.maca && !macaQueda && !fila.some(f => f.tipo === 'comerMaca');
+  if (macaQueda && S.maca) animarQueda(dt, t);
+}
+function animarQueda(dt, t){
+  const q = macaQueda, M = S.maca, arv = ARV_VIS[chave(M.ax, M.az)];
+  q.t += dt;
+  const k = Math.min(1, q.t / MACA.queda), b = clamp((q.t - MACA.queda) / MACA.quique, 0, 1);
+  macaMesh.position.x = lerp(M.ax, M.x, k) + 0.5;
+  macaMesh.position.z = lerp(M.az, M.z, k) + 0.5;
+  macaMesh.position.y = k < 1 ? lerp(1.5, 0, k * k) : Math.sin(b * Math.PI) * 0.16;
+  if (arv) arv.rotation.z = k < 1 ? Math.sin(t * 30) * 0.035 * (1 - k) : 0;
+  if (b >= 1) macaQueda = null;
 }
 
 // ================= progresso
@@ -5088,6 +5180,7 @@ function pausarRelogios(ms){
   if (!(ms > 0)) return;
   const inicio = Date.now() - ms;
   if (S.hudAte && S.hudAte > inicio) S.hudAte += ms;
+  if (S.macaAte && S.macaAte > inicio) S.macaAte += ms;
   for (const p of S.pedidos || []) if (p && p.prazo && p.prazo > inicio) p.prazo += ms;
 }
 const vagasPedido = () => (nivel() < 5 ? 1 : nivel() < 10 ? 2 : 3) + (S.viuCinePelucio ? 1 : 0);
@@ -5380,7 +5473,15 @@ function itensDoAlvoBase(alvo){
     return r;
   }
   if (alvo.k === 'ed'){ falar(ed, sorteia(['Oinc! Bora trabalhar.', 'Essa fazenda não se cuida sozinha.', 'Será que o Beto vem hoje?', 'Cenoura é vida.', 'Toque no chão que eu vou até lá.']), 2); Som.oinc(); return null; }
-  if (alvo.k === 'arvore'){ r.titulo = alvo.arbusto ? 'Arbusto' : 'Árvore'; r.icone = 'mato'; r.estado = alvo.arbusto ? 'Só enfeite. As abelhas gostam.' : 'Dá sombra e, de vez em quando, uma fruta pro Ed.'; return r; }
+  if (alvo.k === 'maca'){
+    r.titulo = 'Maçã'; r.icone = 'maca';
+    const tarefa = fila.find(t => t.tipo === 'comerMaca');
+    if (tarefa){ r.estado = 'Na fila do Ed: comer a maçã'; r.itens.push({ rotulo: 'Cancelar', icone: 'ed', fn: () => cancelar(tarefa) }); return r; }
+    r.estado = 'Caiu da árvore, fresquinha!'; r.classe = 'bom';
+    r.itens.push({ rotulo: 'Comer a maçã', sub: `o Ed anda ${MACA.fator}× mais rápido por ${MACA.minutos} min`, icone: 'maca', fn: () => enfileirar('comerMaca', alvo) });
+    return r;
+  }
+  if (alvo.k === 'arvore'){ r.titulo = alvo.arbusto ? 'Arbusto' : 'Árvore'; r.icone = 'mato'; r.estado = alvo.arbusto ? 'Só enfeite. As abelhas gostam.' : 'Dá sombra e, de vez em quando, deixa cair uma maçã para o Ed.'; return r; }
   return null;
 }
 function itemBeto(){
@@ -5937,6 +6038,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Oferta do dia:</b> um produto vale 50% a mais naquele dia.</li>
       <li><b>Estações:</b> seguem o calendário. As culturas da estação colhem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais. ${nomesRend1()}, que rendem 1, valem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais no Beto e no Jaca, mas esse bônus de preço não soma com a oferta do dia. Toque no selo da estação para ver quais.</li>
       <li><b>Figurinhas:</b> metas de longo prazo no caderno, que dão xp.</li>
+      <li><b>Maçã:</b> de vez em quando uma árvore deixa cair uma maçã. Toque nela para o Ed comer: ele agradece à árvore e anda ${MACA.fator}× mais rápido por ${MACA.minutos} minutos de jogo.</li>
       <li><b>Cenas:</b> as cenas da história ficam guardadas e podem ser revistas nos Ajustes ou no caderno do Ed. Rever uma cena não muda nada na fazenda. De vez em quando o Ed para para um cafezinho na frente da casa, às vezes com visita. Para chamar na hora, toque na casa e escolha Tomar um lanchinho.</li>
       <li><b>Pista do Milton:</b> atrás da fazenda, o Milton, irmão do Ed, pousa de tempos em tempos o teco-teco PIG-MTP. Ele traz sementes ou ração e paga uma taxa pelo uso da pista. O primeiro pouso vem depois da primeira venda ao Joli Market. Só acontece com o jogo aberto.</li>
       <li><b>Enfeites</b>: comprados na loja e colocados em qualquer gramado livre. Dão xp só na compra.</li>
@@ -5983,7 +6085,7 @@ function atualizarDica(){
 
 // ================= entrada
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), planoChao = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), ptChao = new THREE.Vector3();
-const FUNDO_DE_CANTEIRO = ['irrigador', 'enfeite', 'arvore', 'alimentador', 'coletor'];
+const FUNDO_DE_CANTEIRO = ['irrigador', 'enfeite', 'arvore', 'alimentador', 'coletor', 'maca'];
 const planoCanteiro = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.12), ptCanteiro = new THREE.Vector3();
 function canteiroAtras(obj){
   if (!ray.ray.intersectPlane(planoCanteiro, ptCanteiro)) return null;
@@ -5998,6 +6100,8 @@ function alvoNaTela(cx, cy){
   ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObjects(pickaveis.filter(o => o.visible !== false), true);
+  // a copa de uma árvore na frente não pode esconder a maçã, mas um canteiro atrás dela continua valendo
+  if (hits.some(h => h.object === macaHit) && !canteiroAtras(macaHit)) return macaHit.userData.alvo;
   for (const h of hits){
     let o = h.object, vis = true;
     for (let p = o; p; p = p.parent) if (p.visible === false) vis = false;
@@ -6175,6 +6279,7 @@ function quadro(agoraP){
   if (ed.estado === 'parado' && !tarefaAtual && !fila.length && !cine && !modo && !menuAberto && !algumaJanela()) edParadoDesde = edParadoDesde || agoraP; else edParadoDesde = 0;
   if (cine) atualizarCine(dt); else { const cenaId = podeIniciarCine(); if (cenaId) iniciarCine(cenaId, cenaId === cenaPedida); }
   proximaTarefa();
+  atualizarMaca(dt, t);
   ed.update(dt, t);
   if (pelucio.g.visible) pelucio.update(dt, t);
   if (milton.g.visible) milton.update(dt, t);
@@ -6250,6 +6355,7 @@ async function iniciar(){
   montarPlacasPomar();
   POMAR_SLOTS.forEach((_, i) => montarPomar(i)); COLMEIA_SLOTS.forEach((_, i) => montarColmeia(i)); criarAbelhas();
   construirPersonagens();
+  montarMaca();
   // só aqui: terminar receitas com o jogo fechado pode subir de nível, e o aviso usa o Ed
   // antes das fábricas: secagens terminadas com o jogo fechado não podem somar restos antes de a composteira recuperar o tempo fechado
   simularComposteira();
@@ -6287,7 +6393,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // o Safari do iPhone ignora o user-scalable do viewport: sem isso a pinça amplia a página e as janelas saem da tela
 for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
