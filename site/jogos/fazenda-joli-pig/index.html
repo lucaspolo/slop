@@ -529,6 +529,8 @@ const RECEITAS = {
   geleia:      { nome: 'Geleia de morango', entra: { morango: 6 }, sai: { geleia: 1 }, tempo: 150, xp: 14 },
   doce:        { nome: 'Doce de abóbora', entra: { abobora: 1 }, sai: { doce: 1 }, tempo: 120, xp: 8 },
   secar:       { nome: 'Secar café', entra: { cereja: 12 }, sai: { cafe: 12 }, tempo: 240, xp: 18 },
+  // a secagem da versão 2, para as que já estavam na fila ou prontas (fica fora do menu do terreiro)
+  secarAntigo: { nome: 'Secar café', entra: { cereja: 4 }, sai: { cafe: 4 }, tempo: 240, xp: 6 },
   torrar:      { nome: 'Torrar café', entra: { cafe: 2 }, sai: { torrado: 1 }, tempo: 120, xp: 10 },
 };
 const VAGAS_FAB = 3;
@@ -1699,14 +1701,22 @@ function estadoNovo(){
 }
 // saves antigos usavam outras curvas de XP: mantém o nível e a fração do caminho até o próximo
 function converterXp(xp, xpDe){
+  xp = Math.max(0, xp || 0);
   let n = 1; while (xp >= xpDe(n + 1)) n++;
   const frac = (xp - xpDe(n)) / (xpDe(n + 1) - xpDe(n));
-  return Math.round(xpPara(n) + frac * (xpPara(n + 1) - xpPara(n)));
+  // o arredondamento não pode empurrar para o nível seguinte
+  return Math.min(xpPara(n + 1) - 1, Math.round(xpPara(n) + frac * (xpPara(n + 1) - xpPara(n))));
 }
 function migrar(){
   const v = S.versao || 1;
   if (v < 2) S.xp = converterXp(S.xp, xpParaAntigo);
   else if (v < 3) S.xp = converterXp(S.xp, xpParaV2);
+  // as secagens que já estavam no terreiro foram pagas com a receita antiga
+  if (v < 3 && S.fabricas && S.fabricas.terreiro){
+    const t = S.fabricas.terreiro;
+    if (Array.isArray(t.fila)) for (const f of t.fila) if (f && f.r === 'secar') f.r = 'secarAntigo';
+    if (Array.isArray(t.feitos)) t.feitos = t.feitos.map(r => r === 'secar' ? 'secarAntigo' : r);
+  }
   S.versao = 3;
 }
 function carregar(){
@@ -2643,6 +2653,7 @@ function simularAnimais(){
 }
 // a caixa do coletor guarda CAIXA_HORAS horas de produção do bando; cheia, os bichos esperam o Ed esvaziar
 const CAIXA_HORAS = 1;
+const horasCaixa = () => CAIXA_HORAS === 1 ? 'uma hora' : CAIXA_HORAS + ' horas';
 const caixa = () => S.caixa || (S.caixa = {});
 const naCaixa = tp => caixa()[tp] || 0;
 const capCaixa = tp => Math.ceil(ANI.filter(a => a.d.tipo === tp).length * 3600 * CAIXA_HORAS / ANIMAIS[tp].tempo);
@@ -2664,7 +2675,8 @@ function montarColetor(tp){
   if (COL_MALHA[tp]) return COL_MALHA[tp];
   const C = COLETOR[tp];
   // um enfeite que estivesse no lugar volta para a loja
-  for (const e of S.enfeites.slice()) if (e.x === C.x && e.z === C.z){ removerEnfeite(e); S.guardados[e.tipo] = (S.guardados[e.tipo] || 0) + 1; }
+  // (e também os que estiverem em volta, para o Ed conseguir chegar)
+  for (const e of S.enfeites.slice()) if (Math.max(Math.abs(e.x - C.x), Math.abs(e.z - C.z)) <= 1){ removerEnfeite(e); S.guardados[e.tipo] = (S.guardados[e.tipo] || 0) + 1; }
   const m = colocar(malha(geo('col' + tp, () => vColetor(tp === 'vaca').build(1 / 16, { origin: [8, 0, 8] }))), C.x + 0.5, 0, C.z + 0.5);
   m.traverse(o => { o.userData.alvo = { k: 'coletor', tp }; }); pickaveis.push(m); COL_MALHA[tp] = m;
   setT(C.x, C.z, 'feno');
@@ -2681,7 +2693,7 @@ function comprarColetor(tp){
   const m = montarColetor(tp);
   for (let i = 0; i < 24; i++) particula(m.position.x + rnd(-0.5, 0.5), 0.4, m.position.z + rnd(-0.5, 0.5), [0xffffff, 0xffe066, 0xbac3cb][i % 3], 1.2);
   Som.moeda(); chipPulsa('chipDinheiro');
-  aviso(`${C.nome} no ${C.lugar}! ${tp === 'galinha' ? 'Os ovos' : 'O leite'} vão para uma caixa de ${CAIXA_HORAS === 1 ? 'uma hora' : CAIXA_HORAS + ' horas'}. O Ed esvazia.`, 'grande', 3.5);
+  aviso(`${C.nome} no ${C.lugar}! ${tp === 'galinha' ? 'Os ovos' : 'O leite'} vão para uma caixa de ${horasCaixa()}. O Ed esvazia.`, 'grande', 3.5);
   simularAnimais(); hud(); salvar();
 }
 const ALIM_MALHA = {};
@@ -2983,6 +2995,8 @@ function livreParaEnfeite(x, z){
   if (t !== 'grama' && t !== 'pastoV') return false;
   if (loteDe(x, z) >= 0 || campo(x, z) || blocoEm(x, z) > 0) return false;
   if (S.enfeites.some(e => e.x === x && e.z === z)) return false;
+  // o Ed precisa chegar ao coletor: os ladrilhos em volta dele (diagonais também) ficam livres
+  for (const tp in COLETOR) if (Math.max(Math.abs(COLETOR[tp].x - x), Math.abs(COLETOR[tp].z - z)) <= 1) return false;
   if (Math.hypot(ed.pos.x - x - 0.5, ed.pos.y - z - 0.5) < 0.6) return false;
   return t === 'grama';
 }
@@ -3043,16 +3057,22 @@ const pertoDeEspantalho = (x, z) => S.enfeites.some(e => e.tipo === 'espantalho'
 // a estação segue o calendário do jogador (hemisfério sul) e muda as culturas que rendem mais;
 // de tempos em tempos chove: a chuva rega todos os canteiros sozinha
 const ESTACOES = [
-  { nome: 'Verão', meses: [11, 0, 1], culturas: ['melancia', 'milho', 'tomate'], ceu: ['#9fd8f2', '#dff3ea'] },
-  { nome: 'Outono', meses: [2, 3, 4], culturas: ['abobora', 'cenoura', 'cafe'], ceu: ['#f5d6a8', '#f7ead6'] },
-  { nome: 'Inverno', meses: [5, 6, 7], culturas: ['alface', 'morango', 'cenoura'], ceu: ['#bcd3e6', '#e6eef4'] },
-  { nome: 'Primavera', meses: [8, 9, 10], culturas: ['morango', 'tomate', 'alface'], ceu: ['#b8e3f6', '#f3e6f2'] },
+  { nome: 'Verão', art: 'No', meses: [11, 0, 1], culturas: ['melancia', 'milho', 'tomate'], ceu: ['#9fd8f2', '#dff3ea'] },
+  { nome: 'Outono', art: 'No', meses: [2, 3, 4], culturas: ['abobora', 'cenoura', 'cafe'], ceu: ['#f5d6a8', '#f7ead6'] },
+  { nome: 'Inverno', art: 'No', meses: [5, 6, 7], culturas: ['alface', 'morango', 'cenoura'], ceu: ['#bcd3e6', '#e6eef4'] },
+  { nome: 'Primavera', art: 'Na', meses: [8, 9, 10], culturas: ['morango', 'tomate', 'alface'], ceu: ['#b8e3f6', '#f3e6f2'] },
 ];
 const BONUS_ESTACAO = 1.5;
+const PCT_ESTACAO = Math.round((BONUS_ESTACAO - 1) * 100);
 const estacaoAtual = () => ESTACOES.find(e => e.meses.includes(new Date().getMonth()));
 const daEstacao = c => estacaoAtual().culturas.includes(c);
 // quem rende 1 por colheita não ganha no rendimento (arredondaria para 2): o bônus vai para o preço de venda
 const rendCultura = c => CULTURAS[c].rend < 2 ? CULTURAS[c].rend : Math.round(CULTURAS[c].rend * (daEstacao(c) ? BONUS_ESTACAO : 1));
+// "Abóbora e melancia": as culturas que rendem 1 por colheita
+const nomesRend1 = () => {
+  const n = ORDEM_CULTURAS.filter(c => CULTURAS[c].rend < 2).map((c, i) => i ? CULTURAS[c].nome.toLowerCase() : CULTURAS[c].nome);
+  return n.length > 1 ? n.slice(0, -1).join(', ') + ' e ' + n[n.length - 1] : n.join('');
+};
 const vendeMaisNaEstacao = p => !!CULTURAS[p] && CULTURAS[p].rend < 2 && daEstacao(p);
 const chovendo = () => !!S.chuvaAte && Date.now() < S.chuvaAte;
 let gotas = null, proxChuvaCheck = 0;
@@ -3131,7 +3151,7 @@ function abrirEstacao(){
   const e = estacaoAtual();
   const min = chovendo() ? 0 : Math.max(0, Math.ceil((S.proxChuva - Date.now()) / 60000));
   abrirJanela(topo('semente', e.nome, 'A estação segue o calendário', 'azul') + `<div class="janela-corpo">
-    <p>No ${e.nome.toLowerCase()}, estas culturas rendem 50% a mais na colheita. As que dão só 1 por colheita colhem o mesmo, mas o Beto e o Jaca pagam 50% a mais. O bônus não soma com a oferta do dia:</p>
+    <p>${e.art} ${e.nome.toLowerCase()}, estas culturas rendem ${PCT_ESTACAO}% a mais na colheita.${e.culturas.some(c => CULTURAS[c].rend < 2) ? ` As que dão só 1 por colheita colhem o mesmo, mas o Beto e o Jaca pagam ${PCT_ESTACAO}% a mais.` : ''} O bônus não soma com a oferta do dia:</p>
     <div class="linhas">${e.culturas.filter(c => CULTURAS[c].nivel <= nivel() + 5).map(c => `<div class="linha"><img src="${icone(CULTURAS[c].produto || c)}" alt=""><div class="nome">${CULTURAS[c].nome}<small>${CULTURAS[c].rend < 2 ? `${reais(PRODUTOS[c].venda)} → ${reais(Math.round(PRODUTOS[c].venda * BONUS_ESTACAO))} cada` : `${CULTURAS[c].rend} → ${rendCultura(c)} por canteiro`}${CULTURAS[c].nivel > nivel() ? ` · nível ${CULTURAS[c].nivel}` : ''}</small></div></div>`).join('')}</div>
     <p style="margin-top:12px">${chovendo() ? 'Está chovendo agora: a chuva rega todos os canteiros.' : `A próxima chuva vem em mais ou menos ${min} min. Ela rega todos os canteiros sozinha.`}</p></div>`);
 }
@@ -3480,8 +3500,14 @@ function limparFila(){ for (const t of fila.slice()) cancelar(t); }
 // o Ed fica no primeiro ladinho livre do coletor (o coletor em si não é andável)
 function frenteColetor(tp){
   const C = COLETOR[tp];
-  for (const [dx, dz] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) if (andavel(C.x + dx, C.z + dz)) return [C.x + dx + 0.5, C.z + dz + 0.5];
-  return [C.x + 0.5, C.z + 0.5];
+  for (const [dx, dz] of [[0, -1], [1, 0], [0, 1], [-1, 0], [1, -1], [1, 1], [-1, 1], [-1, -1]]) if (andavel(C.x + dx, C.z + dz)) return [C.x + dx + 0.5, C.z + dz + 0.5];
+  // nenhum vizinho andável: o ladrilho andável mais perto
+  let melhor = null, dm = Infinity;
+  for (let x = Math.max(0, C.x - 8); x <= Math.min(W - 1, C.x + 8); x++) for (let z = Math.max(0, C.z - 8); z <= Math.min(H - 1, C.z + 8); z++){
+    const d = Math.hypot(x - C.x, z - C.z);
+    if (d < dm && andavel(x, z)){ dm = d; melhor = [x + 0.5, z + 0.5]; }
+  }
+  return melhor || [C.x + 0.5, C.z + 0.5];
 }
 function alvoMundo(alvo){
   if (alvo.k === 'coletor') return frenteColetor(alvo.tp);
@@ -3645,7 +3671,7 @@ function ganharXP(n, pos){
   hud();
 }
 function subiuNivel(n){
-  Som.nivel(); ed.pulo = 0.45;
+  Som.nivel(); if (ed) ed.pulo = 0.45;
   const libs = [];
   for (const k of ORDEM_CULTURAS) if (CULTURAS[k].nivel === n) libs.push(CULTURAS[k].nome);
   for (const k in ANIMAIS) if (ANIMAIS[k].nivel === n) libs.push(ANIMAIS[k].nome);
@@ -3661,7 +3687,7 @@ function subiuNivel(n){
   if (n === IRRIGADOR.nivel) libs.push('irrigador automático');
   for (const id in MELHORIAS) for (const d of MELHORIAS[id].degraus) if (d.nivel === n) libs.push(d.nome.toLowerCase());
   aviso(`Nível ${n}!` + (libs.length ? ` Liberou: ${libs.join(', ')}` : ''), 'grande', 4);
-  falar(ed, 'Oinc! Subi de nível!', 2);
+  if (ed) falar(ed, 'Oinc! Subi de nível!', 2);
 }
 function gastar(v){ S.dinheiro -= v; hud(); }
 function chipPulsa(id){ const e = $(id); e.classList.remove('pulsa'); void e.offsetWidth; e.classList.add('pulsa'); }
@@ -3714,7 +3740,11 @@ function atualizarPedidos(){
   const agora = Date.now(), vagas = vagasPedido();
   let mudou = false;
   // save antigo: o pedido do Pelúcio ficava na vaga 2 e agora a vaga dele é a 3
-  if (S.pedidos[2] && S.pedidos[2].quem === 'pelucio' && !S.pedidos[3]){ S.pedidos[3] = S.pedidos[2]; S.pedidos[2] = null; mudou = true; }
+  const p2 = S.pedidos[2], p3 = S.pedidos[3];
+  if (p2 && p2.quem === 'pelucio'){
+    if (!p3 || p3.espera){ S.pedidos[3] = p2; S.pedidos[2] = null; mudou = true; }
+    else if (p3.quem === 'pelucio'){ S.pedidos[2] = { espera: agora }; mudou = true; }
+  }
   for (let i = 0; i < 4; i++){
     let p = S.pedidos[i];
     if (i >= vagas){ continue; }
@@ -3878,7 +3908,7 @@ function itensDoAlvoBase(alvo){
         r.itens.push({ rotulo: 'Tirar o mato', sub: '+2 xp', icone: 'mato', fn: () => enfileirar('capinar', alvo), modo: { tipo: 'capinar' } });
         multiplos(r, 'capinar', 'Tirar o mato de todos', 'mato', t2 => t2.p === 'mato');
       } else if (t.prog >= 1){
-        r.estado = `Pronto! Dá ${c.rend} ${c.rend > 1 ? c.plural : c.nome.toLowerCase()}.`; r.classe = 'bom';
+        const rd = rendCultura(t.c); r.estado = `Pronto! Dá ${rd} ${rd > 1 ? c.plural : c.nome.toLowerCase()}.`; r.classe = 'bom';
         r.itens.push({ rotulo: 'Colher', sub: `+${c.xp} xp`, icone: 'cesta', fn: () => enfileirar('colher', alvo), modo: { tipo: 'colher' } });
         multiplos(r, 'colher', 'Colher tudo que está pronto', 'cesta', t2 => t2.prog >= 1 && !t2.p);
       } else {
@@ -3942,7 +3972,7 @@ function itensDoAlvoBase(alvo){
     const tp = alvo.tp, A = ANIMAIS[tp], n = naCaixa(tp), cap = capCaixa(tp), ovo = tp === 'galinha';
     r.estado = n >= cap && n > 0
       ? `Caixa cheia! ${ovo ? 'As galinhas pararam' : 'As vacas pararam'} até o Ed esvaziar.`
-      : `Caixa: ${n} de ${cap}${ovo ? ' ovos' : ' de leite'}. Guarda ${CAIXA_HORAS === 1 ? 'uma hora' : CAIXA_HORAS + ' horas'} de produção.`;
+      : `Caixa: ${n} de ${cap}${ovo ? ' ovos' : ' de leite'}. Guarda ${horasCaixa()} de produção.`;
     if (n >= cap && n > 0) r.classe = 'alerta';
     r.estado += S.alimentador[tp] ? ' Com o alimentador, o ciclo se repete sozinho enquanto houver ração e lugar na caixa.' : ' Sem alimentador, os bichos ainda precisam de ração.';
     const indo = reservado(alvo);
@@ -3980,7 +4010,7 @@ function itensPredio(p){
     const bloq = nivel() < A.nivel;
     const CO = COLETOR[tp];
     if (S.coletor[tp]) r.estado += ` ${tp === 'galinha' ? 'Os ovos vão' : 'O leite vai'} para a caixa do coletor (${naCaixa(tp)} de ${capCaixa(tp)}).`;
-    else if (nivel() >= CO.nivel - 1) r.itens.push({ rotulo: CO.nome, sub: nivel() < CO.nivel ? `nível ${CO.nivel}` : `caixa de uma hora`, icone: tp === 'galinha' ? 'coletor' : 'ordenhadeira', preco: reais(CO.preco), off: nivel() < CO.nivel || S.dinheiro < CO.preco, fn: () => comprarColetor(tp) });
+    else if (nivel() >= CO.nivel - 1) r.itens.push({ rotulo: CO.nome, sub: nivel() < CO.nivel ? `nível ${CO.nivel}` : `caixa de ${horasCaixa()}`, icone: tp === 'galinha' ? 'coletor' : 'ordenhadeira', preco: reais(CO.preco), off: nivel() < CO.nivel || S.dinheiro < CO.preco, fn: () => comprarColetor(tp) });
     if (!S.alimentador[tp]) r.itens.push({ rotulo: 'Alimentador automático', sub: nivel() < AL.nivel ? `nível ${AL.nivel}` : 'dá ração sozinho', icone: 'alimentador', preco: reais(AL.preco), off: nivel() < AL.nivel || S.dinheiro < AL.preco, fn: () => comprarAlimentador(tp) });
     r.itens.push({ rotulo: `Comprar ${A.nome.toLowerCase()}`, sub: bloq ? `nível ${A.nivel}` : `cabe mais ${A.max - n}`, icone: tp, preco: reais(A.preco), off: bloq || n >= A.max || S.dinheiro < A.preco, fn: () => comprarAnimal(tp) });
     const fome = ANI.filter(a => a.d.tipo === tp && a.d.e === 'fome' && !a.res).length;
@@ -4103,7 +4133,7 @@ function abrirLoja(aba){
     for (const k of ORDEM_CULTURAS){
       const c = CULTURAS[k], bloq = c.nivel > n, tem = S.bolsa[k] || 0;
       corpo += `<div class="cartao${bloq ? ' bloq' : ''}${daEstacao(k) && !bloq ? ' oferta' : ''}"><div class="cab"><img src="${icone(k)}" alt=""><div><h4>${c.nome}${daEstacao(k) ? `<span class="selo">${estacaoAtual().nome.toLowerCase()}</span>` : ''}</h4><div class="info">${bloq ? `libera no nível ${c.nivel}` : `${tem} na bolsa`}</div></div></div>
-        <div class="info">${reais(c.semente)} a semente · cresce em ${tempo(c.tempo)} · ${c.produto ? `dá ${c.rend} ${c.plural}; secas valem ${reais(c.venda)} cada` : `dá ${c.rend} × ${vendeMaisNaEstacao(k) ? reais(Math.round(c.venda * BONUS_ESTACAO)) + ' (preço da estação)' : reais(c.venda)}`}</div>
+        <div class="info">${reais(c.semente)} a semente · cresce em ${tempo(c.tempo)} · ${c.produto ? `dá ${c.rend} ${c.plural}; secas valem ${reais(c.venda)} cada` : `dá ${rendCultura(k)} × ${vendeMaisNaEstacao(k) ? reais(Math.round(c.venda * BONUS_ESTACAO)) + ' (preço da estação)' : reais(c.venda)}`}</div>
         <div class="botoes">${bloq ? '' : `<button class="botao mini" data-comprar="${k}" data-q="1" type="button"${S.dinheiro < c.semente ? ' disabled' : ''}>+1</button><button class="botao mini" data-comprar="${k}" data-q="5" type="button"${S.dinheiro < c.semente * 5 ? ' disabled' : ''}>+5 · ${reais(c.semente * 5)}</button>`}</div></div>`;
     }
   } else if (abaLoja === 'animais'){
@@ -4122,7 +4152,7 @@ function abrirLoja(aba){
     for (const tp in COLETOR){
       const C = COLETOR[tp], bloq = C.nivel > n, tem = S.coletor[tp];
       corpo += `<div class="cartao${bloq ? ' bloq' : ''}"><div class="cab"><img src="${icone(tp === 'galinha' ? 'coletor' : 'ordenhadeira')}" alt=""><div><h4>${C.nome}</h4><div class="info">${tem ? 'já instalado' : bloq ? `libera no nível ${C.nivel}` : `no ${C.lugar}`}</div></div></div>
-        <div class="info">${tp === 'galinha' ? 'Os ovos vão' : 'O leite vai'} para uma caixa que guarda uma hora de produção, até com o jogo fechado. O Ed esvazia a caixa. Junto com o alimentador, o ${C.lugar} trabalha sozinho até a caixa encher.</div>
+        <div class="info">${tp === 'galinha' ? 'Os ovos vão' : 'O leite vai'} para uma caixa que guarda ${horasCaixa()} de produção, até com o jogo fechado. O Ed esvazia a caixa. Junto com o alimentador, o ${C.lugar} trabalha sozinho até a caixa encher.</div>
         <div class="botoes">${bloq || tem ? '' : `<button class="botao mini" data-coletor="${tp}" type="button"${S.dinheiro < C.preco ? ' disabled' : ''}>Comprar · ${reais(C.preco)}</button>`}</div></div>`;
     }
   } else if (abaLoja === 'enfeites'){
@@ -4433,7 +4463,7 @@ function mostrarAjuda(intro, aba){
     <h3 style="margin:14px 0 6px;font-size:16px">Ajuda automática</h3>
     <ul class="passos">
       <li><b>Irrigador automático</b>${nv(IRRIGADOR.nivel)}: um por terreno, ${reais(IRRIGADOR.preco)}. Rega os 16 canteiros dele, até com o jogo fechado, e dá 1 xp por rega, como regar à mão.</li>
-      <li><b>Coletor de ovos</b>${nv(COLETOR.galinha.nivel)} e <b>ordenhadeira</b>${nv(COLETOR.vaca.nivel)}: os bichos produzem para uma caixa que guarda uma hora de produção, até com o jogo fechado. O xp vem quando o Ed esvazia a caixa, pelo menu do coletor. Com a caixa cheia, os bichos param e não gastam ração. Com o alimentador junto, continua sozinho enquanto houver ração e lugar na caixa.</li>
+      <li><b>Coletor de ovos</b>${nv(COLETOR.galinha.nivel)} e <b>ordenhadeira</b>${nv(COLETOR.vaca.nivel)}: os bichos produzem para uma caixa que guarda ${horasCaixa()} de produção, até com o jogo fechado. O xp vem quando o Ed esvazia a caixa, pelo menu do coletor. Com a caixa cheia, os bichos param e não gastam ração. Com o alimentador junto, continua sozinho enquanto houver ração e lugar na caixa.</li>
       <li><b>Esteira de saída</b> (${reais(ESTEIRA.preco)} por construção): o que fica pronto vai sozinho para o celeiro. Depois dela, o <b>repetidor de receita</b> (${reais(REPETIDOR.preco)}) recomeça a receita que você escolher sempre que houver ingredientes. Vale também para o terreiro de café, que seca ${RECEITAS.secar.entra.cereja} cerejas por vez.</li>
       <li><b>Alimentador automático</b>${nv(ALIMENTADOR.galinha.nivel)}: um no galinheiro e um no curral. Dá ração sozinho, usando a ração do estoque.</li>
       <li><b>Chuva:</b> de tempos em tempos chove e todos os canteiros ficam regados, sem dar xp.</li>
@@ -4449,11 +4479,11 @@ function mostrarAjuda(intro, aba){
     </ul>`;
   if (abaAjuda === 'progresso') corpo = `
     <ul class="passos">
-      <li><b>Níveis:</b> plantar, colher, produzir e entregar pedidos dá xp. Cada nível libera coisas novas.</li>
+      <li><b>Níveis:</b> arar, regar, tirar o mato, colher, produzir e entregar pedidos dá xp. Cada nível libera coisas novas.</li>
       <li><b>Terrenos:</b> o Ed começa com um; os outros são comprados nos níveis ${NIVEL_LOTE.slice(1).join(', ')}.</li>
-      <li><b>Pedidos:</b> até três do Beto e do Jaca ao mesmo tempo, com prazo, que só corre com o jogo aberto. Depois da cena do Pelúcio, chega mais um dele, só de café. Cada item pede no máximo ${MAX_ITEM_PEDIDO} unidades. Pagam mais que vender solto e às vezes trazem presente. O caderno do Ed mostra todos.</li>
+      <li><b>Pedidos:</b> até três do Beto e do Jaca ao mesmo tempo, com prazo, que só corre com o jogo aberto. Depois da cena do Pelúcio, chega mais um dele, só de café. Cada item pede no máximo ${MAX_ITEM_PEDIDO} unidades. Pagam mais que o preço normal de cada coisa e às vezes trazem presente. O caderno do Ed mostra todos.</li>
       <li><b>Oferta do dia:</b> um produto vale 50% a mais naquele dia.</li>
-      <li><b>Estações:</b> seguem o calendário. As culturas da estação colhem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais. Abóbora e melancia, que rendem 1, valem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais no Beto e no Jaca. O bônus não soma com a oferta do dia. Toque no selo da estação para ver quais.</li>
+      <li><b>Estações:</b> seguem o calendário. As culturas da estação colhem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais. ${nomesRend1()}, que rendem 1, valem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais no Beto e no Jaca. O bônus não soma com a oferta do dia. Toque no selo da estação para ver quais.</li>
       <li><b>Figurinhas:</b> metas de longo prazo no caderno, que dão xp.</li>
       <li><b>Pista do Milton:</b> atrás da fazenda, o Milton, irmão do Ed, pousa de tempos em tempos o teco-teco PIG-MTP. Ele traz sementes ou ração e paga uma taxa pelo uso da pista. Só acontece com o jogo aberto.</li>
       <li><b>Enfeites</b>: comprados na loja e colocados em qualquer gramado livre. Dão xp só na compra.</li>
@@ -4709,7 +4739,7 @@ function quadro(agoraP){
   atualizarClima(dt);
   atualizarParticulas(dt);
   atualizarFalas();
-  if (menuAberto && ['tile', 'animal', 'predio', 'pomar', 'colmeia', 'pomarLote'].includes(menuAberto.alvo.k) && Math.floor(t * 2) !== Math.floor((t - dt) * 2)) atualizarEstadoMenu();
+  if (menuAberto && ['tile', 'animal', 'predio', 'pomar', 'colmeia', 'pomarLote', 'coletor'].includes(menuAberto.alvo.k) && Math.floor(t * 2) !== Math.floor((t - dt) * 2)) atualizarEstadoMenu();
   tSalvo += dt; if (tSalvo > 6){ tSalvo = 0; verificarFigurinhas(); salvar(); }
   renderer.render(scene, camera);
 }
@@ -4745,7 +4775,6 @@ async function iniciar(){
   montarLotes();
   // o terreiro chega junto com o café, depois da cena do Pelúcio
   if (S.viuCinePelucio) estFab('terreiro').feita = true;
-  simularFabricas();
   for (const id in FABRICAS) montarFabrica(id);
   climaInicio();
   if (!Array.isArray(S.enfeites)) S.enfeites = []; if (!S.guardados) S.guardados = {};
@@ -4757,6 +4786,8 @@ async function iniciar(){
   montarPlacasPomar();
   POMAR_SLOTS.forEach((_, i) => montarPomar(i)); COLMEIA_SLOTS.forEach((_, i) => montarColmeia(i)); criarAbelhas();
   construirPersonagens();
+  // só aqui: terminar receitas com o jogo fechado pode subir de nível, e o aviso usa o Ed
+  simularFabricas();
   construirPista();
   for (const tp in ALIMENTADOR) if (S.alimentador[tp]) montarAlimentador(tp);
   if (!S.coletor) S.coletor = {};
