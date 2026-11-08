@@ -2797,21 +2797,21 @@ const VISITA = {
     chegada: ['Oi, Ed! Vim buscar as coisas pro Joli Market.', 'Cheguei! O que tem pra hoje?', 'Oinc! O mercado tá cheio de cliente.'],
     conversa: of => [`Oi, maninho! Hoje o pessoal tá pagando mais por ${PRODUTOS[of].plural}.`, 'E aí, Ed! O que você tem pra mim hoje?', `Oinc! Se tiver ${PRODUTOS[of].plural}, pago melhor hoje.`, 'A freguesia do Joli Market não para de perguntar das suas coisas!'],
     tchau: ['Até mais, maninho!', 'Valeu! Volto quando você chamar.', 'Tchau, Ed! Mamãe mandou um beijo.'],
-    tudo: 'Fechado! Já levo tudo pro mercado.', pedido: 'Isso! Pedido completinho. Já tenho outro pra você.', botaoTchau: 'Tchau, Beto',
+    tudo: 'Fechado! Já levo tudo pro mercado.', sobra: 'Fechado! Levo a sobra pro mercado e deixo aí o que é dos pedidos.', pedido: 'Isso! Pedido completinho. Já tenho outro pra você.', botaoTchau: 'Tchau, Beto',
   },
   jaca: {
     nome: 'Jaca', icone: 'jaca', cor: 'verde', titulo: 'Jaca do Joli Market', sub: 'O melhor amigo e sócio do Beto',
     chegada: ['Oi, Ed! O Beto ficou no caixa, então vim eu!', 'Cheguei! Dirigi com cuidadinho, viu?', 'Oi oi! Que saudade da fazenda!'],
     conversa: of => [`Oi, Ed! O Beto mandou dizer que hoje ${PRODUTOS[of].plural} valem mais.`, 'Que fazenda bonita! O que você separou pra gente?', 'O Beto disse que você é o melhor fazendeiro da região. Eu concordo!', `Se tiver ${PRODUTOS[of].plural}, o mercado paga melhor hoje.`],
     tchau: ['Tchau, Ed! Vou mandar um abraço pro Beto por você.', 'Foi muito bom te ver! Até a próxima!', 'Valeu, amigão! Cuida bem das galinhas!'],
-    tudo: 'Oba! Vou levar tudo com muito cuidado.', pedido: 'Uau, pedido completinho! O Beto vai ficar feliz. Já anotei outro.', botaoTchau: 'Tchau, Jaca',
+    tudo: 'Oba! Vou levar tudo com muito cuidado.', sobra: 'Oba! Levo a sobra com cuidado e deixo aí o que é dos pedidos.', pedido: 'Uau, pedido completinho! O Beto vai ficar feliz. Já anotei outro.', botaoTchau: 'Tchau, Jaca',
   },
   pelucio: {
     nome: 'Pelúcio', icone: 'pelucio', cor: 'rosa2', titulo: 'Pelúcio da Joli Coffee', sub: 'Seu irmão veio buscar café para a cafeteria', compra: 'cafe',
     chegada: ['Boa tarde, irmão! Vim buscar o café.', 'Oi, Ed! A Joli Coffee tá lotada, preciso de café!', 'Cheguei! Sente o cheirinho de café na van?'],
     conversa: () => ['Quanto café seco você tem pra mim hoje?', 'Os clientes da Joli Coffee adoram o café da fazenda!', 'Esse café vai virar um cappuccino caprichado.'],
     tchau: ['Valeu, irmão! Passa lá na Joli Coffee pra tomar um cafezinho.', 'Até mais! Vou torrar esse café hoje mesmo.', 'Tchau, Ed! Manda um oi pro Beto.'],
-    tudo: 'Perfeito! Vou torrar hoje mesmo.', botaoTchau: 'Tchau, Pelúcio',
+    tudo: 'Perfeito! Vou torrar hoje mesmo.', sobra: 'Perfeito! Levo o que sobra e deixo o café do pedido separado.', botaoTchau: 'Tchau, Pelúcio',
     vazio: 'Ainda não tem café seco no celeiro. Colha as cerejas de café e seque no terreiro.',
   },
 };
@@ -5335,13 +5335,22 @@ function comprarAnimal(tp){
   aviso(`${A.nome} nova no ${A.lugar}!`);
   hud(); salvar();
 }
+// o que os pedidos abertos precisam, até o que tem no celeiro: o "Vender tudo" deixa isso separado e vende só a sobra
+function separadoPedidos(){
+  const sep = {};
+  for (const p of S.pedidos || []) if (p && p.itens) for (const [k, q] of p.itens) sep[k] = (sep[k] || 0) + q;
+  for (const k in sep) sep[k] = Math.min(sep[k], S.celeiro[k] || 0);
+  return sep;
+}
+const sobraDe = (p, sep) => Math.max(0, (S.celeiro[p] || 0) - (sep[p] || 0));
+const nomeQtd = (p, q) => `${q} ${q > 1 ? PRODUTOS[p].plural : PRODUTOS[p].nome.toLowerCase()}`;
 function linhasProdutos(comVenda, aceita = () => true, vazio = 'O celeiro está vazio. Colha alguma coisa ou pegue ovos e leite.'){
-  const of = ofertaDoDia();
+  const of = ofertaDoDia(), sep = separadoPedidos();
   const itens = ORDEM_PRODUTOS.filter(p => S.celeiro[p] > 0 && aceita(p));
   if (!itens.length) return `<div class="vazio">${vazio}</div>`;
   return '<div class="linhas">' + itens.map(p => {
     const pr = preco(p), q = S.celeiro[p];
-    return `<div class="linha${p === of ? ' oferta' : ''}"><img src="${icone(p)}" alt=""><div class="nome">${PRODUTOS[p].nome}${p === of ? '<span class="selo">oferta do dia</span>' : ''}<small>${PRODUTOS[p].venda ? reais(pr) + ' cada' : 'precisa secar no terreiro'}</small></div><div class="qtd">${q}</div>${comVenda ? `<button class="botao mini claro" data-vender="${p}" data-q="1" type="button">1</button><button class="botao mini" data-vender="${p}" data-q="${q}" type="button">Tudo · ${reais(pr * q)}</button>` : ''}</div>`;
+    return `<div class="linha${p === of ? ' oferta' : ''}"><img src="${icone(p)}" alt=""><div class="nome">${PRODUTOS[p].nome}${p === of ? '<span class="selo">oferta do dia</span>' : ''}<small>${PRODUTOS[p].venda ? reais(pr) + ' cada' : 'precisa secar no terreiro'}${sep[p] ? ` · ${sep[p]} para pedidos` : ''}</small></div><div class="qtd">${q}</div>${comVenda ? `<button class="botao mini claro" data-vender="${p}" data-q="1" type="button">1</button><button class="botao mini" data-vender="${p}" data-q="${q}" type="button">Tudo · ${reais(pr * q)}</button>` : ''}</div>`;
   }).join('') + '</div>';
 }
 function valorCeleiro(aceita = () => true){ return ORDEM_PRODUTOS.reduce((s, p) => s + (aceita(p) ? (S.celeiro[p] || 0) * preco(p) : 0), 0); }
@@ -5495,12 +5504,18 @@ function abrirBeto(){
   const peds = pedidosDe(!doCafe);
   let corpo = `<div class="fala-janela">${esc(falaBeto)}</div>${peds.map(([p, i]) => pedidoHTML(p, i, true)).join('')}${linhasProdutos(true, aceita, D.vazio)}`;
   if (!doCafe && S.celeiro.cafe) corpo += `<p style="margin:10px 0 0;font-weight:700;font-size:13px;color:var(--tinta-suave)">O café seco fica guardado para o Pelúcio, da Joli Coffee.</p>`;
-  const total = valorCeleiro(aceita);
-  corpo += `<div class="rodape-janela"><button class="botao claro" type="button" data-fechar>${D.botaoTchau}</button><button class="botao" id="jTudo" type="button"${total ? '' : ' disabled'}>Vender tudo · ${reais(total)}</button></div>`;
+  const sep = separadoPedidos(), guardados = ORDEM_PRODUTOS.filter(p => sep[p] > 0 && aceita(p));
+  if (guardados.length) corpo += `<p style="margin:10px 0 0;font-weight:700;font-size:13px;color:var(--tinta-suave)">Separado para os pedidos: ${guardados.map(p => nomeQtd(p, sep[p])).join(', ')}.</p>`;
+  const total = ORDEM_PRODUTOS.reduce((t, p) => t + (aceita(p) ? sobraDe(p, sep) * preco(p) : 0), 0);
+  corpo += `<div class="rodape-janela"><button class="botao claro" type="button" data-fechar>${D.botaoTchau}</button><button class="botao" id="jTudo" type="button"${total ? '' : ' disabled'}>${guardados.length ? 'Vender a sobra' : 'Vender tudo'} · ${reais(total)}</button></div>`;
   abrirJanela(topo(D.icone, D.titulo, D.sub, D.cor) + `<div class="janela-corpo">${corpo}</div>`, () => { falaBeto = ''; despedirBeto(); });
   const j = $('janela');
   j.querySelectorAll('[data-vender]').forEach(b => b.addEventListener('click', () => { vender(b.dataset.vender, +b.dataset.q); reabrirBeto(); }));
-  const tudo = $('jTudo'); if (tudo) tudo.addEventListener('click', () => { for (const p of ORDEM_PRODUTOS) if (S.celeiro[p] && aceita(p)) vender(p, S.celeiro[p], true); Som.moeda(); falaBeto = D.tudo; reabrirBeto(); });
+  const tudo = $('jTudo'); if (tudo) tudo.addEventListener('click', () => {
+    const sep = separadoPedidos(), guardou = ORDEM_PRODUTOS.some(p => sep[p] > 0 && aceita(p));
+    for (const p of ORDEM_PRODUTOS) if (aceita(p)){ const q = sobraDe(p, sep); if (q) vender(p, q, true); }
+    Som.moeda(); falaBeto = guardou ? D.sobra : D.tudo; reabrirBeto();
+  });
   j.querySelectorAll('[data-entregar]').forEach(b => b.addEventListener('click', () => entregarPedido(+b.dataset.entregar)));
 }
 function reabrirBeto(){ const cb = aoFecharJanela; aoFecharJanela = null; $('modal').hidden = true; abrirBeto(); if (!aoFecharJanela) aoFecharJanela = cb; }
@@ -5530,6 +5545,7 @@ function entregarPedido(i){
     setTimeout(() => aviso(`Presente do pedido: ${textoPremio(pr)}!`), 400);
   }
   S.entregues = (S.entregues || 0) + 1;
+  avancarTut(5);
   Som.moeda(); Som.nivel();
   S.pedidos[i] = { espera: Date.now() + rnd(6, 12) * 60 * 1000 };
   falaBeto = dadosVisita().pedido || 'Perfeito, irmão! Era isso mesmo.';
@@ -5620,7 +5636,7 @@ function mostrarAjuda(intro, aba){
     <ul class="passos">
       <li><b>Níveis:</b> arar, regar, tirar o mato, colher, produzir e entregar pedidos dá xp. Cada nível libera coisas novas.</li>
       <li><b>Terrenos:</b> o Ed começa com um; os outros são comprados nos níveis ${NIVEL_LOTE.slice(1).join(', ')}.</li>
-      <li><b>Pedidos:</b> até três do Beto e do Jaca ao mesmo tempo, com prazo, que só corre com o jogo aberto. Depois da cena do Pelúcio, chega mais um dele, só de café. Cada item pede no máximo ${MAX_ITEM_PEDIDO} unidades. Pagam mais que o preço normal de cada coisa e às vezes trazem presente. O caderno do Ed mostra todos.</li>
+      <li><b>Pedidos:</b> até três do Beto e do Jaca ao mesmo tempo, com prazo, que só corre com o jogo aberto. Depois da cena do Pelúcio, chega mais um dele, só de café. Cada item pede no máximo ${MAX_ITEM_PEDIDO} unidades. Pagam mais que o preço normal de cada coisa e às vezes trazem presente. O caderno do Ed mostra todos. Na hora de vender, o "Vender tudo" deixa no celeiro o que os pedidos abertos precisam e leva só a sobra; os botões de cada produto vendem mesmo assim.</li>
       <li><b>Oferta do dia:</b> um produto vale 50% a mais naquele dia.</li>
       <li><b>Estações:</b> seguem o calendário. As culturas da estação colhem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais. ${nomesRend1()}, que rendem 1, valem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais no Beto e no Jaca, mas esse bônus de preço não soma com a oferta do dia. Toque no selo da estação para ver quais.</li>
       <li><b>Figurinhas:</b> metas de longo prazo no caderno, que dão xp.</li>
