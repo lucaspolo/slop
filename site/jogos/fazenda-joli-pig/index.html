@@ -1604,6 +1604,15 @@ const VI = {
     v.box(-7, 9, -1, -7, 10, 1, 0x9aa3ad);
     return v;
   },
+  // chapéu de festa listrado com pompom e confete em volta
+  festa(){
+    const v = new Vox(), LIS = [0xff4d6d, 0xffd23f, 0x4dabf7];
+    for (let y = 0; y <= 13; y++){ const r = 5.6 - y * 0.4; v.ell(0, y, 0, r, 0.6, r, (x, Y, z) => LIS[(Math.floor((x + z + 40) / 3)) % 3]); }
+    v.ell(0, 0, 0, 6.2, 0.6, 6.2, 0xf27fa4);
+    v.ell(0, 14, 0, 1.6, 1.6, 1.6, 0xffffff);
+    for (const [x, y, z, c] of [[-8, 9, 0, 0x69db7c], [8, 12, 1, 0xffd23f], [-7, 15, 0, 0xf783ac], [7, 6, 0, 0x4dabf7], [-9, 4, 1, 0xffd23f], [9, 16, 0, 0xff4d6d], [-3, 18, 0, 0x4dabf7], [4, 19, 1, 0x69db7c]]) v.box(x, y, z, x + 1, y + 1, z, c);
+    return v;
+  },
   lote(){ const v = vSolo(false); v.box(6, 2, 6, 6, 5, 6, 0x8a5a36); v.box(3, 5, 6, 9, 8, 6, 0xf3e3c3); return v; },
 };
 
@@ -1769,6 +1778,8 @@ function carregar(){
     const d = JSON.parse(localStorage.getItem(CHAVE_SALVO) || 'null');
     if (d && d.campo){
       S = Object.assign(estadoNovo(), d); S.versao = d.versao || 1; migrar();
+      // quem já chamou o Hud viu a explicação e não vê a cena dele; os outros veem no nível 9
+      if (d.viuCineHud === undefined && d.viuExplicacaoHud) S.viuCineHud = true;
       // quem já joga não vê a cena inicial sozinho (pode rever pelo menu)
       if (d.viuCineInicio === undefined) S.viuCineInicio = true;
       return false;
@@ -2848,7 +2859,10 @@ function chamarBeto(){
   if (caminhaoE.estado === 'aqui'){ abrirBeto(); return; }
   if (caminhaoE.estado !== 'longe'){ aviso(`${dadosVisita().nome} ainda está por aqui. Espere ele ir embora.`); return; }
   if (cenaPedida){ aviso('Uma cena vai começar. Espere um pouquinho.'); return; }
-  visita = (S.visitas || 0) >= 1 && Math.random() < 0.3 ? jaca : beto;
+  const sorteado = (S.visitas || 0) >= 1 && Math.random() < 0.3;
+  // a primeira visita do Jaca é uma cena: só sai o Jaca se ela puder começar agora, senão vem o Beto
+  if (sorteado && !S.conheceuJaca && ed.estado === 'parado' && !tarefaAtual && !algumaJanela() && !menuAberto){ avancarTut(4); iniciarCine('jaca'); hud(); return; }
+  visita = sorteado && S.conheceuJaca ? jaca : beto;
   caminhao = caminhaoMarket;
   caminhaoE.estado = 'chegando'; caminhaoE.t = 0; caminhao.visible = true; caminhao.position.x = -5;
   Som.buzina(); aviso('Você ligou pro Joli Market. O caminhão já vem!'); hud();
@@ -2878,7 +2892,6 @@ function atualizarCaminhao(dt){
         c.estado = 'aqui'; v.angAlvo = Math.PI; v.aceno = 1.6;
         S.visitas = (S.visitas || 0) + 1;
         if (v === jaca){
-          if (!S.conheceuJaca){ S.conheceuJaca = true; aviso('Quem veio foi o Jaca, o melhor amigo e sócio do Beto!', 'grande', 3.5); }
           presenteJaca = darPresente();
           Som.jaca();
         } else Som.oinc();
@@ -2916,13 +2929,13 @@ function despedirBeto(){
   falar(visita, txt, dur + 0.4);
 }
 // o Jaca sempre traz um presentinho: sementes de algo que o Ed já pode plantar, ou ração
-function darPresente(){
+function darPresente(sobre = jaca){
   const n = nivel();
-  if (ANI.length && Math.random() < 0.35){ S.racao += 5; chipPulsa('chipRacao'); flutuar(jaca.topo(), '+5', '', 'racao'); return 'Trouxe 5 rações de presente pros bichos!'; }
+  if (ANI.length && Math.random() < 0.35){ S.racao += 5; chipPulsa('chipRacao'); flutuar(sobre.topo(), '+5', '', 'racao'); return 'Trouxe 5 rações de presente pros bichos!'; }
   const opc = ORDEM_CULTURAS.filter(k => CULTURAS[k].nivel <= n);
   const k = opc[Math.min(opc.length - 1, Math.floor(Math.random() * opc.length))], q = 3;
   S.bolsa[k] = (S.bolsa[k] || 0) + q;
-  flutuar(jaca.topo(), '+' + q, '', k);
+  flutuar(sobre.topo(), '+' + q, '', k);
   return `Trouxe ${q} sementes de ${CULTURAS[k].nome.toLowerCase()} de presente pra você!`;
 }
 
@@ -2949,7 +2962,40 @@ const FALAS_MINHOCAS = [
   ['ed', 'Ed', 'Combinado, sócias! Mãos à obra.', 'obra'],
   ['minhoquinha', 'Minhoquinhas', 'Que casa linda! Pode trazer o mato que a gente cuida do resto.', 'entram'],
 ];
+const FALAS_JACA = [
+  ['jaca', 'Jaca', 'Oi, Ed! Eu sou o Jaca, o melhor amigo e sócio do Beto!'],
+  ['ed', 'Ed', 'Aooooa! O Beto fala muito de você! Cadê ele?'],
+  ['jaca', 'Jaca', 'Ficou no caixa do Joli Market. Hoje quem dirige sou eu, com cuidadinho!'],
+  ['jaca', 'Jaca', 'E eu sempre trago um presentinho pra fazenda. Toma!', 'presente'],
+  ['ed', 'Ed', 'Obrigado, Jaca! Vem ver o que eu separei pro mercado.'],
+];
+const FALAS_MILTON = [
+  ['milton', 'Milton', 'Milton na área! Oi, Ed!'],
+  ['ed', 'Ed', 'Milton?! Que susto! Esse avião é seu?'],
+  ['milton', 'Milton', 'É o PIG-MTP! Posso pousar aqui atrás de vez em quando?'],
+  ['ed', 'Ed', 'Claro, maninho! Traz umas sementes quando vier.'],
+  ['milton', 'Milton', 'Combinado! E eu pago a manutenção da pista.'],
+];
+// festa do nível 20: a fala 4 vai para o Beto quando o Jaca ainda não conheceu a fazenda
+const falasFesta = () => [
+  ['beto', 'Beto', 'Surpresa, maninho! Viemos comemorar!'],
+  ['ed', 'Ed', 'Aooooa! Todo mundo aqui? Que festa é essa?'],
+  ['pelucio', 'Pelúcio', 'Nível 20, irmão! A sua fazenda é a mais famosa da região.'],
+  S.conheceuJaca ? ['jaca', 'Jaca', 'E o Joli Market não para de vender as suas coisas!'] : ['beto', 'Beto', 'E o Joli Market não para de vender as suas coisas!'],
+  ['hud', 'Hud', 'Eu ajudei! Eu ajudei!'],
+  ['ed', 'Ed', 'Ajudou muito, Hud! Mas cadê o Milton?', 'milton'],
+  ['milton', 'Milton', 'Milton na área! Parabéns, Ed!'],
+  ['ed', 'Ed', 'Obrigado, família! Essa fazenda é de todos nós.'],
+  ['todos', 'Todos', 'Viva a Fazenda Joli Pig!', 'festa'],
+];
 const PONTO_ED = [16.5, 13.5], PONTO_PELUCIO = [15.5, 14.5];
+// cena do Jaca: conversa no mesmo lugar da do Pelúcio; no fim ele anda até o lugar de espera das visitas
+const JACA_ESPERA = [PARADA, 15.4], JACA_CENA = PONTO_PELUCIO, JACA_ED = PONTO_ED;
+// cena do Hud: a porta da casa, onde o Ed espera, onde o Hud para e o canteiro da demonstração (no primeiro terreno)
+const HUD_PORTA = [5.5, 5.6], HUD_ED = [8.5, 6.5], HUD_PARA = [7.5, 6.5];
+// a demonstração usa o canteiro do canto do primeiro terreno; o Hud fica no gramado ao lado, entre o canteiro e a câmera
+const canteiroHud = () => { const l = LOTES[2]; return [l.x + 3, l.z + 3]; };
+const HUD_DEMO = [14.4, 10.5];
 // cena inicial: [Ed, Beto] logo depois da porteira e depois de entrar; ficam um de cada lado na tela, de perfil para a câmera
 const INI_PORTAO = [[16.0, 13.4], [15.2, 14.2]], INI_DENTRO = [[15.8, 12.5], [15.0, 13.3]];
 // o passeio da câmera na fala 3: casa, celeiro, galinhas e o primeiro terreno
@@ -2972,6 +3018,35 @@ function soltarMochila(){
 function limparInicio(){
   ed.mochila.visible = false; mochilaChao.visible = false; ed.ferramenta(null);
   ed.g.visible = true; beto.g.visible = false; beto.pontos = []; beto.estado = 'parado'; beto.aceno = 0;
+}
+// Milton na área: o Ed espera na beira de cima da fazenda e o Milton desce na faixa entre a pista e a fazenda
+const MI_ED = [18.7, 0.6], MI_MILTON = [19.2, -0.9], MI_DESCE = [19.9, -1.7];
+const portaAviao = () => [PISTA.para + 0.9, PISTA.y + 0.35];
+function aviaoFora(){ voo = { estado: 'fora', t: 0 }; aviao.visible = false; aviao.rotation.set(0, 0, 0); motor(false); }
+// o presente, a taxa e o relógio do próximo pouso valem só na primeira vez (na reprise não mexem no save)
+function presenteMiltonCena(){
+  if (cine.presente || cine.reprise) return;
+  cine.presente = true;
+  S.conheceuMilton = true; S.proxMilton = Date.now() + rnd(...PISTA.intervalo) * 60000;
+  presenteMilton();
+}
+// Festa: o Ed no cruzamento em frente ao celeiro, os outros em meia-lua na frente dele
+const FESTA_ED = [15.5, 6.5], FESTA_VAN = PARADA - 3.4;
+const festaRoda = () => (S.conheceuJaca ? { pelucio: [-1.5, 0.3], beto: [-0.95, 1.2], jaca: [0.2, 1.5], hud: [1.15, 0.95] } : { pelucio: [-1.5, 0.3], beto: [-0.5, 1.4], hud: [1.0, 1.1] });
+const CORES_FESTA = [0xff4d6d, 0xffd23f, 0x4dabf7, 0x69db7c, 0xf783ac, 0xffffff, 0xb197fc];
+function confete(x, y, z, n = 1, espalha = 0.8){
+  for (let i = 0; i < n; i++){
+    particula(x + rnd(-0.2, 0.2), y, z + rnd(-0.2, 0.2), CORES_FESTA[Math.floor(rnd(0, CORES_FESTA.length))], 0);
+    const p = PART[PART.length - 1]; p.v.set(rnd(-espalha, espalha), rnd(-0.2, 1.4), rnd(-espalha, espalha)); p.g = 1.1; p.vida = 3; p.m.scale.setScalar(1.7);
+  }
+}
+// tudo o que a festa deixa para trás: a família, o Hud, os veículos e o avião
+function limparFesta(){
+  if (tarefaHud){ setReserva(tarefaHud.alvo, null); tarefaHud = null; }
+  for (const p of [beto, jaca, pelucio, irmaoHud]){ p.g.visible = false; p.pontos = []; p.aoChegar = null; p.estado = 'parado'; p.aceno = 0; p.pulo = 0; }
+  irmaoHud.saindo = false;
+  caminhaoMarket.visible = false; caminhaoCafe.visible = false;
+  if (voo.estado === 'festa') aviaoFora();
 }
 let cine = null, cineLivreEm = 0, cenaPedida = null;
 const CENAS = {
@@ -3047,6 +3122,75 @@ const CENAS = {
     },
     restaurar(){ limparInicio(); },
   },
+  milton: {
+    flag: 'conheceuMilton', nivel: () => 1, falas: FALAS_MILTON, icone: 'milton',
+    titulo: 'Milton na área', desc: 'O Milton pousa o PIG-MTP pela primeira vez.', trancada: 'acontece depois da primeira venda',
+    // só depois da primeira venda ao Joli Market, quando o relógio do primeiro pouso vence
+    pronta: () => !S.conheceuMilton && S.vendeu > 0 && Date.now() >= S.proxMilton && voo.estado === 'fora',
+    podeRever: () => (voo.estado !== 'fora' ? 'Dá para rever quando o Milton decolar.' : null),
+    foco(c){
+      const p = c.passo, ax = aviao.position.x;
+      if (p === 'm-rasante') return new THREE.Vector3(clamp(ax, 15.5, 23.5), 0.6, -0.1);
+      if (p === 'm-pouso' || p === 'm-decola') return new THREE.Vector3(clamp(ax, 9, 20), 0.3, -1.3);
+      return new THREE.Vector3((MI_ED[0] + MI_MILTON[0]) / 2 + 0.25, 0.35, (MI_ED[1] + MI_MILTON[1]) / 2 + 0.6);
+    },
+    vista(c){
+      const f = telaEstreita() ? 1.45 : 1;
+      return /rasante|pouso|decola/.test(c.passo) ? 8.5 * f : /indo/.test(c.passo) ? 7 * f : 4.8 * f;
+    },
+    cameraRapida: c => /rasante|pouso|decola/.test(c.passo),
+    iniciar(c){
+      caminhaoE.estado = 'cine';
+      // a câmera vai para o lado da pista (nordeste): a árvore ao lado do Ed não tapa a conversa
+      cam.azAlvo += (((Math.PI * 3 / 4 - cam.azAlvo + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+      const pts = rota(clamp(Math.floor(ed.pos.x), 0, W - 1), clamp(Math.floor(ed.pos.y), 0, H - 1), Math.floor(MI_ED[0]), Math.floor(MI_ED[1]));
+      if (pts) { pts.push(MI_ED); ed.ir(pts, () => ed.olhar(...MI_MILTON)); } else { ed.colocar(...MI_ED); ed.olhar(...MI_MILTON); }
+      return 'm-indo';
+    },
+    // o Ed espera, o PIG-MTP faz o rasante, volta e pousa; o Milton desce e anda até o Ed
+    trecho(c){
+      switch (c.passo){
+        case 'm-indo':
+          if (c.t > 1.2 && ed.estado === 'parado'){ voo = { estado: 'rasante', t: 0, cena: true, reprise: c.reprise }; aviao.visible = true; motor(true); c.passo = 'm-rasante'; c.t = 0; }
+          break;
+        case 'm-rasante': case 'm-pouso':
+          ed.olhar(aviao.position.x, aviao.position.z);
+          if (c.passo === 'm-rasante' && voo.estado === 'chegando') c.passo = 'm-pouso';
+          if (voo.estado === 'parado'){
+            const p = portaAviao();
+            milton.g.visible = true; milton.colocar(...p); milton.estado = 'parado'; milton.ang = milton.angAlvo = 0;
+            c.chegou = false; c.passo = 'm-desce'; c.t = 0;
+            milton.ir([MI_DESCE, MI_MILTON], () => { c.chegou = true; });
+          }
+          break;
+        case 'm-desce':
+          if (c.chegou && ed.estado === 'parado' && milton.estado === 'parado'){
+            virarNaCena(ed, ...MI_MILTON); virarNaCena(milton, ...MI_ED); milton.pulo = 0.45;
+            c.passo = 'dialogo'; mostrarFalaCine(0);
+          }
+          break;
+        // depois da última fala: o presente, e o Milton volta para o avião e decola
+        case 'm-volta':
+          if (!c.ini && c.t > (c.reprise ? 1.2 : 3.8)){
+            c.ini = true;
+            milton.ir([MI_DESCE, portaAviao()], () => { milton.g.visible = false; voo = { estado: 'decolando', t: 0, cena: true, reprise: c.reprise }; motor(true); c.passo = 'm-decola'; c.t = 0; });
+          }
+          break;
+        case 'm-decola':
+          ed.olhar(aviao.position.x, aviao.position.z);
+          if (voo.estado === 'fora'){ c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
+          break;
+      }
+    },
+    fimDasFalas(c){ $('cineDialogo').hidden = true; presenteMiltonCena(); ed.olhar(...MI_MILTON); c.passo = 'm-volta'; c.t = 0; c.ini = false; },
+    pular(){
+      ed.trab = null; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado';
+      milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; milton.colocar(...MI_MILTON);
+      presenteMiltonCena();
+      milton.g.visible = false; aviaoFora();
+    },
+    fim(){ S.conheceuMilton = true; },
+  },
   pelucio: {
     flag: 'viuCinePelucio', nivel: () => CULTURAS.cafe.nivel, falas: FALAS_CINE, icone: 'pelucio',
     titulo: 'Café com o Pelúcio', desc: 'O Pelúcio quer o café da fazenda para a Joli Coffee.',
@@ -3081,6 +3225,151 @@ const CENAS = {
       if (!estFab('terreiro').feita){ estFab('terreiro').feita = true; montarFabrica('terreiro'); }
       aviso('Café liberado! O Pelúcio compra o café seco para a Joli Coffee.', 'grande', 4.5);
     },
+  },
+  jaca: {
+    flag: 'conheceuJaca', nivel: () => 1, falas: FALAS_JACA, icone: 'jaca',
+    titulo: 'O sócio do Beto', desc: 'O Jaca vem no lugar do Beto e traz um presente.', trancada: 'acontece numa visita do Joli Market',
+    // começa por chamarBeto (o sorteio da visita), nunca sozinha
+    pronta: () => false,
+    visitante: () => jaca,
+    foco(c){
+      if (c.passo === 'chegando' || c.passo === 'partindo') return new THREE.Vector3(15.2, 0.3, 16.2);
+      return centroDe(JACA_ED, JACA_CENA);
+    },
+    vista(c){
+      const p = c.passo, f = telaEstreita() ? 1.45 : 1;
+      if (p === 'chegando' || p === 'partindo') return 8 * f;
+      return p === 'dialogo' || p === 'presente' || p === 'jacaesp' ? 4.4 * (telaEstreita() ? 1.9 : 1) : 6 * f;
+    },
+    iniciar(c){
+      caminhao = caminhaoMarket; caminhao.visible = true; caminhao.position.set(-5, 0, Z_ESTRADA);
+      caminhaoE.estado = 'cine';
+      const pts = rota(clamp(Math.floor(ed.pos.x), 0, W - 1), clamp(Math.floor(ed.pos.y), 0, H - 1), Math.floor(JACA_ED[0]), Math.floor(JACA_ED[1]));
+      if (pts) ed.ir(pts, () => ed.olhar(...JACA_CENA)); else { ed.colocar(...JACA_ED); ed.olhar(...JACA_CENA); }
+      Som.buzina();
+      return 'chegando';
+    },
+    desce(c){
+      jaca.g.visible = true; jaca.colocar(PARADA, 16.85); jaca.ang = jaca.angAlvo = Math.PI;
+      jaca.ir([[PARADA, 16.4], JACA_CENA], () => { c.chegou = true; Som.jaca(); });
+    },
+    posicionar(){ virarNaCena(ed, ...JACA_CENA); virarNaCena(jaca, ...JACA_ED); jaca.aceno = 1.4; },
+    // o Jaca estica o presente e ele aparece sobre o Ed
+    presente(c){
+      if (!c.ini){
+        c.ini = true; jaca.aceno = 1.8; presenteDoJaca(); Som.moeda();
+        for (let i = 0; i < 14; i++) particula(ed.pos.x + rnd(-0.4, 0.4), 0.9, ed.pos.y + rnd(-0.4, 0.4), [0xffe066, 0xf27fa4, 0xffffff][i % 3], 1.2);
+      }
+      if (c.t >= 2.2){ c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
+    },
+    // na primeira vez a visita continua: o caminhão fica e a janela de venda abre; na reprise o Jaca vai embora
+    fimDasFalas(c){
+      $('cineDialogo').hidden = true;
+      if (c.reprise){ jaca.aceno = 1.6; c.passo = 'despedida'; c.t = 0; return; }
+      c.passo = 'jacaesp'; c.t = 0; c.ini = false;
+    },
+    // o Jaca anda até o lugar de espera e a câmera volta
+    espera(c){
+      if (!c.ini){ c.ini = true; c.ok = false; jaca.ir([JACA_ESPERA], () => { c.ok = true; }); }
+      if (c.ok){ jaca.olhar(...JACA_ED); c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
+    },
+    pular(c){
+      ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado';
+      if (c.reprise){ limparJaca(); return; }
+      presenteDoJaca();
+      ed.colocar(...JACA_ED); ed.olhar(...JACA_ESPERA);
+    },
+    fim(){
+      S.conheceuJaca = true; S.visitas = (S.visitas || 0) + 1;
+      visita = jaca; caminhao = caminhaoMarket; caminhao.visible = true; caminhao.position.set(PARADA, 0, Z_ESTRADA);
+      caminhaoE.estado = 'aqui'; presenteJaca = '';
+      jaca.g.visible = true; jaca.pontos = []; jaca.estado = 'parado'; jaca.colocar(...JACA_ESPERA); jaca.ang = jaca.angAlvo = Math.PI; jaca.aceno = 1.6;
+      setTimeout(() => { if (caminhaoE.estado === 'aqui' && visita === jaca && !algumaJanela() && !cine) abrirBeto(); }, 500);
+    },
+    restaurar(){ limparJaca(); },
+  },
+  hud: {
+    flag: 'viuCineHud', nivel: () => HUD.nivel, icone: 'hud',
+    titulo: 'O ajudante caçula', desc: 'O Hud quer ajudar em troca de uma mesada.',
+    pronta: () => nivel() >= HUD.nivel && !hudAtivo() && !irmaoHud.g.visible,
+    podeRever: () => (hudAtivo() || irmaoHud.g.visible ? 'Dá para rever quando o Hud terminar a ajuda.' : null),
+    // os números vêm de HUD, que só existe depois deste bloco
+    get falas(){
+      return [
+        ['hud', 'Hud', 'Ed! Eu também quero trabalhar na fazenda!'],
+        ['ed', 'Ed', 'Você, Hud? Mas você é tão pequenininho!'],
+        ['hud', 'Hud', 'Pequeno, mas rapidinho! Olha só!', 'mostra'],
+        ['hud', 'Hud', 'Eu rego, tiro o mato e colho. Até as frutas do pomar e o mel!'],
+        ['ed', 'Ed', 'Uau! E quanto custa esse ajudante?'],
+        ['hud', 'Hud', `Uma mesadinha de ${reais(HUD.preco)}, e eu trabalho ${HUD.minutos} minutos sem parar!`],
+        ['ed', 'Ed', 'Combinado! E onde eu te chamo?'],
+        ['hud', 'Hud', 'Na casa, no caderno ou é só tocar em mim!'],
+      ];
+    },
+    foco(c){
+      const p = c.passo;
+      if (p === 'mostra') return new THREE.Vector3(irmaoHud.pos.x + 0.25, 0.35, irmaoHud.pos.y + 0.6);
+      if (p === 'hudsai' || p === 'hudvolta') return centroDe(HUD_PORTA, HUD_ED);
+      return centroDe(HUD_PARA, HUD_ED);
+    },
+    vista(c){
+      const p = c.passo, f = telaEstreita() ? 1.45 : 1;
+      return (p === 'mostra' ? 6.5 : p === 'hudsai' || p === 'hudvolta' ? 5.6 : 4.4) * f;
+    },
+    cameraRapida: c => c.passo === 'mostra',
+    iniciar(){
+      caminhaoE.estado = 'cine';
+      cam.azAlvo = Math.PI / 4;
+      irmaoHud.vel = 3.3;
+      const pts = rota(clamp(Math.floor(ed.pos.x), 0, W - 1), clamp(Math.floor(ed.pos.y), 0, H - 1), Math.floor(HUD_ED[0]), Math.floor(HUD_ED[1]));
+      if (pts) ed.ir(pts, () => ed.olhar(...HUD_PORTA)); else { ed.colocar(...HUD_ED); ed.olhar(...HUD_PORTA); }
+      return 'hudsai';
+    },
+    posicionar(){ virarNaCena(ed, ...HUD_PARA); virarNaCena(irmaoHud, ...HUD_ED); irmaoHud.pulo = 0.45; },
+    // o Hud sai de casa correndo e para de frente para o Ed
+    sai(c){
+      const Hd = irmaoHud;
+      if (!c.ini && c.t > 0.5 && ed.estado === 'parado'){
+        c.ini = true; Hd.saindo = false; Hd.g.visible = true; Hd.estado = 'parado'; Hd.pontos = [];
+        Hd.colocar(...HUD_PORTA); Hd.ang = Hd.angAlvo = 0.3; Hd.pulo = 0.45; Som.pop();
+        fumacaDoHud();
+        Hd.ir([HUD_PARA], () => { c.hudOk = true; });
+      }
+      if (c.hudOk && Hd.estado === 'parado'){ this.posicionar(); c.passo = 'dialogo'; mostrarFalaCine(0); }
+    },
+    // o Hud corre até um canteiro do primeiro terreno, faz de conta que rega e que colhe (sem mexer em nada) e volta
+    mostra(c){
+      const Hd = irmaoHud, [kx, kz] = canteiroHud(), alvo = { k: 'tile', x: kx, z: kz };
+      if (!c.ini){
+        c.ini = true; c.sub = 0;
+        const pts = rota(clamp(Math.floor(Hd.pos.x), 0, W - 1), clamp(Math.floor(Hd.pos.y), 0, H - 1), Math.floor(HUD_DEMO[0]), Math.floor(HUD_DEMO[1])) || [];
+        if (pts.length) pts[pts.length - 1] = HUD_DEMO.slice(); else pts.push(HUD_DEMO.slice());
+        Hd.ir(pts, () => { c.sub = 1; });
+      }
+      if (c.sub === 1){
+        c.sub = 2; Hd.olhar(kx + 0.5, kz + 0.5);
+        efeitoDuranteTrabalho({ tipo: 'regar', alvo }); Som.plantar();
+        Hd.trabalhar(1.6, 'regador', () => { c.sub = 3; });
+      } else if (c.sub === 3){
+        c.sub = 4; efeitoDuranteTrabalho({ tipo: 'colher', alvo });
+        Hd.trabalhar(1.4, 'cesta', () => { c.sub = 5; Som.moeda(); });
+      } else if (c.sub === 5){
+        c.sub = 6;
+        const pts = rota(clamp(Math.floor(Hd.pos.x), 0, W - 1), clamp(Math.floor(Hd.pos.y), 0, H - 1), Math.floor(HUD_PARA[0]), Math.floor(HUD_PARA[1])) || [];
+        if (pts.length) pts[pts.length - 1] = HUD_PARA.slice();
+        Hd.ir(pts, () => { c.sub = 7; });
+      } else if (c.sub === 7 && Hd.estado === 'parado'){ this.posicionar(); c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
+    },
+    // o Hud volta correndo para a casa e some na porta
+    volta(c){
+      if (!c.ini){ c.ini = true; irmaoHud.ir([HUD_PORTA], () => { irmaoHud.g.visible = false; fumacaDoHud(); c.t = 0; c.sumiu = true; }); virarNaCena(ed, ...HUD_PORTA); ed.aceno = 1.6; }
+      if (c.sumiu && c.t > 0.7){ c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
+    },
+    fimDasFalas(c){ $('cineDialogo').hidden = true; c.passo = 'hudvolta'; c.t = 0; c.ini = false; c.sumiu = false; },
+    pular(){ limparHud(); ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; },
+    // a cena faz o papel da janela que explicava o Hud
+    fim(){ limparHud(); S.viuCineHud = true; S.viuExplicacaoHud = true; },
+    restaurar(){ limparHud(); },
   },
   minhocas: {
     flag: 'viuCineMinhocas', nivel: () => COMPOSTEIRA.nivel, falas: FALAS_MINHOCAS, icone: 'minhoquinha',
@@ -3118,6 +3407,133 @@ const CENAS = {
       for (const w of MINHOCAS) if (w.modo === 'oculta'){ w.modo = 'casa'; w.nasce = 0; for (let k = 0; k < 8; k++) particula(w.rest[0], Y_TERRA, w.rest[2], [0xf2a3b5, 0x7a4e2e, 0xf9cdd6][k % 3], 1); }
     },
   },
+  festa: {
+    flag: 'viuCineFesta', nivel: () => 20, icone: 'festa',
+    get falas(){ return falasFesta(); },
+    titulo: 'Festa na fazenda', desc: 'A família toda vem comemorar o nível 20.', trancada: 'libera no nível 20',
+    // o Hud entra na roda: a festa espera ele terminar a ajuda e sumir da fazenda (pode estar acabando uma tarefa ou indo para casa)
+    pronta: () => nivel() >= 20 && !!S.conheceuMilton && voo.estado === 'fora' && caminhaoE.estado === 'longe' && !hudAtivo() && !irmaoHud.g.visible,
+    podeRever: () => (voo.estado !== 'fora' ? 'Dá para rever quando o Milton decolar.' : hudAtivo() || irmaoHud.g.visible ? 'Dá para rever quando o Hud terminar a ajuda.' : null),
+    foco(c){
+      const p = c.passo, v = (x, z) => new THREE.Vector3(x, 0.4, z);
+      const dx = telaEstreita() ? -2.4 : 0; // em tela estreita a câmera abre mais para a esquerda, onde a van para
+      if (p === 'f-chega') return v(14.6 + dx, 11.3);
+      if (p === 'f-sobem'){ const zs = [beto, jaca, pelucio].filter(q => q.g.visible).map(q => q.pos.y); return v(15.3 + dx, zs.length ? clamp(zs.reduce((a, b) => a + b) / zs.length, 8.5, 12.5) : 12); }
+      if (p === 'festa' && c.t >= 2.4) return v(14.4, 12.5);
+      return v(15.4, 7.3);
+    },
+    vista(c){
+      const f = telaEstreita() ? 1.45 : 1, p = c.passo;
+      return p === 'f-chega' ? 13.5 * f : p === 'f-sobem' ? 10 * f * (f > 1 ? 1.15 : 1) : p === 'milton' ? 7.6 * f : p === 'festa' && c.t >= 2.4 ? 11 * f : 6 * f;
+    },
+    iniciar(c){
+      caminhaoE.estado = 'cine';
+      caminhaoMarket.visible = true; caminhaoMarket.position.set(-5, 0, Z_ESTRADA);
+      caminhaoCafe.visible = true; caminhaoCafe.position.set(-8.6, 0, Z_ESTRADA);
+      Som.buzina();
+      const pts = rota(clamp(Math.floor(ed.pos.x), 0, W - 1), clamp(Math.floor(ed.pos.y), 0, H - 1), Math.floor(FESTA_ED[0]), Math.floor(FESTA_ED[1]));
+      if (pts) { pts.push(FESTA_ED); ed.ir(pts, () => ed.olhar(FESTA_ED[0], 14)); } else { ed.colocar(...FESTA_ED); ed.olhar(FESTA_ED[0], 14); }
+      return 'f-chega';
+    },
+    // os trechos da festa; o nome do passo é o do 'case' em atualizarCine
+    trecho(c, dt){
+      const roda = festaRoda(), Ex = FESTA_ED[0], Ez = FESTA_ED[1];
+      const lugar = nome => [Ex + roda[nome][0], Ez + roda[nome][1]];
+      switch (c.passo){
+        case 'f-chega': {
+          const e = 1 - Math.pow(1 - Math.min(1, c.t / 4.2), 3);
+          caminhaoMarket.position.x = lerp(-5, PARADA, e); caminhaoCafe.position.x = lerp(-8.6, FESTA_VAN, e);
+          caminhaoMarket.position.y = caminhaoCafe.position.y = Math.abs(Math.sin(c.t * 10)) * 0.015;
+          if (c.t >= 4.2){
+            caminhaoMarket.position.y = caminhaoCafe.position.y = 0; Som.buzina();
+            c.passo = 'f-sobem'; c.t = 0; c.n = 0;
+            // quem desce de cada veículo, com um pequeno atraso entre eles
+            c.fila = [[0, beto, PARADA, 'caminhao', 'beto'], [0.8, pelucio, FESTA_VAN, 'van', 'pelucio']];
+            if (S.conheceuJaca) c.fila.push([1.5, jaca, PARADA, 'caminhao', 'jaca']);
+            c.total = c.fila.length + 1; c.hud = false;
+          }
+          break;
+        }
+        case 'f-sobem': {
+          const chegou = p => { c.n++; p.pulo = 0.3; };
+          if (!c.hud && c.t > 0.2){
+            c.hud = true;
+            const H0 = irmaoHud, [hx, hz] = lugar('hud');
+            H0.saindo = false; H0.g.visible = true; H0.estado = 'parado'; H0.pontos = []; H0.colocar(5.5, 5.6); H0.ang = H0.angAlvo = 0.3; H0.pulo = 0.45; Som.oinc();
+            const pts = rota(5, 5, Math.floor(hx), Math.floor(hz)) || [];
+            pts.push([hx, hz]); H0.ir(pts, () => chegou(H0));
+          }
+          for (const it of c.fila){
+            const [atraso, p, x0, veic, nome] = it;
+            if (it.ok || c.t < atraso) continue;
+            it.ok = true;
+            const [lx, lz] = lugar(nome);
+            p.g.visible = true; p.colocar(x0, 16.85); p.ang = p.angAlvo = Math.PI; p.estado = 'parado'; p.pontos = [];
+            const subida = veic === 'van' ? [[x0 + 1.9, 16.85], [PARADA, 16.4], [PARADA, 15.4]] : [[x0 + (nome === 'jaca' ? 0.25 : -0.2), 16.4], [x0 + (nome === 'jaca' ? 0.25 : -0.2), 15.4]];
+            p.ir([...subida, [Ex, 9.6], [lx, lz]], () => chegou(p));
+          }
+          if (c.n >= c.total && ed.estado === 'parado'){
+            ed.olhar(Ex, Ez + 1.3); ed.angAlvo = anguloPerto(ed.angAlvo, cam.azAlvo, 0.42);
+            for (const nome in roda){ const p = nome === 'hud' ? irmaoHud : { beto, jaca, pelucio }[nome]; virarNaCena(p, Ex, Ez); }
+            beto.aceno = 1.4;
+            if (COMP_VIS.mesh) for (const w of MINHOCAS) w.pulo = 0.45;
+            c.passo = 'dialogo'; mostrarFalaCine(0);
+          }
+          break;
+        }
+        // fala 6: o PIG-MTP passa baixo por cima de todos soltando confete
+        case 'milton': {
+          if (!c.ini){ c.ini = true; c.acc = 0; voo = { estado: 'festa', t: 0, cena: true }; aviao.visible = true; motor(true); }
+          const k = Math.min(1, c.t / 3.8);
+          aviao.position.set(lerp(1, 29, k), 2.3, Ez - 0.1); aviao.rotation.set(Math.sin(k * 8) * 0.08, 0, 0);
+          c.acc += dt;
+          while (c.acc > 0.05){ c.acc -= 0.05; if (k < 1) confete(aviao.position.x, 2.2, aviao.position.z, 3, 0.5); }
+          if (c.t >= 4.8){ aviaoFora(); c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
+          break;
+        }
+        // fala 9: todo mundo pula, chove confete, e a família volta para os veículos e vai embora
+        case 'festa': {
+          if (!c.ini){
+            c.ini = true; c.acc = 0; c.indo = false; c.vagas = { caminhao: 0, van: 0 }; c.hudFora = false; c.saida = {};
+            for (const p of [ed, beto, jaca, pelucio, irmaoHud]) if (p.g.visible){ p.pulo = 0.45; p.aceno = 1.6; }
+            confete(Ex, 2.8, Ez + 0.9, 90, 2); Som.nivel();
+          }
+          c.acc += dt;
+          while (c.acc > 0.1){ c.acc -= 0.1; if (c.t < 2) confete(Ex, 2.8, Ez + 0.9, 5, 1.6); }
+          if (c.t > 1 && !c.pulo2){ c.pulo2 = true; for (const p of [ed, beto, jaca, pelucio, irmaoHud]) if (p.g.visible) p.pulo = 0.45; confete(Ex, 2.8, Ez + 0.9, 50, 2); }
+          if (c.t >= 2.4 && !c.indo){
+            c.indo = true;
+            for (const [p, veic] of [[beto, 'caminhao'], [jaca, 'caminhao'], [pelucio, 'van']]){
+              if (!p.g.visible) continue;
+              c.vagas[veic]++;
+              const xv = veic === 'van' ? FESTA_VAN : PARADA;
+              const volta = [[Ex, 9.6], [PARADA, 15.4], [PARADA, 16.4], ...(veic === 'van' ? [[xv + 1.9, 16.85]] : []), [xv, 16.85]];
+              p.ir(volta, () => { p.g.visible = false; c.vagas[veic]--; if (!c.vagas[veic]){ c.saida[veic] = c.t; Som.buzina(); } });
+            }
+            const hpts = rota(clamp(Math.floor(irmaoHud.pos.x), 0, W - 1), clamp(Math.floor(irmaoHud.pos.y), 0, H - 1), 5, 5) || [];
+            irmaoHud.ir(hpts, () => { irmaoHud.g.visible = false; c.hudFora = true; });
+          }
+          let vivos = 0;
+          for (const [veic, v, x0] of [['caminhao', caminhaoMarket, PARADA], ['van', caminhaoCafe, FESTA_VAN]]){
+            if (!v.visible) continue;
+            vivos++;
+            if (c.saida[veic] === undefined) continue;
+            const k = Math.min(1, (c.t - c.saida[veic]) / 3.5);
+            v.position.x = lerp(x0, W + 7, k * k); v.position.y = Math.abs(Math.sin(c.t * 10)) * 0.015;
+            if (k >= 1) v.visible = false;
+          }
+          if (c.indo && !vivos && c.hudFora){ c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
+          break;
+        }
+      }
+    },
+    pular(){
+      ed.trab = null; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado';
+      limparFesta();
+    },
+    fim(){ S.viuCineFesta = true; },
+    restaurar(){ limparFesta(); },
+  },
 };
 // a ordem da história; uma cena que ainda não existe em CENAS fica de fora
 const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'pelucio', 'minhocas', 'festa'];
@@ -3127,7 +3543,11 @@ const cenaPronta = id => { const C = CENAS[id]; return !S[C.flag] && (C.pronta ?
 // devolve a cena que deve começar agora (a primeira da ordem que ainda não foi vista), ou null; uma cena pedida na janela Cenas vem antes
 function podeIniciarCine(){
   if (!S || cine || ed.estado !== 'parado' || tarefaAtual || algumaJanela() || menuAberto || caminhaoE.estado !== 'longe') return null;
-  if (cenaPedida) return cenaPedida;
+  if (cenaPedida){
+    const C = CENAS[cenaPedida], motivo = C.podeRever && C.podeRever();
+    if (motivo){ aviso(motivo); cenaPedida = null; return null; }
+    return cenaPedida;
+  }
   if (performance.now() < cineLivreEm) return null;
   return ordemCenas().find(cenaPronta) || null;
 }
@@ -3198,6 +3618,14 @@ function atualizarCine(dt){
       if (c.t >= 3.5){ caminhao.visible = false; c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
       break;
     }
+    // cena do Jaca: o presente; cena do Hud: sai de casa, mostra o que faz e volta
+    case 'presente': cena.presente(c); break;
+    case 'jacaesp': cena.espera(c); break;
+    case 'hudsai': cena.sai(c); break;
+    case 'mostra': cena.mostra(c); break;
+    case 'hudvolta': cena.volta(c); break;
+    // trechos próprios das cenas do Milton e da festa (o método `trecho` da cena)
+    case 'm-indo': case 'm-rasante': case 'm-pouso': case 'm-desce': case 'm-volta': case 'm-decola': case 'f-chega': case 'f-sobem': case 'milton': case 'festa': cena.trecho(c, dt); break;
     // cena inicial: o Ed entra na fazenda e as galinhas cacarejam
     case 'entrando': cena.entrando(c); break;
     case 'galinhas': cena.galinhas(c); break;
@@ -3268,6 +3696,25 @@ function presenteCafe(){
   S.bolsa.cafe = (S.bolsa.cafe || 0) + 4;
   if (pelucio.g.visible) flutuar(ed.topo(), '+4', '', 'cafe');
 }
+// o presente do Jaca sobre o Ed, uma vez só (na reprise só aparece a festinha, sem nada no save)
+function presenteDoJaca(){
+  if (cine.presente || cine.reprise) return;
+  cine.presente = true; darPresente(ed);
+  S.conheceuJaca = true;
+}
+// tira o Jaca e o caminhão de cena (reprise)
+function limparJaca(){
+  jaca.g.visible = false; jaca.pontos = []; jaca.estado = 'parado'; jaca.aceno = 0; jaca.aoChegar = null;
+  caminhao.visible = false;
+}
+// o Hud volta a ser o de sempre: escondido, sem ferramenta, na velocidade normal
+function limparHud(){
+  const H = irmaoHud;
+  // se ele estava no meio de uma tarefa, solta o canteiro e a tarefa
+  if (tarefaHud){ setReserva(tarefaHud.alvo, null); tarefaHud = null; }
+  H.g.visible = false; H.pontos = []; H.aoChegar = null; H.estado = 'parado'; H.trab = null; H.ferramenta(null); H.aceno = 0; H.pulo = 0; H.vel = 2.5; H.saindo = false;
+}
+const fumacaDoHud = () => { for (let i = 0; i < 10; i++) particula(HUD_PORTA[0] + rnd(-0.25, 0.25), 0.2, HUD_PORTA[1] + rnd(-0.2, 0.2), [0xffffff, 0xe2cfa0][i % 2], 0.9); };
 function pularCine(){
   if (!cine) return;
   cine.cena.pular(cine);
@@ -3564,7 +4011,7 @@ function itensComposteira(){
     r.prog = 1 - falta / cfg.seg;
   }
   if (c.restos >= COMPOSTEIRA.restoMax) e += ' Os restos estão no máximo: o que passar disso se perde.';
-  if (!COMPOSTEIRA.comida.some(k => (S.celeiro[k] || 0) >= COMPOSTEIRA.lote)) e += ' Elas comem o mato tirado, a casca do café da secagem e as sobras da horta da lista.';
+  if (!COMPOSTEIRA.comida.some(k => (S.celeiro[k] || 0) >= COMPOSTEIRA.lote)) e += ` Elas comem o mato tirado, a casca do café da secagem e sobras da horta (${COMPOSTEIRA.comida.map(k => PRODUTOS[k].nome.toLowerCase()).join(', ')}), de ${COMPOSTEIRA.lote} em ${COMPOSTEIRA.lote}.`;
   r.estado = e;
   const indo = fila.some(t => t.tipo === 'recolherAdubo');
   r.itens.push({ rotulo: `Recolher adubo (${c.sacos})`, sub: indo ? 'o Ed já vai' : `+${c.sacos * COMPOSTEIRA.xpSaco} xp`, icone: 'adubo', off: !c.sacos || indo, fn: pedirRecolherAdubo });
@@ -3793,6 +4240,7 @@ const FIGURINHAS = [
   { id: 'milton', nome: 'Milton na área!', desc: 'receber o Milton na pista', icone: 'milton', xp: 15, cond: () => !!S.conheceuMilton },
   { id: 'pelucio', nome: 'Café com o Pelúcio', desc: 'conhecer a Joli Coffee', icone: 'pelucio', xp: 20, cond: () => !!S.viuCinePelucio },
   { id: 'socias', nome: 'Sócias da terra', desc: 'conhecer as Minhoquinhas', icone: 'minhoquinha', xp: 20, cond: () => !!S.viuCineMinhocas },
+  { id: 'festa', nome: 'Festa na fazenda', desc: 'comemorar o nível 20 com a família', icone: 'festa', xp: 20, cond: () => !!S.viuCineFesta },
   { id: 'barista', nome: 'Barista', desc: 'secar 100 cafés', icone: 'cafe', xp: 50, cond: () => conta('feitos', 'cafe') >= 100 },
   { id: 'enfeites', nome: 'Fazenda caprichada', desc: 'colocar 10 enfeites', icone: 'fonte', xp: 30, cond: () => S.enfeites.length >= 10 },
   { id: 'nivel10', nome: 'Fazendeiro de verdade', desc: 'chegar ao nível 10', icone: 'ed', xp: 20, cond: () => nivel() >= 10 },
@@ -3867,23 +4315,29 @@ function atualizarPista(dt){
   if (!aviao) return;
   const v = voo, y = PISTA.y;
   if (v.estado === 'fora'){
-    if (!cine && Date.now() >= S.proxMilton) chamarMilton();
+    // o primeiro pouso é a cena do Milton (depois da primeira venda); os outros vêm pelo relógio
+    if (!cine && !cenaPedida && S.conheceuMilton && Date.now() >= S.proxMilton) chamarMilton();
     return;
   }
   v.t += dt;
   helice.rotation.x += dt * (v.estado === 'parado' ? 4 : 40);
   if (motorSom) motorSom.o.frequency.value = v.estado === 'parado' ? 48 : 72 + Math.min(20, v.t * 4);
-  if (v.estado === 'chegando'){
+  if (v.estado === 'rasante'){
+    // na cena: passa baixo por cima da fazenda, sai da tela e volta para pousar
+    const k = Math.min(1, v.t / 4.8);
+    aviao.position.set(lerp(-8, W + 8, k), 2.1, -1.1); aviao.rotation.set(Math.sin(k * 6) * 0.1, 0, 0);
+    if (k >= 1){ v.estado = 'chegando'; v.t = 0; aviao.rotation.set(0, 0, 0); }
+  } else if (v.estado === 'chegando'){
     // planeia descendo até tocar a pista e roda freando até parar
     const T1 = 5, T2 = 3.2;
     if (v.t < T1){ const k = v.t / T1; aviao.position.set(lerp(-14, PISTA.toque, k), lerp(5, 0, k * k * (3 - 2 * k)), y); aviao.rotation.z = -0.08 * (1 - k); }
     else if (v.t < T1 + T2){ const k = (v.t - T1) / T2, e = 1 - (1 - k) * (1 - k); aviao.position.set(lerp(PISTA.toque, PISTA.para, e), 0, y); aviao.rotation.z = 0; }
-    else { v.estado = 'parado'; v.t = 0; motor(false); desembarcar(); }
+    else { v.estado = 'parado'; v.t = 0; motor(false); if (!v.cena) desembarcar(); }
   } else if (v.estado === 'decolando'){
     const T1 = 3.2, T2 = 4;
     if (v.t < T1){ const k = v.t / T1; aviao.position.set(lerp(PISTA.para, W + 2, k * k), 0, y); aviao.rotation.z = 0.04 * k; }
     else if (v.t < T1 + T2){ const k = (v.t - T1) / T2; aviao.position.set(W + 2 + k * 18, k * 7, y); aviao.rotation.z = 0.15; }
-    else { v.estado = 'fora'; aviao.visible = false; motor(false); S.proxMilton = Date.now() + rnd(...PISTA.intervalo) * 60000; salvar(); }
+    else { v.estado = 'fora'; aviao.visible = false; motor(false); if (!v.reprise) S.proxMilton = Date.now() + rnd(...PISTA.intervalo) * 60000; salvar(); }
   }
 }
 function desembarcar(){
@@ -3893,7 +4347,7 @@ function desembarcar(){
     milton.angAlvo = Math.PI / 4; milton.aceno = 2.4; milton.pulo = 0.45;
     const txt = 'Milton na área!', dur = 2.6;
     falar(milton, txt, dur); Som.oinc();
-    if (!S.conheceuMilton){ S.conheceuMilton = true; setTimeout(() => aviso('O Milton, irmão do Ed, pousou o teco-teco PIG-MTP na pista atrás da fazenda!', 'grande', 4), 400); }
+    S.conheceuMilton = true;
     setTimeout(() => { presenteMilton(); }, dur * 1000);
     setTimeout(() => { milton.ir([[porta[0] + 0.7, porta[1] + 0.1], porta], () => { milton.g.visible = false; voo = { estado: 'decolando', t: 0 }; motor(true); }); }, (dur + 3.6) * 1000);
   });
@@ -3923,7 +4377,7 @@ function itensMilton(){
 function itensPista(){
   const min = Math.max(1, Math.ceil((S.proxMilton - Date.now()) / 60000));
   const r = { titulo: 'Pista de pouso', icone: 'aviao', itens: [] };
-  r.estado = voo.estado !== 'fora' ? 'O Milton está na pista agora!' : `O Milton pousa por aqui de tempos em tempos, com o jogo aberto. Próxima visita em uns ${min} min.` + (S.pistaGanho ? ` A pista já rendeu ${reais(S.pistaGanho)}.` : '');
+  r.estado = !S.conheceuMilton ? 'Ainda ninguém pousou aqui. O Milton aparece depois da sua primeira venda ao Joli Market.' : voo.estado !== 'fora' ? 'O Milton está na pista agora!' : `O Milton pousa por aqui de tempos em tempos, com o jogo aberto. Próxima visita em uns ${min} min.` + (S.pistaGanho ? ` A pista já rendeu ${reais(S.pistaGanho)}.` : '');
   return r;
 }
 
@@ -3934,6 +4388,7 @@ let tarefaHud = null;
 const ignoradosHud = new Map();
 const hudAtivo = () => !!S.hudAte && Date.now() < S.hudAte;
 function chamarHud(){
+  if (cenaPedida){ aviso('Uma cena vai começar. Espere um pouquinho.'); return; }
   if (nivel() < HUD.nivel){ aviso(`O Hud ajuda a partir do nível ${HUD.nivel}`, 'ruim'); Som.erro(); return; }
   if (S.dinheiro < HUD.preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return; }
   gastar(HUD.preco); chipPulsa('chipDinheiro');
@@ -3945,7 +4400,7 @@ function chamarHud(){
     falar(irmaoHud, sorteia(['Oba! Deixa comigo, Ed!', 'Cheguei! Bora trabalhar!', 'Eu rego, eu colho, eu ajudo!']), 2.8);
   } else falar(irmaoHud, 'Mais tempo? Oba!', 2);
   Som.oinc(); hud(); salvar();
-  if (!S.viuExplicacaoHud){ S.viuExplicacaoHud = true; salvar(); setTimeout(() => { if (!algumaJanela()) explicarHud(); }, 1200); }
+  if (!S.viuExplicacaoHud){ S.viuExplicacaoHud = S.viuCineHud = true; salvar(); setTimeout(() => { if (!algumaJanela()) explicarHud(); }, 1200); }
 }
 function alvosHud(){
   const out = [];
@@ -5170,7 +5625,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Estações:</b> seguem o calendário. As culturas da estação colhem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais. ${nomesRend1()}, que rendem 1, valem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais no Beto e no Jaca, mas esse bônus de preço não soma com a oferta do dia. Toque no selo da estação para ver quais.</li>
       <li><b>Figurinhas:</b> metas de longo prazo no caderno, que dão xp.</li>
       <li><b>Cenas:</b> as cenas da história ficam guardadas e podem ser revistas nos Ajustes ou no caderno do Ed. Rever uma cena não muda nada na fazenda.</li>
-      <li><b>Pista do Milton:</b> atrás da fazenda, o Milton, irmão do Ed, pousa de tempos em tempos o teco-teco PIG-MTP. Ele traz sementes ou ração e paga uma taxa pelo uso da pista. Só acontece com o jogo aberto.</li>
+      <li><b>Pista do Milton:</b> atrás da fazenda, o Milton, irmão do Ed, pousa de tempos em tempos o teco-teco PIG-MTP. Ele traz sementes ou ração e paga uma taxa pelo uso da pista. O primeiro pouso vem depois da primeira venda ao Joli Market. Só acontece com o jogo aberto.</li>
       <li><b>Enfeites</b>: comprados na loja e colocados em qualquer gramado livre. Dão xp só na compra.</li>
     </ul>`;
   const abas = `<div class="abas" role="tablist">${ABAS.map(([k, r]) => `<button class="aba" role="tab" aria-selected="${abaAjuda === k}" data-aba-ajuda="${k}" type="button">${r}</button>`).join('')}</div>`;
