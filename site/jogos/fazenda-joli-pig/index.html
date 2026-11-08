@@ -5049,13 +5049,19 @@ function atualizarPista(dt){
 function desembarcar(){
   const porta = [PISTA.para + 0.9, PISTA.y + 0.35];
   milton.g.visible = true; milton.colocar(...porta); milton.estado = 'parado'; milton.ang = milton.angAlvo = 0;
-  milton.ir([[porta[0] + 0.7, porta[1] + 0.1], [porta[0] + 1.1, porta[1] + 0.55]], () => {
-    milton.angAlvo = Math.PI / 4; milton.aceno = 2.4; milton.pulo = 0.45;
-    const txt = 'Milton na área!', dur = 2.6;
-    falar(milton, txt, dur); Som.oinc();
+  const [fx, fz] = PREDIO.casa.porta, m = descidaMilton(fx, fz);
+  // sem rota até a casa ele entrega ali mesmo, ao lado do avião
+  const pts = [[porta[0] + 0.7, porta[1] + 0.1], ...(m.ida.length ? [[m.sx, -1.2], [m.sx, 0.5], ...m.ida] : [[porta[0] + 1.1, porta[1] + 0.55]])];
+  milton.ir(pts, () => {
+    if (m.ida.length) milton.olhar(fx + 0.5, fz - 1); else milton.angAlvo = Math.PI / 4;
+    milton.aceno = 2.4; milton.pulo = 0.45;
+    const dur = 2.6;
+    falar(milton, 'Milton na área!', dur); Som.oinc();
     S.conheceuMilton = true;
-    setTimeout(() => { presenteMilton(); }, dur * 1000);
-    setTimeout(() => { milton.ir([[porta[0] + 0.7, porta[1] + 0.1], porta], () => { milton.g.visible = false; voo = { estado: 'decolando', t: 0 }; motor(true); }); }, (dur + 3.6) * 1000);
+    setTimeout(() => milton.trabalhar(1, 'saco', () => {
+      const espera = presenteMilton();
+      setTimeout(() => milton.ir([...pts.slice(0, -1).reverse(), porta], () => { milton.g.visible = false; voo = { estado: 'decolando', t: 0 }; motor(true); }), espera * 1000);
+    }), dur * 1000);
   });
 }
 // suprimentos sorteados e a taxa de manutenção da pista
@@ -5072,8 +5078,10 @@ function presenteMilton(){
   S.dinheiro += taxa; S.pistaGanho = (S.pistaGanho || 0) + taxa; contar('acoes', 'milton');
   setTimeout(() => flutuar(milton.topo().add(new THREE.Vector3(0, 0.25, 0)), '+' + reais(taxa), 'ouro'), 500);
   Som.moeda(); chipPulsa('chipDinheiro');
-  falar(milton, `Trouxe ${txt}! E a taxa da pista: ${reais(taxa)}.`, 3.4);
+  const fala = `Trouxe ${txt}! E a taxa da pista: ${reais(taxa)}.`, dur = tempoDeLeitura(fala);
+  falar(milton, fala, dur);
   hud(); salvar();
+  return dur;
 }
 function itensMilton(){
   const r = { titulo: 'Milton', icone: 'milton', itens: [], classe: 'bom' };
@@ -5083,7 +5091,7 @@ function itensMilton(){
 function itensPista(){
   const min = Math.max(1, Math.ceil((S.proxMilton - Date.now()) / 60000));
   const r = { titulo: 'Pista de pouso', icone: 'aviao', itens: [] };
-  r.estado = !S.conheceuMilton ? 'Ainda ninguém pousou aqui. O Milton aparece depois da sua primeira venda ao Joli Market.' : voo.estado !== 'fora' ? 'O Milton está na pista agora!' : `O Milton pousa por aqui de tempos em tempos, com o jogo aberto. Próxima visita em uns ${min} min.` + (S.pistaGanho ? ` A pista já rendeu ${reais(S.pistaGanho)}.` : '');
+  r.estado = !S.conheceuMilton ? 'Ainda ninguém pousou aqui. O Milton aparece depois da sua primeira venda ao Joli Market.' : voo.estado !== 'fora' ? 'O Milton está na fazenda agora!' : `O Milton pousa por aqui de tempos em tempos, com o jogo aberto. Próxima visita em uns ${min} min.` + (S.pistaGanho ? ` A pista já rendeu ${reais(S.pistaGanho)}.` : '');
   return r;
 }
 
@@ -6956,7 +6964,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // o Safari do iPhone ignora o user-scalable do viewport: sem isso a pinça amplia a página e as janelas saem da tela
 for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
