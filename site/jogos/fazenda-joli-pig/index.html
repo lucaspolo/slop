@@ -799,6 +799,26 @@ function corpoMoletom(v, frenteZ){
   for (let y = 26; y >= 15; y--) cordao(1 + Math.round((26 - y) * 0.3), y);
   for (const [x, y] of [[-3, 17], [-2, 17], [-3, 18], [-2, 18], [3, 14], [4, 14], [3, 15], [4, 15]]) cordao(x, y, 2, MOLETOM.cordaoE);
 }
+// o suéter do Patrinho: tricô marrom, barra e gola mais escuras e um ursinho branco bordado no peito; abaixo da barra, sem calça
+const SUETER = { claro: 0x9a6a42, base: 0x8a5a36, escuro: 0x6b4426, urso: 0xfdf8ef, sombra: 0xd9d2c4, tinta: 0x3b2a20 };
+const panoSueter = (x, y) => ((x + 40) % 4 < 2) === ((y + 40) % 4 < 2) ? SUETER.base : SUETER.claro;
+function corpoSueter(v, frenteZ){
+  for (const lx of [-7, 7]) for (let y = 2; y <= 8; y++) for (let x = lx - 5; x <= lx + 5; x++) for (let z = -5; z <= 5; z++)
+    if ((x - lx) ** 2 + z * z <= 27) v.set(x, y, z, COR.pele);
+  v.ell(0, 15, 0, 17, 14.4, 14.3, (x, y) => y <= 9 ? COR.pele : y <= 11 ? SUETER.escuro : panoSueter(x, y), (x, y) => y >= 5);
+  v.ell(0, 26, 0, 15.8, 8.6, 13.4, (x, y) => y >= 31 ? SUETER.escuro : panoSueter(x, y));
+  const dentro = (x, y) => (x * x / 30 + (y - 20) ** 2 / 25 <= 1) || ((x / 5.6) ** 2 + (y - 12.5) ** 2 / 9 <= 1) || ((Math.abs(x) - 5) ** 2 + (y - 25) ** 2 <= 5) || ((Math.abs(x) - 6) ** 2 + (y - 13.5) ** 2 / 2.5 <= 2.2);
+  for (let x = -9; x <= 9; x++) for (let y = 9; y <= 28; y++){
+    if (!dentro(x, y)) continue;
+    const borda = !dentro(x + 1, y) || !dentro(x - 1, y) || !dentro(x, y + 1) || !dentro(x, y - 1);
+    v.set(x, y, frenteZ(x, y) + 1, borda ? SUETER.sombra : SUETER.urso);
+  }
+  const ponto = (x, y, c) => v.set(x, y, frenteZ(x, y) + 1, c);
+  for (const x of [-2, 2]) for (const y of [20, 21]) ponto(x, y, SUETER.tinta);
+  for (const x of [-1, 0, 1]) ponto(x, 18, SUETER.tinta);
+  ponto(0, 17, SUETER.tinta);
+  for (const x of [-5, 5]) ponto(x, 25, SUETER.sombra);
+}
 function vBracoMoletom(){
   const v = new Vox();
   v.ell(0, -7, 0, 5.2, 8.6, 5.2, (x, y, z) => y <= -13 ? MOLETOM.punho : panoMoletom(x, y, z));
@@ -812,6 +832,7 @@ function vPorco(cor, bolso, soCabeca, roupa){
   const costura = tom(cor, 0.84), barra = tom(cor, 0.9), botao = 0xfff3cf, borda = tom(bolso, 0.9);
   const frenteZ = (x, y) => { for (let z = 80; z >= -80; z--) if (v.has(x, y, z)) return z; return null; };
   if (!soCabeca && roupa === 'moletom') corpoMoletom(v, frenteZ);
+  else if (!soCabeca && roupa === 'sueter') corpoSueter(v, frenteZ);
   else if (!soCabeca){
     for (const lx of [-7, 7]) for (let y = 2; y <= 8; y++) for (let x = lx - 5; x <= lx + 5; x++) for (let z = -5; z <= 5; z++)
       if ((x - lx) ** 2 + z * z <= 27) v.set(x, y, z, y <= 3 ? barra : cor);
@@ -880,6 +901,13 @@ function vPorco(cor, bolso, soCabeca, roupa){
       }
     }
   }
+  return v;
+}
+function vBracoSueter(){
+  const v = new Vox();
+  v.ell(0, -7, 0, 5.2, 8.6, 5.2, (x, y) => y <= -13 ? SUETER.escuro : panoSueter(x, y));
+  v.ell(0, -16, 0.8, 3.6, 3, 3.6, COR.focinho, (x, y) => y <= -14);
+  for (let y = -19; y <= -15; y++) for (let z = -5; z <= 5; z++) v.set(0, y, z, null);
   return v;
 }
 function vBraco(){
@@ -1330,6 +1358,12 @@ function vNativa(tipoA, comFruta){
   }
   return v;
 }
+function vTrufa(){
+  const v = new Vox(), c = (x, y, z) => hash(x, y, z) < 0.12 ? 0xcdbfa8 : hash(z, x, y) < 0.5 ? 0x3a2a24 : 0x4f3a30;
+  v.ell(0, 3.4, 0, 4.2, 3.4, 3.8, c);
+  for (const [x, y, z, r] of [[3, 5, 1, 1.8], [-3, 2, 2, 1.6], [1, 6, -2, 1.7], [-2, 5, -2, 1.5], [2, 1.6, -3, 1.4]]) v.ell(x, y, z, r, r, r, c);
+  return v;
+}
 function vArbusto(){ const v = new Vox(); v.ell(3.5, 2.6, 3.5, 3.6, 2.9, 3.6, (x, y, z) => hash(x, y, z) < 0.08 ? 0xf27fa4 : (hash(z, x, y) < 0.5 ? 0x5aa845 : 0x4f9a3d)); return v; }
 function vFeno(){ const v = new Vox(); v.box(2, 0, 3, 13, 7, 12, (x, y) => y % 3 === 0 ? 0xdcb550 : 0xeccb62); v.box(5, 0, 2, 5, 8, 13, 0xb8893f); v.box(10, 0, 2, 10, 8, 13, 0xb8893f); return v; }
 function vCorreio(){
@@ -1378,6 +1412,26 @@ function vPortao(arco){
   return v;
 }
 function vPlaca(){ const v = new Vox(); v.box(7, 0, 7, 8, 11, 8, 0x8a5a36); v.box(1, 8, 7, 14, 14, 8, 0xf3e3c3); v.box(1, 8, 7, 14, 8, 8, 0xc99a66); v.box(1, 14, 7, 14, 14, 8, 0xc99a66); return v; }
+// a lambreta do Joli Bistrô: a frente aponta para +x, como os outros veículos na estrada
+function vLambreta(){
+  const v = new Vox(), cor = 0xa8324a, corE = 0x84263a, creme = 0xf6ead0, cromo = 0xcfd2d6, pneu = 0x2f2f33;
+  for (const wx of [2, 19]) for (let x = -3; x <= 3; x++) for (let y = -3; y <= 3; y++) if (x * x + y * y <= 10) v.box(wx + x, 3 + y, -1, wx + x, 3 + y, 1, x * x + y * y <= 2 ? cromo : pneu);
+  v.ell(3, 7, 0, 8, 4.4, 4.4, (x, y) => y === 6 ? creme : cor, (x, y) => y >= 3);
+  v.box(9, 3, -4, 15, 4, 4, corE);
+  for (let y = 4; y <= 15; y++){ const x = 15 + Math.round((y - 4) * 0.2); v.box(x, y, -5, x + 1, y, 5, (X, Y, Z) => Math.abs(Z) === 5 ? creme : cor); }
+  v.ell(19, 5.4, 0, 4.4, 2.8, 2.8, cor, (x, y) => y >= 5);
+  v.box(17, 5, 0, 18, 7, 0, cromo);
+  v.box(18, 15, 0, 18, 18, 0, cromo);
+  v.box(18, 18, -7, 19, 18, 7, cromo);
+  for (const z of [-8, -7, 7, 8]) v.box(18, 18, z, 19, 18, z, pneu);
+  v.ell(20, 16.5, 0, 2, 2.2, 2.4, cor);
+  v.ell(21.4, 16.5, 0, 0.9, 1.6, 1.6, 0xfff3b0);
+  v.box(-2, 11, -4, 9, 12, 4, 0x6b4226);
+  v.box(-1, 13, -3, 8, 13, 3, 0x7f5230);
+  v.box(-9, 11, -6, -3, 19, 6, (X, Y) => Y === 11 || Y === 19 ? cor : creme);
+  v.box(-10, 8, -1, -9, 9, 1, 0xe0483c);
+  return v;
+}
 function vCaminhao(cafe){
   const v = new Vox();
   const azul = cafe ? 0xf2a9b8 : 0xa9cff0, azulE = cafe ? 0x8a5a3c : 0x7fb3e0, branco = cafe ? 0xfdf3e6 : 0xfdf8ef, vidro = 0x9fc8e0;
@@ -1888,6 +1942,8 @@ const VI = {
   guarana(){ const v = new Vox(); v.ell(0, 4, 0, 3.6, 3.8, 3.2, 0xd9362e); v.ell(0, 4, 3.6, 2.5, 2.5, 0.7, 0xfff7ee); for (const [x, y] of [[0, 4], [-1, 4], [1, 4], [0, 3], [0, 5]]) v.set(x, y, 4, 0x1a1a1a); return v; },
   castanha(){ const v = new Vox(); v.ell(0, 4, 0, 4.2, 4.2, 4.2, (x, y, z) => hash(x, y, z) < 0.3 ? 0x5e3e28 : 0x7a5232); v.ell(0, 8, 0, 2.2, 0.8, 2.2, 0x3e2a1c); for (const [x, z] of [[-1, 1], [1, 0], [0, -1]]) v.set(x, 9, z, 0xe6d8b8); return v; },
   acaizeiro(){ return vNativa('acaizeiro', true); }, cupuacuzeiro(){ return vNativa('cupuacuzeiro', true); }, guaranazeiro(){ return vNativa('guaranazeiro', true); }, castanheira(){ return vNativa('castanheira', true); },
+  patrinho(){ return vPorco(0, 0, false, 'sueter'); },
+  trufa(){ return vTrufa(); },
   maca(){ const v = new Vox(); v.ell(0, 3, 0, 3.4, 3.2, 3.4, (x, y) => x <= -1 && y >= 4 ? 0xf0695c : 0xd9362e); v.box(0, 6, 0, 0, 8, 0, 0x7a4c2c); v.box(1, 7, 0, 3, 7, 0, 0x6cbf52); return v; },
   laranja(){ const v = new Vox(); v.ell(0, 3, 0, 3.4, 3.2, 3.4, 0xf08a2c); v.set(0, 6, 0, 0x5a8f3a); v.box(1, 6, 0, 2, 6, 0, 0x6cbf52); return v; },
   goiaba(){ const v = new Vox(); v.ell(0, 3, 0, 3, 3.6, 3, (x, y, z) => z > 1 && x > 0 ? 0xe0607a : 0xb8d65a); v.set(0, 7, 0, 0x7a5232); return v; },
@@ -3280,6 +3336,7 @@ const PARADA = 15.5, Z_ESTRADA = 17.5;
 const MODELO_JACA = { corpo: () => vJaca(false), braco: vBracoJaca, pe: vPeJaca, ombro: [11.5, 22, 2], quadril: [5.5, 7], mao: [-12, 1], altura: 1.1 };
 const modeloMoletom = altura => ({ corpo: () => vPorco(0, 0, false, 'moletom'), braco: vBracoMoletom, pe: vPe, ombro: [15.5, 28.5, 1], quadril: [7, 9], mao: [-16, 1.5], altura });
 const MODELO_HUD = { corpo: () => vPorco(COR.ed, COR.edBolso), braco: vBraco, pe: vPe, ombro: [15.5, 28.5, 1], quadril: [7, 9], mao: [-16, 1.5], altura: 0.7 };
+const MODELO_PATRINHO = { corpo: () => vPorco(0, 0, false, 'sueter'), braco: vBracoSueter, pe: vPe, ombro: [15.5, 28.5, 1], quadril: [7, 9], mao: [-16, 1.5], altura: 1.32 };
 const CAMINHAO_MARKET = [false, [['JOLI', 1, '#2f6fb3'], ['MARKET', 0.62, '#e0408a']], '#fdf8ef'], CAMINHAO_CAFE = [true, [['JOLI', 1, '#7a4a2a'], ['COFFEE', 0.62, '#e0408a']], '#fdf3e6'];
 function construirPersonagens(){
   ed = new Porco(COR.ed, COR.edBolso, 'ed'); ed.colocar(6.5, 5.5); ed.ang = ed.angAlvo = 0.6; scene.add(ed.g);
@@ -3301,6 +3358,21 @@ function construirPersonagens(){
   caminhaoMarket = criarCaminhao(...CAMINHAO_MARKET);
   caminhaoCafe = criarCaminhao(...CAMINHAO_CAFE);
   caminhao = caminhaoMarket;
+}
+function criarLambreta(){
+  const c = malha(vLambreta().build(1 / 16, { origin: [8, 0, 0.5] }));
+  c.position.set(-5, 0, Z_ESTRADA); c.visible = false;
+  const tex = texturaTexto([['JOLI', 1, '#a8324a'], ['BISTRÔ', 0.62, '#7a4a2a']], 512, 210, '#f6ead0');
+  for (const lado of [1, -1]){
+    const pl = placaDeTexto(tex, 6.6 / 16, 3 / 16);
+    pl.position.set(-13.5 / 16, 15.5 / 16, lado * (6.6 / 16));
+    if (lado < 0) pl.rotation.y = Math.PI;
+    c.add(pl);
+  }
+  c.traverse(o => { o.userData.alvo = { k: 'caminhao' }; });
+  pickaveis.push(c);
+  scene.add(c);
+  return c;
 }
 function criarCaminhao(cafe, linhas, fundo){
   const c = malha(vCaminhao(cafe).build(1 / 16, { origin: [20, 0, 8.5] }));
@@ -7013,14 +7085,14 @@ function catalogoModelos(){
   const usados = new Set();
   const uso = k => { usados.add(k); return k; };
   const grupos = [
-    { nome: 'Personagens', itens: [porco('Ed', COR.ed, COR.edBolso, 'ed'), porco('Beto', COR.beto, COR.betoBolso, 'beto'), porco('Hud', COR.ed, COR.edBolso, 'hud', MODELO_HUD), porco('Pelúcio', 0, 0, 'pelucio', modeloMoletom(1.32)), porco('Milton', 0, 0, 'milton', modeloMoletom(0.7)), porco('Jaca', 0, 0, 'jaca', MODELO_JACA)] },
+    { nome: 'Personagens', itens: [porco('Ed', COR.ed, COR.edBolso, 'ed'), porco('Beto', COR.beto, COR.betoBolso, 'beto'), porco('Hud', COR.ed, COR.edBolso, 'hud', MODELO_HUD), porco('Pelúcio', 0, 0, 'pelucio', modeloMoletom(1.32)), porco('Milton', 0, 0, 'milton', modeloMoletom(0.7)), porco('Jaca', 0, 0, 'jaca', MODELO_JACA), porco('Patrinho', 0, 0, 'patrinho', MODELO_PATRINHO)] },
     { nome: 'Bichos', itens: [um('Galinha', vGalinha), um('Vaca', vVaca), um('Minhoca', vMinhoca)] },
     { nome: 'Canteiros', itens: [...Object.keys(CULTURAS).map(k => { const C = CULTURAS[k]; return varios(C.nome, [['Semente', () => vPlanta(k, 0)], ['Muda', () => vPlanta(k, 1)], ['Crescendo', () => vPlanta(k, 2)], ['Pronta', () => vPlanta(k, 3)], ...produto(uso(C.produto || k))], 3); }), um('Mato', vMato), varios('Solo', [['Seco', () => vSolo(false, false)], ['Molhado', () => vSolo(true, false)], ['Adubado', () => vSolo(false, true)]])] },
     { nome: 'Pomar', itens: Object.keys(FRUTIFERAS).map(k => { uso(k); return varios(FRUTIFERAS[k].nome, [['Com fruta', () => vFrutifera(k, true)], ['Sem fruta', () => vFrutifera(k, false)], ...produto(uso(FRUTIFERAS[k].fruta))]); }) },
     { nome: 'Floresta', itens: [...Object.keys(NATIVAS).map(k => { uso(k); return varios(NATIVAS[k].nome, [['Com fruto', () => vNativa(k, true)], ['Sem fruto', () => vNativa(k, false)], ...produto(uso(NATIVAS[k].produto))]); }), varios('Mata', [[ 'Copa redonda', () => vCopa(0)], ['Copa alta', () => vCopa(1)], ['Copa larga', () => vCopa(2)]])] },
     { nome: 'Construções', itens: [um('Casa', vCasa), um('Celeiro', vCeleiro), um('Galinheiro', vGalinheiro), um('Curral', vAbrigo), um('Poço', vPoco), um('Moinho', VI.moinho), um('Queijaria', vQueijaria), um('Padaria', vPadaria), um('Cozinha de doces', vCozinha), varios('Terreiro de café', [['Cheio', () => vTerreiro(true)], ['Vazio', () => vTerreiro(false)]]), um('Torrador', vTorrador), um('Composteira', () => vComposteira(false)), um('Hangar', vHangar), um('Obra', vObra)] },
     { nome: 'Automação', itens: [varios('Alimentador', [['Galinheiro', () => vAlimentador(false)], ['Curral', () => vAlimentador(true)]]), varios('Coletor', [['Ovos', () => vColetor(false)], ['Ordenhadeira', () => vColetor(true)]]), um('Esteira', vEsteira), varios('Irrigador', [['Base', vIrrigadorBase], ['Cabeça', vIrrigadorCabeca]]), um('Colmeia', vColmeia)] },
-    { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), um('Teco-teco', vTecoTeco), um('Hélice', vHelice), um('Biruta', vBiruta)] },
+    { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Teco-teco', vTecoTeco), um('Hélice', vHelice), um('Biruta', vBiruta)] },
     { nome: 'Cenário', itens: [varios('Árvore', [['Maçãs', () => vArvore(0)], ['Sem fruta', () => vArvore(1)], ['Laranjas', () => vArvore(2)]]), um('Arbusto', vArbusto), um('Fardo de feno', vFeno), um('Flores', () => vFlores(3)), um('Capim', () => vCapim(1)), um('Cova', vCova), varios('Cerca', [['Reta', () => vCerca(3)], ['Canto', () => vCerca(5)]]), varios('Portão', [['Arco da entrada', () => vPortao(true)], ['Simples', () => vPortao(false)]]), um('Placa', vPlaca), um('Correio', vCorreio)] },
     { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), um('Chafariz', vFonte), um('Estátua do Ed', vEstatua)] },
     { nome: 'Objetos', itens: [um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
