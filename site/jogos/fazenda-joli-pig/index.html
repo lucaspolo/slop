@@ -2332,6 +2332,103 @@ function atualizarBichosMata(dt, t){
     if (q >= (P.para || 0)){ B.i++; B.tt = 0; if (B.i >= B.pts.length) sumirBichoMata(); }
   }
 }
+// ================= cena da mata (nível 20): o Ed sai da fazenda, vai até a beira da floresta e os bichos saem para comemorar
+// em volta dele. Os que andam saem da mata e param do lado dele pulando; o tucano e o papagaio descem das copas e voam em
+// roda da cabeça do Ed. Depois da última fala, todo mundo volta para a floresta. Nada disso fica no save.
+const MATA_CINE = { ed: [11.5, 19.4], az: Math.PI * 5 / 4, saida: Z_MATA + 0.9 };
+let mataCine = null;
+function montarMataCine(){
+  limparMataCine();
+  const [Ex, Ez] = MATA_CINE.ed, V = (x, y, z) => new THREE.Vector3(x, y, z);
+  // com a câmera virada para a floresta, a direita da tela é (-x, +z)
+  const R = [-Math.SQRT1_2, Math.SQRT1_2], F = [-Math.SQRT1_2, -Math.SQRT1_2], ponto = (r, f) => V(Ex + R[0] * r + F[0] * f, 0, Ez + R[1] * r + F[1] * f);
+  const lista = [
+    { tipo: 'jaguatirica', para: ponto(1.25, 0.1), atraso: 0.3, dur: 1.8 },
+    { tipo: 'bugio', para: ponto(-1.25, 0.15), atraso: 0, dur: 2.2, fala: 'Uuuuooo!' },
+    { tipo: 'cobra', para: ponto(0.55, 0.75), atraso: 0.7, dur: 2.4 },
+    { tipo: 'tucano', voa: true, raio: 0.85, alt: 1.3, fase: 0, atraso: 0.5, dur: 2 },
+    { tipo: 'papagaio', voa: true, raio: 0.95, alt: 1.5, fase: Math.PI, atraso: 0.9, dur: 2, fala: 'Currupaco!' },
+  ];
+  mataCine = { t: 0, bichos: lista.map((b, i) => {
+    const [fn, esc] = BICHOS_MATA.modelos[b.tipo], g = new THREE.Group();
+    g.add(malha(geo('bichoMata' + b.tipo, () => fn().build(esc, { origin: [0.5, 0, 0.5], jitter: 0.03 }))));
+    g.visible = false; scene.add(g);
+    const de = b.voa ? V(Ex + (i % 2 ? 2.5 : -1.5), 3.2, Z_MATA + 1.5) : V(b.para.x + (i - 1) * 0.3, 0, MATA_CINE.saida);
+    g.position.copy(de);
+    return Object.assign({ g, de, estado: 'espera', fase2: i * 1.7, nome: 'bicho', topo(){ return this.g.position.clone().add(V(0, 0.75, 0)); } }, b);
+  }) };
+}
+function limparMataCine(){
+  if (!mataCine) return;
+  for (const b of mataCine.bichos){ b.g.visible = false; scene.remove(b.g); }
+  mataCine = null;
+}
+// onde cada passarinho está na roda em volta da cabeça do Ed, no tempo t
+function rodaMataCine(b, t){
+  const [Ex, Ez] = MATA_CINE.ed, a = t * 2.2 + b.fase;
+  return { p: new THREE.Vector3(Ex + Math.cos(a) * b.raio, b.alt + Math.sin(t * 6 + b.fase) * 0.08, Ez + Math.sin(a) * b.raio), ang: Math.atan2(-Math.sin(a), Math.cos(a)) };
+}
+// os bichos vindo, comemorando e indo embora; roda em todo quadro da cena
+function atualizarMataCine(dt){
+  const M = mataCine;
+  if (!M) return;
+  M.t += dt;
+  const t = M.t, ease = k => k * k * (3 - 2 * k);
+  for (const b of M.bichos){
+    const g = b.g;
+    if (b.estado === 'espera'){ if (M.vem && t >= M.vem + b.atraso){ b.estado = 'vem'; b.tt = 0; g.visible = true; } else continue; }
+    b.tt += dt;
+    if (b.estado === 'vem'){
+      const k = Math.min(1, b.tt / b.dur), e = ease(k);
+      if (b.voa){
+        const r = rodaMataCine(b, t);
+        g.position.lerpVectors(b.de, r.p, e); g.position.y += Math.sin(k * Math.PI) * 0.6;
+        g.rotation.y = anguloPerto(g.rotation.y, k < 0.7 ? Math.atan2(r.p.x - b.de.x, r.p.z - b.de.z) : r.ang, Math.min(1, dt * 6));
+        g.rotation.z = Math.sin(t * 18) * 0.15;
+      } else {
+        g.position.lerpVectors(b.de, b.para, e);
+        if (b.tipo !== 'cobra') g.position.y = Math.abs(Math.sin(k * Math.PI * 5)) * (b.tipo === 'bugio' ? 0.12 : 0.05);
+        else g.rotation.z = 0;
+        const dx = b.para.x - b.de.x, dz = b.para.z - b.de.z;
+        g.rotation.y = Math.atan2(dx, dz) + (b.tipo === 'cobra' ? Math.sin(t * 7) * 0.3 : 0);
+      }
+      if (k >= 1){
+        b.estado = 'festa'; b.tt = 0;
+        if (b.fala) falar(b, b.fala, 2.2);
+        if (b.tipo === 'bugio') Som.tom(150, 0.8, 'sawtooth', 0.02, 230);
+        else if (b.tipo === 'papagaio' || b.tipo === 'tucano') Som.tom(b.tipo === 'papagaio' ? 1300 : 900, 0.09, 'square', 0.02, 850);
+        else Som.pop();
+      }
+    } else if (b.estado === 'festa'){
+      // comemorando: os do chão pulam virados para a câmera, a cobra se remexe e os passarinhos voam em roda
+      if (b.voa){ const r = rodaMataCine(b, t); g.position.copy(r.p); g.rotation.y = r.ang; g.rotation.z = Math.sin(t * 18) * 0.15; }
+      else {
+        g.position.x = b.para.x; g.position.z = b.para.z;
+        const pula = M.pulo && t - M.pulo < 1.2 ? 1.6 : 1;
+        if (b.tipo === 'cobra'){ g.position.y = 0; g.rotation.y = anguloPerto(g.rotation.y, cam.az + Math.sin(t * 5 + b.fase2) * 0.6, Math.min(1, dt * 5)); }
+        else {
+          g.position.y = Math.abs(Math.sin(t * (b.tipo === 'bugio' ? 7 : 8) + b.fase2)) * (b.tipo === 'bugio' ? 0.16 : 0.08) * pula;
+          g.rotation.y = anguloPerto(g.rotation.y, cam.az + Math.sin(t * 1.3 + b.fase2) * 0.35, Math.min(1, dt * 4));
+          g.rotation.z = b.tipo === 'bugio' ? Math.sin(t * 7 + b.fase2) * 0.12 : 0;
+        }
+      }
+    } else if (b.estado === 'vai'){
+      // de volta para a floresta: os do chão entram na mata, os passarinhos sobem por cima das copas
+      if (!b.volta){ b.volta = { de: g.position.clone(), para: b.voa ? new THREE.Vector3(g.position.x + 1.5, 4.2, Z_MATA + 3) : new THREE.Vector3(g.position.x, 0, MATA_CINE.saida) }; b.dur2 = b.voa ? 2 : 1.8; }
+      const k = Math.min(1, b.tt / b.dur2), e = k * k;
+      g.position.lerpVectors(b.volta.de, b.volta.para, e);
+      const dx = b.volta.para.x - b.volta.de.x, dz = b.volta.para.z - b.volta.de.z;
+      g.rotation.y = anguloPerto(g.rotation.y, Math.atan2(dx, dz), Math.min(1, dt * 6));
+      if (b.voa) g.rotation.z = Math.sin(t * 18) * 0.15;
+      else if (b.tipo !== 'cobra') g.position.y = Math.abs(Math.sin(k * Math.PI * 4)) * 0.05;
+      if (k >= 1){ b.estado = 'fora'; g.visible = false; }
+    }
+  }
+  // folhas, flores e frutinhas voando em volta enquanto eles chegam e quando todos pulam
+  M.acc = (M.acc || 0) + dt;
+  const festa = (M.vem && t >= M.vem + 1.6 && t < M.vem + 4.4) || (M.pulo && t - M.pulo < 1.4);
+  while (M.acc > 0.12){ M.acc -= 0.12; if (festa){ const [Ex, Ez] = MATA_CINE.ed; particula(Ex + rnd(-1.4, 1.4), rnd(0.2, 0.9), Ez + rnd(-1.2, 1.2), [0x5aa845, 0x8fd06a, 0xffd23f, 0xe8483a, 0xf28fac][Math.floor(rnd(0, 5))], 1.1); } }
+}
 // ================= easter egg: o Nano Hostel, atrás do celeiro. As nano pessoas têm 5 cm de altura; chegam e vão embora
 // pelo Nano Metrô, passeiam até o banquinho e entram e saem do hostel. Tudo fica escondido pelo celeiro na câmera de
 // sempre: só aparece girando o mapa. O hostel é feito na escala 1/40 e as nanos em 1/56, sem mexer no save.
@@ -3032,6 +3129,7 @@ const VI = {
   minhoquinha(){ return vRostoMinhoca(); }, composteira(){ return vComposteira(true); },
   irrigador(){ const v = vIrrigadorBase(); for (const e of vIrrigadorCabeca().m.values()) v.set(e.x, e.y + 10, e.z, e.c); for (const [x, y, z] of [[-8, 12, 0], [-9, 11, -1], [7, 12, 0], [8, 11, -1], [-10, 9, 0], [9, 9, 0]]) v.set(x, y, z, 0x8fd3f5); return v; },
   jaca(){ return vJaca(true); },
+  bugio(){ return vBugio(); },
   caderno(){ const v = new Vox(); v.box(-5, 0, -1, 5, 14, -1, 0xfdf8ef); v.box(-5, 0, 0, 5, 14, 0, 0xf28fac); for (let y = 1; y <= 13; y += 2){ v.set(-6, y, 0, 0x5a5a5a); v.set(-6, y, -1, 0x5a5a5a); } v.ell(1, 8, 1, 2.6, 2.6, 0.5, 0xf3e0c6); v.box(0, 6, 2, 2, 7, 2, 0xf2b3a8); v.box(-3, 2, 1, 4, 2, 1, 0x2f6fb3); return v; },
   claquete(){
     const v = new Vox(), D = 0x2d2a2a, B = 0xfbf6ea;
@@ -4701,6 +4799,10 @@ const FALAS_CINE = [
   ['pelucio', 'Pelúcio', 'Boa tarde, irmão! O que acha de vender café pra eu vender lá na minha cafeteria?'],
   ['ed', 'Ed', 'Aooooa! Grande ideia irmão, vou começar a plantar e assim que tiver pronto ligo pra você vir buscar.'],
 ];
+const FALAS_MATA = [
+  ['ed', 'Ed', 'Esse lugar é lindo! E produz muito, além de ter muitos amigos novos para fazer aqui!', 'mt-bichos'],
+  ['ed', 'Ed', 'Não se preocupem, amigos, vou cuidar da casa de vocês e apenas pegar algumas frutinhas.'],
+];
 const FALAS_MINHOCAS = [
   ['ed', 'Ed', 'Minhoquinhas! Vocês querem ser minhas sócias? Eu construo uma casa novinha pra vocês.', 'saem'],
   ['minhoquinha', 'Minhoquinha', 'Oba! A gente transforma mato e casca de café em adubo.'],
@@ -5475,6 +5577,67 @@ const CENAS = {
     fim(){ S.viuCineFesta = true; },
     restaurar(){ limparFesta(); },
   },
+  mata: {
+    flag: 'viuCineMata', nivel: () => 20, falas: FALAS_MATA, icone: 'bugio',
+    titulo: 'Amigos da mata', desc: 'O Ed vai até a floresta e conhece os bichos que moram nela.', trancada: 'libera no nível 20',
+    // vem depois da festa do nível 20
+    pronta: () => nivel() >= 20 && !!S.viuCineFesta,
+    foco(c){
+      const [Ex, Ez] = MATA_CINE.ed;
+      if (c.passo === 'mt-indo' && !c.chegou) return new THREE.Vector3(ed.pos.x, 0.4, ed.pos.y);
+      // o alvo fica um pouco para o lado da câmera: o Ed e os bichos sobem na tela e a caixa da fala não os cobre
+      return new THREE.Vector3(Ex - 0.35, 0.3, Ez - 0.35);
+    },
+    vista(c){
+      const f = telaEstreita() ? 1.45 : 1;
+      return c.passo === 'mt-indo' && !c.chegou ? 7 * f : c.passo === 'dialogo' && c.linha === 0 ? 4.6 * f : 5.6 * f;
+    },
+    ambiente(dt){ atualizarMataCine(dt); },
+    iniciar(c){
+      caminhaoE.estado = 'cine';
+      montarMataCine();
+      // a câmera vira para olhar a floresta de dentro da fazenda: as copas ficam atrás do Ed
+      cam.azAlvo += (((MATA_CINE.az - cam.azAlvo + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+      ed.trab = null; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; ed.ferramenta(null);
+      const [Ex, Ez] = MATA_CINE.ed, olhar = () => ed.olhar(Ex, Z_MATA + 2);
+      const pts = rota(clamp(Math.floor(ed.pos.x), 0, W - 1), clamp(Math.floor(ed.pos.y), 0, H - 1), Math.floor(Ex), Math.floor(Ez));
+      if (pts){ pts.push([Ex, Ez]); ed.ir(pts, olhar); } else { ed.colocar(Ex, Ez); olhar(); }
+      c.chegou = false;
+      return 'mt-indo';
+    },
+    trecho(c, dt){
+      const [Ex, Ez] = MATA_CINE.ed;
+      switch (c.passo){
+        // o Ed chega na beira da floresta, fica um pouco olhando as árvores e se vira para falar
+        case 'mt-indo':
+          if (!c.chegou && ed.estado === 'parado' && c.t > 0.5){ c.chegou = true; c.tc = c.t; ed.olhar(Ex, Z_MATA + 2); }
+          if (c.chegou && c.t - c.tc > 1.8){ ed.angAlvo = azPerto(cam.azAlvo + 0.3); c.passo = 'dialogo'; mostrarFalaCine(0); }
+          break;
+        // os bichos saem da mata e comemoram em volta do Ed
+        case 'mt-bichos':
+          if (!c.ini){ c.ini = true; mataCine.vem = mataCine.t; }
+          if (!c.pulou && c.t > 2.6){ c.pulou = true; ed.pulo = 0.45; ed.aceno = 1.6; Som.nivel(); }
+          if (c.t >= 4.8){ ed.angAlvo = azPerto(cam.azAlvo); c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
+          break;
+        // todos pulam mais uma vez e os bichos voltam para a floresta
+        case 'mt-volta': {
+          if (!c.ini){ c.ini = true; mataCine.pulo = mataCine.t; ed.pulo = 0.45; ed.aceno = 1.6; Som.moeda(); }
+          if (!c.foram && c.t > 1.6){ c.foram = true; for (const b of mataCine.bichos) if (b.estado === 'festa'){ b.estado = 'vai'; b.tt = 0; } }
+          if (c.foram && c.t > 2 && mataCine.bichos.every(b => b.estado === 'fora')){ ed.olhar(Ex, Z_MATA + 2); c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
+          break;
+        }
+      }
+    },
+    fimDasFalas(c){ $('cineDialogo').hidden = true; c.passo = 'mt-volta'; c.t = 0; c.ini = false; },
+    pular(){ ed.trab = null; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; limparMataCine(); },
+    fim(){
+      limparMataCine();
+      S.viuCineMata = true;
+      montarPlacasMata();
+      if (!parcelaComprada(0)) aviso('A mata está à venda! Toque na placa na beira da floresta para comprar a primeira parcela.', 'grande', 6);
+    },
+    restaurar(){ limparMataCine(); },
+  },
   cafezinho: {
     flag: 'viuCafezinho', nivel: () => 3, repete: true, icone: 'caneca',
     get falas(){ return cafe ? cafe.falas : []; },
@@ -5587,7 +5750,7 @@ const CENAS = {
   },
 };
 // a ordem da história; uma cena que ainda não existe em CENAS fica de fora
-const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'patrinho', 'pelucio', 'minhocas', 'festa', 'cafezinho'];
+const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'patrinho', 'pelucio', 'minhocas', 'festa', 'mata', 'cafezinho'];
 const ordemCenas = () => ORDEM_CENAS.filter(id => CENAS[id]);
 // uma cena começa sozinha quando ainda não foi vista e está pronta (pelo nível, ou pela regra própria dela)
 const cenaPronta = id => { const C = CENAS[id]; return (!S[C.flag] || C.repete) && (C.pronta ? C.pronta() : nivel() >= C.nivel()); };
@@ -5679,6 +5842,8 @@ function atualizarCine(dt){
     case 'hudvolta': cena.volta(c); break;
     // trechos próprios das cenas do Milton e da festa (o método `trecho` da cena)
     case 'm-indo': case 'm-rasante': case 'm-pouso': case 'm-desce': case 'm-volta': case 'm-decola': case 'f-chega': case 'f-sobem': case 'milton': case 'festa': cena.trecho(c, dt); break;
+    // cena da mata
+    case 'mt-indo': case 'mt-bichos': case 'mt-volta': cena.trecho(c, dt); break;
     // cena inicial: o Ed entra na fazenda e as galinhas cacarejam
     // cena do cafezinho
     case 'c-monta': case 'c-hud': case 'c-conv': case 'c-desmonta': case 'c-puf': cena.trecho(c, dt); break;
@@ -8720,7 +8885,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, obj: () => discoJogo }, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, obj: () => discoJogo }, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
