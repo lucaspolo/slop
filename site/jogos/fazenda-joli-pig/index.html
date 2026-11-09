@@ -1928,9 +1928,10 @@ function animarDisco(D, t){
   D.et.rotation.y = Math.sin(t * 0.8) * 0.5;
   if (D.raio) D.raio.material.opacity = 0.22 + Math.sin(t * 5) * 0.07;
 }
-// ================= o disco voador na fazenda: de vez em quando cruza o céu bem pequeno, de um lado ao outro da tela,
-// e o Ed leva um susto. Não mexe no save: os tempos contam só com o jogo aberto e recomeçam ao abrir.
-const DISCO_JOGO = { primeira: [240, 480], intervalo: [600, 1200], escala: 0.3, dur: 7, altura: 3, topo: 0.36 };
+// ================= o disco voador na fazenda: de vez em quando aparece bem pequeno no céu, passeia pela tela parando
+// em alguns pontos (um deles em cima do Ed, que leva um susto) e vai embora acelerando pelo outro lado.
+// Não mexe no save: os tempos contam só com o jogo aberto e recomeçam ao abrir.
+const DISCO_JOGO = { primeira: [240, 480], intervalo: [600, 1200], escala: 0.6, altura: 3, vel: 0.24 };
 let discoJogo = null;
 function criarDiscoJogo(){
   const D = montarDisco(false), raiz = new THREE.Group();
@@ -1938,16 +1939,31 @@ function criarDiscoJogo(){
   // lá no alto não faz sombra no chão
   raiz.traverse(o => { if (o.isMesh) o.castShadow = false; });
   scene.add(raiz);
-  discoJogo = { D, g: raiz, prox: rnd(...DISCO_JOGO.primeira), t: -1, de: new THREE.Vector3(), ate: new THREE.Vector3(), reagiu: false };
+  discoJogo = { D, g: raiz, prox: rnd(...DISCO_JOGO.primeira), t: -1, trechos: [], i: 0, tt: 0, reagiu: false };
 }
-// o caminho é montado a partir da câmera: entra por um lado da tela e sai pelo outro, na parte de cima
+// um ponto no céu a partir da tela: u vai de -1 (borda esquerda) a 1 (direita); v de 0 (topo) a 1 (pé da tela)
+function pontoCeuDisco(u, v){
+  const a = cam.az, direita = new THREE.Vector3(Math.cos(a), 0, -Math.sin(a)), longe = new THREE.Vector3(-Math.sin(a), 0, -Math.cos(a));
+  const h = DISCO_JOGO.altura, fundo = ((0.5 - v) * cam.vista - h * Math.cos(cam.el)) / Math.sin(cam.el);
+  const p = cam.alvo.clone().addScaledVector(longe, fundo).addScaledVector(direita, u * cam.vista * innerWidth / innerHeight / 2);
+  p.y = h; return p;
+}
+// o passeio: entra por um lado, para em quatro pontos (o segundo em cima do Ed, se ele estiver na tela) e sai pelo outro
 function passarDisco(){
-  const P = discoJogo, a = cam.az, direita = new THREE.Vector3(Math.cos(a), 0, -Math.sin(a)), longe = new THREE.Vector3(-Math.sin(a), 0, -Math.cos(a));
-  const meia = cam.vista * innerWidth / innerHeight / 2 + 2, h = DISCO_JOGO.altura;
-  const fundo = (cam.vista * DISCO_JOGO.topo - h * Math.cos(cam.el)) / Math.sin(cam.el), lado = Math.random() < 0.5 ? 1 : -1;
-  const base = cam.alvo.clone().addScaledVector(longe, fundo); base.y = h;
-  P.de.copy(base).addScaledVector(direita, -meia * lado); P.ate.copy(base).addScaledVector(direita, meia * lado);
-  P.t = 0; P.reagiu = false; P.g.visible = true; Som.disco();
+  const P = discoJogo, lado = Math.random() < 0.5 ? 1 : -1;
+  let eu = rnd(-0.2, 0.2), ev = rnd(0.2, 0.32);
+  if (ed.g.visible){ const s = tela(ed.topo()), u = s.x / innerWidth * 2 - 1, v = s.y / innerHeight; if (Math.abs(u) < 0.85 && v > 0.15 && v < 0.9){ eu = u; ev = Math.max(0.08, v - 0.2); } }
+  const pts = [pontoCeuDisco(-1.25 * lado, rnd(0.12, 0.22)), pontoCeuDisco(-rnd(0.35, 0.6) * lado, rnd(0.12, 0.3)), pontoCeuDisco(eu, ev),
+    pontoCeuDisco(rnd(0.4, 0.65) * lado, rnd(0.25, 0.4)), pontoCeuDisco(rnd(-0.1, 0.25) * lado, rnd(0.1, 0.2)), pontoCeuDisco(1.3 * lado, rnd(0.02, 0.1))];
+  const vel = DISCO_JOGO.vel * cam.vista * innerWidth / innerHeight;
+  P.trechos = [];
+  for (let k = 0; k < pts.length - 1; k++){
+    const ultimo = k === pts.length - 2, dur = Math.max(0.9, pts[k].distanceTo(pts[k + 1]) / (ultimo ? vel * 1.8 : vel));
+    P.trechos.push({ de: pts[k], ate: pts[k + 1], dur, para: ultimo ? 0 : k === 1 ? rnd(1.4, 1.8) : rnd(0.5, 0.9), susto: k === 1, sai: ultimo });
+  }
+  // já começa no ponto de entrada, fora da tela (sem isso aparece um quadro no lugar da passagem anterior)
+  P.g.position.copy(pts[0]);
+  P.i = 0; P.tt = 0; P.t = 0; P.reagiu = false; P.g.visible = true; Som.disco();
 }
 function sustoDoEd(){
   if (!ed.g.visible) return;
@@ -1964,13 +1980,23 @@ function atualizarDisco(dt, t){
     if (!cine && S.viuCineInicio && !algumaJanela() && !menuAberto){ P.prox -= dt; if (P.prox <= 0) passarDisco(); }
     return;
   }
-  P.t += dt;
-  const k = P.t / DISCO_JOGO.dur;
-  if (k >= 1 || cine){ P.g.visible = false; P.t = -1; P.prox = rnd(...DISCO_JOGO.intervalo); return; }
-  // atravessa em linha reta, subindo e descendo um pouquinho
-  P.g.position.lerpVectors(P.de, P.ate, k); P.g.position.y += Math.sin(k * Math.PI * 3) * 0.35;
+  P.t += dt; P.tt += dt;
+  let T = P.trechos[P.i];
+  if (T && P.tt > T.dur + T.para){ P.tt -= T.dur + T.para; P.i++; T = P.trechos[P.i]; }
+  if (!T || cine){ P.g.visible = false; P.t = -1; P.prox = rnd(...DISCO_JOGO.intervalo); return; }
+  if (P.tt < T.dur){
+    // vai de um ponto ao outro suavemente; no último trecho, acelera para ir embora
+    const k = P.tt / T.dur, e = T.sai ? k * k : k * k * (3 - 2 * k);
+    P.g.position.lerpVectors(T.de, T.ate, e);
+    P.g.position.y += Math.sin(k * Math.PI) * (T.sai ? 0.6 : 0.25);
+  } else {
+    // parado no ar, dando voltinhas
+    const q = P.tt - T.dur;
+    P.g.position.copy(T.ate);
+    P.g.position.x += Math.sin(q * 3) * 0.12; P.g.position.z += Math.cos(q * 3) * 0.12; P.g.position.y += Math.sin(q * 4) * 0.06;
+    if (T.susto && !P.reagiu){ P.reagiu = true; sustoDoEd(); }
+  }
   animarDisco(P.D, t);
-  if (!P.reagiu && k > 0.35){ P.reagiu = true; sustoDoEd(); }
 }
 // alimentador automático: silo de metal do lado de fora da cerca, com a calha descendo até o cocho dentro do cercado (para -x)
 function vAlimentador(vaca){
@@ -7073,7 +7099,7 @@ function abrirCenas(){
   h += `<div class="cartao"><div class="cab"><img src="${icone('luma')}" alt=""><div><h4>A Luma vai brincar</h4></div></div><div class="info">A Luma sai pela portinha da casa para brincar com a bolinha.${motivoL ? `<br><small>${esc(motivoL)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-luma type="button"${motivoL ? ' disabled' : ''}>Chamar a Luma</button></div></div>`;
   // o disco voador também não é cena: o botão faz ele passar assim que a janela fechar
   const motivoD = !discoJogo ? 'O céu está calmo.' : discoJogo.t >= 0 ? 'Ele já está passando.' : null;
-  h += `<div class="cartao"><div class="cab"><img src="${icone('disco')}" alt=""><div><h4>Disco voador</h4></div></div><div class="info">Um disquinho voador cruza o céu, bem lá no alto.${motivoD ? `<br><small>${esc(motivoD)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-disco type="button"${motivoD ? ' disabled' : ''}>Chamar o disco</button></div></div>`;
+  h += `<div class="cartao"><div class="cab"><img src="${icone('disco')}" alt=""><div><h4>Disco voador</h4></div></div><div class="info">Um disquinho voador passeia pelo céu da fazenda.${motivoD ? `<br><small>${esc(motivoD)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-disco type="button"${motivoD ? ' disabled' : ''}>Chamar o disco</button></div></div>`;
   h += '</div>';
   abrirJanela(topo('claquete', 'Cenas', 'Reveja a história da fazenda', 'rosa2') + `<div class="janela-corpo">${h}</div>`);
   $('janela').querySelectorAll('[data-cena]').forEach(b => b.addEventListener('click', () => { Som.clique(); fecharJanela(); pedirCena(b.dataset.cena); }));
@@ -7372,7 +7398,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Floresta</b>${nv(PARCELAS[0].nivel)}: do outro lado da estrada há uma mata nativa protegida, vendida em ${PARCELAS.length} parcelas, nos níveis ${PARCELAS.map(P => P.nivel).join(', ')}. O Ed só coleta das árvores que já estão lá, sem plantar nem cortar: ${Object.values(NATIVAS).map(N => N.nomeP.toLowerCase()).join(', ')}. Cada árvore guarda uma coleta pronta, mesmo com o jogo fechado.</li>
       <li><b>Trufas</b>${nv(CENAS.patrinho.nivel())}: depois da visita do Patrinho, de vez em quando nasce uma trufa perto de uma árvore, enquanto você joga. Siga o cheirinho que sobe do chão e toque ali para o Ed cavar. Só o Patrinho compra: use o botão Ligar e ele vem de lambreta pagar ${reais(PRODUTOS.trufa.venda)} por trufa.</li>
       <li><b>Luma:</b> a irmã chihuahua dos porquinhos. De vez em quando ela sai pela portinha da casa para brincar com a bolinha roxa, em volta do chafariz se tiver um, e, se o Ed estiver por perto, dá uma mordidinha no rabicó dele. Para ela sair na hora, use Chamar a Luma na janela Cenas.</li>
-      <li><b>Disco voador:</b> de vez em quando um disquinho voador cruza o céu bem lá no alto, e o Ed leva um susto. Para ver na hora, use Chamar o disco na janela Cenas.</li>
+      <li><b>Disco voador:</b> de vez em quando um disquinho voador passeia pelo céu da fazenda, para em cima do Ed e ele leva um susto. Para ver na hora, use Chamar o disco na janela Cenas.</li>
       <li><b>Maçã:</b> de vez em quando uma árvore deixa cair uma maçã. Toque nela para o Ed comer: ele agradece à árvore e anda ${MACA.fator}× mais rápido por ${MACA.minutos} minutos de jogo.</li>
       <li><b>Outro aparelho:</b> a fazenda fica salva só neste navegador. Para jogar em outro aparelho, abra os Ajustes, escolha Levar a fazenda e mande o link para você mesmo. Depois disso, cada aparelho segue sozinho.</li>
       <li><b>Cenas:</b> as cenas da história ficam guardadas e podem ser revistas nos Ajustes ou no caderno do Ed. Rever uma cena não muda nada na fazenda. De vez em quando o Ed para para um cafezinho na frente da casa, às vezes com visita. Para chamar na hora, toque na casa e escolha Tomar um lanchinho.</li>
