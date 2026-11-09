@@ -220,6 +220,10 @@ button{font:inherit;color:inherit}
 .cartao .botoes{display:flex;gap:5px;flex-wrap:wrap;margin-top:2px}
 .cartao.bloq{opacity:.55}
 .grade.cenas{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+.creditos{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.credito{border:2px solid var(--borda);border-radius:14px;background:var(--papel-2);padding:10px 8px 12px;text-align:center}
+.credito img{width:100%;max-width:200px;aspect-ratio:1;display:block;margin:0 auto}
+.credito h4{margin:6px 0 0;font-family:var(--f-titulo);font-weight:400;font-size:18px;line-height:1.1}
 .cartao .pergunta{width:42px;height:42px;flex:none;display:grid;place-items:center;border:2px dashed var(--tinta-suave);border-radius:10px;font-family:var(--f-titulo);font-size:26px;color:var(--tinta-suave)}
 .cartao.oferta{background:#fff1b8}
 .linhas{display:grid;gap:6px}
@@ -2321,6 +2325,106 @@ function atualizarNanos(dt, t){
     else { g.position.x += dx / d * passo; g.position.z += dz / d * passo; g.rotation.y = Math.atan2(dx, dz); }
     g.position.y = Math.abs(Math.sin(t * 12 + n.fase)) * 0.01;
   }
+}
+// ================= créditos: a Carolina e o Lucas em voxel, com cabeção de boneco, para a janela de créditos
+// base de uma pessoa: sapato, calça jeans, camiseta com mangas, braços, pescoço, cabeça com olhos, sobrancelhas, nariz,
+// bochechas, orelhas e um sorriso mostrando os dentes; o cabelo e os detalhes ficam com cada um
+function vPessoaBase(c){
+  const v = new Vox(), pele = c.pele;
+  for (const lado of [-1, 1]){
+    v.box(lado * 1, 0, -2, lado * 5, 1, 3, c.sapato);
+    v.box(lado * 1, 2, -2, lado * 5, 12, 2, (x, y) => y === 12 ? 0x2a2a3a : c.calca);
+  }
+  v.ell(0, 18.5, 0, 6.8, 6.5, 3.6, c.camisa, (x, y) => y >= 13 && y <= 24);
+  if (!c.bracos) for (const lado of [-1, 1]){ v.box(lado * 7, 19, -1, lado * 8, 24, 1, c.camisa); v.box(lado * 7, 13, -1, lado * 8, 18, 1, pele); v.box(lado * 7, 11, -1, lado * 8, 12, 1, pele); }
+  v.box(-2, 25, -1, 2, 25, 1, pele);
+  v.ell(0, 33, 0.5, 8, 8, 7.5, pele);
+  const frenteZ = (x, y) => { for (let z = 30; z >= -30; z--) if (v.has(x, y, z)) return z; return null; };
+  for (const lado of [-1, 1]){
+    v.box(lado * 8, 31, 0, lado * 9, 33, 1, pele);
+    for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]){ const x = lado * 3 + (dx ? lado : 0), y = 33 + dy, z = frenteZ(x, y); v.set(x, y, z + 1, 0x1a1414); }
+    { const z = frenteZ(lado * 3, 34); v.set(lado * 3, 34, z, 0xffffff); }
+    for (let dx = -1; dx <= 1; dx++){ const x = lado * 3 + dx, z = frenteZ(x, 36); v.set(x, 36, z + 1, c.sobrancelha); }
+    for (const x of [lado * 5, lado * 6]) v.frente(x, 30, c.bochecha);
+  }
+  for (const y of [31, 32]) v.set(0, y, frenteZ(0, y) + 1, c.nariz);
+  // sorriso: a boca aberta com os dentes de cima
+  for (let x = -3; x <= 3; x++){ v.frente(x, 27, 0x6b2a2a); v.frente(x, 28, Math.abs(x) <= 2 ? 0xffffff : 0x6b2a2a); }
+  v.frente(-3, 29, 0x6b2a2a); v.frente(3, 29, 0x6b2a2a);
+  return { v, frenteZ };
+}
+function vLucas(){
+  const pele = 0xe2b48c, boch = 0xe79a86;
+  const { v, frenteZ } = vPessoaBase({ pele, sapato: 0x2a2a2a, calca: 0x3a4a6a, camisa: 0x1c1c1e, sobrancelha: 0x2a1e18, bochecha: boch, nariz: 0xc99470 });
+  // estampa na camiseta preta: faixa azul-clara e um quadro claro embaixo, sem letras
+  for (let x = -4; x <= 4; x++){ v.frente(x, 21, 0x8ed0ea); v.frente(x, 20, 0x8ed0ea); }
+  for (let x = -4; x <= 4; x++) for (let y = 15; y <= 18; y++) v.frente(x, y, (x + y) % 3 ? 0xd6d0c4 : 0x8a7a6a);
+  // barba cheia e escura com uns fios brancos, e o bigode em cima do sorriso
+  const barba = (x, y) => hash(x, y, 5) > 0.82 ? 0x8a8580 : 0x2a1e18;
+  for (const e of v.m.values()) if (e.y <= 30 && e.y >= 25 && (e.c === pele || e.c === boch)) e.c = barba(e.x, e.y);
+  for (let x = -4; x <= 4; x++){ const z = frenteZ(x, 30); if (z != null) v.set(x, 30, z, barba(x, 30)); }
+  v.ell(0, 27, 1.5, 6.5, 3, 5.5, barba, (x, y, z) => y <= 27 && y >= 25 && !v.has(x, y, z));
+  // cabelo curto, escuro nos lados e grisalho em cima
+  const cabelo = (x, y, z) => { const h = hash(x, y, z + 9); return y >= 40 ? (h > 0.6 ? 0x9a948c : h > 0.3 ? 0x6e655e : 0x3a302a) : (h > 0.85 ? 0x8a8580 : 0x2e241e); };
+  for (const e of v.m.values()) if (e.c === pele && (e.y >= 38 || (e.z < -2 && e.y >= 30) || (Math.abs(e.x) >= 7 && e.y >= 34))) e.c = cabelo(e.x, e.y, e.z);
+  v.ell(0, 39.5, 0, 8.3, 3, 7.6, cabelo, (x, y) => y >= 39);
+  v.ell(0, 40.5, 2.5, 6, 2.2, 5, cabelo, (x, y) => y >= 40);
+  return v;
+}
+function vCarolina(){
+  const pele = 0xf2cdb4, verde = 0x9db84a, luma = 0xe39a4c;
+  const { v, frenteZ } = vPessoaBase({ pele, sapato: 0xefe6d2, calca: 0x3f5f9a, camisa: verde, sobrancelha: 0x3a2820, bochecha: 0xf0a0a0, nariz: 0xe0b098, bracos: true });
+  // braços dobrados segurando a Luma no colo, com umas tatuagens no antebraço
+  for (const lado of [-1, 1]){ v.box(lado * 7, 19, -1, lado * 8, 24, 1, verde); v.box(lado * 6, 16, 1, lado * 7, 18, 6, pele); }
+  for (const [x, y, z] of [[6, 17, 3], [7, 17, 4], [6, 16, 5], [7, 18, 2]]) v.set(x, y, z, 0x3a3a3a);
+  // a Luma: bolinha caramelo de pelo, focinho creme, nariz, orelhonas e o coraçãozinho rosa
+  v.ell(0, 20, 6, 5, 3.6, 3.4, (x, y) => y < 19 ? 0xfbe7cc : luma);
+  v.ell(-1, 24, 7.5, 3.4, 3.1, 3, luma);
+  v.ell(-1, 23, 10, 1.6, 1.2, 1, 0xfbe7cc); v.set(-1, 24, 11, 0x2e2220);
+  for (const x of [-3, 1]) v.set(x, 25, 10, 0x1a1414);
+  for (const lado of [-1, 1]){ const ox = -1 + lado * 2; v.box(ox, 27, 7, ox + lado, 28, 7, luma); v.set(ox + lado, 29, 7, luma); }
+  v.set(-1, 27, 9, 0xff7ac8);
+  // bolsa a tiracolo: a alça cruzando o peito e a bolsinha creme do lado
+  for (let i = 0; i <= 10; i++) v.frente(-5 + i, 24 - i, 0xefe6d2);
+  v.box(7, 9, -1, 9, 13, 2, 0xefe6d2);
+  // óculos de armação transparente rosada
+  const arm = 0xe3c8d2;
+  for (const lado of [-1, 1]){
+    const cx = lado * 3;
+    for (let x = cx - 2; x <= cx + 2; x++) for (const y of [32, 36]){ const z = frenteZ(x, y); if (z != null) v.set(x, y, z + 1, arm); }
+    for (let y = 32; y <= 36; y++) for (const x of [cx - 2, cx + 2]){ const z = frenteZ(x, y); if (z != null) v.set(x, y, z + 1, arm); }
+  }
+  // cabelo comprido e ondulado, castanho escuro, caindo nas costas e dos lados até os ombros
+  const cabelo = (x, y, z) => hash(x, y >> 1, z) > 0.78 ? 0x5e4232 : 0x4a3226;
+  for (const e of v.m.values()) if (e.c === pele && (e.y >= 38 || (e.z < -1 && e.y >= 28) || (Math.abs(e.x) >= 7 && e.y >= 33))) e.c = cabelo(e.x, e.y, e.z);
+  v.ell(0, 38.5, 0, 8.6, 4, 8, cabelo, (x, y) => y >= 38);
+  for (let y = 14; y <= 37; y++){
+    const onda = Math.round(Math.sin(y * 0.7) * 0.8);
+    for (let x = -8; x <= 8; x++) for (let z = -5; z <= -2; z++) if (x * x / 72 + (z + 1) * (z + 1) / 20 <= 1 && !v.has(x + onda, y, z)) v.set(x + onda, y, z, cabelo(x, y, z));
+    if (y >= 18) for (const lado of [-1, 1]) for (let z = -3; z <= 2; z++){ const x = lado * 9 + onda; if (!v.has(x, y, z)) v.set(x, y, z, cabelo(x, y, z)); }
+  }
+  return v;
+}
+// retrato de três quartos, maior que os ícones, para a janela de créditos
+const RETRATOS = {};
+function retrato(nome, fn){
+  if (RETRATOS[nome]) return RETRATOS[nome];
+  const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }), T = 240;
+  r.setPixelRatio(1); r.setSize(T, T, false);
+  const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xffffff, 0xb0a080, 0.66));
+  const l = new THREE.DirectionalLight(0xffffff, 0.6); l.position.set(3, 5, 6); sc.add(l);
+  const geo = fn().build(1 / 16, { jitter: 0.02, ao: AO_SUAVE }), m = new THREE.Mesh(geo, MAT), c = new THREE.Vector3();
+  geo.boundingBox.getCenter(c); m.position.copy(c).multiplyScalar(-1); sc.add(m);
+  const R = geo.boundingSphere.radius * 0.98, cam = new THREE.OrthographicCamera(-R, R, R, -R, 0.1, 200);
+  cam.position.set(0.5, 0.3, 1).normalize().multiplyScalar(60); cam.lookAt(0, 0, 0);
+  r.render(sc, cam);
+  RETRATOS[nome] = r.domElement.toDataURL();
+  geo.dispose(); r.dispose(); if (r.forceContextLoss) r.forceContextLoss();
+  return RETRATOS[nome];
+}
+function abrirCreditos(){
+  const pessoa = (nome, fn) => `<div class="credito"><img src="${retrato(nome, fn)}" alt="${esc(nome)} em voxel"><h4>${esc(nome)}</h4></div>`;
+  abrirJanela(topo('luma', 'Créditos', 'Quem fez a Fazenda Joli Pig', 'rosa2') + `<div class="janela-corpo"><div class="creditos">${pessoa('Carolina Torrigo', vCarolina)}${pessoa('Lucas Polo', vLucas)}</div></div>`);
 }
 // alimentador automático: silo de metal do lado de fora da cerca, com a calha descendo até o cocho dentro do cercado (para -x)
 function vAlimentador(vaca){
@@ -7633,6 +7737,7 @@ function abrirAjustes(){
     <div class="ajuste"><span>Como jogar</span><button class="botao mini" id="jAjuda" type="button">abrir</button></div>
     <div class="ajuste"><span>Ver os modelos 3D</span><a class="botao mini" href="./?modelos">abrir</a></div>
     <div class="ajuste"><span>Rever as cenas</span><button class="botao mini" id="jCenas" type="button"><img src="${icone('claquete')}" alt="" style="width:20px;height:20px;vertical-align:-5px;margin-right:4px">abrir</button></div>
+    <div class="ajuste"><span>Créditos</span><button class="botao mini" id="jCreditos" type="button">abrir</button></div>
     <div class="ajuste"><span>Levar a fazenda para outro aparelho</span><button class="botao mini" id="jLevar" type="button">abrir</button></div>
     ${fazendaAnterior() ? '<div class="ajuste"><span>Voltar para a fazenda anterior</span><button class="botao mini" id="jVoltar" type="button">voltar</button></div>' : ''}
     <div class="ajuste"><span>Recomeçar a fazenda do zero</span><button class="botao mini rosa" id="jZerar" type="button">recomeçar</button></div>
@@ -7647,6 +7752,7 @@ function abrirAjustes(){
   $('jDicas').addEventListener('click', () => { S.dicas = !S.dicas; atualizarDica(); salvar(); abrirAjustes(); });
   $('jAjuda').addEventListener('click', mostrarAjuda);
   $('jCenas').addEventListener('click', () => { Som.clique(); abrirCenas(); });
+  $('jCreditos').addEventListener('click', () => { Som.clique(); abrirCreditos(); });
   $('jLevar').addEventListener('click', () => { Som.clique(); abrirLevarFazenda(); });
   const voltar = $('jVoltar');
   if (voltar) voltar.addEventListener('click', () => {
@@ -8104,7 +8210,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { nano: () => nanoHostel, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, obj: () => discoJogo }, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { abrirCreditos, nano: () => nanoHostel, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, obj: () => discoJogo }, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
@@ -8128,7 +8234,7 @@ function catalogoModelos(){
   const usados = new Set();
   const uso = k => { usados.add(k); return k; };
   const grupos = [
-    { nome: 'Personagens', itens: [porco('Ed', COR.ed, COR.edBolso, 'ed'), porco('Beto', COR.beto, COR.betoBolso, 'beto'), porco('Hud', COR.ed, COR.edBolso, 'hud', MODELO_HUD), porco('Pelúcio', 0, 0, 'pelucio', modeloMoletom(1.32)), porco('Milton', 0, 0, 'milton', modeloMoletom(0.7)), porco('Jaca', 0, 0, 'jaca', MODELO_JACA), porco('Patrinho', 0, 0, 'patrinho', MODELO_PATRINHO), luma('Luma')] },
+    { nome: 'Personagens', itens: [porco('Ed', COR.ed, COR.edBolso, 'ed'), porco('Beto', COR.beto, COR.betoBolso, 'beto'), porco('Hud', COR.ed, COR.edBolso, 'hud', MODELO_HUD), porco('Pelúcio', 0, 0, 'pelucio', modeloMoletom(1.32)), porco('Milton', 0, 0, 'milton', modeloMoletom(0.7)), porco('Jaca', 0, 0, 'jaca', MODELO_JACA), porco('Patrinho', 0, 0, 'patrinho', MODELO_PATRINHO), luma('Luma'), um('Carolina', vCarolina), um('Lucas', vLucas)] },
     { nome: 'Bichos', itens: [um('Galinha', vGalinha), um('Vaca', vVaca), um('Minhoca', vMinhoca), um('Bugio', vBugio), um('Jaguatirica', vJaguatirica), um('Tucano', vTucano), um('Papagaio', vPapagaio), um('Cobra-coral', vCobraCoral)] },
     { nome: 'Canteiros', itens: [...Object.keys(CULTURAS).map(k => { const C = CULTURAS[k]; return varios(C.nome, [['Semente', () => vPlanta(k, 0)], ['Muda', () => vPlanta(k, 1)], ['Crescendo', () => vPlanta(k, 2)], ['Pronta', () => vPlanta(k, 3)], ...produto(uso(C.produto || k))], 3); }), um('Mato', vMato), varios('Solo', [['Seco', () => vSolo(false, false)], ['Molhado', () => vSolo(true, false)], ['Adubado', () => vSolo(false, true)]])] },
     { nome: 'Pomar', itens: Object.keys(FRUTIFERAS).map(k => { uso(k); return varios(FRUTIFERAS[k].nome, [['Com fruta', () => vFrutifera(k, true)], ['Sem fruta', () => vFrutifera(k, false)], ...produto(uso(FRUTIFERAS[k].fruta))]); }) },
