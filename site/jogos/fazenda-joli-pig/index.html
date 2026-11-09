@@ -1507,6 +1507,150 @@ function vJaca(soCabeca){
 }
 function vBracoJaca(){ const v = new Vox(); v.ell(0, -5.5, 0, 3.3, 6.5, 3.3, CJ.verde); for (const [x, z] of [[-1, 1], [1, 1], [0, 2]]) v.set(x, -12, z, CJ.barriga); return v; }
 function vPeJaca(){ const v = new Vox(); v.ell(0, -4, 1, 4, 4, 5.5, CJ.verde, (x, y) => y >= -7 && y <= -1); for (const x of [-2, 0, 2]) v.box(x, -7, 6, x, -6, 7, CJ.barriga); return v; }
+
+// ================= Luma, a irmã chihuahua dos porquinhos: meiga, brincalhona e dona da bolinha roxa
+// por enquanto só aparece no catálogo de modelos. Peças separadas (corpo, cabeça, quatro patas e rabo) para animar depois;
+// cubinhos na mesma escala dos porquinhos (1/57), com o corpo girando em volta do quadril para ela poder sentar
+const CL = { pelo: 0xe39a4c, claro: 0xf0b268, escuro: 0xc97c38, creme: 0xfbe7cc, creme2: 0xf3d5ae, focinho: 0xf8e2c6, nariz: 0x2e2220, narizBrilho: 0x6a5450, olho: 0x1a1414, orelha: 0xf4b2a2, coracao: 0xff7ac8, boca: 0x5a2c24, bola: 0x8b4fd6, bola2: 0xb98cf2 };
+const LUMA = { escala: 0.8, quadril: [0, 13, -7], pescoco: [0, 26, 8], rabo: [0, 23, -9], pernas: [[-4.5, 6], [4.5, 6], [-4.5, -7], [4.5, -7]] };
+// pelo comprido em mechas: a cor varia em faixas de dois cubinhos de altura
+const peloLuma = (x, y, z) => hash(x, Math.floor(y / 3), z) > 0.86 ? CL.claro : CL.pelo;
+// tufos: parte dos cubinhos da borda ganha um fio para fora, na direção oposta ao centro
+function tufosLuma(v, cx, cy, cz, sel, chance, cor){
+  for (const e of [...v.m.values()]){
+    if (!sel(e)) continue;
+    const dx = e.x - cx, dy = e.y - cy, dz = e.z - cz, n = Math.hypot(dx, dy, dz) || 1;
+    const nx = Math.round(e.x + dx / n * 1.5), ny = Math.round(e.y + dy / n * 1.5), nz = Math.round(e.z + dz / n * 1.5);
+    if (!v.has(nx, ny, nz) && hash(e.x * 3 + 1, e.y * 5, e.z * 7) < chance) v.set(nx, ny, nz, cor || e.c);
+  }
+}
+function vLumaTronco(){
+  const v = new Vox();
+  // corpo comprido e baixinho, com a barriga creme
+  v.ell(0, 18, 0, 8, 7.5, 11, (x, y, z) => y < 13 ? CL.creme2 : peloLuma(x, y, z));
+  // ancas fofas atrás, com o pelo comprido das coxas
+  for (const lado of [-1, 1]) v.ell(lado * 5, 15, -7, 4.5, 6, 5, (x, y, z) => y < 11 ? CL.creme : peloLuma(x, y, z));
+  // juba no pescoço e no peito; o peito é creme, como nas fotos
+  const peito = (x, y, z) => z > 9 && Math.abs(x) < 6 && y < 26 ? CL.creme : peloLuma(x, y, z);
+  v.ell(0, 22, 7, 10.5, 9.5, 7.5, peito);
+  // a juba cai em franja embaixo do peito
+  tufosLuma(v, 0, 22, 7, e => e.y < 18 && e.z > 6, 0.5);
+  return v;
+}
+function vLumaPerna(frente){
+  const v = new Vox();
+  // perninha fina; o topo entra no corpo para esconder a junta
+  v.ell(0, -4.5, 0, 2.4, 8.5, 2.4, peloLuma);
+  if (!frente) v.ell(0, -1, -0.5, 2.8, 4.5, 3.2, peloLuma);
+  // franja de pelo comprido atrás da perna
+  for (let y = -9; y <= -2; y++) for (const x of [-1, 0, 1]) if (hash(x, y, frente ? 3 : 9) > 0.35) v.set(x, y, -2, y < -5 ? CL.creme : CL.claro);
+  // patinha creme, um pouco para a frente
+  v.ell(0, -12, 0.8, 2.5, 1.6, 3, CL.creme2, (x, y) => y >= -13);
+  return v;
+}
+function vLumaCabeca(){
+  const v = new Vox();
+  const frenteZ = (x, y) => { for (let z = 60; z >= -60; z--) if (v.has(x, y, z)) return z; return null; };
+  // cabeça de maçã, grande para o corpo, com as bochechas fofas abertas para os lados
+  v.ell(0, 10, 4, 11.5, 10.5, 10, peloLuma);
+  for (const lado of [-1, 1]) v.ell(lado * 9.5, 6, 4, 4, 4.5, 5, peloLuma);
+  tufosLuma(v, 0, 8, 4, e => Math.abs(e.x) > 10 && e.y < 9, 0.4);
+  // focinho curto e creme, com o nariz escuro na ponta
+  v.ell(0, 6, 13, 4.8, 3.8, 3.8, CL.focinho);
+  v.ell(0, 7.6, 16.6, 2, 1.4, 1, CL.nariz);
+  v.set(0, 9, frenteZ(0, 9), CL.narizBrilho);
+  // boquinha
+  for (const [x, y] of [[0, 5], [-1, 4], [1, 4]]) v.frente(x, y, CL.boca);
+  // olhos grandes e redondos, saltados, com brilho
+  for (const lado of [-1, 1]){
+    const ex = lado * 5, ey = 12;
+    for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++){
+      if (dx * dx / 3.4 + dy * dy / 4.6 > 1) continue;
+      const z = frenteZ(ex + dx, ey + dy); v.set(ex + dx, ey + dy, z + 1, CL.olho);
+    }
+    v.set(ex + 1, ey + 1, frenteZ(ex + 1, ey + 1), 0xffffff);
+  }
+  // coraçãozinho rosa na testa
+  for (const [x, y] of [[-2, 17], [-1, 17], [1, 17], [2, 17], [-2, 16], [-1, 16], [0, 16], [1, 16], [2, 16], [-1, 15], [0, 15], [1, 15], [0, 14]]){ const z = frenteZ(x, y); v.set(x, y, z + 1, CL.coracao); }
+  // orelhonas em pé, abertas para os lados, com o dentro rosa e franja de pelo na borda de fora
+  for (const lado of [-1, 1]){
+    const H = 13;
+    for (let k = 0; k <= H; k++){
+      const t = k / H, y = 16 + k, cx = 6 + t * 6.5, w = 4.6 * (1 - t) + 0.6;
+      for (let x = Math.round(cx - w); x <= Math.round(cx + w); x++){
+        const dentro = t < 0.82 && x > cx - w + 1 && x < cx + w - 1;
+        v.set(lado * x, y, 1, peloLuma(lado * x, y, 1)); v.set(lado * x, y, 2, peloLuma(lado * x, y, 2));
+        v.set(lado * x, y, 3, dentro ? (t < 0.15 ? CL.creme : CL.orelha) : peloLuma(lado * x, y, 3));
+      }
+      const xf = Math.round(cx + w) + 1;
+      if (t > 0.1 && t < 0.9 && hash(lado, y, 4) > 0.35) for (let z = 1; z <= 2; z++) v.set(lado * xf, y, z, t > 0.5 ? CL.claro : CL.creme);
+    }
+  }
+  return v;
+}
+function vLumaRabo(){
+  const v = new Vox();
+  // rabo de pluma que sobe e se enrola por cima das costas, creme por baixo e na ponta
+  let y = 0, z = 0;
+  const N = 15;
+  for (let i = 0; i <= N; i++){
+    const t = i / N, a = Math.PI * (0.42 + 0.72 * t);
+    y += Math.sin(a) * 1.25; z -= Math.cos(a) * 1.25;
+    const r = 1.8 + 2.8 * Math.sin(Math.PI * Math.min(1, t * 1.1)), cy = y;
+    v.ell(0, y, z, r * 1.1, r, r, (X, Y, Z) => t > 0.85 ? CL.claro : Y < cy - r * 0.35 ? CL.creme : peloLuma(X, Y, Z));
+  }
+  tufosLuma(v, 0, 6, -2, e => e.y > 4, 0.12);
+  return v;
+}
+// a bolinha roxa, com a costura curva clarinha de bolinha de tênis
+function vBolinha(){
+  const v = new Vox();
+  v.ell(0, 4.9, 0, 4.9, 4.9, 4.9, (x, y, z) => Math.abs((y - 4.9) - Math.sin(2 * Math.atan2(z, x)) * 2.2) < 0.8 ? CL.bola2 : CL.bola);
+  return v;
+}
+function montarLuma(comBola){
+  const s = 1 / 57, op = { origin: [0.5, 0, 0.5], jitter: 0.015, ao: AO_SUAVE }, Q = LUMA.quadril;
+  const g = new THREE.Group(), corpo = new THREE.Group();
+  g.add(corpo); g.scale.setScalar(LUMA.escala);
+  const parte = (vox, [x, y, z], pai = corpo) => {
+    const p = new THREE.Group(), m = malha(vox.build(s, op)); m.userData.cubos = vox.m.size;
+    p.position.set((x - Q[0]) * s, (y - Q[1]) * s, (z - Q[2]) * s); p.add(m); pai.add(p); return p;
+  };
+  const tronco = parte(vLumaTronco(), Q); tronco.position.set(-Q[0] * s, -Q[1] * s, -Q[2] * s);
+  const cabeca = parte(vLumaCabeca(), LUMA.pescoco), rabo = parte(vLumaRabo(), LUMA.rabo);
+  const pernas = LUMA.pernas.map(([x, z], i) => parte(vLumaPerna(i < 2), [x, Q[1], z]));
+  let bola = null;
+  if (comBola){ const vb = vBolinha(); bola = malha(vb.build(s, { jitter: 0.015, ao: AO_SUAVE })); bola.userData.cubos = vb.m.size; bola.position.set(0, -2 * s, 17.5 * s); cabeca.add(bola); }
+  return { g, corpo, cabeca, rabo, pernas, bola };
+}
+// poses do catálogo: parada, andando (trote em diagonal), sentada com a cabeça de lado e brincando com a bolinha na boca
+function animarLuma(L, modo, t){
+  const { corpo, cabeca, rabo, pernas } = L, s = 1 / 57, Q = LUMA.quadril, sentada = modo === 'Sentada';
+  corpo.position.set(Q[0] * s, (Q[1] - (sentada ? 7 : 0)) * s, Q[2] * s);
+  corpo.rotation.set(sentada ? -0.52 : 0, 0, 0);
+  for (const p of pernas) p.rotation.set(0, 0, 0);
+  cabeca.rotation.set(sentada ? 0.42 : 0, 0, 0); rabo.rotation.set(0, 0, 0); L.g.position.y = 0;
+  if (modo === 'Andando'){
+    const f = t * 10;
+    pernas.forEach((p, i) => { p.rotation.x = Math.sin(f + (i === 0 || i === 3 ? 0 : Math.PI)) * 0.55; });
+    corpo.position.y += Math.abs(Math.sin(f)) * 0.012;
+    cabeca.rotation.x = Math.sin(f * 2) * 0.04;
+    rabo.rotation.z = Math.sin(t * 12) * 0.3;
+  } else if (sentada){
+    pernas[0].rotation.x = pernas[1].rotation.x = 0.52;
+    pernas[2].rotation.x = pernas[3].rotation.x = -0.78;
+    cabeca.rotation.z = Math.sin(t * 0.9) * 0.22;
+    rabo.rotation.z = Math.sin(t * 4) * 0.2;
+  } else if (modo === 'Com a bolinha'){
+    L.g.position.y = Math.max(0, Math.sin(t * 6)) * 0.03;
+    rabo.rotation.z = Math.sin(t * 16) * 0.4;
+    cabeca.rotation.y = Math.sin(t * 3) * 0.3;
+  } else {
+    rabo.rotation.z = Math.sin(t * 5) * 0.25;
+    cabeca.rotation.y = Math.sin(t * 0.45) * 0.25;
+    cabeca.rotation.z = Math.sin(t * 0.7) * 0.1;
+  }
+}
 // alimentador automático: silo de metal do lado de fora da cerca, com a calha descendo até o cocho dentro do cercado (para -x)
 function vAlimentador(vaca){
   const v = new Vox();
@@ -7273,12 +7417,18 @@ function catalogoModelos(){
     p.g.userData.anima(0, 0);
     return p.g;
   } })) });
+  const luma = nome => ({ nome, variantes: ['Parada', 'Andando', 'Sentada', 'Com a bolinha'].map(n => ({ nome: n, cria: () => {
+    const L = montarLuma(n === 'Com a bolinha');
+    L.g.userData.anima = (dt, t) => animarLuma(L, n, t);
+    L.g.userData.anima(0, 0);
+    return L.g;
+  } })) });
   const caminhao = (nome, cfg) => ({ nome, variantes: [{ nome: '', cria: () => { const c = criarCaminhao(...cfg); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] });
   const produto = k => VI[k] ? [['Produto', VI[k]]] : [];
   const usados = new Set();
   const uso = k => { usados.add(k); return k; };
   const grupos = [
-    { nome: 'Personagens', itens: [porco('Ed', COR.ed, COR.edBolso, 'ed'), porco('Beto', COR.beto, COR.betoBolso, 'beto'), porco('Hud', COR.ed, COR.edBolso, 'hud', MODELO_HUD), porco('Pelúcio', 0, 0, 'pelucio', modeloMoletom(1.32)), porco('Milton', 0, 0, 'milton', modeloMoletom(0.7)), porco('Jaca', 0, 0, 'jaca', MODELO_JACA), porco('Patrinho', 0, 0, 'patrinho', MODELO_PATRINHO)] },
+    { nome: 'Personagens', itens: [porco('Ed', COR.ed, COR.edBolso, 'ed'), porco('Beto', COR.beto, COR.betoBolso, 'beto'), porco('Hud', COR.ed, COR.edBolso, 'hud', MODELO_HUD), porco('Pelúcio', 0, 0, 'pelucio', modeloMoletom(1.32)), porco('Milton', 0, 0, 'milton', modeloMoletom(0.7)), porco('Jaca', 0, 0, 'jaca', MODELO_JACA), porco('Patrinho', 0, 0, 'patrinho', MODELO_PATRINHO), luma('Luma')] },
     { nome: 'Bichos', itens: [um('Galinha', vGalinha), um('Vaca', vVaca), um('Minhoca', vMinhoca)] },
     { nome: 'Canteiros', itens: [...Object.keys(CULTURAS).map(k => { const C = CULTURAS[k]; return varios(C.nome, [['Semente', () => vPlanta(k, 0)], ['Muda', () => vPlanta(k, 1)], ['Crescendo', () => vPlanta(k, 2)], ['Pronta', () => vPlanta(k, 3)], ...produto(uso(C.produto || k))], 3); }), um('Mato', vMato), varios('Solo', [['Seco', () => vSolo(false, false)], ['Molhado', () => vSolo(true, false)], ['Adubado', () => vSolo(false, true)]])] },
     { nome: 'Pomar', itens: Object.keys(FRUTIFERAS).map(k => { uso(k); return varios(FRUTIFERAS[k].nome, [['Com fruta', () => vFrutifera(k, true)], ['Sem fruta', () => vFrutifera(k, false)], ...produto(uso(FRUTIFERAS[k].fruta))]); }) },
@@ -7288,7 +7438,7 @@ function catalogoModelos(){
     { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Teco-teco', vTecoTeco), um('Hélice', vHelice), um('Biruta', vBiruta)] },
     { nome: 'Cenário', itens: [varios('Árvore', [['Maçãs', () => vArvore(0)], ['Sem fruta', () => vArvore(1)], ['Laranjas', () => vArvore(2)]]), um('Arbusto', vArbusto), um('Fardo de feno', vFeno), um('Flores', () => vFlores(3)), um('Capim', () => vCapim(1)), um('Cova', vCova), varios('Cerca', [['Reta', () => vCerca(3)], ['Canto', () => vCerca(5)]]), varios('Portão', [['Arco da entrada', () => vPortao(true)], ['Simples', () => vPortao(false)]]), um('Placa', vPlaca), um('Correio', vCorreio)] },
     { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), um('Chafariz', vFonte), um('Estátua do Ed', vEstatua)] },
-    { nome: 'Objetos', itens: [um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
+    { nome: 'Objetos', itens: [um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
   ];
   grupos.push({ nome: 'Ícones', itens: Object.keys(VI).filter(k => !usados.has(k)).sort().map(k => um((PRODUTOS[k] && PRODUTOS[k].nome) || k, VI[k])) });
   return grupos.flatMap(g => g.itens.map(it => ({ ...it, grupo: g.nome, ini: it.ini || 0, id: (g.nome + '-' + it.nome).normalize('NFD').replace(/[^\w]+/g, '-').toLowerCase() })));
