@@ -913,6 +913,35 @@ function vPorco(cor, bolso, soCabeca, roupa){
   }
   return v;
 }
+// o tratorzinho e as bicicletas do trânsito: a frente aponta para +x, como os outros veículos
+function vTrator(){
+  const v = new Vox(), verde = 0x3f9a4a, verdeE = 0x2f7a3a, amarelo = 0xf2c23a, pneu = 0x2f2f33;
+  for (const lado of [-1, 1]){
+    for (let x = -5; x <= 5; x++) for (let y = -5; y <= 5; y++) if (x * x + y * y <= 27) v.box(4 + x, 5 + y, lado * 5, 4 + x, 5 + y, lado * 7, x * x + y * y <= 6 ? amarelo : pneu);
+    for (let x = -3; x <= 3; x++) for (let y = -3; y <= 3; y++) if (x * x + y * y <= 10) v.box(18 + x, 3 + y, lado * 4, 18 + x, 3 + y, lado * 5, x * x + y * y <= 2 ? amarelo : pneu);
+    v.box(0, 11, lado * 4, 8, 11, lado * 8, verdeE);
+  }
+  v.box(1, 5, -3, 21, 7, 3, verdeE);
+  v.box(9, 8, -3, 21, 13, 3, (x, y) => y === 13 ? verdeE : verde);
+  v.box(22, 8, -2, 22, 12, 2, (x, y, z) => (y + 20) % 2 ? 0x8a8a8a : 0x4a4a4a);
+  v.box(1, 8, -3, 8, 10, 3, verde);
+  v.box(1, 11, -3, 7, 11, 3, 0x3a3a3e);
+  v.box(0, 11, -3, 0, 15, 3, 0x3a3a3e);
+  v.box(16, 14, 0, 16, 19, 0, 0x4a4a4a);
+  v.box(9, 14, 0, 9, 16, 0, 0x8a8a8a);
+  v.box(9, 16, -3, 9, 16, 3, 0x2f2f33);
+  return v;
+}
+function vBicicleta(cor){
+  const v = new Vox(), pneu = 0x2f2f33, cromo = 0xcfd2d6;
+  const linha = (x0, y0, x1, y1, c) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)); for (let i = 0; i <= n; i++) v.set(Math.round(x0 + (x1 - x0) * i / n), Math.round(y0 + (y1 - y0) * i / n), 0, c); };
+  for (const wx of [2, 18]) for (let x = -5; x <= 5; x++) for (let y = -5; y <= 5; y++){ const d = x * x + y * y; if (d >= 13 && d <= 26) v.set(wx + x, 5 + y, 0, pneu); else if (d <= 1 || (d <= 13 && (x === 0 || y === 0))) v.set(wx + x, 5 + y, 0, cromo); }
+  linha(2, 5, 8, 12, cor); linha(8, 5, 8, 13, cor); linha(2, 5, 8, 5, cor); linha(8, 12, 15, 12, cor); linha(8, 5, 15, 11, cor); linha(18, 5, 15, 13, cor); linha(15, 13, 15, 15, cromo);
+  v.box(15, 15, -3, 15, 15, 3, cromo);
+  for (const z of [-3, 3]) v.set(15, 15, z, pneu);
+  v.box(6, 14, -1, 10, 14, 1, 0x3a2a20);
+  return v;
+}
 // três faixas em espiral que abrem para cima, com folhinhas presas no vento
 function vRedemoinho(){
   const v = new Vox(), cores = [0xd9c9a6, 0xc4b18a, 0xe9dfc7, 0xf3ecd9];
@@ -6847,6 +6876,69 @@ function atualizarRedemoinho(dt, t){
   if (rdMesh.visible && (rdPoeira -= dt) <= 0){ rdPoeira = 0.09; particula(rd.x + rnd(-0.4, 0.4), 0.08, rd.z + rnd(-0.4, 0.4), sorteia([0xd9c9a6, 0xc4b18a, 0xe9dfc7]), 0.5); }
 }
 
+// ================= trânsito na estrada: de vez em quando passa um veículo, e o Ed cumprimenta quem passa perto
+const TRANSITO = { espera: [30, 90], perto: 4 };
+// [cor da bicicleta, cor da roupa do porquinho, cor do bolso]
+const ROUPA_VERMELHA = [0xd9483c, 0xf2b632], ROUPA_VERDE = [0x46a352, 0xbfe59a], ROUPA_ROXA = [0x8a4fc4, 0xd7b8f0];
+const CICLISTAS = [[0xd9483c, ...ROUPA_VERDE], [0x3f8fd0, ...ROUPA_VERMELHA], [0xf0b432, ...ROUPA_ROXA]];
+let TRAFEGO = [], carroRua = null, transitoEspera = Infinity;
+function saudacaoDoEd(){
+  const h = new Date().getHours();
+  return `Aoooa! ${h >= 5 && h < 12 ? 'Diiiia!' : h >= 12 && h < 18 ? 'Boa tarde!' : 'Noite!'}`;
+}
+function montarTransito(){
+  // o Porco se registra para receber toque, mas quem passa na estrada não abre menu
+  const piloto = (nome, args, x, y, esc, pedala) => { const p = new Porco(...args); pickaveis.pop(); p.g.scale.setScalar(esc); return { p, x, y, pedala, nome }; };
+  const veiculo = (g, vel, pilotos) => { pilotos.forEach(q => g.add(q.p.g)); g.visible = false; return { g, vel, pilotos }; };
+  const criado = g => { pickaveis.pop(); return g; };
+  const novoMesh = (fn, ori, chave) => { const m = malha(geo(chave, () => fn().build(1 / 16, { origin: ori }))); scene.add(m); return m; };
+  TRAFEGO = [
+    veiculo(criado(criarCaminhao(...CAMINHAO_MARKET)), 5.5, []),
+    veiculo(criado(criarCaminhao(...CAMINHAO_CAFE)), 5.5, []),
+    veiculo(criado(criarLambreta()), 4.5, [piloto('moto', [0, 0, 'patrinho', MODELO_PATRINHO], -0.2, 0.84, 1)]),
+    veiculo(novoMesh(vTrator, [10, 0, 0.5], 'trator'), 2.2, [piloto('trator', [...ROUPA_VERMELHA, 'tratorista'], -0.34, 0.68, 0.72)]),
+    ...CICLISTAS.map((c, i) => veiculo(novoMesh(() => vBicicleta(c[0]), [9, 0, 0.5], 'bicicleta' + i), 3 + i * 0.5, [piloto('bike', [c[1], c[2], 'ciclista' + i], -0.05, 0.56, 0.5, true)])),
+  ];
+  transitoEspera = rnd(...TRANSITO.espera);
+}
+function soltarVeiculo(i){
+  if (carroRua) return false;
+  const v = TRAFEGO[i], sentido = Math.random() < 0.5 ? 1 : -1;
+  carroRua = { v, sentido, x: sentido > 0 ? -9 : W + 9, saudou: false };
+  v.g.visible = true; v.g.rotation.y = sentido > 0 ? 0 : Math.PI; v.g.position.set(carroRua.x, 0, Z_ESTRADA);
+  return true;
+}
+function tirarVeiculo(){
+  carroRua.v.g.visible = false; carroRua = null;
+  transitoEspera = rnd(...TRANSITO.espera);
+}
+function atualizarTransito(dt, t){
+  if (!carroRua){
+    if (!cine && !cenaPedida && caminhaoE.estado === 'longe' && (transitoEspera -= dt) <= 0) soltarVeiculo(Math.floor(Math.random() * TRAFEGO.length));
+    return;
+  }
+  // visita e cena usam a mesma pista, e os veículos se atravessariam
+  if (cine || caminhaoE.estado !== 'longe'){ tirarVeiculo(); return; }
+  const c = carroRua;
+  c.x += c.sentido * c.v.vel * dt;
+  c.v.g.position.x = c.x; c.v.g.position.y = Math.abs(Math.sin(t * 18)) * 0.012;
+  for (const q of c.v.pilotos){
+    const p = q.p;
+    if (q.pedala){ p.estado = 'andando'; p.pontos = [[1e6, 0]]; }
+    p.update(dt, t);
+    p.pos.set(q.x, 0); p.g.position.set(q.x, q.y, 0); p.g.rotation.y = Math.PI / 2;
+    if (!q.pedala) p.pE.rotation.x = p.pD.rotation.x = -1.3;
+    p.bE.rotation.set(-1.25, 0, -0.35); p.bD.rotation.set(-1.25, 0, 0.35);
+  }
+  if (!c.saudou && ed.g.visible && !emEncontroSaci() && !FALAS.some(f => f.quem === ed) && Math.hypot(c.x - ed.pos.x, Z_ESTRADA - ed.pos.y) <= TRANSITO.perto){
+    c.saudou = true;
+    const fala = saudacaoDoEd();
+    falar(ed, fala, tempoDeLeitura(fala)); ed.aceno = 1.6; Som.oinc();
+    if (ed.estado === 'parado') ed.olhar(c.x, Z_ESTRADA);
+  }
+  if (c.sentido > 0 ? c.x > W + 9 : c.x < -9) tirarVeiculo();
+}
+
 // ================= a maçã das árvores
 const MACA = { minutos: 10, fator: 2, esperaMin: 5, esperaMax: 12, queda: 0.7, quique: 0.35 };
 const FALAS_MACA = ['Obrigado, árvore!', 'Valeu, árvore! Estava uma delícia.', 'Brigadão, árvore! Agora eu corro!'];
@@ -8287,6 +8379,7 @@ function quadro(agoraP){
   proximaTarefa();
   atualizarMaca(dt, t);
   atualizarRedemoinho(dt, t);
+  atualizarTransito(dt, t);
   atualizarTrufas(dt, t);
   ed.update(dt, t);
   atualizarLuma(dt, t);
@@ -8380,6 +8473,7 @@ async function iniciar(){
   construirPersonagens();
   montarMaca();
   montarRedemoinho();
+  montarTransito();
   // só aqui: terminar receitas com o jogo fechado pode subir de nível, e o aviso usa o Ed
   // antes das fábricas: secagens terminadas com o jogo fechado não podem somar restos antes de a composteira recuperar o tempo fechado
   simularComposteira();
@@ -8418,7 +8512,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, obj: () => discoJogo }, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, obj: () => discoJogo }, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
@@ -8455,7 +8549,7 @@ function catalogoModelos(){
     { nome: 'Floresta', itens: [...Object.keys(NATIVAS).map(k => { uso(k); return varios(NATIVAS[k].nome, [['Com fruto', () => vNativa(k, true)], ['Sem fruto', () => vNativa(k, false)], ...produto(uso(NATIVAS[k].produto))]); }), varios('Mata', [[ 'Copa redonda', () => vCopa(0)], ['Copa alta', () => vCopa(1)], ['Copa larga', () => vCopa(2)]])] },
     { nome: 'Construções', itens: [um('Casa', vCasa), um('Celeiro', vCeleiro), um('Galinheiro', vGalinheiro), um('Curral', vAbrigo), um('Poço', vPoco), um('Moinho', VI.moinho), um('Queijaria', vQueijaria), um('Padaria', vPadaria), um('Cozinha de doces', vCozinha), varios('Terreiro de café', [['Cheio', () => vTerreiro(true)], ['Vazio', () => vTerreiro(false)]]), um('Torrador', vTorrador), um('Composteira', () => vComposteira(false)), um('Hangar', vHangar), um('Obra', vObra)] },
     { nome: 'Automação', itens: [varios('Alimentador', [['Galinheiro', () => vAlimentador(false)], ['Curral', () => vAlimentador(true)]]), varios('Coletor', [['Ovos', () => vColetor(false)], ['Ordenhadeira', () => vColetor(true)]]), um('Esteira', vEsteira), varios('Irrigador', [['Base', vIrrigadorBase], ['Cabeça', vIrrigadorCabeca]]), um('Colmeia', vColmeia)] },
-    { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Teco-teco', vTecoTeco), um('Hélice', vHelice), um('Biruta', vBiruta), { nome: 'Disco voador', variantes: [['Voando', false], ['Com o raio', true]].map(([n, r]) => ({ nome: n, cria: () => { const D = montarDisco(r); D.g.userData.anima = (dt, t) => animarDisco(D, t); D.g.userData.anima(0, 0); return D.g; } })) }] },
+    { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Tratorzinho', vTrator), varios('Bicicleta', CICLISTAS.map((c, i) => [['Vermelha', 'Azul', 'Amarela'][i], () => vBicicleta(c[0])])), um('Teco-teco', vTecoTeco), um('Hélice', vHelice), um('Biruta', vBiruta), { nome: 'Disco voador', variantes: [['Voando', false], ['Com o raio', true]].map(([n, r]) => ({ nome: n, cria: () => { const D = montarDisco(r); D.g.userData.anima = (dt, t) => animarDisco(D, t); D.g.userData.anima(0, 0); return D.g; } })) }] },
     { nome: 'Cenário', itens: [varios('Árvore', [['Maçãs', () => vArvore(0)], ['Sem fruta', () => vArvore(1)], ['Laranjas', () => vArvore(2)]]), um('Arbusto', vArbusto), um('Redemoinho', vRedemoinho), um('Fardo de feno', vFeno), um('Flores', () => vFlores(3)), um('Capim', () => vCapim(1)), um('Cova', vCova), varios('Cerca', [['Reta', () => vCerca(3)], ['Canto', () => vCerca(5)]]), varios('Portão', [['Arco da entrada', () => vPortao(true)], ['Simples', () => vPortao(false)]]), um('Placa', vPlaca), um('Correio', vCorreio)] },
     { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), um('Chafariz', vFonte), um('Estátua do Ed', vEstatua)] },
     { nome: 'Objetos', itens: [um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Nano Hostel', vNanoHostel), um('Nano Metrô', vNanoMetro), varios('Nano pessoa', [0, 1, 2, 3, 4, 5].map(k => ['Nano ' + (k + 1), () => vNano(k * 7, k === 2)])), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
