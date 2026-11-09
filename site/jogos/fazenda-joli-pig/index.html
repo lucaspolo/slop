@@ -1881,7 +1881,7 @@ function lumaSair(){
   if (!lug.tiles.length){ L.prox = rnd(...LUMA_JOGO.intervalo); return; }
   Object.assign(L, { lugares: lug, estado: 'fora', acao: 'saindo', ta: 0, fora: 0, limite: rnd(...LUMA_JOGO.fora), mordeu: false, ang: 0, angAlvo: 0, pontos: [[PORTINHA.x, PORTINHA.fora]], vel: 1.3 });
   L.pos.set(PORTINHA.x, PORTINHA.dentro);
-  bolaNaBoca(); L.g.visible = true;
+  bolaNaBoca(); L.g.visible = true; Musica.vinheta('luma');
 }
 // as cenas usam a frente da casa: a Luma some na hora e volta mais tarde
 function lumaRecolher(){
@@ -3215,6 +3215,149 @@ const VI = {
   lote(){ const v = vSolo(false); v.box(6, 2, 6, 6, 5, 6, 0x8a5a36); v.box(3, 5, 6, 9, 8, 6, 0xf3e3c3); return v; },
 };
 
+// ================= músicas das cenas: melodias originais em estilo midi, tocadas por osciladores
+// Notação: "C5:1 E5+G5:.5 r:1" é nota (ou acorde com +) e duração em tempos; r é pausa; x é batida de percussão (ruído).
+// Cada tema tem vários instrumentos tocando juntos; os temas em loop repetem o ciclo enquanto a cena durar.
+// O ganho de cada tema deixa todos com o mesmo volume médio. Com a caixa de fala aberta o volume baixa, para não brigar com a leitura. Ao parar, a música some aos poucos.
+const TEMAS = {
+  // A fazenda é sua: country alegre em sol maior, com baixo de "bum-tchic"
+  inicio: { bpm: 120, ganho: 1.0, loop: true, faixas: [
+    { tipo: 'triangle', vol: 0.05, notas: 'G4:1 B4:.5 D5:.5 E5:1 D5:1 B4:1 G4:.5 A4:.5 B4:1 r:1 C5:1 E5:.5 C5:.5 B4:1 G4:1 A4:1 B4:.5 A4:.5 G4:2' },
+    { tipo: 'square', vol: 0.016, leg: 0.5, notas: 'G2:1 D3:1 G2:1 D3:1 G2:1 D3:1 G2:1 D3:1 C3:1 G3:1 C3:1 G3:1 D3:1 A3:1 G2:2' },
+    { tipo: 'x', vol: 0.05, notas: 'r:1 x:1 r:1 x:1 r:1 x:1 r:1 x:1 r:1 x:1 r:1 x:1 r:1 x:1 r:1 x:1' } ] },
+  // Milton na área: fanfarra de aviação em dó maior
+  milton: { bpm: 132, ganho: 1.0, loop: true, faixas: [
+    { tipo: 'square', vol: 0.026, notas: 'C5:.5 E5:.5 G5:1 C6:1.5 r:.5 A5:.5 G5:.5 E5:1 G5:2 F5:.5 A5:.5 C6:1 A5:.5 G5:.5 E5:1 D5:.5 E5:.5 F5:.5 D5:.5 C5:2' },
+    { tipo: 'triangle', vol: 0.05, notas: 'C3:2 G2:2 A2:2 E3:2 F2:2 C3:2 G2:2 C3:2' },
+    { tipo: 'x', vol: 0.04, notas: 'x:.5 r:.5 x:.25 x:.25 r:.5 x:.5 r:.5 x:.25 x:.25 r:.5 x:.5 r:.5 x:.25 x:.25 r:.5 x:.5 r:.5 x:.25 x:.25 r:.5' } ] },
+  // O sócio do Beto: brincalhona em fá maior
+  jaca: { bpm: 112, ganho: 1.5, loop: true, faixas: [
+    { tipo: 'triangle', vol: 0.05, notas: 'F4:.5 A4:.5 C5:.5 A4:.5 Bb4:1 G4:1 A4:.5 C5:.5 F5:.5 C5:.5 D5:1 r:1 Bb4:.5 D5:.5 F5:.5 D5:.5 C5:1 A4:1 G4:.5 A4:.5 Bb4:.5 G4:.5 F4:2' },
+    { tipo: 'square', vol: 0.016, leg: 0.5, notas: 'F2:1 C3:1 F2:1 C3:1 F2:1 C3:1 Bb2:1 C3:1 Bb2:1 F3:1 F2:1 C3:1 C3:1 E3:1 F2:2' } ] },
+  // O ajudante caçula: marchinha de criança, rápida, em ré maior
+  hud: { bpm: 150, ganho: 0.75, loop: true, faixas: [
+    { tipo: 'square', vol: 0.022, leg: 0.7, notas: 'D5:.5 F#5:.5 A5:.5 F#5:.5 G5:.5 E5:.5 C#5:1 D5:.5 B4:.5 G4:.5 B4:.5 A4:.5 F#4:.5 E4:1 F#4:.5 A4:.5 D5:.5 A4:.5 B4:.5 G4:.5 E4:1 A4:.5 C#5:.5 E5:.5 C#5:.5 D5:2' },
+    { tipo: 'triangle', vol: 0.05, notas: 'D3:1 A2:1 D3:1 A2:1 G2:1 D3:1 A2:1 E3:1 D3:1 A2:1 G2:1 E2:1 A2:1 A2:1 D3:2' },
+    { tipo: 'x', vol: 0.045, notas: 'x:1 x:1 x:1 x:.5 x:.5 x:1 x:1 x:1 x:.5 x:.5 x:1 x:1 x:1 x:.5 x:.5 x:1 x:1 x:2' } ] },
+  // O nariz do Patrinho: valsinha de bistrô em lá menor, com um mistério leve
+  patrinho: { bpm: 132, ganho: 1.45, loop: true, faixas: [
+    { tipo: 'triangle', vol: 0.05, notas: 'A4:1 C5:1 E5:1 D5:2 C5:1 B4:1 D5:1 F5:1 E5:3 A4:1 C5:1 E5:1 F5:2 E5:1 D5:1 B4:1 G#4:1 A4:3' },
+    { tipo: 'square', vol: 0.014, leg: 0.5, notas: 'A2:1 E3+A3:1 E3+A3:1 F2:1 C3+F3:1 C3+F3:1 G2:1 D3+G3:1 D3+G3:1 E2:1 B2+E3:1 B2+G#3:1 A2:1 E3+A3:1 E3+A3:1 D2:1 A2+D3:1 A2+F3:1 E2:1 B2+E3:1 B2+G#3:1 A2:1 E3+A3:1 E3+A3:1' } ] },
+  // Café com o Pelúcio: bossa lenta, com acordes macios e baixo sincopado
+  pelucio: { bpm: 96, ganho: 1.0, loop: true, faixas: [
+    { tipo: 'triangle', vol: 0.045, notas: 'F#5:1.5 E5:.5 D5:1 C#5:1 B4:1.5 D5:.5 E5:2 G5:1.5 F#5:.5 E5:1 C#5:1 D5:4' },
+    { tipo: 'sine', vol: 0.018, notas: 'D4+F#4+A4+C#5:4 E4+G4+B4+D5:4 C#4+E4+G4+A4:4 D4+F#4+A4+C#5:4' },
+    { tipo: 'square', vol: 0.012, leg: 0.6, notas: 'D3:1.5 A2:.5 D3:2 E3:1.5 B2:.5 E3:2 A2:1.5 E3:.5 A2:2 D3:1.5 A2:.5 D3:2' },
+    { tipo: 'x', vol: 0.025, notas: 'x:.75 x:.75 x:.5 x:1 x:1 x:.75 x:.75 x:.5 x:1 x:1 x:.75 x:.75 x:.5 x:1 x:1 x:.75 x:.75 x:.5 x:1 x:1' } ] },
+  // Sócias da terra: notinhas curtas que pulam, em dó maior
+  minhocas: { bpm: 126, ganho: 1.7, loop: true, faixas: [
+    { tipo: 'square', vol: 0.022, leg: 0.4, notas: 'C5:.5 r:.5 E5:.5 r:.5 G5:.5 E5:.5 C5:1 D5:.5 r:.5 F5:.5 r:.5 A5:.5 F5:.5 D5:1 E5:.5 G5:.5 C6:.5 G5:.5 F5:.5 D5:.5 B4:.5 G4:.5 C5:1 G4:1 C5:2' },
+    { tipo: 'triangle', vol: 0.05, leg: 0.6, notas: 'C3:1 G2:1 C3:1 G2:1 D3:1 A2:1 D3:1 A2:1 C3:1 E3:1 G2:1 B2:1 C3:1 G2:1 C3:2' } ] },
+  // Amigos da mata: calma, para o Ed admirar a floresta
+  mata: { bpm: 84, ganho: 1.1, loop: true, faixas: [
+    { tipo: 'triangle', vol: 0.045, notas: 'C5:2 A4:1 F4:1 G4:2 A4:1 C5:1 D5:2 C5:1 A4:1 C5:4 Bb4:2 A4:1 G4:1 F4:2 G4:1 A4:1 G4:2 E4:1 C4:1 F4:4' },
+    { tipo: 'sine', vol: 0.03, notas: 'F2+C3:4 C3+G3:4 Bb2+F3:4 F2+C3:4 Bb2+F3:4 F2+C3:4 C3+G3:4 F2+C3:4' } ] },
+  // Amigos da mata, quando os bichos aparecem: batucada com flautinha
+  mataFesta: { bpm: 128, ganho: 0.66, loop: true, faixas: [
+    { tipo: 'sine', vol: 0.04, notas: 'F5:.5 A5:.5 C6:.5 A5:.5 G5:.5 Bb5:.5 A5:1 F5:.5 G5:.5 A5:.5 F5:.5 E5:.5 G5:.5 F5:1' },
+    { tipo: 'square', vol: 0.016, leg: 0.5, notas: 'F2:.75 F2:.25 C3:.5 F2:.5 F2:.75 F2:.25 C3:.5 F2:.5 C3:.75 C3:.25 G2:.5 C3:.5 F2:.75 F2:.25 C3:.5 F2:.5' },
+    { tipo: 'x', vol: 0.05, notas: 'x:.5 x:.25 x:.25 x:.5 x:.5 x:.5 x:.25 x:.25 x:.5 x:.5 x:.5 x:.25 x:.25 x:.5 x:.5 x:.5 x:.25 x:.25 x:.5 x:.5' } ] },
+  // Festa na fazenda: marchinha com baião no baixo, sininho e triângulo
+  festa: { bpm: 138, ganho: 0.8, loop: true, faixas: [
+    { tipo: 'square', vol: 0.026, leg: 0.8, notas: 'B4:.5 D5:.5 G5:.5 F#5:.5 E5:.5 D5:.5 B4:1 C5:.5 E5:.5 A5:.5 G5:.5 F#5:.5 E5:.5 D5:1 B4:.5 D5:.5 G5:.5 B5:.5 A5:.5 G5:.5 E5:.5 C5:.5 D5:.5 F#5:.5 A5:.5 F#5:.5 G5:2' },
+    { tipo: 'triangle', vol: 0.05, notas: 'G2:.75 D3:.25 r:.5 G2:.5 G2:.75 D3:.25 r:.5 G2:.5 A2:.75 E3:.25 r:.5 A2:.5 D3:.75 A2:.25 r:.5 D3:.5 G2:.75 D3:.25 r:.5 G2:.5 C3:.75 G2:.25 r:.5 C3:.5 D3:.75 A2:.25 r:.5 D3:.5 G2:2' },
+    { tipo: 'sine', vol: 0.015, notas: 'G6:.25 r:1.75 D6:.25 r:1.75 G6:.25 r:1.75 D6:.25 r:1.75 G6:.25 r:1.75 C6:.25 r:1.75 D6:.25 r:1.75 G6:.25 r:1.75' },
+    { tipo: 'x', vol: 0.04, notas: 'x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5' } ] },
+  // Um cafezinho: caixinha de música de fim de tarde, baixinha
+  cafezinho: { bpm: 80, ganho: 1.3, loop: true, faixas: [
+    { tipo: 'sine', vol: 0.03, leg: 0.6, notas: 'E5:.5 G5:.5 C6:.5 G5:.5 D5:.5 G5:.5 B5:.5 G5:.5 C5:.5 E5:.5 A5:.5 E5:.5 F5:.5 A5:.5 C6:.5 A5:.5' },
+    { tipo: 'sine', vol: 0.025, notas: 'C3:2 G2:2 A2:2 F2:2' } ] },
+};
+// vinhetas: frases curtas que tocam uma vez, por cima de tudo
+const VINHETAS = {
+  // o "tchan" do presente do Jaca
+  tchan: { bpm: 140, ganho: 2.3, faixas: [{ tipo: 'square', vol: 0.03, notas: 'G4:.25 r:.25 C5+E5+G5:1.5' }, { tipo: 'triangle', vol: 0.05, notas: 'G2:.25 r:.25 C3:1.5' }] },
+  // o "Viva a Fazenda Joli Pig!": arpejo subindo e acorde final
+  viva: { bpm: 150, ganho: 0.9, faixas: [{ tipo: 'square', vol: 0.028, notas: 'G4:.25 B4:.25 D5:.25 G5:.25 B5:.25 D6:.25 G4+B4+D5+G5:2' }, { tipo: 'triangle', vol: 0.05, notas: 'G2:1.5 G2+D3:2' }, { tipo: 'x', vol: 0.06, notas: 'x:.25 x:.25 x:.25 x:.25 x:.25 x:.25 x:.5 x:.5' }] },
+  // a Luma saindo pela portinha: três notinhas fofas
+  luma: { bpm: 200, ganho: 3.7, faixas: [{ tipo: 'sine', vol: 0.035, notas: 'C6:.5 E6:.5 G6:1' }] },
+  // o Saci aparecendo: assobio que gira e uma risadinha
+  saci: { bpm: 300, ganho: 3.7, faixas: [{ tipo: 'sine', vol: 0.03, gira: true, notas: 'C6:2 G6:2 r:1 A5:.5 r:.5 A5:.5 r:.5 G5:.5 r:.5 A5:.5 r:.5 C6:1' }] },
+};
+const NOTA = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+const hzNota = n => { const m = /^([A-G])(#|b)?(\d)$/.exec(n); return 440 * Math.pow(2, ((+m[3] + 1) * 12 + NOTA[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0) - 69) / 12); };
+const lerNotas = txt => txt.trim().split(/\s+/).map(tok => { const [n, d] = tok.split(':'); return { n: n === 'r' ? null : n === 'x' ? 'x' : n.split('+').map(hzNota), d: +d }; });
+for (const T of [...Object.values(TEMAS), ...Object.values(VINHETAS)]){
+  for (const f of T.faixas){ f.seq = lerNotas(f.notas); f.tempos = f.seq.reduce((a, b) => a + b.d, 0); }
+  T.ciclo = Math.max(...T.faixas.map(f => f.tempos)) * 60 / T.bpm;
+}
+const Musica = {
+  atual: null, pendente: null, ruidoBuf: null,
+  // agenda um ciclo inteiro do tema a partir de t0, ligado ao volume mestre
+  agendar(T, mestre, t0, ctx = Som.ctx){
+    const b = 60 / T.bpm, ganho = T.ganho || 1;
+    for (const f of T.faixas){
+      const vol = f.vol * ganho;
+      let t = t0;
+      for (const n of f.seq){
+        const dur = n.d * b;
+        if (n.n === 'x') this.batida(mestre, t, vol, ctx);
+        else if (n.n) for (const hz of n.n){
+          const o = ctx.createOscillator(), g = ctx.createGain(), fim = t + Math.max(0.06, dur * (f.leg || 0.92));
+          o.type = f.tipo; o.frequency.setValueAtTime(hz, t);
+          // o assobio do Saci sobe e desce
+          if (f.gira) o.frequency.exponentialRampToValueAtTime(hz * 1.5, fim);
+          g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, fim);
+          o.connect(g).connect(mestre); o.start(t); o.stop(fim + 0.05);
+        }
+        t += dur;
+      }
+    }
+  },
+  // percussão: um estalo curto de ruído filtrado
+  batida(mestre, t, vol, ctx = Som.ctx){
+    if (!this.ruidoBuf){ const n = Math.floor(ctx.sampleRate * 0.08), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3); this.ruidoBuf = buf; }
+    const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    s.buffer = this.ruidoBuf; f.type = 'highpass'; f.frequency.value = 3000; g.gain.value = vol * 3;
+    s.connect(f).connect(g).connect(mestre); s.start(t);
+  },
+  pode(){ return !!(Som.ctx && S && S.som); },
+  tocar(id){
+    this.parar();
+    if (!TEMAS[id]) return;
+    if (!this.pode()){ this.pendente = id; return; }
+    const ctx = Som.ctx, mestre = ctx.createGain(), t0 = ctx.currentTime + 0.08;
+    mestre.gain.setValueAtTime(0.0001, ctx.currentTime); mestre.gain.exponentialRampToValueAtTime(1, t0 + 0.4);
+    mestre.connect(ctx.destination);
+    this.agendar(TEMAS[id], mestre, t0);
+    this.atual = { id, T: TEMAS[id], mestre, prox: t0 + TEMAS[id].ciclo, vol: 1 };
+  },
+  trocar(id){ if (!this.atual || this.atual.id !== id) this.tocar(id); },
+  parar(){
+    this.pendente = null;
+    const A = this.atual; if (!A) return;
+    this.atual = null;
+    const t = Som.ctx.currentTime;
+    A.mestre.gain.cancelScheduledValues(t); A.mestre.gain.setValueAtTime(Math.max(0.0001, A.mestre.gain.value), t); A.mestre.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    setTimeout(() => A.mestre.disconnect(), 800);
+  },
+  vinheta(id){
+    if (!this.pode() || !VINHETAS[id]) return;
+    const ctx = Som.ctx, mestre = ctx.createGain(); mestre.connect(ctx.destination);
+    this.agendar(VINHETAS[id], mestre, ctx.currentTime + 0.03);
+    setTimeout(() => mestre.disconnect(), VINHETAS[id].ciclo * 1000 + 1500);
+  },
+  // todo quadro: começa o tema que esperava o som ligar, agenda o próximo ciclo e baixa o volume com a caixa de fala
+  atualizar(){
+    if (this.pendente && this.pode()){ const id = this.pendente; this.pendente = null; this.tocar(id); }
+    const A = this.atual; if (!A) return;
+    if (!S.som){ this.parar(); return; }
+    const ctx = Som.ctx;
+    if (A.T.loop && ctx.currentTime > A.prox - 1){ this.agendar(A.T, A.mestre, A.prox); A.prox += A.T.ciclo; }
+    const fala = !$('cineDialogo').hidden, alvo = fala ? 0.45 : 1;
+    if (Math.abs(alvo - A.vol) > 0.01 && ctx.currentTime > A.prox - A.T.ciclo + 0.5){ A.vol = alvo; A.mestre.gain.setTargetAtTime(alvo, ctx.currentTime, 0.25); }
+  },
+};
 // ================= renderizador e cena
 const canvas = $('tela');
 let renderer, scene, camera, sol, ceuLuz;
@@ -5125,7 +5268,7 @@ function limparCafe(){
 let cine = null, cineLivreEm = 0, cenaPedida = null;
 const CENAS = {
   inicio: {
-    flag: 'viuCineInicio', nivel: () => 1, falas: FALAS_INICIO, icone: 'beto',
+    flag: 'viuCineInicio', nivel: () => 1, musica: 'inicio', falas: FALAS_INICIO, icone: 'beto',
     titulo: 'A fazenda é sua', desc: 'O Ed chega à fazenda com o Beto.',
     visitante: () => beto,
     foco(c){
@@ -5197,7 +5340,7 @@ const CENAS = {
     restaurar(){ limparInicio(); },
   },
   milton: {
-    flag: 'conheceuMilton', nivel: () => 1, falas: FALAS_MILTON, icone: 'milton',
+    flag: 'conheceuMilton', nivel: () => 1, musica: 'milton', falas: FALAS_MILTON, icone: 'milton',
     titulo: 'Milton na área', desc: 'O Milton pousa o PIG-MTP pela primeira vez.', trancada: 'acontece depois da primeira venda',
     // só depois da primeira venda ao Joli Market, quando o relógio do primeiro pouso vence
     pronta: () => !S.conheceuMilton && S.vendeu > 0 && Date.now() >= S.proxMilton && voo.estado === 'fora',
@@ -5266,7 +5409,7 @@ const CENAS = {
     fim(){ S.conheceuMilton = true; },
   },
   patrinho: {
-    flag: 'viuCinePatrinho', nivel: () => 10, falas: FALAS_PATRINHO, icone: 'patrinho',
+    flag: 'viuCinePatrinho', nivel: () => 10, musica: 'patrinho', falas: FALAS_PATRINHO, icone: 'patrinho',
     titulo: 'O nariz do Patrinho', desc: 'O Patrinho, chef do Joli Bistrô, conta um segredo que nasce debaixo da terra.',
     visitante: () => patrinho,
     foco: () => new THREE.Vector3((PONTO_ED[0] + PONTO_PELUCIO[0]) / 2 + 0.25, 0.35, (PONTO_ED[1] + PONTO_PELUCIO[1]) / 2 + 0.6),
@@ -5297,7 +5440,7 @@ const CENAS = {
     restaurar(){ caminhaoBistro.visible = false; },
   },
   pelucio: {
-    flag: 'viuCinePelucio', nivel: () => CULTURAS.cafe.nivel, falas: FALAS_CINE, icone: 'pelucio',
+    flag: 'viuCinePelucio', nivel: () => CULTURAS.cafe.nivel, musica: 'pelucio', falas: FALAS_CINE, icone: 'pelucio',
     titulo: 'Café com o Pelúcio', desc: 'O Pelúcio quer o café da fazenda para a Joli Coffee.',
     visitante: () => pelucio,
     foco: () => new THREE.Vector3((PONTO_ED[0] + PONTO_PELUCIO[0]) / 2 + 0.25, 0.35, (PONTO_ED[1] + PONTO_PELUCIO[1]) / 2 + 0.6),
@@ -5332,7 +5475,7 @@ const CENAS = {
     },
   },
   jaca: {
-    flag: 'conheceuJaca', nivel: () => 1, falas: FALAS_JACA, icone: 'jaca',
+    flag: 'conheceuJaca', nivel: () => 1, musica: 'jaca', falas: FALAS_JACA, icone: 'jaca',
     titulo: 'O sócio do Beto', desc: 'O Jaca vem no lugar do Beto e traz um presente.', trancada: 'acontece numa visita do Joli Market',
     // começa por chamarBeto (o sorteio da visita), nunca sozinha
     pronta: () => false,
@@ -5362,7 +5505,7 @@ const CENAS = {
     // o Jaca estica o presente e ele aparece sobre o Ed
     presente(c){
       if (!c.ini){
-        c.ini = true; jaca.aceno = 1.8; presenteDoJaca(); Som.moeda();
+        c.ini = true; jaca.aceno = 1.8; presenteDoJaca(); Som.moeda(); Musica.vinheta('tchan');
         for (let i = 0; i < 14; i++) particula(ed.pos.x + rnd(-0.4, 0.4), 0.9, ed.pos.y + rnd(-0.4, 0.4), [0xffe066, 0xf27fa4, 0xffffff][i % 3], 1.2);
       }
       if (c.t >= 2.2){ c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
@@ -5394,7 +5537,7 @@ const CENAS = {
     restaurar(){ limparJaca(); },
   },
   hud: {
-    flag: 'viuCineHud', nivel: () => HUD.nivel, icone: 'hud',
+    flag: 'viuCineHud', nivel: () => HUD.nivel, musica: 'hud', icone: 'hud',
     titulo: 'O ajudante caçula', desc: 'O Hud quer ajudar em troca de uma mesada.',
     pronta: () => nivel() >= HUD.nivel && !hudAtivo() && !irmaoHud.g.visible,
     podeRever: () => (hudAtivo() || irmaoHud.g.visible ? 'Dá para rever quando o Hud terminar a ajuda.' : null),
@@ -5477,7 +5620,7 @@ const CENAS = {
     restaurar(){ limparHud(); },
   },
   minhocas: {
-    flag: 'viuCineMinhocas', nivel: () => COMPOSTEIRA.nivel, falas: FALAS_MINHOCAS, icone: 'minhoquinha',
+    flag: 'viuCineMinhocas', nivel: () => COMPOSTEIRA.nivel, musica: 'minhocas', falas: FALAS_MINHOCAS, icone: 'minhoquinha',
     titulo: 'Sócias da terra', desc: 'O Ed chama as Minhoquinhas para morar na composteira.',
     foco: () => { const [cx, cz] = centroComposteira(); return new THREE.Vector3(cx, 0.4, cz + 0.45); },
     // em tela estreita a câmera abre mais, para as Minhoquinhas caberem
@@ -5513,7 +5656,7 @@ const CENAS = {
     },
   },
   festa: {
-    flag: 'viuCineFesta', nivel: () => 25, icone: 'festa',
+    flag: 'viuCineFesta', nivel: () => 25, musica: 'festa', icone: 'festa',
     get falas(){ return falasFesta(); },
     titulo: 'Festa na fazenda', desc: 'A família toda vem comemorar o nível 25.', trancada: 'libera no nível 25',
     // o Hud entra na roda: a festa espera ele terminar a ajuda e sumir da fazenda (pode estar acabando uma tarefa ou indo para casa)
@@ -5601,7 +5744,7 @@ const CENAS = {
           if (!c.ini){
             c.ini = true; c.acc = 0; c.indo = false; c.vagas = { caminhao: 0, van: 0, lambreta: 0 }; c.hudFora = false; c.saida = {};
             for (const p of [ed, beto, jaca, pelucio, patrinho, irmaoHud]) if (p.g.visible){ p.pulo = 0.45; p.aceno = 1.6; }
-            confete(Ex, 2.8, Ez + 0.9, 90, 2); Som.nivel();
+            confete(Ex, 2.8, Ez + 0.9, 90, 2); Som.nivel(); Musica.vinheta('viva');
           }
           c.acc += dt;
           while (c.acc > 0.1){ c.acc -= 0.1; if (c.t < 2) confete(Ex, 2.8, Ez + 0.9, 5, 1.6); }
@@ -5643,7 +5786,7 @@ const CENAS = {
     restaurar(){ limparFesta(); },
   },
   mata: {
-    flag: 'viuCineMata', nivel: () => 20, falas: FALAS_MATA, icone: 'bugio',
+    flag: 'viuCineMata', nivel: () => 20, musica: 'mata', falas: FALAS_MATA, icone: 'bugio',
     titulo: 'Amigos da mata', desc: 'O Ed vai até a floresta e conhece os bichos que moram nela.', trancada: 'libera no nível 20',
     foco(c){
       const [Ex, Ez] = MATA_CINE.ed;
@@ -5678,7 +5821,7 @@ const CENAS = {
           break;
         // os bichos saem da mata e comemoram em volta do Ed
         case 'mt-bichos':
-          if (!c.ini){ c.ini = true; mataCine.vem = mataCine.t; }
+          if (!c.ini){ c.ini = true; mataCine.vem = mataCine.t; Musica.trocar('mataFesta'); }
           if (!c.pulou && c.t > 2.6){ c.pulou = true; ed.pulo = 0.45; ed.aceno = 1.6; Som.nivel(); }
           if (c.t >= 4.8){ ed.angAlvo = azPerto(cam.azAlvo); c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
           break;
@@ -5799,7 +5942,7 @@ const CENAS = {
     restaurar(){ limparAbducao(); },
   },
   cafezinho: {
-    flag: 'viuCafezinho', nivel: () => 3, repete: true, icone: 'caneca',
+    flag: 'viuCafezinho', nivel: () => 3, musica: 'cafezinho', repete: true, icone: 'caneca',
     get falas(){ return cafe ? cafe.falas : []; },
     titulo: 'Um cafezinho', desc: 'O Ed faz uma pausa na frente da casa.', trancada: 'acontece de vez em quando a partir do nível 3, ou toque na casa e escolha "Tomar um lanchinho"',
     // nível 3, avião fora e um cantinho livre; e então o lanchinho pedido na casa (fora do modo enfeite) ou, de vez em quando, relógio vencido com o Ed parado há 20 s sem nada para fazer
@@ -5945,6 +6088,7 @@ function iniciarCine(id, reprise){
   $('jogo').classList.add('cinema');
   $('cine').hidden = false; requestAnimationFrame(() => $('cine').classList.add('on'));
   cine.passo = cena.iniciar(cine);
+  if (cena.musica) Musica.tocar(cena.musica);
 }
 // olha para (x, z) mas gira um pouco na direção da câmera, para o rosto aparecer na cena
 const azPerto = a => cam.azAlvo + ((((a - cam.azAlvo + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) - Math.PI);
@@ -6111,6 +6255,7 @@ function encerrarCine(){
   $('jogo').classList.remove('cinema');
   caminhao = caminhaoMarket; caminhaoE.estado = 'longe';
   cine = null;
+  Musica.parar();
   if (reprise) cena.restaurar && cena.restaurar(); else cena.fim();
   // dá um respiro antes da próxima cena pendente
   cineLivreEm = performance.now() + 6000;
@@ -7305,7 +7450,7 @@ function atualizarRedemoinho(dt, t){
         saci.g.visible = true; saci.colocar(rd.x, rd.z); saci.olhar(ed.pos.x, ed.pos.y); saci.ang = saci.angAlvo; saci.pulo = 0.45; saci.aceno = 3;
         ed.olhar(rd.x, rd.z);
         rd.estado = 'oi'; rd.t = 0; rd.dur = tempoDeLeitura(FALA_SACI);
-        falar(saci, FALA_SACI, rd.dur); Som.oinc();
+        falar(saci, FALA_SACI, rd.dur); Som.oinc(); Musica.vinheta('saci');
       }
       break;
     case 'oi':
@@ -8917,6 +9062,7 @@ function quadro(agoraP){
   ed.update(dt, t);
   atualizarLuma(dt, t);
   atualizarDisco(dt, t);
+  Musica.atualizar();
   atualizarBichosMata(dt, t);
   atualizarNanos(dt, t);
   if (pelucio.g.visible) pelucio.update(dt, t);
@@ -9047,7 +9193,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, Musica, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
