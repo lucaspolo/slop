@@ -2340,8 +2340,9 @@ function vPessoaBase(c){
   v.box(-2, 25, -1, 2, 25, 1, pele);
   v.ell(0, 33, 0.5, 8, 8, 7.5, pele);
   const frenteZ = (x, y) => { for (let z = 30; z >= -30; z--) if (v.has(x, y, z)) return z; return null; };
+  for (const lado of [-1, 1]) v.box(lado * 8, 31, 0, lado * 9, 33, 1, pele);
+  if (c.semRosto) return { v, frenteZ };
   for (const lado of [-1, 1]){
-    v.box(lado * 8, 31, 0, lado * 9, 33, 1, pele);
     for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]){ const x = lado * 3 + (dx ? lado : 0), y = 33 + dy, z = frenteZ(x, y); v.set(x, y, z + 1, 0x1a1414); }
     { const z = frenteZ(lado * 3, 34); v.set(lado * 3, 34, z, 0xffffff); }
     for (let dx = -1; dx <= 1; dx++){ const x = lado * 3 + dx, z = frenteZ(x, 36); v.set(x, 36, z + 1, c.sobrancelha); }
@@ -2354,21 +2355,39 @@ function vPessoaBase(c){
   return { v, frenteZ };
 }
 function vLucas(){
-  const pele = 0xe2b48c, boch = 0xe79a86;
-  const { v, frenteZ } = vPessoaBase({ pele, sapato: 0x2a2a2a, calca: 0x3a4a6a, camisa: 0x1c1c1e, sobrancelha: 0x2a1e18, bochecha: boch, nariz: 0xc99470 });
+  const pele = 0xe2b48c;
+  const { v, frenteZ } = vPessoaBase({ pele, sapato: 0x2a2a2a, calca: 0x3a4a6a, camisa: 0x1c1c1e, semRosto: true });
   // estampa na camiseta preta: faixa azul-clara e um quadro claro embaixo, sem letras
   for (let x = -4; x <= 4; x++){ v.frente(x, 21, 0x8ed0ea); v.frente(x, 20, 0x8ed0ea); }
   for (let x = -4; x <= 4; x++) for (let y = 15; y <= 18; y++) v.frente(x, y, (x + y) % 3 ? 0xd6d0c4 : 0x8a7a6a);
-  // barba cheia e escura com uns fios brancos, e o bigode em cima do sorriso
-  const barba = (x, y) => hash(x, y, 5) > 0.82 ? 0x8a8580 : 0x2a1e18;
-  for (const e of v.m.values()) if (e.y <= 30 && e.y >= 25 && (e.c === pele || e.c === boch)) e.c = barba(e.x, e.y);
-  for (let x = -4; x <= 4; x++){ const z = frenteZ(x, 30); if (z != null) v.set(x, 30, z, barba(x, 30)); }
-  v.ell(0, 27, 1.5, 6.5, 3, 5.5, barba, (x, y, z) => y <= 27 && y >= 25 && !v.has(x, y, z));
-  // cabelo curto, escuro nos lados e grisalho em cima
-  const cabelo = (x, y, z) => { const h = hash(x, y, z + 9); return y >= 40 ? (h > 0.6 ? 0x9a948c : h > 0.3 ? 0x6e655e : 0x3a302a) : (h > 0.85 ? 0x8a8580 : 0x2e241e); };
+  // barba escura mesclada de grisalho: queixo, mandíbula e costeletas até o cabelo
+  const barba = (x, y, z) => { const h = hash(x, y, z + 5); return h > 0.86 ? 0x9a948e : h > 0.6 ? 0x6e6862 : h > 0.25 ? 0x3a2e28 : 0x2a201c; };
+  const ehBarba = e => e.y <= 29 || (Math.abs(e.x) >= 5 && e.y <= 30) || (Math.abs(e.x) >= 6 && e.y <= 33 && e.z >= 2);
+  for (const e of v.m.values()) if (e.c === pele && e.y >= 25 && e.y <= 33 && Math.abs(e.x) <= 8 && ehBarba(e)) e.c = barba(e.x, e.y, e.z);
+  v.ell(0, 27, 2, 7, 3.4, 6, barba, (x, y, z) => y <= 28 && y >= 25 && !v.has(x, y, z));
+  // cabelo curto e grisalho, sal e pimenta: mais escuro nos lados e na nuca, claro e meio bagunçado em cima
+  const cabelo = (x, y, z) => { const h = hash(x, y, z + 9), alto = y >= 39; return h > (alto ? 0.62 : 0.78) ? 0xbdb9b2 : h > (alto ? 0.2 : 0.35) ? 0x9a9690 : h > (alto ? 0.07 : 0.12) || (z > 3 && y < 41) ? 0x6e6a66 : 0x3a3632; };
   for (const e of v.m.values()) if (e.c === pele && (e.y >= 38 || (e.z < -2 && e.y >= 30) || (Math.abs(e.x) >= 7 && e.y >= 34))) e.c = cabelo(e.x, e.y, e.z);
-  v.ell(0, 39.5, 0, 8.3, 3, 7.6, cabelo, (x, y) => y >= 39);
-  v.ell(0, 40.5, 2.5, 6, 2.2, 5, cabelo, (x, y) => y >= 40);
+  v.ell(0, 39.5, 0, 8.4, 3, 7.7, cabelo, (x, y) => y >= 39);
+  v.ell(0, 41, 1, 6.6, 2, 6, cabelo, (x, y) => y >= 41);
+  // tufos soltos em cima, uns puxados para a frente
+  for (let x = -6; x <= 6; x++) for (let z = -5; z <= 6; z++){
+    let y = 46; while (y > 36 && !v.has(x, y, z)) y--;
+    if (y > 38 && hash(x, z, 31) > 0.62) v.set(x, y + 1, z, cabelo(x, y + 1, z));
+  }
+  for (let x = -5; x <= 5; x++) if (hash(x, 7, 33) > 0.45){ const z = frenteZ(x, 39); if (z != null) v.set(x, 39, z + 1, cabelo(x, 39, z + 1)); }
+  // olhos apertados de sorriso, sobrancelhas grisalhas escuras e bochechas coradas
+  for (const lado of [-1, 1]){
+    for (const [x, y] of [[lado * 2, 33], [lado * 3, 34], [lado * 4, 33]]) v.set(x, y, frenteZ(x, y), 0x1a1414);
+    for (const [x, y] of [[lado * 2, 36], [lado * 3, 36], [lado * 4, 36], [lado * 5, 35]]) v.set(x, y, frenteZ(x, y) + 1, 0x5a544e);
+    for (const x of [lado * 4, lado * 5]) v.frente(x, 31, 0xe79a86);
+  }
+  // nariz um pouco maior
+  for (const [x, y, c] of [[0, 32, 0xd4a27c], [0, 31, 0xd4a27c], [-1, 31, 0xc99470], [1, 31, 0xc99470]]) v.set(x, y, frenteZ(x, y) + 1, c);
+  // bigode escuro caindo nos cantos, e o sorriso com os dentes de cima
+  for (let x = -4; x <= 4; x++){ const z = frenteZ(x, 30); if (z != null) v.set(x, 30, z + 1, Math.abs(x) <= 3 ? 0x2a201c : 0x3a2e28); }
+  for (const x of [-4, 4]){ const z = frenteZ(x, 29); v.set(x, 29, z + 1, 0x2a201c); }
+  for (let x = -3; x <= 3; x++){ v.frente(x, 29, 0x2a201c); v.frente(x, 28, Math.abs(x) <= 2 ? 0xffffff : 0x6b2a2a); v.frente(x, 27, Math.abs(x) <= 2 ? 0x6b2a2a : 0x3a2e28); }
   return v;
 }
 function vCarolina(){
