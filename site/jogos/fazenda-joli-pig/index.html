@@ -1851,6 +1851,83 @@ function atualizarLuma(dt, t){
   L.g.position.set(L.pos.x, naPorta && z < 5 ? 0.25 : naPorta && z < 5.2 ? 0.25 * (5.2 - z) / 0.2 : 0, z);
   L.g.rotation.y = L.ang;
 }
+// ================= disco voador: por enquanto só no catálogo de modelos (um dia ele passa pela fazenda)
+// casco prateado que gira, borda com luzes que acendem em sequência, janelinhas, domo de vidro com um ETzinho dentro
+const CDV = { casco: 0xd6dde4, cascoE: 0xb4bfca, borda: 0x7c8fa3, topo: 0xeef2f5, janela: 0x8fe0ff, base: 0xfff3a0, vidro: 0x9fe3ff, et: 0x7ed957, etE: 0x5cb83c, olho: 0x1a1414, antena: 0xff7ac8, luzes: [0xffd84d, 0xff7ac8, 0x6fe3ff] };
+const DISCO = { luzes: 12, borda: 24.5, domo: 12 };
+function vDiscoCasco(){
+  const v = new Vox();
+  const disco = (y, r, c) => { for (let x = -Math.ceil(r); x <= Math.ceil(r); x++) for (let z = -Math.ceil(r); z <= Math.ceil(r); z++) if (x * x + z * z <= r * r) v.set(x, y, z, typeof c === 'function' ? c(x, y, z) : c); };
+  // embaixo, um prato raso que abre até a borda, com anéis um pouco mais escuros
+  v.ell(0, 6, 0, 23.5, 7, 23.5, (x, y, z) => Math.round(Math.hypot(x, z)) % 4 === 0 ? CDV.cascoE : CDV.casco, (x, y) => y >= 0 && y <= 5);
+  // a base no meio, que acende
+  disco(0, 6, CDV.base);
+  // a borda larga das luzes
+  for (let y = 6; y <= 7; y++) disco(y, DISCO.borda, CDV.borda);
+  // em cima, o casco convexo até o aro do domo
+  v.ell(0, 7, 0, 23, 6, 23, CDV.topo, (x, y) => y >= 8 && y < DISCO.domo);
+  for (let x = -13; x <= 13; x++) for (let z = -13; z <= 13; z++){ const d = Math.hypot(x, z); if (d >= 10.5 && d <= 12.8) v.set(x, DISCO.domo, z, CDV.borda); }
+  // janelinhas redondas em volta do casco de cima
+  for (let k = 0; k < 8; k++){
+    const a = (k + 0.5) * Math.PI / 4, ex = Math.cos(a), ez = Math.sin(a);
+    for (const y of [9, 10]) for (const dl of [-0.5, 0.5]) for (let r = 24; r > 5; r -= 0.5){
+      const px = Math.round(ex * r - ez * dl), pz = Math.round(ez * r + ex * dl);
+      if (v.has(px, y, pz)){ v.set(px, y, pz, CDV.janela); break; }
+    }
+  }
+  return v;
+}
+function vDiscoDomo(){ const v = new Vox(); v.ell(0, DISCO.domo, 0, 10.5, 10, 10.5, CDV.vidro, (x, y) => y > DISCO.domo); return v; }
+// o ETzinho: cabeção verde, olhões pretos com brilho, anteninhas com bolinha rosa e um sorriso
+function vDiscoEt(){
+  const v = new Vox();
+  v.ell(0, 3, 0, 2.6, 3, 2.2, CDV.et);
+  for (const lado of [-1, 1]) v.ell(lado * 3.2, 3.5, 0.8, 1, 2.4, 1, CDV.etE);
+  v.ell(0, 9, 0, 4.4, 3.8, 3.8, CDV.et);
+  const frenteZ = (x, y) => { for (let z = 20; z >= -20; z--) if (v.has(x, y, z)) return z; return null; };
+  for (const lado of [-1, 1]){
+    for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1], [0, -1], [lado, 1]]){ const x = lado * 2 + dx * lado, y = 9 + dy, z = frenteZ(x, y); v.set(x, y, z + 1, CDV.olho); }
+    v.set(lado * 2, 10, frenteZ(lado * 2, 10), 0xffffff);
+    v.box(lado * 2, 12, 0, lado * 2, 15, 0, CDV.etE);
+    v.ell(lado * 2.5, 16, 0, 1.2, 1.2, 1.2, CDV.antena);
+  }
+  for (const x of [-1, 0, 1]) v.frente(x, x ? 7 : 6, 0x2e5a2a);
+  return v;
+}
+// monta o disco: o casco e as luzes giram (giro); o domo e o ET ficam parados, olhando para a frente
+function montarDisco(comRaio){
+  const s = 1 / 16, op = { origin: [0.5, 0, 0.5], jitter: 0.02 }, g = new THREE.Group(), giro = new THREE.Group();
+  const peca = (vox, mat) => { const m = mat ? new THREE.Mesh(vox.build(s, op), mat) : malha(vox.build(s, op)); m.userData.cubos = vox.m.size; return m; };
+  g.add(giro); giro.add(peca(vDiscoCasco()));
+  const vidro = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.42, depthWrite: false });
+  // o ET é pequenininho: cabe sentado dentro do domo
+  const et = peca(vDiscoEt()); et.scale.setScalar(0.5); et.position.set(0, (DISCO.domo + 0.5) * s, 0); g.add(et);
+  const domo = peca(vDiscoDomo(), vidro); domo.castShadow = false; g.add(domo);
+  // as luzes da borda: acesas são de material sem sombra, que brilha; apagadas, mais escuras
+  const luzes = [], acesa = CDV.luzes.map(c => new THREE.MeshBasicMaterial({ color: c })), apagada = CDV.luzes.map(c => new THREE.MeshLambertMaterial({ color: new THREE.Color(c).multiplyScalar(0.75) }));
+  const geoLuz = new THREE.BoxGeometry(2.8 * s, 1.8 * s, 2.8 * s);
+  for (let i = 0; i < DISCO.luzes; i++){
+    const a = i / DISCO.luzes * Math.PI * 2, m = new THREE.Mesh(geoLuz, acesa[i % 3]);
+    m.position.set(Math.cos(a) * (DISCO.borda + 0.6) * s, 7 * s, Math.sin(a) * (DISCO.borda + 0.6) * s); m.rotation.y = -a;
+    m.userData = { cor: i % 3, cubos: 1 }; giro.add(m); luzes.push(m);
+  }
+  let raio = null;
+  if (comRaio){
+    raio = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 1.7, 4.2, 28, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff6a0, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide }));
+    raio.position.y = -2.1; g.add(raio);
+  }
+  return { g, giro, et, luzes, acesa, apagada, raio };
+}
+function animarDisco(D, t){
+  D.giro.rotation.y = t * 1.3;
+  // as luzes acendem em sequência, uma cor por vez
+  const vez = Math.floor(t * 6) % 3;
+  for (const m of D.luzes) m.material = m.userData.cor === vez ? D.acesa[m.userData.cor] : D.apagada[m.userData.cor];
+  D.g.position.y = Math.sin(t * 1.6) * 0.08;
+  D.g.rotation.z = Math.sin(t * 1.1) * 0.05; D.g.rotation.x = Math.sin(t * 0.9) * 0.04;
+  D.et.rotation.y = Math.sin(t * 0.8) * 0.5;
+  if (D.raio) D.raio.material.opacity = 0.22 + Math.sin(t * 5) * 0.07;
+}
 // alimentador automático: silo de metal do lado de fora da cerca, com a calha descendo até o cocho dentro do cercado (para -x)
 function vAlimentador(vaca){
   const v = new Vox();
@@ -7647,7 +7724,7 @@ function catalogoModelos(){
     { nome: 'Floresta', itens: [...Object.keys(NATIVAS).map(k => { uso(k); return varios(NATIVAS[k].nome, [['Com fruto', () => vNativa(k, true)], ['Sem fruto', () => vNativa(k, false)], ...produto(uso(NATIVAS[k].produto))]); }), varios('Mata', [[ 'Copa redonda', () => vCopa(0)], ['Copa alta', () => vCopa(1)], ['Copa larga', () => vCopa(2)]])] },
     { nome: 'Construções', itens: [um('Casa', vCasa), um('Celeiro', vCeleiro), um('Galinheiro', vGalinheiro), um('Curral', vAbrigo), um('Poço', vPoco), um('Moinho', VI.moinho), um('Queijaria', vQueijaria), um('Padaria', vPadaria), um('Cozinha de doces', vCozinha), varios('Terreiro de café', [['Cheio', () => vTerreiro(true)], ['Vazio', () => vTerreiro(false)]]), um('Torrador', vTorrador), um('Composteira', () => vComposteira(false)), um('Hangar', vHangar), um('Obra', vObra)] },
     { nome: 'Automação', itens: [varios('Alimentador', [['Galinheiro', () => vAlimentador(false)], ['Curral', () => vAlimentador(true)]]), varios('Coletor', [['Ovos', () => vColetor(false)], ['Ordenhadeira', () => vColetor(true)]]), um('Esteira', vEsteira), varios('Irrigador', [['Base', vIrrigadorBase], ['Cabeça', vIrrigadorCabeca]]), um('Colmeia', vColmeia)] },
-    { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Teco-teco', vTecoTeco), um('Hélice', vHelice), um('Biruta', vBiruta)] },
+    { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Teco-teco', vTecoTeco), um('Hélice', vHelice), um('Biruta', vBiruta), { nome: 'Disco voador', variantes: [['Voando', false], ['Com o raio', true]].map(([n, r]) => ({ nome: n, cria: () => { const D = montarDisco(r); D.g.userData.anima = (dt, t) => animarDisco(D, t); D.g.userData.anima(0, 0); return D.g; } })) }] },
     { nome: 'Cenário', itens: [varios('Árvore', [['Maçãs', () => vArvore(0)], ['Sem fruta', () => vArvore(1)], ['Laranjas', () => vArvore(2)]]), um('Arbusto', vArbusto), um('Fardo de feno', vFeno), um('Flores', () => vFlores(3)), um('Capim', () => vCapim(1)), um('Cova', vCova), varios('Cerca', [['Reta', () => vCerca(3)], ['Canto', () => vCerca(5)]]), varios('Portão', [['Arco da entrada', () => vPortao(true)], ['Simples', () => vPortao(false)]]), um('Placa', vPlaca), um('Correio', vCorreio)] },
     { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), um('Chafariz', vFonte), um('Estátua do Ed', vEstatua)] },
     { nome: 'Objetos', itens: [um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
