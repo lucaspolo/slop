@@ -28,7 +28,7 @@ site/              # tudo o que é publicado
     <projeto>/index.html  # cada gerador: prévia 3D, medidas e download do STL
   simulacoes/
     index.html     # a lista das simulações
-    <projeto>/index.html  # cada simulação, em three.js ou num canvas 2D (o aspirador ciclone)
+    <projeto>/index.html  # cada simulação, em three.js ou num canvas 2D (o aspirador ciclone e os schedulers)
   style.css        # o visual escrachado: contorno preto grosso, sombra dura; serve às listas, não aos geradores
   favicon.svg
   tabs.js          # troca de aba na página inicial e lembra a aba no endereço (#impressao-3d, #jogos, #simulacoes)

@@ -1,0 +1,3278 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Schedulers, do Cartão Perfurado ao EEVDF · slop</title>
+<meta name="description" content="Simulador dos escalonadores de processador, do FCFS de 1956 ao EEVDF e ao sched_ext: tempo compartilhado, tempo real, paralelismo com roubo de trabalho e assíncrono com event loop, lado a lado e na mesma carga.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Martian+Mono:wght@500;800&display=swap">
+<style>
+/* Visual: formulário contínuo de impressora no tema claro, fósforo de terminal no escuro. */
+:root {
+  --paper: #f3f0e4; --plate: #fffdf5; --band: #e6efdf; --ink: #1b2822; --ink2: #47564d; --muted: #68766d; --line: #c6cfc0;
+  --accent: #0d7555; --accent-ink: #ffffff; --accent-soft: #cfe6d9; --crit: #c8321e; --warn: #a06400; --hole: #dcd8c8;
+  --t1: #2a78d6; --t2: #eb6834; --t3: #1baf7a; --t4: #eda100; --t5: #e87ba4; --t6: #008300; --t7: #6250d6; --t8: #e34948;
+  --f-display: "Martian Mono", ui-monospace, Menlo, monospace;
+  --f-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #0d1310; --plate: #141c18; --band: #1a2620; --ink: #dcefe1; --ink2: #a9beb0; --muted: #7f9287; --line: #2d3c33;
+  --accent: #62dcaa; --accent-ink: #06130d; --accent-soft: #1d3d30; --crit: #ff7f6b; --warn: #f0b64a; --hole: #070b09;
+  --t1: #3987e5; --t2: #d95926; --t3: #199e70; --t4: #c98500; --t5: #d55181; --t6: #008300; --t7: #9085e9; --t8: #e66767;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --paper: #0d1310; --plate: #141c18; --band: #1a2620; --ink: #dcefe1; --ink2: #a9beb0; --muted: #7f9287; --line: #2d3c33;
+  --accent: #62dcaa; --accent-ink: #06130d; --accent-soft: #1d3d30; --crit: #ff7f6b; --warn: #f0b64a; --hole: #070b09;
+  --t1: #3987e5; --t2: #d95926; --t3: #199e70; --t4: #c98500; --t5: #d55181; --t6: #008300; --t7: #9085e9; --t8: #e66767;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 15px/1.55 var(--f-body); }
+.wrap { max-width: 1480px; margin: 0 auto; padding: 14px max(16px, env(safe-area-inset-right, 0px)) 56px max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 14px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 800; margin: 0; line-height: 1.15; letter-spacing: -.02em; text-wrap: balance; }
+h1 { font-size: clamp(21px, 2.5vw, 32px); }
+h2 { font-size: clamp(18px, 1.8vw, 23px); }
+h3 { font-size: 13px; letter-spacing: 0; }
+p { margin: 0; }
+a { color: var(--accent); }
+button, select, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.crumbs { font: 500 13px var(--f-mono); color: var(--muted); }
+.crumbs a { color: inherit; }
+.mast { display: flex; flex-direction: column; gap: 6px; }
+.mast p.sub { color: var(--ink2); max-width: 78ch; }
+
+/* A fita perfurada com a linha do tempo. */
+.fita-box { display: flex; align-items: stretch; gap: 6px; }
+.fita-seta { flex: none; width: 34px; border: 1px solid var(--line); background: var(--plate); border-radius: 6px; font: 600 16px var(--f-mono); }
+.fita-seta:hover { border-color: var(--accent); color: var(--accent); }
+.fita { flex: 1; min-width: 0; overflow-x: auto; background: var(--plate); border: 1px solid var(--line); border-radius: 6px; scrollbar-width: thin; }
+.fita-trilho { display: inline-flex; min-width: 100%; padding: 15px 8px;
+  background-image: radial-gradient(circle at 9px 5px, var(--hole) 3px, transparent 3.5px), radial-gradient(circle at 9px calc(100% - 5px), var(--hole) 3px, transparent 3.5px);
+  background-size: 18px 100%; background-repeat: repeat-x; }
+.decada { display: flex; flex-direction: column; gap: 4px; padding: 0 8px; border-left: 1px dashed var(--line); }
+.decada:first-child { border-left: 0; }
+.decada > span { font: 500 11px var(--f-mono); color: var(--muted); white-space: nowrap; }
+.decada > div { display: flex; gap: 4px; }
+.furo { flex: none; display: flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 4px 9px; border: 1px solid var(--line); border-radius: 4px; background: transparent; white-space: nowrap; line-height: 1.25; }
+.furo b { font: 600 13px var(--f-mono); }
+.furo i { font: 400 11px var(--f-mono); color: var(--muted); }
+.furo:hover { border-color: var(--accent); }
+.furo[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.furo[aria-selected="true"] i { color: inherit; opacity: .85; }
+
+/* A bancada: palco à esquerda, comandos à direita. */
+.banca { display: grid; grid-template-columns: minmax(0, 1fr) 316px; gap: 14px; align-items: start; }
+.palco, .painel, .kpi, .bloco, .cmp { background: var(--plate); border: 1px solid var(--line); border-radius: 6px; }
+.palco { display: flex; flex-direction: column; min-width: 0; }
+.palco-head { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; padding: 11px 14px 9px; border-bottom: 1px solid var(--line); }
+.palco-head h2 span { color: var(--accent); }
+.palco-head p { color: var(--ink2); font-size: 14px; }
+.status { margin-left: auto; font: 500 12.5px var(--f-mono); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+canvas { display: block; width: 100%; }
+#gantt { cursor: crosshair; }
+.gantt-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 14px 6px; border-top: 1px solid var(--line); }
+.gantt-bar h3 { margin-right: 4px; }
+.legenda { display: flex; flex-wrap: wrap; gap: 3px 11px; padding: 2px 14px 11px; font: 400 12px var(--f-mono); color: var(--ink2); }
+.legenda span { display: inline-flex; align-items: center; gap: 5px; }
+.legenda i { width: 11px; height: 11px; border-radius: 2px; display: inline-block; flex: none; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.seg button { padding: 3px 9px; border: 0; background: transparent; font: 500 12.5px var(--f-mono); color: var(--ink2); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+.painel { display: flex; flex-direction: column; padding: 12px; gap: 11px; }
+.grupo { display: flex; flex-direction: column; gap: 7px; }
+.grupo + .grupo { border-top: 1px solid var(--line); padding-top: 10px; }
+.transporte { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; }
+.btn { padding: 6px 11px; border: 1px solid var(--line); border-radius: 5px; background: transparent; font: 500 13px var(--f-mono); }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.prim { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn.prim:hover { color: var(--accent-ink); filter: brightness(1.08); }
+.linha { display: flex; align-items: center; justify-content: space-between; gap: 9px; font-size: 13.5px; }
+.linha .val { font: 500 12.5px var(--f-mono); color: var(--ink2); font-variant-numeric: tabular-nums; }
+.rng { display: flex; flex-direction: column; gap: 1px; }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; height: 22px; }
+input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+select { width: 100%; padding: 5px 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--plate); font-size: 14px; }
+.nota { font-size: 13px; color: var(--ink2); line-height: 1.4; }
+.botoes { display: flex; flex-wrap: wrap; gap: 5px; }
+.botoes .btn { padding: 4px 8px; font-size: 12px; }
+.passo { display: flex; flex-direction: column; gap: 9px; padding: 11px 14px 11px; border-top: 1px solid var(--line); }
+.passo header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.p-quando { font: 500 12.5px var(--f-mono); color: var(--ink2); font-variant-numeric: tabular-nums; margin-right: auto; }
+.p-grade { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 8px 20px; min-height: 104px; }
+.p-grade h4 { margin: 0 0 4px; font: 600 12px var(--f-body); color: var(--muted); }
+#p-fatos { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: 14px; line-height: 1.35; }
+#p-fatos b { font-weight: 600; }
+.p-dec { font-size: 14.5px; line-height: 1.4; }
+.p-dec + .p-dec { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); }
+.p-dec b { font-weight: 600; }
+.p-dec small { color: var(--muted); font: 400 12px var(--f-mono); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px 1px 2px; border: 1px solid var(--line); border-radius: 4px; font: 400 12px var(--f-mono); color: var(--ink2); }
+.chip i { font-style: normal; font-weight: 600; min-width: 18px; padding: 0 3px; text-align: center; border-radius: 2px; font-size: 11px; }
+.chip.esc { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); font-weight: 500; }
+.p-regra { font-size: 13.5px; color: var(--ink2); }
+.p-regra b { font-weight: 600; color: var(--ink); }
+.passo summary { cursor: pointer; font: 500 12.5px var(--f-mono); color: var(--ink2); }
+#log { list-style: none; margin: 6px 0 0; padding: 0; font: 400 12px/1.5 var(--f-mono); max-height: 190px; overflow-y: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--plate); }
+#log li { padding: 1px 7px; }
+#log li:nth-child(even) { background: var(--band); }
+#log b { font-weight: 600; }
+#log small { color: var(--muted); font-size: inherit; }
+textarea { width: 100%; height: 86px; resize: vertical; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--plate); font: 400 12.5px/1.45 var(--f-mono); }
+.erro { color: var(--crit); font: 500 12px var(--f-mono); }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.kpi { padding: 10px 13px; }
+.kpi h3 { font: 500 12px var(--f-body); color: var(--ink2); }
+.kpi strong { display: block; font: 600 24px/1.2 var(--f-mono); font-variant-numeric: tabular-nums; }
+.kpi strong small { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 3px; }
+.kpi p { font-size: 11.5px; color: var(--muted); line-height: 1.3; }
+
+.explica { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 14px; align-items: start; }
+.ex-corpo { background: var(--plate); border: 1px solid var(--line); border-radius: 6px; padding: 20px 24px 22px; display: flex; flex-direction: column; gap: 14px; }
+#ex-texto { display: flex; flex-direction: column; gap: 16px; max-width: 84ch; }
+#ex-texto h3 { font-size: 14px; color: var(--accent); margin-bottom: 4px; }
+#ex-texto p { font-size: 15.5px; line-height: 1.62; }
+#ex-texto p + p { margin-top: 8px; }
+.cita { font: 500 11px var(--f-mono); vertical-align: super; line-height: 0; margin-left: 1px; text-decoration: none; }
+.cita:hover { text-decoration: underline; }
+.ex-refs { border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 7px; }
+.ex-refs ol { margin: 0; padding-left: 24px; display: flex; flex-direction: column; gap: 5px; font-size: 13.5px; line-height: 1.45; color: var(--ink2); }
+.ex-refs li:target { background: var(--accent-soft); }
+.ex-refs li { scroll-margin-top: 80px; }
+.ex-lado { display: flex; flex-direction: column; gap: 10px; }
+.bloco { padding: 13px 15px; display: flex; flex-direction: column; gap: 6px; }
+.bloco h3 { color: var(--accent); }
+.bloco ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+pre { margin: 0; font: 400 12.5px/1.6 var(--f-mono); overflow-x: auto; padding: 0; background-image: repeating-linear-gradient(var(--band) 0 20px, transparent 20px 40px); }
+pre code { display: block; padding: 0 8px; min-width: max-content; font: inherit; }
+.proximo { align-self: flex-start; }
+
+.cmp { padding: 13px 15px; display: flex; flex-direction: column; gap: 10px; }
+.cmp-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.cmp-head select { width: auto; }
+.linhas { display: flex; flex-direction: column; gap: 2px; }
+.lin { display: grid; grid-template-columns: 136px minmax(0, 1fr) 96px; align-items: center; gap: 10px; padding: 2px 6px; border: 0; border-radius: 4px; background: transparent; text-align: left; font: 500 12.5px var(--f-mono); width: 100%; }
+.lin:hover { background: var(--band); }
+.lin .pista { height: 11px; display: flex; align-items: center; }
+.lin .barra { height: 8px; border-radius: 0 4px 4px 0; background: var(--muted); min-width: 2px; }
+.lin[aria-current="true"] { background: var(--accent-soft); }
+.lin[aria-current="true"] .barra { background: var(--accent); }
+.lin .num { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink2); white-space: nowrap; }
+.lin.falhou .num { color: var(--crit); }
+
+.texto { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px 26px; padding-top: 4px; }
+.texto section { display: flex; flex-direction: column; gap: 7px; }
+.texto p, .texto li { font-size: 14.5px; color: var(--ink2); }
+.texto ul { margin: 0; padding-left: 18px; }
+.dica { position: fixed; z-index: 20; pointer-events: none; padding: 5px 8px; border-radius: 4px; background: var(--ink); color: var(--paper); font: 500 12px/1.35 var(--f-mono); max-width: 260px; }
+
+@media (max-width: 1040px) {
+  .banca { grid-template-columns: minmax(0, 1fr); }
+  .explica { grid-template-columns: minmax(0, 1fr); }
+  .ex-corpo { padding: 16px; }
+  .status { margin-left: 0; width: 100%; }
+}
+@media (max-width: 720px) {
+  .p-grade { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .fita-seta { display: none; }
+  .lin { grid-template-columns: 96px minmax(0, 1fr) 76px; gap: 6px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <nav class="crumbs" aria-label="Caminho"><a href="../../">slop</a> / <a href="../">simulações</a></nav>
+    <h1>Schedulers, do Cartão Perfurado ao EEVDF</h1>
+    <p class="sub">Quando há mais trabalho do que processador, alguém precisa decidir quem roda agora. Escolha um ponto da história e veja a mesma decisão ser tomada de um jeito diferente a cada década.</p>
+  </header>
+
+  <div class="fita-box">
+    <button class="fita-seta" id="ant" type="button" aria-label="Algoritmo anterior">‹</button>
+    <div class="fita" id="fita"><div class="fita-trilho" id="trilho" role="tablist" aria-label="Algoritmos em ordem cronológica"></div></div>
+    <button class="fita-seta" id="prox" type="button" aria-label="Próximo algoritmo">›</button>
+  </div>
+
+  <div class="banca">
+    <section class="palco" aria-label="Simulação">
+      <div class="palco-head">
+        <h2 id="a-nome"></h2>
+        <p id="a-titulo"></p>
+        <span class="status" id="status" aria-live="off"></span>
+      </div>
+      <canvas id="estagio" role="img" aria-label="Filas do escalonador e núcleos, com as tarefas se movendo entre eles"></canvas>
+      <section class="passo" aria-label="Passo a passo das decisões">
+        <header>
+          <h3>Passo a passo</h3>
+          <span class="p-quando" id="p-quando"></span>
+          <div class="seg" role="group" aria-label="Ritmo da explicação" id="modos">
+            <button type="button" data-modo="guiada" aria-pressed="true" title="Segura um instante em cada decisão">guiada</button>
+            <button type="button" data-modo="manual" aria-pressed="false" title="Para em cada decisão e espera você">manual</button>
+            <button type="button" data-modo="continua" aria-pressed="false" title="Roda sem parar">contínua</button>
+          </div>
+          <button class="btn prim" id="p-prox" type="button">Próxima decisão</button>
+        </header>
+        <div class="p-grade">
+          <div>
+            <h4>O que aconteceu</h4>
+            <ul id="p-fatos"></ul>
+          </div>
+          <div>
+            <h4>O que o escalonador decidiu</h4>
+            <div id="p-decisoes"></div>
+          </div>
+        </div>
+        <p class="p-regra"><b>A regra:</b> <span id="p-regra"></span></p>
+        <details>
+          <summary>Todas as decisões até agora</summary>
+          <ol id="log"></ol>
+        </details>
+      </section>
+      <div class="gantt-bar">
+        <h3>Linha do tempo</h3>
+        <div class="seg" role="group" aria-label="Ver a linha do tempo por">
+          <button type="button" data-gv="nucleos" aria-pressed="true">por núcleo</button>
+          <button type="button" data-gv="tarefas" aria-pressed="false">por tarefa</button>
+        </div>
+      </div>
+      <canvas id="gantt" role="img" aria-label="Gráfico de Gantt do que cada núcleo executou ao longo do tempo"></canvas>
+      <div class="legenda" id="legenda"></div>
+    </section>
+
+    <aside class="painel" aria-label="Comandos">
+      <div class="grupo">
+        <div class="transporte">
+          <button class="btn prim" id="play" type="button">Pausar</button>
+          <button class="btn" id="passo" type="button">Passo</button>
+          <button class="btn" id="reini" type="button">Recomeçar</button>
+        </div>
+        <div class="linha"><span>Velocidade</span>
+          <div class="seg" role="group" aria-label="Velocidade" id="vels">
+            <button type="button" data-v="8" aria-pressed="false">lenta</button>
+            <button type="button" data-v="30" aria-pressed="true">média</button>
+            <button type="button" data-v="120" aria-pressed="false">rápida</button>
+          </div>
+        </div>
+      </div>
+      <div class="grupo">
+        <label class="linha" for="carga"><span>Carga de trabalho</span></label>
+        <select id="carga"></select>
+        <p class="nota" id="carga-desc"></p>
+        <label class="linha"><span>Manter a carga ao trocar de algoritmo</span><input type="checkbox" id="manter"></label>
+        <div class="botoes">
+          <button class="btn" type="button" data-add="curta">+ curta</button>
+          <button class="btn" type="button" data-add="longa">+ longa</button>
+          <button class="btn" type="button" data-add="inter">+ interativa</button>
+          <button class="btn" type="button" id="sortear">sortear</button>
+        </div>
+      </div>
+      <div class="grupo">
+        <div class="rng"><div class="linha"><span>Núcleos</span><span class="val" id="v-cores"></span></div><input type="range" id="cores" min="1" max="8" step="1"></div>
+        <div class="linha"><span>Máquina</span>
+          <div class="seg" role="group" aria-label="Tipo de máquina" id="maquina">
+            <button type="button" data-m="smp" aria-pressed="true">iguais</button>
+            <button type="button" data-m="hetero" aria-pressed="false">big.LITTLE</button>
+          </div>
+        </div>
+        <div class="rng"><div class="linha"><span>Custo da troca de contexto</span><span class="val" id="v-cs"></span></div><input type="range" id="cs" min="0" max="5" step="1"></div>
+      </div>
+      <div class="grupo" id="g-params"></div>
+      <div class="grupo" id="g-scx" hidden>
+        <label class="linha" for="scx-fonte"><span>nota(t): menor roda primeiro</span></label>
+        <textarea id="scx-fonte" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+        <div class="botoes" id="scx-ex"></div>
+        <button class="btn prim" id="scx-aplica" type="button">Carregar no escalonador</button>
+        <p class="nota">Campos de <code>t</code>: chegada, restante, cpu, esperou, peso, nice, io, prazo, tipo. Também há <code>agora</code>.</p>
+        <p class="erro" id="scx-erro" hidden></p>
+      </div>
+    </aside>
+  </div>
+
+  <section class="kpis" id="kpis" aria-label="Indicadores da execução atual"></section>
+
+  <article class="explica" aria-labelledby="ex-titulo">
+    <div class="ex-corpo">
+      <h2 id="ex-titulo"></h2>
+      <div id="ex-texto"></div>
+      <section class="ex-refs" aria-label="Referências">
+        <h3>Referências</h3>
+        <ol id="ex-refs"></ol>
+      </section>
+    </div>
+    <aside class="ex-lado">
+      <div class="bloco"><h3>Experimente</h3><ul id="h-tente"></ul></div>
+      <div class="bloco"><h3>O essencial, em pseudocódigo</h3><pre><code id="h-code"></code></pre></div>
+      <button class="btn proximo" id="h-prox" type="button"></button>
+    </aside>
+  </article>
+
+  <section class="cmp" aria-label="Comparação entre algoritmos">
+    <div class="cmp-head">
+      <div><h2>Todos na mesma carga</h2><p class="nota" id="cmp-nota"></p></div>
+      <label class="linha"><span>Comparar por</span><select id="cmp-kpi"></select></label>
+    </div>
+    <div class="linhas" id="cmp-linhas"></div>
+  </section>
+
+  <div class="texto">
+    <section>
+      <h2>Paralelo não é assíncrono</h2>
+      <p>Paralelismo é fazer várias coisas <em>ao mesmo tempo</em>, e precisa de mais de um núcleo. Assincronia é <em>não ficar parado esperando</em>: enquanto o banco responde, o processador atende outra pessoa, e isso funciona até em um núcleo só.</p>
+      <p>O Fork-join é paralelismo puro: tudo é conta, e o gargalo é repartir o trabalho. O Servidor web é o oposto: quase tudo é espera, e o gargalo é quanto custa manter alguém esperando. O Go e o Tokio tratam dos dois casos juntos.</p>
+    </section>
+    <section>
+      <h2>Como ler</h2>
+      <p>Cada bloco colorido é uma tarefa. No palco ela anda entre as filas do algoritmo, os núcleos e a espera por I/O. O painel Passo a passo diz, a cada decisão, o que aconteceu, quem disputava o núcleo e por que aquela tarefa venceu. No modo guiado, a simulação segura um instante em cada decisão; no manual, ela espera você apertar “Próxima decisão”.</p>
+      <p>Embaixo, o Gantt registra o que cada núcleo fez. “Por tarefa” mostra também o tempo parado na fila, que é onde se nota a fome.</p>
+      <p>Um tick vale 1 ms simulado. A mesma carga e a mesma semente dão sempre o mesmo resultado, por isso dá para comparar.</p>
+    </section>
+    <section>
+      <h2>O que foi simplificado</h2>
+      <ul>
+        <li>Cache, NUMA, interrupções e frequência variável não entram na conta. Migrar é contado, mas não custa tempo.</li>
+        <li>Só a Fila única cobra pela trava. Os outros algoritmos de fila global aparecem no comparativo como se ela fosse de graça.</li>
+        <li>A energia é um modelo didático com três números. A memória usa 1 MB por thread e 8 KB por goroutine ou callback.</li>
+        <li>CFS, EEVDF, O(1), EAS e o runtime do Go seguem as regras e as fórmulas dos originais, mas sem os muitos casos especiais do código real.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+<div class="dica" id="dica" hidden></div>
+<script id="sim-src">
+'use strict';
+/* Motor do simulador. Não toca no DOM: recebe a máquina, a carga e o algoritmo, e avança um tick (1 ms simulado) por vez. */
+
+// Tabela sched_prio_to_weight do kernel Linux (nice -20 a +19).
+const PESOS_NICE = [
+  88761, 71755, 56483, 46273, 36291, 29154, 23254, 18705, 14949, 11916,
+  9548, 7620, 6100, 4904, 3906, 3121, 2501, 1991, 1586, 1277,
+  1024, 820, 655, 526, 423, 335, 272, 215, 172, 137,
+  110, 87, 70, 56, 45, 36, 29, 23, 18, 15,
+];
+const pesoDe = nice => PESOS_NICE[nice + 20];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const EPS = 1e-6;
+
+function criaRng(seed) {
+  return () => {
+    seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+class Sim {
+  constructor(cfg, specs, algo) {
+    this.cfg = cfg;
+    this.rec = !!cfg.rec;
+    this.t = 0;
+    this.tasks = [];
+    this.live = 0;
+    this.seq = 0;
+    this.r = criaRng((cfg.seed ^ 0x5bd1e995) | 0);
+    this.pending = specs.slice().sort((a, b) => a.arrival - b.arrival);
+    this.pi = 0;
+    this.blocked = [];
+    this.barriers = new Map();
+    this.nextId = 0;
+    this.log = [];
+    this.st = { cs: 0, csTicks: 0, lockTicks: 0, stealTicks: 0, spinTicks: 0, workTicks: 0, migrations: 0, steals: 0, energy: 0, memPeak: 0, missed: 0, rtTotal: 0, resp: [] };
+    const hetero = cfg.machine === 'hetero';
+    const nBig = hetero ? Math.ceil(cfg.cores / 2) : cfg.cores;
+    this.cores = Array.from({ length: cfg.cores }, (_, id) => {
+      const big = id < nBig;
+      return { id, big, speed: big ? 1 : 0.5, power: big ? 3 : 0.75, task: null, ovh: [], last: null, sliceUsed: 0, segs: [] };
+    });
+    this.p = algo.make(this, cfg.params || {});
+    this.sw = this.p.switchCost != null ? this.p.switchCost : cfg.cs;
+    this.memPorTarefa = this.p.memKB || 1024;
+  }
+
+  get done() { return this.pi >= this.pending.length && this.live === 0; }
+
+  // O que acontece no fim de um tick pertence à decisão do tick seguinte, por isso o carimbo avança durante a execução.
+  ev(k, core, t, txt, extra) {
+    if (!this.rec) return;
+    const e = Object.assign({ t: this.t + (this.emExec ? 1 : 0), k, core: core ? core.id : null, id: t ? t.id : null, nome: t ? t.name : '', cor: t ? t.cor : 0, txt }, extra);
+    this.log.push(e);
+    if (this.log.length > 900) this.log.shift();
+  }
+
+  makeTask(sp, parent) {
+    const nice = sp.nice || 0;
+    const t = {
+      id: this.nextId++, name: sp.name, cor: sp.cor || 0, arrival: this.t, ops: sp.ops, pc: 0, rem: 0,
+      state: 'new', nice, weight: pesoDe(nice), prio: sp.prio != null ? sp.prio : clamp(Math.round((nice + 20) / 5.7), 0, 7),
+      tickets: sp.tickets || Math.max(1, Math.round(pesoDe(nice) / 10.24)), slice: sp.slice,
+      period: sp.period || Infinity, deadline: sp.deadline != null ? sp.deadline : Infinity,
+      kind: sp.kind || 'cpu', group: sp.group, groupSize: sp.groupSize || 1, parent: parent || null, kidsLeft: 0,
+      readySince: 0, waitStart: null, firstRun: null, finish: null, cpuUsed: 0, onCpu: 0, wait: 0, spin: false,
+      lastCore: null, seq: 0, hist: [], missed: false, sleepStart: null, iops: 0, ideal: 0,
+    };
+    this.tasks.push(t);
+    return t;
+  }
+
+  setState(t, s) {
+    if (this.rec) {
+      const h = t.hist;
+      if (h.length) h[h.length - 1].e = this.t;
+      h.push({ s: this.t, e: null, st: s });
+    }
+    t.state = s;
+  }
+
+  addOvh(core, n, kind) { if (n > 0) core.ovh.push({ n, kind }); }
+
+  ready(t, why, hint) {
+    this.setState(t, 'ready');
+    t.readySince = this.t;
+    if (why === 'new' || why === 'spawn' || why === 'wake') t.waitStart = this.t;
+    this.p.nota = '';
+    this.p.enqueue(t, why, hint);
+    if (this.rec && (why === 'new' || why === 'spawn' || why === 'wake')) {
+      const antes = t.ops[t.pc - 2];
+      const base = why === 'new' ? 'chegou' : why === 'spawn' ? 'foi criada' : antes && antes.t === 'io' ? 'voltou do I/O' : 'as filhas terminaram';
+      this.ev(why === 'new' ? 'chegou' : 'acordou', null, t, this.p.nota ? `${base} e ${this.p.nota}` : base);
+    }
+  }
+
+  // Avança pelas operações instantâneas até a tarefa precisar de CPU ou sair dela.
+  advance(t, core, why, hint) {
+    for (;;) {
+      const op = t.ops[t.pc++];
+      if (!op) return this.finish(t, core);
+      if (op.t === 'cpu') {
+        t.rem = op.n;
+        if (!core) this.ready(t, why || 'wake', hint);
+        return;
+      }
+      if (op.t === 'io') {
+        if (this.p.onBlock) this.p.onBlock(t, core);
+        if (core) this.ev('bloqueou', core, t, `foi esperar I/O por ${op.n} ms`);
+        this.setState(t, 'blocked');
+        t.wakeAt = this.t + (core ? 1 : 0) + op.n;
+        t.sleepStart = this.t;
+        t.iops++;
+        this.blocked.push(t);
+        if (core) core.task = null;
+        return;
+      }
+      if (op.t === 'spawn') {
+        for (const sp of op.kids) {
+          const k = this.makeTask(sp, t);
+          t.kidsLeft++;
+          this.live++;
+          if (this.p.onSpawn) this.p.onSpawn(core, k);
+          this.advance(k, null, 'spawn', core);
+        }
+        continue;
+      }
+      if (op.t === 'join') {
+        if (t.kidsLeft > 0) {
+          if (this.p.onBlock) this.p.onBlock(t, core);
+          if (core) this.ev('bloqueou', core, t, 'parou para esperar as filhas');
+          this.setState(t, 'joining');
+          if (core) core.task = null;
+          return;
+        }
+        continue;
+      }
+      if (op.t === 'barrier') {
+        let b = this.barriers.get(op.id);
+        if (!b) { b = []; this.barriers.set(op.id, b); }
+        t.spin = true;
+        b.push(t);
+        if (b.length >= op.size) {
+          this.barriers.delete(op.id);
+          // Depois de uma barreira sempre vem uma rajada de CPU (ver cargas), então cada
+          // tarefa continua de onde está: no núcleo ou na fila, sem reenfileirar.
+          for (const m of b) { m.spin = false; m.rem = m.ops[m.pc++].n; }
+          this.ev('terminou', core, t, 'foi a última a chegar à barreira: todas seguem');
+        } else {
+          this.ev('bloqueou', core, t, `chegou à barreira e gira até as irmãs chegarem (${b.length}/${op.size})`);
+        }
+        return;
+      }
+    }
+  }
+
+  finish(t, core) {
+    this.ev('terminou', core, t, 'terminou');
+    this.setState(t, 'done');
+    t.finish = this.t + 1;
+    this.live--;
+    if (core) core.task = null;
+    if (this.p.onFinish) this.p.onFinish(t);
+    if (t.deadline !== Infinity && !t.missed) this.st.rtTotal++;
+    if (t.parent) {
+      const par = t.parent;
+      par.kidsLeft--;
+      if (par.kidsLeft === 0 && par.state === 'joining') this.advance(par, null, 'wake', core);
+    }
+  }
+
+  kick(core, why, motivo) {
+    const t = core.task;
+    if (!t) return;
+    core.task = null;
+    core.ovh.length = 0;
+    this.ready(t, why || 'preempt', core);
+    if (this.rec) this.ev(why === 'expire' ? 'fatia' : 'interrompeu', core, t, [motivo, this.p.nota].filter(Boolean).join('; '));
+  }
+
+  dispatch(core) {
+    const p = this.p;
+    p.why = '';
+    const disputa = this.rec ? (p.candidatas ? p.candidatas(core) : p.queued()).slice() : null;
+    const t = p.pick(core);
+    if (!t) return;
+    core.task = t;
+    core.sliceUsed = 0;
+    t.wait += this.t - t.readySince;
+    this.setState(t, 'running');
+    if (t.firstRun == null) t.firstRun = this.t;
+    if (t.waitStart != null) { this.st.resp.push(this.t - t.waitStart); t.waitStart = null; }
+    if (t.lastCore != null && t.lastCore !== core.id) this.st.migrations++;
+    t.lastCore = core.id;
+    if (core.last && core.last !== t) {
+      this.st.cs++;
+      this.addOvh(core, this.sw, 'cs');
+    }
+    core.last = t;
+    if (this.rec) {
+      const m = p.metrica || (() => '');
+      const lista = [t, ...disputa.filter(x => x !== t)];
+      const custo = core.ovh.map(o => (o.kind === 'cs' ? `troca de contexto de ${o.n} ms` : o.kind === 'lock' ? `${o.n} ms na trava` : `${o.n} ms para roubar`)).join(', ');
+      this.ev('escolheu', core, t, p.why || 'era a próxima', { custo, cand: lista.slice(0, 7).map(x => ({ nome: x.name, cor: x.cor, m: m(x), esc: x === t })), mais: Math.max(0, lista.length - 7) });
+    }
+  }
+
+  seg(core, k, t) {
+    if (!this.rec) return;
+    const a = core.segs, l = a[a.length - 1], id = t ? t.id : -1;
+    if (l && l.k === k && l.id === id && l.e === this.t) l.e = this.t + 1;
+    else a.push({ s: this.t, e: this.t + 1, k, id });
+  }
+
+  runCore(core) {
+    const st = this.st, p = this.p;
+    if (core.ovh.length) {
+      const o = core.ovh[0];
+      this.seg(core, o.kind, core.task);
+      if (o.kind === 'cs') st.csTicks++;
+      else if (o.kind === 'lock') st.lockTicks++;
+      else st.stealTicks++;
+      st.energy += core.power;
+      if (--o.n <= 0) core.ovh.shift();
+      return;
+    }
+    const t = core.task;
+    if (!t) { this.seg(core, 'idle', null); st.energy += 0.1; return; }
+    st.energy += core.power;
+    t.onCpu++;
+    core.sliceUsed++;
+    if (t.spin) {
+      this.seg(core, 'spin', t);
+      st.spinTicks++;
+    } else {
+      this.seg(core, 'run', t);
+      t.rem -= core.speed;
+      t.cpuUsed += core.speed;
+      st.workTicks += core.speed;
+    }
+    if (p.charge) p.charge(t, core);
+    if (!t.spin && t.rem <= EPS) this.advance(t, core, 'wake', core);
+    if (core.task === t && p.expired && p.expired(core, t)) this.kick(core, 'expire', p.fatiaTxt ? p.fatiaTxt(t) : core.sliceUsed ? `gastou a fatia de ${core.sliceUsed} ms` : 'gastou a fatia');
+  }
+
+  // Separada de step() para a tela mostrar quem já foi despachado neste tick, e não núcleos vazios entre um tick e outro.
+  prepara() {
+    if (this.prep) return;
+    this.prep = true;
+    const t = this.t, p = this.p;
+    while (this.pi < this.pending.length && this.pending[this.pi].arrival <= t) {
+      this.live++;
+      this.advance(this.makeTask(this.pending[this.pi++], null), null, 'new', null);
+    }
+    for (let i = this.blocked.length - 1; i >= 0; i--) {
+      const b = this.blocked[i];
+      if (b.wakeAt <= t) {
+        this.blocked.splice(i, 1);
+        b.sleptFor = t - b.sleepStart;
+        this.advance(b, null, 'wake', null);
+      }
+    }
+    let somaPesos = 0;
+    for (const x of this.tasks) {
+      if (x.deadline <= t && !x.missed && x.state !== 'done') { x.missed = true; this.st.missed++; this.st.rtTotal++; }
+      if (x.state === 'ready' || x.state === 'running') somaPesos += x.weight;
+    }
+    // Quanto cada tarefa receberia numa CPU idealmente justa (GPS): é a régua do índice de justiça.
+    for (const x of this.tasks) {
+      if (x.state === 'ready' || x.state === 'running') x.ideal += Math.min(1, this.cores.length * x.weight / somaPesos);
+    }
+    if (p.tick) p.tick(t);
+    if (p.preempt) p.preempt();
+    for (const c of this.cores) if (!c.task && !c.ovh.length) this.dispatch(c);
+  }
+
+  step() {
+    this.prepara();
+    this.prep = false;
+    const p = this.p;
+    this.emExec = true;
+    for (const c of this.cores) this.runCore(c);
+    this.emExec = false;
+    this.st.memPeak = Math.max(this.st.memPeak, (p.vivasMem ? p.vivasMem() : this.live) * this.memPorTarefa);
+    this.t++;
+  }
+
+  addTask(sp) {
+    sp.arrival = this.t;
+    let i = this.pi;
+    while (i < this.pending.length && this.pending[i].arrival <= sp.arrival) i++;
+    this.pending.splice(i, 0, sp);
+  }
+
+  stats() {
+    const st = this.st, tops = this.tasks.filter(t => !t.parent);
+    const prontas = tops.filter(t => t.state === 'done');
+    const media = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : null;
+    const resp = st.resp.slice().sort((a, b) => a - b);
+    const shares = this.tasks.filter(t => t.ideal > 0).map(t => t.onCpu / t.ideal);
+    const somaQ = shares.reduce((s, x) => s + x * x, 0), soma = shares.reduce((s, x) => s + x, 0);
+    const ticksNucleo = Math.max(1, this.t * this.cores.length);
+    return {
+      retorno: media(prontas.map(t => t.finish - t.arrival)),
+      resposta: media(resp),
+      p95: resp.length ? resp[Math.min(resp.length - 1, Math.floor(resp.length * 0.95))] : null,
+      trocas: st.cs,
+      sobrecarga: (st.csTicks + st.lockTicks + st.stealTicks + st.spinTicks) / ticksNucleo * 100,
+      utilizacao: st.workTicks / ticksNucleo * 100,
+      justica: shares.length && somaQ > 0 ? soma * soma / (shares.length * somaQ) : null,
+      perdidos: st.missed,
+      prazos: st.rtTotal,
+      duracao: this.done ? Math.max(0, ...this.tasks.map(t => t.finish || 0)) : this.t,
+      migracoes: st.migrations,
+      roubos: st.steals,
+      energia: st.energy,
+      memoria: st.memPeak,
+      concluidas: prontas.length,
+      total: tops.length + (this.pending.length - this.pi),
+    };
+  }
+}
+
+/* ---------- Peças comuns aos algoritmos ---------- */
+
+// Fila única global: a ordem vem de um número (`rank`), menor primeiro, com desempate por ordem de chegada.
+function filaGlobal(s, o) {
+  const q = [];
+  const cmp = (a, b) => (o.rank(a) - o.rank(b)) || (a.seq - b.seq);
+  const p = {
+    why: '', switchCost: o.switchCost, memKB: o.memKB, metrica: o.metrica,
+    queue: q,
+    queued: () => q,
+    ordenada: () => q.slice().sort(cmp),
+    enqueue(t, why, hint) { if (o.onEnqueue) o.onEnqueue(t, why, hint); t.seq = ++s.seq; q.push(t); },
+    pick(core) {
+      if (o.filter && !o.filter(core)) return null;
+      if (!q.length) return null;
+      let b = 0;
+      for (let i = 1; i < q.length; i++) if (cmp(q[i], q[b]) < 0) b = i;
+      const t = q.splice(b, 1)[0];
+      if (s.rec && o.why) p.why = o.why(t, q);
+      return t;
+    },
+    expired(core, t) {
+      if (o.expired) return o.expired(core, t);
+      if (!o.q || core.sliceUsed < o.q(t, core)) return false;
+      if (q.length) return true;
+      core.sliceUsed = 0;
+      return false;
+    },
+    preempt() {
+      if (!o.preempt) return;
+      for (;;) {
+        if (!q.length) return;
+        if (s.cores.some(c => !c.task && !c.ovh.length)) return;
+        let b = q[0];
+        for (const x of q) if (cmp(x, b) < 0) b = x;
+        let vc = null;
+        for (const c of s.cores) if (c.task && (!vc || o.rank(c.task) > o.rank(vc.task))) vc = c;
+        if (!vc || !(o.rank(vc.task) > o.rank(b))) return;
+        s.kick(vc, 'preempt', o.metrica ? `perdeu a vez para ${b.name}: ${o.metrica(b)} contra ${o.metrica(vc.task)}` : `perdeu a vez para ${b.name}`);
+        s.dispatch(vc);
+      }
+    },
+    charge: o.charge,
+    tick: o.tick,
+    fatiaTxt: o.fatiaTxt,
+    view: () => (o.view ? o.view(p) : { kind: 'lanes', lanes: [{ label: 'fila', tasks: p.ordenada() }], capt: o.capt }),
+  };
+  return p;
+}
+
+// Escolhe o núcleo de uma tarefa nos escalonadores com uma fila por núcleo.
+function escolheNucleo(s, rq, t, why, hint) {
+  if (why === 'spawn' && hint) return hint.id;
+  if (why === 'preempt' || why === 'expire') return hint ? hint.id : t.lastCore;
+  const carga = c => rq[c.id].length + (c.task ? 1 : 0);
+  const prev = t.lastCore != null ? s.cores[t.lastCore] : null;
+  if (prev && carga(prev) === 0) return prev.id;
+  let melhor = s.cores[0];
+  for (const c of s.cores) if (carga(c) < carga(melhor)) melhor = c;
+  if (why === 'wake' && prev && carga(melhor) >= carga(prev)) return prev.id;
+  return melhor.id;
+}
+
+// Equilíbrio periódico: tira uma tarefa da fila mais cheia para a mais vazia.
+function equilibra(s, rq, move, periodo) {
+  if (s.t % periodo || s.cores.length < 2) return;
+  const carga = i => rq[i].length + (s.cores[i].task ? 1 : 0);
+  let a = 0, b = 0;
+  for (let i = 1; i < rq.length; i++) {
+    if (carga(i) > carga(a)) a = i;
+    if (carga(i) < carga(b)) b = i;
+  }
+  if (carga(a) - carga(b) >= 2 && rq[a].length) {
+    move(a, b);
+    s.st.migrations++;
+    s.ev('moveu', s.cores[b], null, `balanceamento: a CPU ${a} tinha ${carga(a) + 1} tarefas e a CPU ${b} só ${carga(b) - 1}, então uma mudou de fila`);
+  }
+}
+
+/* ---------- Algoritmos ---------- */
+
+function fcfs(s) {
+  return filaGlobal(s, { rank: () => 0, why: () => 'é a que chegou primeiro', metrica: t => `chegou em t=${t.arrival}` });
+}
+function sjf(s) {
+  return filaGlobal(s, { rank: t => t.rem, why: t => `rajada mais curta da fila (${Math.ceil(t.rem)})`, capt: t => Math.ceil(t.rem), metrica: t => `restam ${Math.ceil(t.rem)} ms` });
+}
+function srtf(s) {
+  return filaGlobal(s, { rank: t => t.rem, preempt: true, why: t => `tem o menor trabalho restante (${Math.ceil(t.rem)} ms)`, capt: t => Math.ceil(t.rem), metrica: t => `restam ${Math.ceil(t.rem)} ms` });
+}
+function rr(s, p) {
+  const q = p.q;
+  const pol = filaGlobal(s, {
+    rank: () => 0, q: () => q, why: () => `era a próxima da roda e recebe até ${q} ms`, metrica: t => `na fila desde t=${t.readySince}`,
+    onEnqueue(t, why) { if (why === 'expire') s.p.nota = 'voltou para o fim da roda'; },
+    view: self => ({ kind: 'ring', tasks: self.ordenada() }),
+  });
+  return pol;
+}
+function prioridades(s, p) {
+  const rate = p.agingRate;
+  const efetiva = t => {
+    if (!p.aging || t.state !== 'ready') return t.prio;
+    return Math.max(0, t.prio - Math.floor((s.t - t.readySince) / rate));
+  };
+  return filaGlobal(s, {
+    rank: efetiva, preempt: true, metrica: t => `prioridade ${efetiva(t)}`,
+    why: t => (efetiva(t) < t.prio ? `prioridade ${t.prio}, envelheceu até ${efetiva(t)}` : `maior prioridade na fila (${t.prio})`),
+    view: self => {
+      const lanes = Array.from({ length: 8 }, (_, i) => ({ label: `prio ${i}`, tasks: [] }));
+      for (const t of self.ordenada()) lanes[clamp(efetiva(t), 0, 7)].tasks.push(t);
+      return { kind: 'lanes', lanes, compact: true };
+    },
+  });
+}
+function mlfq(s, p) {
+  const N = 4, base = p.q;
+  const quantum = n => base * (1 << n);
+  const pol = filaGlobal(s, {
+    rank: t => t.nivel, preempt: true,
+    onEnqueue(t, why) {
+      if (why === 'new' || why === 'spawn') { t.nivel = 0; t.allot = 0; s.p.nota = 'entrou na fila do topo, como toda tarefa nova'; }
+      if (why === 'wake') s.p.nota = `continua na fila ${t.nivel}, com ${t.allot} ms já gastos da cota`;
+      if (why === 'expire' && t.allot >= quantum(t.nivel)) {
+        t.allot = 0;
+        if (t.nivel < N - 1) { t.nivel++; s.p.nota = `desceu para a fila ${t.nivel}`; }
+        else s.p.nota = 'já estava na última fila e voltou para o fim dela';
+      }
+    },
+    expired: (core, t) => t.allot >= quantum(t.nivel),
+    charge: t => { t.allot++; },
+    fatiaTxt: t => `esgotou a cota de ${quantum(t.nivel)} ms da fila ${t.nivel}`,
+    why: t => `é a primeira da fila mais alta ocupada (fila ${t.nivel}, fatia de ${quantum(t.nivel)} ms)`,
+    metrica: t => `fila ${t.nivel}`,
+    tick(now) {
+      if (!p.boost || !now || now % p.boost) return;
+      for (const t of s.tasks) if (t.state !== 'done') { t.nivel = 0; t.allot = 0; }
+      s.ev('moveu', null, null, `reforço periódico: depois de ${p.boost} ms, todas voltaram à fila 0`);
+    },
+    view: self => {
+      const lanes = Array.from({ length: N }, (_, i) => ({ label: `fila ${i}`, note: `${quantum(i)} ms`, tasks: [] }));
+      for (const t of self.ordenada()) lanes[t.nivel].tasks.push(t);
+      return { kind: 'lanes', lanes };
+    },
+  });
+  return pol;
+}
+function rm(s) {
+  return filaGlobal(s, {
+    rank: t => t.period, preempt: true, metrica: t => (t.period === Infinity ? 'sem período' : `período ${t.period} ms`),
+    why: t => (t.period === Infinity ? 'não tem período: fica com o que sobrar' : `tem o menor período (${t.period} ms)`),
+    view: self => ({ kind: 'lanes', lanes: [{ label: 'por período', tasks: self.ordenada() }], capt: t => (t.period === Infinity ? '' : `T${t.period}`) }),
+  });
+}
+function edf(s) {
+  return filaGlobal(s, {
+    rank: t => t.deadline, preempt: true, metrica: t => (t.deadline === Infinity ? 'sem prazo' : `prazo t=${t.deadline}`),
+    why: t => (t.deadline === Infinity ? 'não tem prazo: fica com o que sobrar' : `tem o prazo mais próximo (t=${t.deadline})`),
+    view: self => ({ kind: 'lanes', lanes: [{ label: 'por prazo', tasks: self.ordenada() }], capt: t => (t.deadline === Infinity ? '' : `d${t.deadline}`) }),
+  });
+}
+
+function gang(s, p) {
+  const Q = p.q, grid = [], grupos = new Map(), prontas = new Set();
+  let cur = 0, resta = Q;
+  const nc = s.cores.length;
+  const linhaVazia = () => Array(nc).fill(null);
+  const livres = l => l.filter(x => !x).length;
+  function coloca(t) {
+    const g = t.group != null ? t.group : `solo${t.id}`;
+    let info = grupos.get(g);
+    if (!info) {
+      const quer = Math.min(t.groupSize, nc);
+      let r = grid.findIndex(l => livres(l) >= quer);
+      if (r < 0) { grid.push(linhaVazia()); r = grid.length - 1; }
+      info = { r };
+      grupos.set(g, info);
+    }
+    for (let r = info.r; ; r++) {
+      if (r >= grid.length) grid.push(linhaVazia());
+      const col = grid[r].indexOf(null);
+      if (col >= 0) { grid[r][col] = t; t.cel = { r, col }; return; }
+    }
+  }
+  const vivaNaLinha = l => l.some(x => x && x.state !== 'done');
+  const podeRodar = l => l.some(x => x && (x.state === 'ready' || x.state === 'running'));
+  function gira() {
+    if (!grid.length) return;
+    for (let i = 1; i <= grid.length; i++) {
+      const r = (cur + i) % grid.length;
+      if (podeRodar(grid[r])) { cur = r; break; }
+    }
+    resta = Q;
+    s.ev('moveu', null, null, `fim da fatia: todos os núcleos trocam juntos para a linha ${cur} da matriz`);
+    for (const c of s.cores) if (c.task) s.kick(c, 'preempt', 'saiu junto com o grupo, na troca de fatia');
+  }
+  const pol = {
+    why: '',
+    metrica: t => `linha ${t.cel.r}`,
+    enqueue(t) {
+      if (!t.cel) { coloca(t); s.p.nota = `foi posta na linha ${t.cel.r}, coluna ${t.cel.col} da matriz`; }
+      prontas.add(t);
+    },
+    queued: () => [...prontas],
+    onFinish(t) { if (t.cel) grid[t.cel.r][t.cel.col] = null; },
+    tick() {
+      if (!grid.length) return;
+      if (--resta <= 0) gira();
+      else if (!podeRodar(grid[cur] || [])) gira();
+    },
+    pick(core) {
+      const l = grid[cur];
+      const t = l && l[core.id];
+      if (t && prontas.has(t)) {
+        prontas.delete(t);
+        if (s.rec) pol.why = `é quem ocupa a coluna ${core.id} da linha ${cur}, a fatia atual`;
+        return t;
+      }
+      for (const x of prontas) {
+        if (x.cel.r !== cur) {
+          prontas.delete(x);
+          if (s.rec) pol.why = `o núcleo ficaria vago nesta fatia, então pega uma tarefa da linha ${x.cel.r}`;
+          return x;
+        }
+      }
+      return null;
+    },
+    view: () => ({ kind: 'matrix', grid, cur, resta, Q, vivaNaLinha }),
+  };
+  return pol;
+}
+
+function bsd(s, p) {
+  const D = p.decay;
+  const usr = t => 50 + Math.floor(t.pcpu / 4) + 2 * t.nice;
+  const banda = t => usr(t) >> 2;
+  const filtro = () => {
+    const carga = Math.max(0.5, s.tasks.filter(t => t.state === 'ready' || t.state === 'running').length / s.cores.length);
+    return (2 * carga) / (2 * carga + 1);
+  };
+  return filaGlobal(s, {
+    rank: banda, preempt: true, q: () => p.q, metrica: t => `p_usrpri ${usr(t)}`,
+    onEnqueue(t, why) {
+      if (t.pcpu == null) t.pcpu = 0;
+      if (why === 'wake' && t.sleptFor > D) t.pcpu *= Math.pow(filtro(), t.sleptFor / D);
+    },
+    charge: t => { t.pcpu++; },
+    tick(now) {
+      if (!now || now % D) return;
+      const f = filtro();
+      for (const t of s.tasks) if (t.state === 'ready' || t.state === 'running') t.pcpu = Math.max(0, t.pcpu * f + t.nice);
+      s.ev('moveu', null, null, `recálculo: todo p_cpu foi multiplicado por ${f.toFixed(2)}, esquecendo parte do passado`);
+    },
+    why: t => `tem o melhor p_usrpri: 50 + ${Math.round(t.pcpu)}/4 + 2×${t.nice} = ${usr(t)}`,
+    view: self => {
+      const lanes = Array.from({ length: 6 }, (_, i) => ({ label: `pri ${48 + i * 4}+`, tasks: [] }));
+      for (const t of self.ordenada()) lanes[clamp(banda(t) - 12, 0, 5)].tasks.push(t);
+      return { kind: 'lanes', lanes, compact: true };
+    },
+  });
+}
+
+function filaUnica(s, p) {
+  let livre = 0;
+  // Quem acha a trava ocupada espera na fila dela; o tempo some em vermelho no Gantt.
+  const trava = core => {
+    const espera = Math.max(0, livre - s.t);
+    livre = s.t + espera + p.lock;
+    s.addOvh(core, espera + p.lock, 'lock');
+  };
+  const pol = filaGlobal(s, {
+    rank: () => 0, q: () => p.q, metrica: t => `na fila desde t=${t.readySince}`,
+    view: self => ({ kind: 'lanes', lanes: [{ label: 'fila', note: 'uma trava', tasks: self.ordenada() }], trava: livre > s.t }),
+  });
+  const pick0 = pol.pick;
+  pol.pick = core => {
+    if (!pol.queue.length) return null;
+    if (p.lock) trava(core);
+    const t = pick0(core);
+    if (s.rec) pol.why = 'pegou a trava e tirou a primeira da fila única';
+    return t;
+  };
+  pol.onSpawn = core => { if (core && p.lock) trava(core); };
+  return pol;
+}
+
+function threadPorPedido(s, p) {
+  const backlog = [];
+  let ativas = 0;
+  const pol = filaGlobal(s, {
+    rank: () => 0, q: () => p.q, metrica: t => `na fila desde t=${t.readySince}`,
+    why: () => 'o kernel alterna as threads em round robin',
+    view: self => ({ kind: 'lanes', lanes: [
+      { label: 'accept', note: `espera de thread`, tasks: backlog.slice() },
+      { label: 'threads', note: `${ativas}/${p.max}`, tasks: self.ordenada() },
+    ] }),
+  });
+  const enq = pol.enqueue;
+  pol.enqueue = (t, why, hint) => {
+    if (why === 'new' && ativas >= p.max) { backlog.push(t); s.p.nota = `espera no accept, porque as ${p.max} threads estão ocupadas`; return; }
+    if (why === 'new') { ativas++; t.tem = true; s.p.nota = `ganhou uma thread (${ativas}/${p.max})`; }
+    enq(t, why, hint);
+  };
+  pol.onFinish = t => {
+    if (!t.tem) return;
+    ativas--;
+    const n = backlog.shift();
+    if (n) { ativas++; n.tem = true; enq(n, 'new'); s.ev('moveu', null, n, 'saiu da fila do accept: uma thread vagou'); }
+  };
+  pol.queued = () => pol.queue.concat(backlog);
+  pol.vivasMem = () => ativas;
+  return pol;
+}
+
+function loteria(s, p) {
+  let ultimo = null;
+  const bilhetes = t => Math.max(1, Math.round(t.tickets * (t.comp || 1)));
+  const pol = filaGlobal(s, { rank: () => 0, q: () => p.q, metrica: t => `${bilhetes(t)} bilhetes` });
+  pol.pick = core => {
+    const q = pol.queue;
+    if (!q.length) return null;
+    const total = q.reduce((a, t) => a + bilhetes(t), 0);
+    const sorteio = Math.floor(s.r() * total);
+    let acum = 0, i = 0;
+    for (; i < q.length - 1; i++) { acum += bilhetes(q[i]); if (sorteio < acum) break; }
+    const t = q.splice(i, 1)[0];
+    ultimo = { sorteio, total, id: t.id, t: s.t };
+    if (s.rec) pol.why = `o sorteio deu ${sorteio}, de 0 a ${total - 1}, e esse bilhete é dela`;
+    t.comp = 1;
+    return t;
+  };
+  // Bilhetes de compensação: quem saiu antes de gastar a fatia recebe mais chances na próxima.
+  pol.onBlock = (t, core) => { if (core && core.sliceUsed < p.q) t.comp = p.q / Math.max(1, core.sliceUsed); };
+  pol.view = () => ({ kind: 'ticket', tasks: pol.queue.slice(), bilhetes, ultimo });
+  return pol;
+}
+
+function stride(s, p) {
+  const GRANDE = 10000;
+  const passoDe = t => GRANDE / t.tickets;
+  const piso = () => {
+    let m = Infinity;
+    for (const t of s.tasks) if ((t.state === 'ready' || t.state === 'running') && t.pass != null) m = Math.min(m, t.pass);
+    return m === Infinity ? 0 : m;
+  };
+  const pol = filaGlobal(s, {
+    rank: t => t.pass, q: () => p.q, metrica: t => `passo ${Math.round(t.pass)}`,
+    onEnqueue(t, why) {
+      if (t.pass == null) t.pass = piso();
+      else if (why === 'wake') t.pass = Math.max(t.pass, piso());
+    },
+    charge: t => { t.pass += passoDe(t) / p.q; },
+    why: t => `tem o menor passo acumulado (${Math.round(t.pass)})`,
+    view: self => ({ kind: 'ruler', rows: [{ tasks: self.ordenada(), v: t => t.pass, curr: s.cores.map(c => c.task).filter(Boolean) }], eixo: 'passada' }),
+  });
+  return pol;
+}
+
+function workStealing(s) {
+  const dq = s.cores.map(() => []);
+  let prox = 0;
+  const haTrabalho = () => dq.some(d => d.length) || s.cores.some(c => c.task);
+  const pol = {
+    why: '', switchCost: 0, memKB: 16,
+    enqueue(t, why, hint) {
+      const c = hint ? hint.id : (why === 'new' ? prox++ % dq.length : (t.lastCore != null ? t.lastCore : 0));
+      dq[c].push(t);
+      s.p.nota = `entrou na base do deque ${c}`;
+    },
+    queued: () => dq.flat(),
+    candidatas: core => dq[core.id],
+    metrica: () => 'no deque',
+    pick(core) {
+      const d = dq[core.id];
+      if (d.length) { if (s.rec) pol.why = 'é a mais recente do próprio deque, sem disputar com ninguém'; return d.pop(); }
+      if (dq.length < 2 || !haTrabalho()) return null;
+      let v = Math.floor(s.r() * (dq.length - 1));
+      if (v >= core.id) v++;
+      s.addOvh(core, 1, 'steal');
+      if (!dq[v].length) return null;
+      s.st.steals++;
+      if (s.rec) pol.why = `o deque local estava vazio; sorteou o núcleo ${v} e roubou a mais antiga dele`;
+      return dq[v].shift();
+    },
+    view: () => ({ kind: 'lanes', lanes: dq.map((d, i) => ({ label: `deque ${i}`, tasks: d.slice().reverse(), coreId: i })), perCore: true }),
+  };
+  return pol;
+}
+
+function cfsBase(s, p, o) {
+  o = o || {};
+  const L = p.q, minG = Math.max(1, L / 8), gran = Math.max(1, L / 6);
+  const rq = s.cores.map(() => []), minV = s.cores.map(() => 0);
+  const esquerda = c => { let b = null; for (const t of rq[c]) if (!b || t.vr < b.vr) b = t; return b; };
+  const somaPeso = c => rq[c].reduce((a, t) => a + t.weight, s.cores[c].task ? s.cores[c].task.weight : 0);
+  const fatia = (c, t) => Math.max(minG, L * t.weight / Math.max(t.weight, somaPeso(c)));
+  const atualizaMin = c => {
+    const cur = s.cores[c].task, e = esquerda(c);
+    let v = cur && cur.vr != null ? cur.vr : Infinity;
+    if (e) v = Math.min(v, e.vr);
+    if (v !== Infinity) minV[c] = Math.max(minV[c], v);
+  };
+  const muda = (t, de, para) => { t.vr += minV[para] - minV[de]; };
+  const puxa = (a, b) => {
+    const lista = rq[a];
+    let i = 0;
+    for (let k = 1; k < lista.length; k++) if (lista[k].vr > lista[i].vr) i = k;
+    const t = lista.splice(i, 1)[0];
+    muda(t, a, b);
+    t.lastCore = b;
+    rq[b].push(t);
+    return t;
+  };
+  const pol = {
+    why: '',
+    rq,
+    enqueue(t, why, hint) {
+      const c = o.place ? o.place(t, why, hint, rq) : escolheNucleo(s, rq, t, why, hint);
+      if (why === 'new' || why === 'spawn') {
+        t.vr = minV[c] + fatia(c, t) * 1024 / t.weight;
+        if (!o.place) s.p.nota = `entrou na árvore da CPU ${c} com vruntime ${t.vr.toFixed(1)}`;
+      } else if (why === 'wake') {
+        if (t.lastCore != null && t.lastCore !== c) t.vr += minV[c] - minV[t.lastCore];
+        t.vr = Math.max(t.vr, minV[c] - L / 2);
+        t.fresh = true;
+        if (!o.place) s.p.nota = `entrou na árvore da CPU ${c} com vruntime ${t.vr.toFixed(1)}`;
+      }
+      rq[c].push(t);
+    },
+    queued: () => rq.flat(),
+    candidatas: core => rq[core.id],
+    metrica: t => `vruntime ${t.vr.toFixed(1)}`,
+    pick(core) {
+      const c = core.id;
+      if (!rq[c].length) {
+        let a = -1;
+        for (let i = 0; i < rq.length; i++) if (rq[i].length && s.cores[i].task && (a < 0 || rq[i].length > rq[a].length)) a = i;
+        if (a < 0) return null;
+        if (o.podePuxar && !o.podePuxar(core, s.cores[a])) return null;
+        puxa(a, c);
+        s.st.migrations++;
+        s.ev('moveu', core, null, `a CPU ${c} ficou sem nada e puxou uma tarefa da CPU ${a}`);
+      }
+      const t = esquerda(c);
+      rq[c].splice(rq[c].indexOf(t), 1);
+      atualizaMin(c);
+      if (s.rec) pol.why = `é a mais à esquerda da árvore: menor vruntime (${t.vr.toFixed(1)})`;
+      t.fresh = false;
+      return t;
+    },
+    charge(t, core) {
+      t.vr += (1024 / t.weight);
+      atualizaMin(core.id);
+      if (o.charge) o.charge(t, core);
+    },
+    expired(core, t) {
+      const e = esquerda(core.id);
+      return !!e && e.vr < t.vr && core.sliceUsed >= fatia(core.id, t);
+    },
+    preempt() {
+      for (const core of s.cores) {
+        const cur = core.task;
+        if (!cur) continue;
+        const e = esquerda(core.id);
+        if (e && e.fresh && e.vr + gran < cur.vr) s.kick(core, 'preempt', `${e.name} acordou com vruntime bem menor (${e.vr.toFixed(1)} contra ${cur.vr.toFixed(1)})`);
+        if (e) e.fresh = false;
+      }
+    },
+    tick() {
+      equilibra(s, rq, puxa, 8);
+      if (o.tick) o.tick();
+    },
+    onBlock: o.onBlock,
+    view: () => ({ kind: 'tree', rq, minV, L }),
+  };
+  return pol;
+}
+
+function eas(s, p) {
+  const util = t => (t.util != null ? t.util : 0.5);
+  const capacidade = c => c.speed;
+  const cargaDe = (c, rq) => rq[c.id].reduce((a, t) => a + util(t), c.task ? util(c.task) : 0);
+  const place = (t, why, hint, rq) => {
+    if (why === 'preempt' || why === 'expire') return hint ? hint.id : t.lastCore;
+    if (why === 'wake' && t.sleptFor) t.util = util(t) * Math.pow(0.978, t.sleptFor);
+    let melhor = null, menor = Infinity;
+    for (const c of s.cores) {
+      const depois = cargaDe(c, rq) + util(t);
+      if (depois > capacidade(c) * 0.8) continue;
+      const custo = util(t) / c.speed * c.power;
+      if (custo < menor - 1e-9) { menor = custo; melhor = c; }
+    }
+    if (melhor) {
+      s.p.nota = `foi para ${melhor.big ? 'o núcleo grande' : 'o LITTLE'} ${melhor.id}: uso de ${Math.round(util(t) * 100)}% cabe ali com o menor gasto de energia`;
+      return melhor.id;
+    }
+    let folga = -Infinity;
+    for (const c of s.cores) {
+      const f = capacidade(c) - cargaDe(c, rq);
+      if (f > folga) { folga = f; melhor = c; }
+    }
+    s.p.nota = `não coube com folga em nenhum núcleo: foi para o ${melhor.id}, o menos ocupado`;
+    return melhor.id;
+  };
+  const pol = cfsBase(s, p, {
+    place,
+    charge: (t, core) => { t.util = util(t) + (core.speed - util(t)) / 32; },
+    podePuxar: (dst, src) => dst.speed >= src.speed || rqCheio(src),
+    tick() {
+      // Tarefa "misfit": pesada demais para o LITTLE em que está sobe assim que um grande vagar.
+      if (s.t % 8) return;
+      for (const c of s.cores) {
+        const t = c.task;
+        if (!t || c.big || util(t) <= 0.8 * capacidade(c)) continue;
+        const alvo = s.cores.find(b => b.big && !b.task && !b.ovh.length && !pol.rq[b.id].length);
+        if (!alvo) continue;
+        c.task = null; c.ovh.length = 0;
+        s.setState(t, 'ready');
+        t.readySince = s.t;
+        t.vr = t.vr || 0;
+        pol.rq[alvo.id].push(t);
+        s.ev('moveu', alvo, t, `pesada demais para o LITTLE ${c.id} (uso ${Math.round(util(t) * 100)}%): subiu para o núcleo grande ${alvo.id}`);
+      }
+    },
+  });
+  const rqCheio = src => pol.rq[src.id].length > 1;
+  const pick0 = pol.pick;
+  pol.pick = core => {
+    const t = pick0(core);
+    if (t && s.rec) pol.why = `é a de menor vruntime na fila deste núcleo ${core.big ? 'grande' : 'LITTLE'} (uso estimado ${Math.round(util(t) * 100)}%)`;
+    return t;
+  };
+  pol.view = () => ({
+    kind: 'lanes', perCore: true,
+    lanes: pol.rq.map((l, i) => ({
+      label: s.cores[i].big ? `grande ${i}` : `LITTLE ${i}`, coreId: i,
+      tasks: l.slice().sort((a, b) => a.vr - b.vr),
+    })),
+    capt: t => `${Math.round(util(t) * 100)}%`,
+  });
+  return pol;
+}
+
+function eevdf(s, p) {
+  const base = p.q;
+  const rq = s.cores.map(() => []);
+  const vClock = s.cores.map(() => 0);
+  const V = c => {
+    let sw = 0, sv = 0;
+    for (const t of rq[c]) { sw += t.weight; sv += t.weight * t.vr; }
+    const cur = s.cores[c].task;
+    if (cur && cur.vr != null) { sw += cur.weight; sv += cur.weight * cur.vr; }
+    if (sw) vClock[c] = sv / sw;
+    return vClock[c];
+  };
+  const fatia = t => t.slice || base;
+  const vfatia = t => fatia(t) * 1024 / t.weight;
+  const melhor = c => {
+    const v = V(c);
+    let b = null, menor = null;
+    for (const t of rq[c]) {
+      if (!menor || t.vr < menor.vr) menor = t;
+      if (t.vr <= v + EPS && (!b || t.dl < b.dl)) b = t;
+    }
+    return b || menor;
+  };
+  const puxa = (a, b) => {
+    const lista = rq[a];
+    let i = 0;
+    for (let k = 1; k < lista.length; k++) if (lista[k].dl > lista[i].dl) i = k;
+    const t = lista[i], lag = V(a) - t.vr;
+    lista.splice(i, 1);
+    t.vr = V(b) - lag;
+    t.dl = t.vr + vfatia(t);
+    t.lastCore = b;
+    rq[b].push(t);
+    return t;
+  };
+  const pol = {
+    why: '',
+    enqueue(t, why, hint) {
+      const c = escolheNucleo(s, rq, t, why, hint);
+      if (why === 'new' || why === 'spawn') {
+        t.vr = V(c);
+        t.dl = t.vr + vfatia(t) / 2;
+        s.p.nota = `entrou na fila da CPU ${c} em V (${t.vr.toFixed(1)}), com lag zero`;
+      } else if (why === 'wake') {
+        t.vr = V(c) - (t.vlag || 0);
+        t.dl = t.vr + vfatia(t);
+        t.fresh = true;
+        s.p.nota = `voltou à fila da CPU ${c} mantendo o lag de ${(t.vlag || 0).toFixed(1)}`;
+      }
+      rq[c].push(t);
+    },
+    queued: () => rq.flat(),
+    candidatas: core => rq[core.id],
+    metrica: t => `${t.vr <= V(t.lastCore != null ? t.lastCore : 0) + EPS ? 'elegível' : 'não elegível'}, prazo ${t.dl.toFixed(1)}`,
+    onBlock(t, core) {
+      if (!core) return;
+      const lim = 2 * vfatia(t);
+      t.vlag = clamp(V(core.id) - t.vr, -lim, lim);
+    },
+    pick(core) {
+      const c = core.id;
+      if (!rq[c].length) {
+        let a = -1;
+        for (let i = 0; i < rq.length; i++) if (rq[i].length && s.cores[i].task && (a < 0 || rq[i].length > rq[a].length)) a = i;
+        if (a < 0) return null;
+        puxa(a, c);
+        s.st.migrations++;
+      }
+      const t = melhor(c);
+      if (s.rec) pol.why = `entre as elegíveis (v ≤ V = ${V(c).toFixed(1)}), tem o prazo virtual mais próximo (${t.dl.toFixed(1)})`;
+      rq[c].splice(rq[c].indexOf(t), 1);
+      t.fresh = false;
+      return t;
+    },
+    charge(t) { t.vr += 1024 / t.weight; },
+    expired(core, t) {
+      if (core.sliceUsed < fatia(t)) return false;
+      t.dl = t.vr + vfatia(t);
+      core.sliceUsed = 0;
+      const b = melhor(core.id);
+      return !!b && b.vr <= V(core.id) + EPS && b.dl < t.dl;
+    },
+    preempt() {
+      for (const core of s.cores) {
+        const cur = core.task;
+        if (!cur) continue;
+        const v = V(core.id);
+        for (const t of rq[core.id]) {
+          if (t.fresh && t.vr <= v + EPS && t.dl < cur.dl) { s.kick(core, 'preempt', `${t.name} acordou elegível e com prazo mais próximo (${t.dl.toFixed(1)} contra ${cur.dl.toFixed(1)})`); break; }
+        }
+        for (const t of rq[core.id]) t.fresh = false;
+      }
+    },
+    tick() { equilibra(s, rq, puxa, 8); },
+    view: () => ({
+      kind: 'ruler', eixo: 'tempo virtual',
+      rows: rq.map((l, c) => ({ tasks: l.slice(), v: t => t.vr, dl: t => t.dl, V: V(c), curr: s.cores[c].task ? [s.cores[c].task] : [], label: rq.length > 1 ? `${c}` : '' })),
+    }),
+  };
+  return pol;
+}
+
+function o1(s, p) {
+  const MAX = 100;
+  const mk = () => Array.from({ length: 40 }, () => []);
+  const rqs = s.cores.map(() => ({ a: mk(), e: mk(), desde: null }));
+  const bonus = t => Math.round((t.sono / MAX - 0.5) * 10);
+  const dyn = t => clamp(20 + t.nice - bonus(t), 0, 39);
+  const fatia = t => {
+    const sp = 120 + t.nice;
+    return Math.max(1, Math.round((140 - sp) * (sp < 120 ? 20 : 5) / 100 * p.q));
+  };
+  const interativa = t => bonus(t) >= t.nice / 4 + 2;
+  const conta = r => { let n = 0; for (const l of r.a) n += l.length; for (const l of r.e) n += l.length; return n; };
+  const achaPrimeira = arr => { for (let i = 0; i < 40; i++) if (arr[i].length) return i; return -1; };
+  const remove = r => {
+    for (const arr of [r.e, r.a]) {
+      for (let i = 39; i >= 0; i--) if (arr[i].length) return arr[i].pop();
+    }
+    return null;
+  };
+  const insere = (r, t, ondeExp) => (ondeExp ? r.e : r.a)[dyn(t)].push(t);
+  const proxies = rqs.map(r => ({ get length() { return conta(r); } }));
+  const puxa = (a, b) => {
+    const t = remove(rqs[a]);
+    if (t) { t.lastCore = b; insere(rqs[b], t, false); }
+  };
+  const pol = {
+    why: '',
+    enqueue(t, why, hint) {
+      if (t.sono == null) { t.sono = MAX / 2; t.tsl = fatia(t); }
+      const c = escolheNucleo(s, proxies, t, why, hint);
+      const r = rqs[c];
+      if (why === 'wake') {
+        t.sono = Math.min(MAX, t.sono + (t.sleptFor || 0));
+        t.fresh = true;
+      }
+      let exp = false;
+      if (why === 'expire') {
+        t.tsl = fatia(t);
+        const fome = r.desde != null && s.t - r.desde >= 40 * (conta(r) + 1);
+        if (!interativa(t) || fome) {
+          exp = true;
+          if (r.desde == null) r.desde = s.t;
+        }
+      }
+      insere(r, t, exp);
+      if (why === 'expire') s.p.nota = exp ? 'foi para o vetor de expiradas, com fatia nova' : 'é interativa e continua no vetor de ativas';
+      else if (why !== 'preempt') s.p.nota = `entrou no vetor de ativas da CPU ${c}, prioridade ${100 + dyn(t)}`;
+    },
+    queued: () => rqs.flatMap(r => [...r.a.flat(), ...r.e.flat()]),
+    candidatas: core => [...rqs[core.id].a.flat(), ...rqs[core.id].e.flat()],
+    metrica: t => `prioridade ${100 + dyn(t)}`,
+    pick(core) {
+      let r = rqs[core.id];
+      if (!conta(r)) {
+        let a = -1, m = 0;
+        for (let i = 0; i < rqs.length; i++) if (conta(rqs[i]) > m && s.cores[i].task) { m = conta(rqs[i]); a = i; }
+        if (a < 0) return null;
+        puxa(a, core.id);
+        s.st.migrations++;
+      }
+      let i = achaPrimeira(r.a), trocou = false;
+      if (i < 0) {
+        const x = r.a; r.a = r.e; r.e = x;
+        r.desde = null;
+        i = achaPrimeira(r.a);
+        trocou = true;
+      }
+      const t = r.a[i].shift();
+      if (s.rec) pol.why = `${trocou ? 'as ativas acabaram e os vetores trocaram de nome; ' : ''}o primeiro bit aceso do mapa indica a prioridade ${100 + i}`;
+      return t;
+    },
+    charge(t) { t.sono = Math.max(0, t.sono - 1); t.tsl--; },
+    expired: (core, t) => t.tsl <= 0,
+    fatiaTxt: t => `esgotou a fatia de ${fatia(t)} ms`,
+    preempt() {
+      for (const core of s.cores) {
+        const cur = core.task;
+        if (!cur || cur.sono == null) continue;
+        const r = rqs[core.id];
+        let dispara = false;
+        for (let i = 0; i < 40; i++) for (const t of r.a[i]) if (t.fresh) { if (i < dyn(cur)) dispara = true; t.fresh = false; }
+        if (dispara) s.kick(core, 'preempt', 'acordou uma tarefa de prioridade melhor');
+      }
+    },
+    tick() { equilibra(s, proxies, puxa, 16); },
+    view: () => ({ kind: 'o1', rqs }),
+  };
+  return pol;
+}
+
+function eventLoop(s) {
+  return filaGlobal(s, {
+    rank: () => 0, switchCost: 0, memKB: 8,
+    filter: core => core.id === 0,
+    why: () => 'é o próximo callback da fila, e roda até devolver o controle',
+    metrica: t => `na fila desde t=${t.readySince}`,
+    view: self => ({ kind: 'lanes', lanes: [{ label: 'callbacks', note: 'uma só thread', tasks: self.ordenada() }], soNucleo0: true, blockedLabel: 'I/O em voo (epoll)' }),
+  });
+}
+
+function goSched(s, p) {
+  const P = s.cores.map(() => ({ q: [], next: null, tick: 0 }));
+  const global = [];
+  const pol = {
+    why: '', switchCost: 0, memKB: 8,
+    enqueue(t, why, hint) {
+      if (why === 'new' || why === 'expire' || why === 'preempt') { global.push(t); s.p.nota = 'foi para a fila global'; return; }
+      if (why === 'spawn' && hint) {
+        const x = P[hint.id];
+        if (x.next) x.q.push(x.next);
+        x.next = t;
+        s.p.nota = `entrou no runnext do P${hint.id}`;
+        return;
+      }
+      const c = hint ? hint.id : (t.lastCore != null ? t.lastCore : 0);
+      P[c].q.push(t);
+      s.p.nota = `foi para a fila local do P${c}`;
+    },
+    candidatas: core => { const x = P[core.id]; return (x.next ? [x.next] : []).concat(x.q, global); },
+    metrica: t => (global.includes(t) ? 'fila global' : P.some(x => x.next === t) ? 'runnext' : 'fila local'),
+    queued: () => global.concat(P.flatMap(x => (x.next ? [x.next, ...x.q] : x.q))),
+    expired: (core) => core.sliceUsed >= p.q,
+    pick(core) {
+      const x = P[core.id];
+      x.tick++;
+      // A cada 61 escalonamentos o P olha a fila global primeiro, senão ela passaria fome (runtime/proc.go).
+      if (x.tick % 61 === 0 && global.length) { if (s.rec) pol.why = 'a cada 61 escalonamentos, olha primeiro a fila global, por justiça'; return global.shift(); }
+      if (x.next) { const t = x.next; x.next = null; if (s.rec) pol.why = 'estava no runnext, que tem preferência sobre a fila local'; return t; }
+      if (x.q.length) { if (s.rec) pol.why = 'é a primeira da fila local do P'; return x.q.shift(); }
+      if (global.length) {
+        const n = Math.min(global.length, Math.floor(global.length / P.length) + 1);
+        const lote = global.splice(0, n);
+        const t = lote.shift();
+        x.q.push(...lote);
+        if (s.rec) pol.why = `a fila local acabou: trouxe ${n} da fila global`;
+        return t;
+      }
+      const vitimas = P.filter(v => v !== x && v.q.length);
+      if (!vitimas.length) return null;
+      const v = vitimas[Math.floor(s.r() * vitimas.length)];
+      const metade = Math.ceil(v.q.length / 2);
+      const lote = v.q.splice(0, metade);
+      const t = lote.shift();
+      x.q.push(...lote);
+      s.addOvh(core, 1, 'steal');
+      s.st.steals++;
+      if (s.rec) pol.why = `sem trabalho local nem global: roubou ${metade} de outro P`;
+      return t;
+    },
+    view: () => ({
+      kind: 'lanes', perCore: true, blockedLabel: 'netpoller',
+      lanes: [{ label: 'global', tasks: global.slice() }].concat(P.map((x, i) => ({
+        label: `P${i}`, coreId: i, tasks: x.next ? [x.next, ...x.q] : x.q.slice(), slot: !!x.next,
+      }))),
+    }),
+  };
+  return pol;
+}
+
+const SCX_EXEMPLOS = {
+  fifo: 'return t.chegada;',
+  curta: 'return t.restante;',
+  justo: 'return t.cpu * 1024 / t.peso;',
+  interativa: '// quem faz mais I/O e usa menos CPU vem primeiro\nreturn t.cpu / (1 + t.io);',
+};
+
+function compilaScx(fonte) {
+  return new Function('t', 'agora', `"use strict";\n${fonte}\n`);
+}
+
+function scx(s, p) {
+  let fn, erro = null;
+  try { fn = compilaScx(p.fonte || SCX_EXEMPLOS.justo); } catch (e) { erro = e; fn = null; }
+  const nota = t => {
+    if (!fn) return t.seq;
+    try {
+      const v = fn({ chegada: t.arrival, restante: t.rem, cpu: t.cpuUsed, esperou: t.wait, peso: t.weight, nice: t.nice, io: t.iops, prazo: t.deadline, tipo: t.kind }, s.t);
+      if (typeof v === 'number' && !Number.isNaN(v)) return v;
+      erro = new Error('a função precisa devolver um número');
+    } catch (e) { erro = e; }
+    return t.seq;
+  };
+  const pol = filaGlobal(s, {
+    rank: nota, q: () => p.q, preempt: !!p.preempt, metrica: t => `nota ${nota(t).toFixed(1)}`,
+    why: t => `recebeu a menor nota da sua função (${nota(t).toFixed(1)})`,
+    view: self => ({ kind: 'lanes', lanes: [{ label: 'sua fila', tasks: self.ordenada() }], capt: t => nota(t).toFixed(0) }),
+  });
+  pol.erro = () => erro;
+  return pol;
+}
+
+/* ---------- Cargas de trabalho ---------- */
+
+const cpu = n => ({ t: 'cpu', n });
+const io = n => ({ t: 'io', n });
+const repete = (n, ...ops) => Array.from({ length: n }, () => ops).flat();
+const letra = i => String.fromCharCode(65 + i);
+
+const KPIS = {
+  retorno: { nome: 'Retorno médio', un: 'ms', dica: 'da chegada até terminar', dir: -1 },
+  resposta: { nome: 'Resposta média', un: 'ms', dica: 'de ficar pronta até ganhar CPU', dir: -1 },
+  p95: { nome: 'Resposta p95', un: 'ms', dica: 'os 5% mais azarados esperam isso ou mais', dir: -1 },
+  duracao: { nome: 'Duração total', un: 'ms', dica: 'até a última tarefa acabar', dir: -1 },
+  trocas: { nome: 'Trocas de contexto', un: '', dica: 'quantas vezes o núcleo mudou de tarefa', dir: -1 },
+  sobrecarga: { nome: 'Sobrecarga', un: '%', dica: 'tempo de núcleo em troca, trava, roubo ou espera ocupada', dir: -1 },
+  utilizacao: { nome: 'Trabalho útil', un: '%', dica: 'parcela do tempo dos núcleos fazendo trabalho', dir: 1 },
+  justica: { nome: 'Justiça', un: '', dica: 'índice de Jain sobre a parte de CPU dividida pelo peso; 1 é perfeito', dir: 1, dec: 2 },
+  perdidos: { nome: 'Prazos perdidos', un: '', dica: 'jobs que passaram do prazo', dir: -1 },
+  migracoes: { nome: 'Migrações', un: '', dica: 'mudanças de núcleo, que esfriam o cache', dir: -1 },
+  roubos: { nome: 'Roubos', un: '', dica: 'tarefas tiradas da fila de outro núcleo', dir: -1 },
+  energia: { nome: 'Energia', un: 'J', dica: 'modelo simplificado: grande 3 W, LITTLE 0,75 W, ocioso 0,1 W, com 1 ms por tick', dir: -1, esc: 1e-3, dec: 2 },
+  memoria: { nome: 'Memória de pilhas', un: 'MB', dica: 'pico: 1 MB por thread, 8 KB por goroutine ou callback', dir: -1, esc: 1 / 1024, dec: 1 },
+};
+
+const CARGAS = {
+  comboio: {
+    nome: 'Comboio', desc: 'Um job enorme chega à frente de cinco curtinhos, e mais um curto aparece no meio da execução.',
+    cores: 1, machine: 'smp', cs: 1, cap: 2000,
+    kpis: ['retorno', 'resposta', 'p95', 'trocas', 'sobrecarga'],
+    gen() {
+      return [
+        { name: 'A', cor: 0, arrival: 0, ops: [cpu(3)], kind: 'lote' },
+        { name: 'B', cor: 1, arrival: 1, ops: [cpu(90)], kind: 'lote' },
+        { name: 'C', cor: 2, arrival: 2, ops: [cpu(8)], kind: 'lote' },
+        { name: 'D', cor: 3, arrival: 2, ops: [cpu(12)], kind: 'lote' },
+        { name: 'E', cor: 4, arrival: 3, ops: [cpu(6)], kind: 'lote' },
+        { name: 'F', cor: 5, arrival: 3, ops: [cpu(10)], kind: 'lote' },
+        { name: 'G', cor: 6, arrival: 80, ops: [cpu(5)], kind: 'lote' },
+      ];
+    },
+  },
+  misto: {
+    nome: 'Editor e compilação', desc: 'Duas compilações pesadas dividem a máquina com editor, terminal e tocador de áudio, que usam a CPU aos goles.',
+    cores: 2, machine: 'smp', cs: 1, cap: 4000,
+    kpis: ['resposta', 'p95', 'retorno', 'trocas', 'justica'],
+    gen() {
+      return [
+        { name: 'C', cor: 0, arrival: 0, ops: [cpu(180)], kind: 'lote', prio: 5 },
+        { name: 'D', cor: 1, arrival: 15, ops: [cpu(140)], kind: 'lote', prio: 5 },
+        { name: 'E', cor: 2, arrival: 2, ops: repete(10, cpu(2), io(18)), kind: 'inter', prio: 1, slice: 3 },
+        { name: 'T', cor: 3, arrival: 20, ops: repete(6, cpu(3), io(30)), kind: 'inter', prio: 2, slice: 3 },
+        { name: 'S', cor: 4, arrival: 5, ops: repete(12, cpu(4), io(12)), kind: 'inter', prio: 0, slice: 4 },
+        { name: 'G', cor: 5, arrival: 80, ops: [cpu(60)], kind: 'lote', prio: 7 },
+      ];
+    },
+  },
+  pesos: {
+    nome: 'Pesos diferentes', desc: 'Quatro tarefas que só calculam, com nice −5, 0, 0 e +5. A de nice −5 merece cerca de 3× a parte de nice 0; a de +5, cerca de 1/3.',
+    cores: 1, machine: 'smp', cs: 0, cap: 4000,
+    kpis: ['justica', 'retorno', 'trocas', 'sobrecarga'],
+    gen() {
+      return [-5, 0, 0, 5].map((nice, i) => ({ name: letra(i), cor: i, arrival: 0, ops: [cpu(120)], nice, kind: 'lote' }));
+    },
+  },
+  rt: {
+    nome: 'Tempo real', desc: 'Duas tarefas periódicas que ocupam 97% da CPU: 8 ms a cada 20 e 16 ms a cada 28.',
+    cores: 1, machine: 'smp', cs: 0, cap: 340,
+    kpis: ['perdidos', 'resposta', 'trocas', 'utilizacao'],
+    gen() { return periodicas([[8, 20], [16, 28]], 280); },
+  },
+  sobrecarga: {
+    nome: 'Sobrecarga', desc: 'As mesmas tarefas e mais uma de 10 ms a cada 40: a demanda chega a 122% da CPU.',
+    cores: 1, machine: 'smp', cs: 0, cap: 700,
+    kpis: ['perdidos', 'resposta', 'trocas', 'utilizacao'],
+    gen() { return periodicas([[8, 20], [16, 28], [10, 40]], 280); },
+  },
+  barreira: {
+    nome: 'Jobs com barreira', desc: 'Dois jobs de 4 threads em 4 núcleos. A cada rodada, cada thread calcula e espera as irmãs girando na CPU.',
+    cores: 4, machine: 'smp', cs: 1, cap: 3000, ritmo: 0.5,
+    kpis: ['duracao', 'sobrecarga', 'utilizacao', 'trocas'],
+    gen(r) {
+      const out = [];
+      // A chegada intercala os dois jobs de propósito: sem coordenação, cada núcleo pega metade de cada um.
+      for (let i = 0; i < 4; i++) {
+        ['A', 'B'].forEach((g, j) => {
+          let ops = [];
+          for (let k = 0; k < 6; k++) ops = ops.concat(cpu(6 + Math.floor(r() * 5)), { t: 'barrier', id: `${g}${k}`, size: 4 });
+          ops.push(cpu(1));
+          out.push({ name: `${g}${i}`, cor: j, arrival: 0, ops, group: g, groupSize: 4, kind: 'lote' });
+        });
+      }
+      return out;
+    },
+  },
+  forkjoin: {
+    nome: 'Fork-join', desc: 'Uma ordenação paralela: cada tarefa se divide em duas, cinco níveis abaixo, e espera as filhas.',
+    cores: 8, machine: 'smp', cs: 1, cap: 3000, ritmo: 0.35,
+    kpis: ['duracao', 'sobrecarga', 'utilizacao', 'roubos'],
+    gen(r) {
+      let n = 0;
+      const no = (d, trilha) => {
+        const cor = parseInt((trilha + '000').slice(0, 3), 2);
+        const name = `t${n++}`;
+        if (d === 0) return { name, cor, ops: [cpu(8 + Math.floor(r() * 8))], kind: 'folha' };
+        const kids = [no(d - 1, trilha + '0'), no(d - 1, trilha + '1')];
+        return { name, cor, ops: [cpu(2), { t: 'spawn', kids }, { t: 'join' }, cpu(2)], kind: 'no' };
+      };
+      const raiz = no(5, '');
+      raiz.arrival = 0;
+      return [raiz];
+    },
+  },
+  servidor: {
+    nome: 'Servidor web', desc: '60 pedidos que passam quase todo o tempo esperando o banco, e dois relatórios que calculam 70 ms de uma vez só.',
+    cores: 2, machine: 'smp', cs: 1, cap: 6000,
+    kpis: ['resposta', 'p95', 'retorno', 'memoria', 'trocas'],
+    gen(r) {
+      const out = [];
+      let t = 0;
+      for (let i = 0; i < 60; i++) {
+        t += Math.floor(-Math.log(1 - r()) * 5);
+        const pesado = i === 18 || i === 40;
+        out.push({
+          name: pesado ? 'R!' : `${i + 1}`, cor: pesado ? 1 : 0, arrival: t, kind: pesado ? 'lote' : 'inter',
+          ops: pesado ? [cpu(70)] : [cpu(1 + Math.floor(r() * 2)), io(20 + Math.floor(r() * 20)), cpu(1 + Math.floor(r() * 2)), io(10 + Math.floor(r() * 10)), cpu(1)],
+        });
+      }
+      return out;
+    },
+  },
+  celular: {
+    nome: 'Celular', desc: 'A tela pede um quadro a cada 16 ms, enquanto sincronização e indexação rodam ao fundo, em dois núcleos grandes e dois LITTLE.',
+    cores: 4, machine: 'hetero', cs: 1, cap: 1500,
+    kpis: ['energia', 'perdidos', 'resposta', 'migracoes'],
+    gen() {
+      const out = [];
+      for (let i = 0; i < 22; i++) out.push({ name: 'Q', cor: 0, arrival: i * 16, deadline: (i + 1) * 16, period: 16, ops: [cpu(9)], kind: 'ui', prio: 0 });
+      ['S', 'M', 'N', 'P'].forEach((name, i) => out.push({ name, cor: i + 1, arrival: 3 + i * 5, ops: repete(9, cpu(4), io(30)), kind: 'inter', prio: 4 }));
+      out.push({ name: 'I', cor: 5, arrival: 40, ops: [cpu(70)], nice: 5, kind: 'lote', prio: 7 });
+      return out;
+    },
+  },
+  sorteio: {
+    nome: 'Sorteada', desc: 'Oito tarefas com rajadas, esperas e prioridades sorteadas. O botão “sortear” troca a carga.',
+    cores: 2, machine: 'smp', cs: 1, cap: 5000,
+    kpis: ['retorno', 'resposta', 'p95', 'justica', 'trocas'],
+    gen(r) {
+      return Array.from({ length: 8 }, (_, i) => {
+        const inter = r() < 0.5;
+        const ops = inter ? repete(3 + Math.floor(r() * 6), cpu(1 + Math.floor(r() * 5)), io(8 + Math.floor(r() * 30))) : [cpu(30 + Math.floor(r() * 100))];
+        return { name: letra(i), cor: i, arrival: Math.floor(r() * 80), ops, kind: inter ? 'inter' : 'lote', nice: inter ? 0 : Math.floor(r() * 6), prio: inter ? 1 + Math.floor(r() * 2) : 4 + Math.floor(r() * 3) };
+      });
+    },
+  },
+};
+
+function periodicas(lista, ate) {
+  const out = [];
+  lista.forEach(([c, T], i) => {
+    for (let k = 0; k * T < ate; k++) {
+      out.push({ name: `T${i + 1}`, cor: i, arrival: k * T, deadline: (k + 1) * T, period: T, ops: [cpu(c)], kind: 'rt' });
+    }
+  });
+  return out;
+}
+
+/* ---------- Os algoritmos, em ordem cronológica ---------- */
+
+const pQ = (nome, def, min, max) => ({ id: 'q', nome, tipo: 'range', def, min, max, un: 'ms' });
+
+const ALGOS = [
+  {
+    id: 'fcfs', ano: '1956', decada: 'Anos 50', nome: 'FCFS', titulo: 'Primeiro a chegar, primeiro a ser servido', make: fcfs, carga: 'comboio', params: [],
+    tente: ['Olhe o Gantt: C, D, E e F chegam logo depois de B e ficam parados até ele terminar, perto de t = 95.', 'Compare o retorno médio com o do SJF, usando a mesma carga.'],
+    code: 'escolhe():\n  return fila.primeira()',
+  },
+  {
+    id: 'sjf', ano: '1956', decada: 'Anos 50', nome: 'SJF', titulo: 'O mais curto primeiro', make: sjf, carga: 'comboio', params: [],
+    tente: ['Quando A termina, todos já chegaram: o SJF passa os curtos na frente e deixa B por último.', 'G chega em t = 80 e espera B terminar, porque o SJF não interrompe. Compare com o SRTF.'],
+    code: 'escolhe():\n  return min(fila, chave = rajada_prevista)',
+  },
+  {
+    id: 'rr', ano: 'anos 60', decada: 'Anos 60', nome: 'Round Robin', titulo: 'Cada um com sua fatia, em roda', make: rr, carga: 'misto',
+    params: [pQ('Quantum', 10, 1, 60)],
+    tente: ['Ponha o quantum em 1 e a troca de contexto em 3: veja a sobrecarga tomar o Gantt.', 'Depois ponha o quantum em 60 e compare a resposta do editor.'],
+    code: 'escolhe():\n  return fila.primeira()\n\nfim_do_quantum(t):\n  fila.no_fim(t)',
+  },
+  {
+    id: 'prio', ano: 'anos 60', decada: 'Anos 60', nome: 'Prioridades', titulo: 'Os importantes passam na frente', make: prioridades, carga: 'misto',
+    params: [
+      { id: 'aging', nome: 'Envelhecimento', tipo: 'bool', def: false },
+      { id: 'agingRate', nome: 'Sobe 1 nível a cada', tipo: 'range', def: 12, min: 3, max: 60, un: 'ms' },
+    ],
+    tente: ['Sem envelhecimento, G (prioridade 7) só anda quando sobra núcleo. Ligue a opção e veja G subir de fila.'],
+    code: 'escolhe():\n  return min(fila, chave = t.prio - t.espera / taxa)',
+  },
+  {
+    id: 'mlfq', ano: '1962', decada: 'Anos 60', nome: 'MLFQ', titulo: 'Aprende com o comportamento', make: mlfq, carga: 'misto',
+    params: [
+      pQ('Fatia da fila 0', 4, 1, 20),
+      { id: 'boost', nome: 'Reforço a cada', tipo: 'range', def: 150, min: 0, max: 400, un: 'ms', zero: 'desligado' },
+    ],
+    tente: ['Veja C e D afundarem para a fila 3 nos primeiros instantes, enquanto E, T e S ficam no topo.', 'Desligue o reforço pondo o valor em 0 e olhe a espera de quem está no fundo.'],
+    code: 'ao_gastar(t):\n  t.gasto += 1\n  se t.gasto >= fatia(t.fila):\n    t.fila += 1; t.gasto = 0\n\nescolhe():\n  return filas.primeira_nao_vazia().primeira()',
+  },
+  {
+    id: 'srtf', ano: '1968', decada: 'Anos 60', nome: 'SRTF', titulo: 'O SJF que interrompe', make: srtf, carga: 'comboio', params: [],
+    tente: ['G chega em t = 80 e toma o lugar de B na hora, sem esperar.', 'Zere a troca de contexto e abra o comparativo: com um núcleo, nenhum algoritmo tem retorno médio menor.'],
+    code: 'escolhe():\n  return min(prontas, chave = t.restante)\n\nao_chegar(n):\n  se n.restante < atual.restante:\n    interrompe(atual)',
+  },
+  {
+    id: 'rm', ano: '1973', decada: 'Anos 70', nome: 'Rate Monotonic', titulo: 'Quem repete mais rápido vem antes', make: rm, carga: 'rt', params: [],
+    tente: ['Com 97% de uso, T2 perde prazos. Mude para EDF e veja a mesma carga passar.', 'Selecione “Sobrecarga”: T1 continua em dia.'],
+    code: 'prioridade(t) = 1 / t.periodo   // fixa\n\nescolhe():\n  return min(prontas, chave = t.periodo)',
+  },
+  {
+    id: 'edf', ano: '1973', decada: 'Anos 70', nome: 'EDF', titulo: 'O prazo mais próximo primeiro', make: edf, carga: 'rt', params: [],
+    tente: ['Veja a carga “Tempo real” sem perdas.', 'Agora “Sobrecarga”: compare o número de prazos perdidos com o do RM.'],
+    code: 'escolhe():\n  return min(prontas, chave = t.prazo)',
+  },
+  {
+    id: 'gang', ano: '1982', decada: 'Anos 80', nome: 'Gang', titulo: 'Quem trabalha junto roda junto', make: gang, carga: 'barreira',
+    params: [pQ('Duração da fatia', 20, 4, 60)],
+    tente: ['Compare a sobrecarga com o Round Robin, na mesma carga: o tempo listrado no Gantt é espera ocupada.'],
+    code: 'a_cada(fatia):\n  linha = proxima_linha_com_trabalho()\n  para cada núcleo c:\n    troca(c, matriz[linha][c])',
+  },
+  {
+    id: 'bsd', ano: '1986', decada: 'Anos 80', nome: '4.3BSD', titulo: 'A prioridade que esquece devagar', make: bsd, carga: 'misto',
+    params: [pQ('Quantum', 10, 2, 40), { id: 'decay', nome: 'Recalcula a cada', tipo: 'range', def: 100, min: 20, max: 300, un: 'ms' }],
+    tente: ['Veja as tarefas descendo de faixa enquanto rodam e subindo enquanto dormem.', 'Aumente o intervalo de recálculo e veja a memória do passado durar mais.'],
+    code: 'ao_rodar(t):      t.p_cpu += 1\na_cada(período):  t.p_cpu *= 2c / (2c + 1)\n\nprioridade(t) = 50 + t.p_cpu / 4 + 2 * t.nice',
+  },
+  {
+    id: 'unica', ano: 'anos 90', decada: 'Anos 90', nome: 'Fila única', titulo: 'Uma fila, uma trava, muitos núcleos', make: filaUnica, carga: 'forkjoin',
+    params: [pQ('Quantum', 40, 5, 100), { id: 'lock', nome: 'Custo da trava', tipo: 'range', def: 1, min: 0, max: 4, un: 'ms' }],
+    tente: ['Com 8 núcleos, o vermelho no Gantt é trava. Ponha o custo em 0 e veja o que seria o mundo sem contenção.', 'Agora vá de 8 para 2 núcleos e veja a contenção sumir.'],
+    code: 'escolhe():\n  trava.pega()        // só um por vez\n  t = fila.primeira()\n  trava.solta()\n  return t',
+  },
+  {
+    id: 'ws', ano: '1994', decada: 'Anos 90', nome: 'Work stealing', titulo: 'Sem trabalho? Roube de quem tem', make: workStealing, carga: 'forkjoin', params: [],
+    tente: ['Compare a duração com a Fila única, com a mesma carga e 8 núcleos.', 'Veja as tarefas grandes saltarem entre núcleos no começo, enquanto as pequenas ficam em casa.'],
+    code: 'escolhe(n):\n  se deque[n] tem tarefa:\n    return deque[n].tira_base()\n  v = vítima_aleatória()\n  return deque[v].tira_topo()   // pode falhar',
+  },
+  {
+    id: 'loteria', ano: '1994', decada: 'Anos 90', nome: 'Loteria', titulo: 'Justiça por sorteio', make: loteria, carga: 'pesos',
+    params: [pQ('Quantum', 10, 2, 40)],
+    tente: ['Sorteie outra semente: o Gantt muda bastante, mas a proporção final não.'],
+    code: 'escolhe():\n  n = sorteia(0, total_de_bilhetes)\n  percorre a fila somando bilhetes\n  até passar de n',
+  },
+  {
+    id: 'thread', ano: '1995', decada: 'Anos 90', nome: 'Thread por pedido', titulo: 'Cada conexão, uma thread', make: threadPorPedido, carga: 'servidor',
+    params: [pQ('Quantum', 10, 2, 40), { id: 'max', nome: 'Máximo de threads', tipo: 'range', def: 8, min: 2, max: 40, un: '' }],
+    tente: ['Reduza o máximo de threads para 4 e veja a fila do accept crescer.', 'Compare a memória de pilhas com o Event loop.'],
+    code: 'para cada conexão:\n  thread_nova(atende)\n\natende():\n  r = banco.consulta()   // dorme, segura a pilha\n  responde(r)',
+  },
+  {
+    id: 'stride', ano: '1995', decada: 'Anos 90', nome: 'Stride', titulo: 'A loteria sem sorte', make: stride, carga: 'pesos',
+    params: [pQ('Quantum', 10, 2, 40)],
+    tente: ['Veja o Gantt: A, com nice −5, roda bem mais, em um padrão regular, sem as rajadas da loteria.'],
+    code: 'escolhe():\n  t = min(fila, chave = t.passo)\n  t.passo += GRANDE / t.bilhetes\n  return t',
+  },
+  {
+    id: 'o1', ano: '2002', decada: 'Anos 2000', nome: 'O(1)', titulo: 'Decide em tempo constante', make: o1, carga: 'misto',
+    params: [pQ('Fatia em nice 0', 20, 4, 60)],
+    tente: ['Olhe o mapa de bits: acende e apaga conforme as filas enchem.', 'Espere as ativas esvaziarem para ver a troca entre os dois vetores.'],
+    code: 'escolhe(n):\n  i = primeiro_bit(ativas[n].mapa)\n  se não há bit:\n    troca(ativas[n], expiradas[n])\n  return ativas[n].fila[i].primeira()',
+  },
+  {
+    id: 'cfs', ano: '2007', decada: 'Anos 2000', nome: 'CFS', titulo: 'Uma CPU ideal, simulada', make: (s, p) => cfsBase(s, p), carga: 'pesos',
+    params: [pQ('Latência-alvo', 24, 6, 80)],
+    tente: ['Na carga “Pesos diferentes”, veja o vruntime subindo devagar para A.', 'Mude para “Editor e compilação” e veja quem acorda entrar pela esquerda da árvore.'],
+    code: 'ao_rodar(t):\n  t.vruntime += 1 * 1024 / t.peso\n\nescolhe():\n  return arvore.mais_a_esquerda()',
+  },
+  {
+    id: 'loop', ano: '2009', decada: 'Anos 2000', nome: 'Event loop', titulo: 'Uma thread que nunca espera', make: eventLoop, carga: 'servidor', params: [],
+    tente: ['Olhe os relatórios R!: tudo atrás deles para.', 'Compare a memória de pilhas com a Thread por pedido.'],
+    code: 'para sempre:\n  para cada evento em epoll.espera():\n    fila.põe(evento.callback)\n  callback = fila.primeira()\n  callback()   // sem preempção',
+  },
+  {
+    id: 'go', ano: '2012', decada: 'Anos 2010', nome: 'Go (M:N)', titulo: 'Milhares de tarefas em poucos núcleos', make: goSched, carga: 'servidor',
+    params: [pQ('Preempção', 10, 2, 40)],
+    tente: ['Veja o relatório R!: ele ocupa um núcleo e não trava o resto, ao contrário do Event loop.'],
+    code: 'escolhe(p):\n  a cada 61 voltas: fila global\n  runnext, depois fila local\n  fila global\n  rouba metade de outro P',
+  },
+  {
+    id: 'eas', ano: '2019', decada: 'Anos 2010', nome: 'EAS', titulo: 'Quanto custa em energia?', make: eas, carga: 'celular',
+    params: [pQ('Latência-alvo', 24, 6, 80)],
+    tente: ['Compare a energia com o CFS na mesma máquina: veja quem deixa S, M, N e P nos núcleos LITTLE.', 'Mude a máquina para “todos iguais” e veja que sobra pouca decisão a tomar.'],
+    code: 'ao_acordar(t):\n  return min(núcleos que comportam t,\n             chave = energia_adicional(n, t))',
+  },
+  {
+    id: 'eevdf', ano: '2023', decada: 'Anos 2020', nome: 'EEVDF', titulo: 'Justiça e prazo, separados', make: eevdf, carga: 'misto',
+    params: [pQ('Fatia base', 8, 2, 30)],
+    tente: ['Veja a régua: à esquerda da linha V ficam as elegíveis, e cada barra termina no prazo.', 'E, T e S pedem fatias curtas: recebem a mesma parte de CPU, mas muito antes. Compare a resposta p95 com o CFS.'],
+    code: 'escolhe():\n  elegíveis = [t para t em fila se t.v <= V]\n  return min(elegíveis, chave = t.prazo)\n\nprazo(t) = t.v + t.fatia / t.peso',
+  },
+  {
+    id: 'scx', ano: '2024', decada: 'Anos 2020', nome: 'sched_ext', titulo: 'Agora escreva o seu', make: scx, carga: 'misto',
+    params: [pQ('Quantum', 10, 2, 40), { id: 'preempt', nome: 'Interrompe por nota melhor', tipo: 'bool', def: false }],
+    tente: ['Comece pelos exemplos e tente vencer o CFS no comparativo, na resposta p95.'],
+    code: 'nota(t):\n  return t.cpu * 1024 / t.peso',
+    scx: true,
+  },
+];
+
+/* ---------- Explicações e referências de cada algoritmo ---------- */
+
+// [n] no texto cita a n-ésima referência da própria entrada.
+const OSTEP = 'R. H. Arpaci-Dusseau e A. C. Arpaci-Dusseau';
+const LIVRO = 'Operating Systems: Three Easy Pieces (livro on-line)';
+const REF = {
+  ostep7: { a: OSTEP, t: 'Scheduling: Introduction', v: `cap. 7 de ${LIVRO}`, u: 'https://pages.cs.wisc.edu/~remzi/OSTEP/cpu-sched.pdf' },
+  ostep8: { a: OSTEP, t: 'Scheduling: The Multi-Level Feedback Queue', v: `cap. 8 de ${LIVRO}`, u: 'https://pages.cs.wisc.edu/~remzi/OSTEP/cpu-sched-mlfq.pdf' },
+  ostep9: { a: OSTEP, t: 'Scheduling: Proportional Share', v: `cap. 9 de ${LIVRO}`, u: 'https://pages.cs.wisc.edu/~remzi/OSTEP/cpu-sched-lottery.pdf' },
+  ostep10: { a: OSTEP, t: 'Multiprocessor Scheduling (Advanced)', v: `cap. 10 de ${LIVRO}`, u: 'https://pages.cs.wisc.edu/~remzi/OSTEP/cpu-sched-multi.pdf' },
+  smith: { a: 'W. E. Smith', t: 'Various optimizers for single-stage production', v: 'Naval Research Logistics Quarterly 3(1–2):59–66', y: '1956', u: 'https://doi.org/10.1002/nav.3800030106' },
+  patrick: { a: 'R. L. Patrick', t: 'General Motors/North American Monitor for the IBM 704 Computer', v: 'RAND Corporation, P-7316', y: '1987', u: 'https://shop.rand.org/products/general-motors-north-american-monitor-for-the-ibm-704-computer' },
+  gmnaa: { a: 'Wikipédia', t: 'GM-NAA I/O', v: 'enciclopédia on-line', u: 'https://en.wikipedia.org/wiki/GM-NAA_I/O' },
+  kleinrock64: { a: 'L. Kleinrock', t: 'Analysis of a time-shared processor', v: 'Naval Research Logistics Quarterly 11(1):59–73', y: '1964', u: 'https://doi.org/10.1002/nav.3800110105' },
+  kleinrock67: { a: 'L. Kleinrock', t: 'Time-shared Systems: A Theoretical Treatment', v: 'Journal of the ACM 14(2):242–261', y: '1967', u: 'https://doi.org/10.1145/321386.321388' },
+  corbato: { a: 'F. J. Corbató, M. Merwin-Daggett e R. C. Daley', t: 'An experimental time-sharing system', v: 'AFIPS Spring Joint Computer Conference, 335–344', y: '1962', u: 'https://doi.org/10.1145/1460833.1460871' },
+  lampson: { a: 'B. W. Lampson', t: 'A scheduling philosophy for multiprocessing systems', v: 'Communications of the ACM 11(5):347–360', y: '1968', u: 'https://doi.org/10.1145/363095.363144' },
+  stevens: { a: 'D. F. Stevens', t: 'On overcoming high-priority paralysis in multiprogramming systems', v: 'Communications of the ACM 11(8):539–541', y: '1968', u: 'https://doi.org/10.1145/363567.363571' },
+  aging: { a: 'Wikipédia', t: 'Aging (scheduling)', v: 'enciclopédia on-line', u: 'https://en.wikipedia.org/wiki/Aging_(scheduling)' },
+  schrage: { a: 'L. Schrage', t: 'A proof of the optimality of the shortest remaining processing time discipline', v: 'Operations Research 16(3):687–690', y: '1968', u: 'https://doi.org/10.1287/opre.16.3.687' },
+  dsmith: { a: 'D. R. Smith', t: 'A new proof of the optimality of the shortest remaining processing time discipline', v: 'Operations Research 26(1):197–199', y: '1978', u: 'https://doi.org/10.1287/opre.26.1.197' },
+  liu: { a: 'C. L. Liu e J. W. Layland', t: 'Scheduling Algorithms for Multiprogramming in a Hard-Real-Time Environment', v: 'Journal of the ACM 20(1):46–61', y: '1973', u: 'https://doi.org/10.1145/321738.321743' },
+  buttazzo: { a: 'G. C. Buttazzo', t: 'Rate Monotonic vs. EDF: Judgment Day', v: 'Real-Time Systems 29(1):5–26', y: '2005', u: 'https://doi.org/10.1023/B:TIME.0000048932.30002.d9' },
+  ousterhout: { a: 'J. K. Ousterhout', t: 'Scheduling Techniques for Concurrent Systems', v: 'Third International Conference on Distributed Computing Systems, 22–30', y: '1982' },
+  feitelson: { a: 'D. G. Feitelson e L. Rudolph', t: 'Gang scheduling performance benefits for fine-grain synchronization', v: 'Journal of Parallel and Distributed Computing 16(4):306–318', y: '1992', u: 'https://doi.org/10.1016/0743-7315(92)90014-E' },
+  gangwiki: { a: 'Wikipédia', t: 'Gang scheduling', v: 'enciclopédia on-line', u: 'https://en.wikipedia.org/wiki/Gang_scheduling' },
+  bsdsynch: { a: 'Computer Systems Research Group, UC Berkeley', t: 'kern_synch.c, versão 7.1', v: 'código-fonte do 4.3BSD, no arquivo da TUHS', y: '1986', u: 'https://www.tuhs.org/cgi-bin/utree.pl?file=4.3BSD/usr/src/sys/sys/kern_synch.c' },
+  bsdclock: { a: 'Computer Systems Research Group, UC Berkeley', t: 'kern_clock.c', v: 'código-fonte do 4.3BSD, no arquivo da TUHS', y: '1986', u: 'https://www.tuhs.org/cgi-bin/utree.pl?file=4.3BSD/usr/src/sys/sys/kern_clock.c' },
+  bsdparam: { a: 'Computer Systems Research Group, UC Berkeley', t: 'param.h', v: 'código-fonte do 4.3BSD, no arquivo da TUHS', y: '1986', u: 'https://www.tuhs.org/cgi-bin/utree.pl?file=4.3BSD/usr/src/sys/h/param.h' },
+  lm89: { a: 'S. J. Leffler, M. K. McKusick, M. J. Karels e J. S. Quarterman', t: 'The Design and Implementation of the 4.3BSD UNIX Operating System', v: 'Addison-Wesley', y: '1989' },
+  epema: { a: 'D. H. J. Epema', t: 'An Analysis of Decay-Usage Scheduling in Multiprocessors', v: 'ACM SIGMETRICS', y: '1995' },
+  o1: { a: 'I. Molnár', t: '[announce] [patch] ultra-scalable O(1) SMP and UP scheduler', v: 'lista de discussão do kernel Linux', y: '2002', u: 'https://lkml.iu.edu/hypermail/linux/kernel/0201.0/0810.html' },
+  blumofe99: { a: 'R. D. Blumofe e C. E. Leiserson', t: 'Scheduling multithreaded computations by work stealing', v: 'Journal of the ACM 46(5):720–748', y: '1999', u: 'https://doi.org/10.1145/324133.324234' },
+  blumofe94: { a: 'R. D. Blumofe e C. E. Leiserson', t: 'Scheduling multithreaded computations by work stealing', v: '35th Symposium on Foundations of Computer Science, 356–368', y: '1994', u: 'https://doi.org/10.1109/SFCS.1994.365680' },
+  cilk: { a: 'R. D. Blumofe, C. F. Joerg, B. C. Kuszmaul, C. E. Leiserson, K. H. Randall e Y. Zhou', t: 'Cilk: An Efficient Multithreaded Runtime System', v: 'PPoPP, 207–216', y: '1995', u: 'https://doi.org/10.1145/209936.209958' },
+  chaselev: { a: 'D. Chase e Y. Lev', t: 'Dynamic circular work-stealing deque', v: 'SPAA, 21–28', y: '2005', u: 'https://doi.org/10.1145/1073970.1073974' },
+  tokio: { a: 'C. Lerche', t: 'Making the Tokio scheduler 10x faster', v: 'blog do projeto Tokio', y: '2019', u: 'https://tokio.rs/blog/2019-10-scheduler' },
+  lottery: { a: 'C. A. Waldspurger e W. E. Weihl', t: 'Lottery Scheduling: Flexible Proportional-Share Resource Management', v: 'OSDI, 1–11', y: '1994', u: 'https://www.usenix.org/conference/osdi-94/lottery-scheduling-flexible-proportional-share-resource-management' },
+  stride: { a: 'C. A. Waldspurger e W. E. Weihl', t: 'Stride Scheduling: Deterministic Proportional-Share Resource Management', v: 'MIT/LCS/TM-528', y: '1995', u: 'https://dspace.mit.edu/handle/1721.1/149244' },
+  kegel: { a: 'D. Kegel', t: 'The C10K problem', v: 'página on-line', y: '1999', u: 'http://www.kegel.com/c10k.html' },
+  apache: { a: 'The Apache Software Foundation', t: 'About the Apache HTTP Server Project', v: 'httpd.apache.org', u: 'https://httpd.apache.org/ABOUT_APACHE.html' },
+  prefork: { a: 'The Apache Software Foundation', t: 'Apache MPM prefork', v: 'documentação do Apache HTTP Server 2.4', u: 'https://httpd.apache.org/docs/2.4/mod/prefork.html' },
+  cfsdoc: { a: 'Documentação do kernel Linux', t: 'CFS Scheduler', v: 'docs.kernel.org', u: 'https://docs.kernel.org/scheduler/sched-design-CFS.html' },
+  kn2623: { a: 'KernelNewbies', t: 'Linux 2.6.23', v: 'notas da versão', y: '2007', u: 'https://kernelnewbies.org/Linux_2_6_23' },
+  libuv: { a: 'Projeto libuv', t: 'Design overview', v: 'documentação do libuv', u: 'https://docs.libuv.org/en/stable/design.html' },
+  nodeloop: { a: 'Projeto Node.js', t: 'The Node.js Event Loop', v: 'documentação do Node.js', u: 'https://nodejs.org/en/learn/asynchronous-work/event-loop-timers-and-nexttick' },
+  nodeblock: { a: 'Projeto Node.js', t: "Don't Block the Event Loop (or the Worker Pool)", v: 'documentação do Node.js', u: 'https://nodejs.org/en/learn/asynchronous-work/dont-block-the-event-loop' },
+  nodewiki: { a: 'Wikipédia', t: 'Node.js', v: 'enciclopédia on-line', u: 'https://en.wikipedia.org/wiki/Node.js' },
+  go11sched: { a: 'D. Vyukov', t: 'Scalable Go Scheduler Design Doc', v: 'documento de projeto do Go', y: '2012', u: 'https://golang.org/s/go11sched' },
+  goproc: { a: 'Projeto Go', t: 'runtime/proc.go', v: 'código-fonte do runtime do Go', u: 'https://go.dev/src/runtime/proc.go' },
+  go114: { a: 'Projeto Go', t: 'Go 1.14 Release Notes', v: 'go.dev', y: '2020', u: 'https://go.dev/doc/go1.14' },
+  easdoc: { a: 'Documentação do kernel Linux', t: 'Energy Aware Scheduling', v: 'docs.kernel.org', u: 'https://docs.kernel.org/scheduler/sched-energy.html' },
+  easarm: { a: 'Arm', t: 'Energy Aware Scheduling in Linux', v: 'blog da Arm para desenvolvedores', y: '2019', u: 'https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/energy-aware-scheduling-in-linux' },
+  biglittle: { a: 'CNX Software', t: 'ARM unveils Cortex-A7 and big.LITTLE processing', v: 'cnx-software.com', y: '2011', u: 'https://www.cnx-software.com/2011/10/20/arm-unveils-cortex-a7-and-big-little-processing/' },
+  threaddir: { a: 'Intel', t: 'What Is Intel Thread Director?', v: 'suporte da Intel', u: 'https://www.intel.com/content/www/us/en/support/articles/000097053/processors.html' },
+  alderlake: { a: 'AnandTech', t: "Intel Architecture Day 2021: Alder Lake, Golden Cove, and Gracemont Detailed", v: 'anandtech.com', y: '2021', u: 'https://www.anandtech.com/show/16881/a-deep-dive-into-intels-alder-lake-microarchitectures/2' },
+  eevdfpaper: { a: 'I. Stoica e H. Abdel-Wahab', t: 'Earliest Eligible Virtual Deadline First: A Flexible and Accurate Mechanism for Proportional Share Resource Allocation', v: 'relatório técnico TR-95-22, Old Dominion University', y: '1995', u: 'https://dl.acm.org/doi/10.5555/890606' },
+  eevdfdoc: { a: 'Documentação do kernel Linux', t: 'EEVDF Scheduler', v: 'docs.kernel.org', u: 'https://docs.kernel.org/scheduler/sched-eevdf.html' },
+  eevdflwn: { a: 'J. Corbet', t: 'An EEVDF CPU scheduler for Linux', v: 'LWN.net', y: '2023', u: 'https://lwn.net/Articles/925371/' },
+  scxdoc: { a: 'Documentação do kernel Linux', t: 'Extensible Scheduler Class', v: 'docs.kernel.org', u: 'https://docs.kernel.org/scheduler/sched-ext.html' },
+  scxpull: { a: 'T. Heo', t: '[GIT PULL] sched_ext: Initial pull request for v6.12', v: 'lista de discussão do kernel Linux', y: '2024', u: 'https://lkml.iu.edu/hypermail/linux/kernel/2409.1/07472.html' },
+};
+
+const EXPLICA = {
+  fcfs: {
+    refs: [REF.gmnaa, REF.patrick, REF.ostep7],
+    secs: [
+      ['De onde veio', ['O GM-NAA I/O, criado em 1956 para o IBM 704, é considerado o primeiro sistema operacional daquela máquina [1]. Robert L. Patrick, que concebeu o desenho, contou essa história décadas depois em um artigo da RAND [2]. A função principal era simples: ao terminar um job, carregar o seguinte, em vez de deixar a máquina parada esperando o operador [1].']],
+      ['Como decide', ['Fila indiana. Cada tarefa entra no fim da fila e fica com o processador até terminar ou bloquear. Não há relógio interrompendo ninguém, nem informação sobre a duração das tarefas.']],
+      ['Um exemplo com números', ['Três tarefas chegam juntas: A de 100 ms, B de 10 ms e C de 10 ms. Se A for a primeira, as três terminam em 100, 110 e 120 ms, e o tempo médio de retorno é 110 ms. Se os curtos fossem na frente, terminariam em 10, 20 e 120, e a média cairia para 50 ms [3]. A ordem da fila, sozinha, muda o resultado por um fator de dois.']],
+      ['Onde tropeça', ['Esse é o efeito comboio: tarefas leves ficam presas atrás de uma pesada, como carros atrás de um caminhão em pista simples [3]. A justiça de ordem de chegada não considera o custo de quem espera.']],
+      ['Nesta simulação', ['Na carga Comboio, o job gigante B chega antes dos curtos. Tudo o que chega depois fica parado até ele terminar, e o custo aparece no retorno e na resposta. Há o custo de 1 ms de troca de contexto, que você pode ajustar no painel.']],
+    ],
+  },
+  sjf: {
+    refs: [REF.smith, REF.ostep7, REF.ostep8],
+    secs: [
+      ['De onde veio', ['O resultado vem da pesquisa operacional. Em 1956, W. E. Smith publicou uma análise de sequenciamento em uma única etapa de produção, na qual ordenar os trabalhos pelo tempo de processamento minimiza o tempo médio [1]. A mesma lógica vale para um processador.']],
+      ['Como decide', ['Entre as tarefas prontas, escolhe a de menor rajada de CPU e a deixa rodar até o fim dessa rajada. É uma política sem preempção: decide só quando o processador fica livre.']],
+      ['Por que funciona', ['Quando todas as tarefas chegam juntas, cada uma atrasa só as que vêm depois dela. Pôr a menor na frente faz o atraso de uma tarefa ser pago pelo menor número de “vítimas” possível, e isso minimiza a média [1][2].']],
+      ['Onde tropeça', ['O sistema operacional em geral não sabe quanto uma tarefa vai demorar, e é justamente essa informação que o SJF exige [3]. Além disso, se a escolha só ocorre quando o núcleo fica livre, uma tarefa curta que chega logo depois de uma longa começar precisa esperar por ela inteira [2]. Em um fluxo contínuo de tarefas curtas, uma longa pode nunca ser escolhida.']],
+      ['Nesta simulação', ['O simulador conhece a duração exata de cada rajada, o que nenhum sistema real conhece. Quando A termina, todas já chegaram: os curtos passam à frente e B fica por último. G chega em t = 80 e espera B terminar, porque aqui ninguém é interrompido.']],
+    ],
+  },
+  rr: {
+    refs: [REF.corbato, REF.kleinrock64, REF.kleinrock67, REF.ostep7],
+    secs: [
+      ['De onde veio', ['Com terminais, passou a importar quanto tempo alguém espera pela primeira resposta. O artigo do CTSS, de 1962, discute o escalonamento circular simples e explica por que ele degrada quando o sistema satura, devido ao custo de trocar programas na memória [1]. Leonard Kleinrock analisou o modelo matematicamente em 1964: comparado com a ordem de chegada, tarefas mais curtas que a média passam menos tempo no sistema, e as mais longas, mais [2][3].']],
+      ['Como decide', ['As tarefas formam uma roda. Cada uma roda por um quantum e volta para o fim da fila. Com n tarefas, nenhuma espera mais de (n − 1) quanta por sua vez, sem contar o custo das trocas.']],
+      ['O dilema do quantum', ['Quanto menor o quantum, melhor o tempo de resposta. Mas cada troca de contexto tem custo, e um quantum pequeno demais faz o custo tomar uma fração grande do tempo total. Um quantum grande dilui esse custo, mas, no limite, o algoritmo vira ordem de chegada [4].']],
+      ['Onde tropeça', ['É ótimo em tempo de resposta e ruim em tempo de retorno, porque espalha as tarefas ao longo do tempo: todas terminam perto do fim [4]. E trata igual quem precisa de um gole de CPU e quem precisa de um barril.']],
+      ['Nesta simulação', ['A roda mostra a ordem da fila, e o arco verde, quanto do quantum foi gasto. Com o quantum em 1 e a troca em 3 ms, a sobrecarga domina o Gantt. Um detalhe do modelo: se ninguém está esperando, a fatia recomeça sem troca.']],
+    ],
+  },
+  prio: {
+    refs: [REF.lampson, REF.stevens, REF.aging, REF.ostep8],
+    secs: [
+      ['De onde veio', ['Quando uma máquina atende muita gente, alguns trabalhos importam mais. Em 1968, Butler Lampson descreveu uma abordagem geral de escalonamento orientado a prioridades e sua relação com interrupções [1].']],
+      ['Como decide', ['Cada tarefa tem um número de prioridade. Roda sempre a de maior prioridade, e, se uma melhor ficar pronta, toma o processador na hora. Empates seguem a ordem de chegada.']],
+      ['Onde tropeça', ['Uma prioridade atribuída de antemão não diz nada sobre o que a tarefa fará. Um relato publicado em 1968 já descrevia a “paralisia” em sistemas baseados em prioridades preestabelecidas [2]. A forma mais direta do problema é a fome: enquanto houver tarefa de prioridade alta pronta, a baixa não roda.']],
+      ['O remédio: envelhecimento', ['A prioridade de quem espera melhora aos poucos [3]. Assim, qualquer tarefa acaba chegando ao topo. O reforço periódico do MLFQ é uma variação da mesma ideia [4].']],
+      ['Nesta simulação', ['A prioridade 0 é a melhor. Com o envelhecimento ligado, cada intervalo na fila melhora a prioridade em 1 nível, e ela volta ao valor original quando a tarefa ganha a CPU. Compare com ele ligado e desligado e olhe a tarefa G.']],
+    ],
+  },
+  mlfq: {
+    refs: [REF.corbato, REF.ostep8],
+    secs: [
+      ['De onde veio', ['Corbató e seus colegas descreveram o escalonador multinível em 1962, no CTSS [1]. Esse trabalho, junto com o Multics, levou Corbató ao Prêmio Turing [2]. O problema que ele ataca é duplo: reduzir o retorno, o que exigiria saber a duração, e a resposta, sem nada saber sobre as tarefas [2].']],
+      ['As cinco regras', ['Na formulação didática do OSTEP [2]: (1) se a prioridade de A é maior que a de B, A roda; (2) em prioridades iguais, A e B alternam em round robin; (3) toda tarefa nova entra na fila mais alta; (4) gastou toda a sua cota em um nível, mesmo em várias rajadas, desce uma fila; (5) depois de um período S, todas as tarefas voltam para a fila mais alta.']],
+      ['Por que funciona', ['Como não sabe se a tarefa é curta, o MLFQ supõe que seja. Se for, termina logo. Se não for, vai descendo até se revelar um trabalho longo. Assim ele aproxima o SJF sem precisar de oráculo [2]. E as filas de baixo têm fatias maiores, porque tarefas de CPU não ganham nada com trocas frequentes [2].']],
+      ['Onde tropeça', ['Sem a regra 5, tarefas longas passam fome. Sem a regra 4, um programa pode fazer um I/O pouco antes do fim da cota e ficar para sempre no topo [2]. E o período S é o que John Ousterhout chamava de “constante vodu”: alto demais causa fome; baixo demais prejudica interativos [2].']],
+      ['Nesta simulação', ['Quatro filas, com a fatia dobrando a cada nível, seguindo as cinco regras acima. Ponha o reforço em 0 para desligar a regra 5 e observe as filas de baixo.']],
+    ],
+  },
+  srtf: {
+    refs: [REF.schrage, REF.dsmith, REF.ostep7],
+    secs: [
+      ['De onde veio', ['É a versão preemptiva do SJF. Linus Schrage publicou em 1968 a prova de que atender sempre quem tem menor tempo restante é ótimo [1]. Uma prova posterior, de Donald Smith, mostra que, em uma fila conservativa, essa disciplina minimiza o número de trabalhos no sistema [2].']],
+      ['Como decide', ['A cada chegada, compara o tempo restante de todas as tarefas prontas e da que está rodando. Se a nova termina antes, interrompe a atual [3].']],
+      ['Por que importa', ['Em um processador, e ignorando o custo de troca, é o melhor retorno médio possível. Por isso serve de régua: nenhuma política prática consegue superá-lo [1].']],
+      ['Onde tropeça', ['Exige conhecer o restante de cada tarefa, o que em geral não se sabe, e tarefas longas podem passar fome. Olhando só para o retorno, ele também não favorece o tempo de resposta de quem já está rodando [3].']],
+      ['Nesta simulação', ['Com a troca de contexto em zero e um núcleo, nenhum algoritmo do comparativo consegue retorno médio menor. Com custo de troca maior que zero, o ótimo teórico não vale exatamente, porque o modelo da prova não cobra por ela.']],
+    ],
+  },
+  rm: {
+    refs: [REF.liu, REF.buttazzo],
+    secs: [
+      ['De onde veio', ['Em controle de processos, muitas tarefas se repetem em intervalos fixos e precisam terminar antes da próxima repetição. O artigo de Liu e Layland, de 1973, é o marco desse campo [1].']],
+      ['Como decide', ['Prioridade fixa, definida pelo período: quanto menor, mais prioritária. Ela nunca muda durante a execução.']],
+      ['O que garante', ['Um conjunto de n tarefas periódicas é escalonável se o uso total for de até n(2^(1/n) − 1). Isso dá 82,8% para duas tarefas e tende a cerca de 69% com muitas [1]. É uma condição suficiente: acima dela, pode ou não dar certo.']],
+      ['Um exemplo com números', ['Com T1 de 8 ms a cada 20, e T2 de 16 ms a cada 28, o uso é 97%. T2 é interrompida por T1: seu tempo de resposta é 16 + ⌈R/20⌉ × 8. A conta resulta em R = 32 ms, maior que o prazo de 28. Por isso esta carga perde prazos mesmo havendo CPU sobrando.']],
+      ['Onde tropeça', ['Pode perder prazo com uso abaixo de 100%. Uma comparação detalhada entre RM e EDF, examinando crenças comuns sobre ambos, está em Buttazzo [2].']],
+      ['Nesta simulação', ['Os jobs são criados nos instantes de chegada, com prazo igual à próxima chegada. O prazo perdido não cancela o job, que continua até acabar.']],
+    ],
+  },
+  edf: {
+    refs: [REF.liu, REF.buttazzo],
+    secs: [
+      ['De onde veio', ['No mesmo artigo de 1973, Liu e Layland trataram da alternativa com prioridade dinâmica: considerar o prazo de cada job, e não o período da tarefa [1].']],
+      ['Como decide', ['Roda sempre o job com prazo mais próximo. A prioridade relativa entre duas tarefas pode inverter de um job para o outro.']],
+      ['O que garante', ['Em um núcleo, com tarefas periódicas independentes e preempção, todos os prazos são cumpridos sempre que o uso total for de até 100% [1]. Essa é a grande vantagem sobre o RM.']],
+      ['Onde tropeça', ['Prioridades dinâmicas exigem mais trabalho em cada decisão, e os custos reais costumam ser mais discutidos do que medidos [2]. Quando a demanda passa de 100%, o que acontece depende da carga. Nesta página, o resultado é sempre mensurável: compare o número de prazos perdidos com o do RM na carga Sobrecarga.']],
+      ['Nesta simulação', ['Na carga Sobrecarga, a demanda chega a 122%, e a página mostra quantos prazos cada algoritmo perdeu. O atraso de um job empurra o seguinte, porque jobs atrasados têm prazos cada vez mais antigos e continuam na frente da fila.']],
+    ],
+  },
+  gang: {
+    refs: [REF.ousterhout, REF.feitelson, REF.gangwiki],
+    secs: [
+      ['De onde veio', ['Em programas paralelos, as threads se comunicam e se esperam. John Ousterhout tratou desse problema de escalonamento em sistemas concorrentes em 1982 [1]. Feitelson e Rudolph mediram mais tarde o ganho para sincronização de granularidade fina [2].']],
+      ['Como decide', ['O escalonador mantém a matriz de Ousterhout: cada coluna é um processador e cada linha é uma fatia de tempo [3]. As threads de um mesmo job ficam na mesma linha, e todas entram e saem de cena juntas.']],
+      ['Por que funciona', ['Se uma thread espera por outra que não está rodando, ela gasta a própria fatia à toa. Rodar todo o grupo ao mesmo tempo faz a espera ser curta, e esse é o benefício medido para sincronização fina [2].']],
+      ['Onde tropeça', ['Os jobs não preenchem as linhas perfeitamente, e vagas ficam sem uso. Além disso, cada troca de linha muda todos os núcleos de uma vez.']],
+      ['Nesta simulação', ['Dois jobs de 4 threads em 4 núcleos, com barreira em cada rodada e espera ocupada. A chegada intercala os jobs de propósito. Núcleos vagos são preenchidos com tarefas de outras linhas. Os algoritmos que não interrompem ninguém podem ficar girando para sempre na barreira, e o comparativo mostra “não terminou”.']],
+    ],
+  },
+  bsd: {
+    refs: [REF.bsdsynch, REF.bsdclock, REF.bsdparam, REF.ostep8, REF.lm89, REF.epema],
+    secs: [
+      ['De onde veio', ['O BSD descende do Unix e calcula a prioridade por fórmula, em vez de consultar uma tabela: o uso recente de CPU pesa contra a tarefa, e esse uso decai com o tempo [4]. O projeto do 4.3BSD está descrito no livro de Leffler e coautores [5], e Epema analisou esse tipo de escalonador em multiprocessadores [6].']],
+      ['A fórmula real', ['No código de 1986, a prioridade é p_usrpri = PUSER + p_cpu/4 + 2 × nice, limitada a 127, com PUSER igual a 50 [1][3]. O p_cpu sobe a cada tick em que o processo roda [2].']],
+      ['O esquecimento', ['Uma vez por segundo, o uso é multiplicado por 2c/(2c + 1), em que c é a carga média, e somado ao nice [1]. O comentário no código diz o objetivo: esquecer 90% do uso em 5 × c segundos [1]. Processos de mesma prioridade alternam a cada 100 ms [1].']],
+      ['Onde tropeça', ['É uma família de constantes empíricas. A prioridade ajusta a preferência, mas não permite pedir uma fração definida de CPU, e as tarefas só ganham posição à medida que a conta muda.']],
+      ['Nesta simulação', ['A fórmula e o filtro de decaimento são os do código original. Para caber na tela, o recálculo vem a cada 100 ms simulados (ajustável), em vez de uma vez por segundo. As filas aparecem agrupadas em faixas de prioridade.']],
+    ],
+  },
+  unica: {
+    refs: [REF.ostep10, REF.o1],
+    secs: [
+      ['A ideia', ['A forma mais simples de usar vários processadores é manter uma única fila de prontas [1]. Núcleo livre pega a próxima tarefa, e o balanceamento vem de graça.']],
+      ['Como decide', ['Qualquer política de um processador serve. Nesta simulação é round robin. O ponto central é que todos os núcleos disputam a mesma estrutura, protegida por uma trava.']],
+      ['Onde tropeça', ['Duas coisas [1]. A primeira é a escalabilidade: com a trava, só um núcleo mexe na fila por vez, e quanto mais núcleos, mais tempo se perde esperando. A segunda é a afinidade: a tarefa vai parar onde houver vaga, e o estado que deixou no cache do núcleo anterior se perde. O escalonador do Linux 2.4 tinha uma trava global, e foi isso, entre outras coisas, o que o anúncio do O(1) atacou [2].']],
+      ['Nesta simulação', ['Cada retirada da fila e cada criação de tarefa pagam o custo da trava, em série. O tempo em vermelho no Gantt é núcleo esperando. A afinidade de cache não é modelada. Com custo 0 você vê o caso sem contenção, e os demais algoritmos de fila global aparecem sem esse custo no comparativo.']],
+    ],
+  },
+  ws: {
+    refs: [REF.blumofe99, REF.blumofe94, REF.cilk, REF.chaselev, REF.tokio],
+    secs: [
+      ['De onde veio', ['Blumofe e Leiserson publicaram em 1994 [2] e, na versão de periódico, em 1999 [1], o primeiro limite demonstrado para um escalonador de trabalho paralelo por roubo. A técnica foi a base do sistema Cilk [3]. Hoje, é o algoritmo de escolha em escalonadores de propósito geral, usado em Go, Erlang e Java, entre outros [5].']],
+      ['Como decide', ['Cada núcleo tem um deque. O dono empilha e desempilha no mesmo lado, sem disputar com ninguém. Um núcleo sem trabalho sorteia uma vítima e tira uma tarefa da outra ponta. Chase e Lev mostraram como fazer esse deque crescer dinamicamente e sem travas [4].']],
+      ['O que garante', ['Para computações estritas, o tempo esperado em P processadores é T₁/P + O(T∞), em que T₁ é o trabalho total e T∞ é o caminho crítico [1]. Quando o paralelismo é grande, a aceleração é quase linear [1].']],
+      ['Por que da outra ponta', ['O dono trabalha com as tarefas mais recentes, que são pequenas e estão quentes no cache. O ladrão fica com a mais antiga, que tende a ser um pedaço grande. Assim, um roubo costuma render bastante, e roubos são raros quando há trabalho para todos.']],
+      ['Nesta simulação', ['Cada tentativa de roubo custa 1 ms, com ou sem sucesso, e aparece em amarelo. A tarefa-mãe espera as filhas sair da fila, e volta ao deque do núcleo em que a última filha terminou. Uma tarefa não custa troca de contexto, pois roda na mesma thread.']],
+    ],
+  },
+  loteria: {
+    refs: [REF.lottery, REF.ostep9],
+    secs: [
+      ['De onde veio', ['Waldspurger e Weihl apresentaram em 1994 uma maneira direta de dizer “quero X% da CPU” [1]. Antes, prioridades faziam isso mal.']],
+      ['Como decide', ['Cada tarefa tem bilhetes, que representam sua parte. A cada fatia, sorteia-se um número, e quem tem esse bilhete roda [2]. Com A tendo 75 bilhetes e B 25, A deve receber cerca de 75% [2].']],
+      ['Mecanismos', ['O artigo original inclui transferência de bilhetes, inflação e moedas locais [1][2]. Também há bilhetes de compensação: quem sai antes do fim da fatia recebe mais chances, para receber sua parte [1].']],
+      ['Vantagens e limites', ['É leve e quase sem estado por tarefa, e uma tarefa nova entra sem nenhum cálculo especial [2]. Só que a proporção é probabilística. Em uma amostra de 20 fatias, B recebeu 4, ou 20% em vez de 25% [2]. Só em execuções longas o resultado se aproxima do ideal [2].']],
+      ['Nesta simulação', ['Os bilhetes vêm do nice, com 100 bilhetes para nice 0. Quem bloqueia antes do fim da fatia ganha compensação. Use “sortear” para ver como o Gantt muda enquanto a proporção final permanece parecida.']],
+    ],
+  },
+  thread: {
+    refs: [REF.apache, REF.prefork, REF.kegel],
+    secs: [
+      ['De onde veio', ['O Apache começou em 1995 [1]. No modelo clássico prefork, processos filhos ficam prontos e cada um atende uma conexão [2]. É o jeito mais simples de escrever um servidor: o código segue linha a linha e espera o banco como se nada mais existisse.']],
+      ['Como decide', ['Não há escalonador novo: quem decide é o kernel, com as threads ou processos que o servidor criou. O bloqueio em I/O devolve a CPU, e a resposta acorda a thread.']],
+      ['Onde tropeça', ['Em 1999, Dan Kegel chamou de C10K o desafio de atender 10 mil conexões em um servidor [3]. Ele aponta que uma thread por cliente consome uma pilha inteira por conexão, e que muitos sistemas tinham dificuldade com mais do que algumas centenas de threads [3]. Com 2 MB de pilha e 1 GB de espaço de endereçamento, cabem 512 threads [3].']],
+      ['Nesta simulação', ['Há um limite de threads ajustável, e os pedidos excedentes esperam na fila do accept. A memória considera 1 MB por thread ativa, um valor didático. Compare com o Event loop e o Go na mesma carga.']],
+    ],
+  },
+  stride: {
+    refs: [REF.stride, REF.ostep9],
+    secs: [
+      ['De onde veio', ['Waldspurger e Weihl publicaram em 1995 a versão determinística do escalonamento proporcional [1], porque a sorte da loteria nem sempre entrega a proporção certa em intervalos curtos [2].']],
+      ['Como decide', ['Cada tarefa tem uma passada, inversamente proporcional aos bilhetes, e um passo acumulado. Roda quem tem o menor acumulado, e o acumulado cresce pela passada [2].']],
+      ['Um exemplo com números', ['Com 100, 50 e 250 bilhetes, e usando 10.000 como numerador, as passadas são 100, 200 e 40. Em um ciclo, C roda cinco vezes, A duas e B uma, exatamente nas proporções dos bilhetes [2].']],
+      ['Onde tropeça', ['Existe estado global: se uma tarefa nova começasse com passo 0, tomaria a CPU por muito tempo [2]. A loteria não sofre com isso. Quem acorda precisa de cuidado semelhante.']],
+      ['Nesta simulação', ['Tarefas novas e as que acordam entram no menor passo em uso. A régua mostra o passo acumulado de cada tarefa.']],
+    ],
+  },
+  o1: {
+    refs: [REF.o1],
+    secs: [
+      ['De onde veio', ['Em janeiro de 2002, Ingo Molnár anunciou o novo escalonador para o Linux [1]. O texto aponta os defeitos do anterior: uma trava global e um recálculo global de fatias, que deixava núcleos ociosos e fazia tarefas pularem entre eles [1].']],
+      ['Como decide', ['Cada núcleo tem sua própria fila e sua própria trava [1]. Há dois vetores ordenados por prioridade: o ativo e o expirado. Quando uma tarefa gasta a fatia, vai para o expirado, já com a nova fatia calculada. Quando o ativo esvazia, basta trocar os ponteiros [1].']],
+      ['O truque do mapa de bits', ['Um mapa de bits indica quais níveis têm tarefas, e achar o primeiro nível ocupado leva poucas instruções de busca de bit [1]. Com isso, escolher a próxima não depende do número de tarefas, daí o O(1) [1].']],
+      ['Onde tropeça', ['Decidir em tempo constante resolve a escalabilidade, mas não diz qual tarefa merece rodar. Essa parte ficou em heurísticas de interatividade, que acabaram substituídas pelo CFS.']],
+      ['Nesta simulação', ['Mostra os 40 níveis correspondentes ao nice. Quem dorme ganha bônus de prioridade, e tarefas interativas podem voltar ao vetor ativo ao fim da fatia. As constantes são simplificadas e a fatia pode ser ajustada.']],
+    ],
+  },
+  cfs: {
+    refs: [REF.cfsdoc, REF.kn2623, REF.ostep9],
+    secs: [
+      ['De onde veio', ['Ingo Molnár escreveu o CFS, e o código entrou no Linux 2.6.23, lançado em 9 de outubro de 2007 [1][2]. O crédito público vai ao trabalho de Con Kolivas, que mostrou que escalonamento justo dá bons resultados no desktop [2].']],
+      ['A CPU ideal', ['O CFS modela “uma CPU multitarefa ideal e precisa”, capaz de rodar todas as tarefas ao mesmo tempo, à mesma velocidade [1]. Em hardware real só uma roda de cada vez, então o escalonador registra quanto cada uma já recebeu [1].']],
+      ['Como decide', ['O vruntime é o tempo de execução ajustado pelo peso: vruntime += tempo × 1024 / peso [3]. As tarefas prontas ficam em uma árvore rubro-negra, ordenada pelo vruntime, e roda a mais à esquerda [1]. As operações na árvore são O(log n) [3].']],
+      ['Quanto tempo roda', ['A fatia de cada tarefa é a latência-alvo dividida proporcionalmente ao peso [3]. Com A de nice −5 (peso 3121) e B de nice 0 (peso 1024), A recebe cerca de 3/4 da latência, e seu vruntime cresce a um terço da velocidade do de B [3].']],
+      ['Quem dorme', ['Ao acordar, uma tarefa recebe um vruntime ajustado. Sem isso, teria direito a monopolizar a CPU para compensar o tempo dormindo [3]. O custo disso é que quem dorme em intervalos curtos às vezes não recebe sua parte justa [3].']],
+      ['Nesta simulação', ['A tabela de pesos é a do kernel. O desenho é uma árvore perfeitamente balanceada, com as tarefas prontas em ordem de vruntime; no kernel, o balanceamento segue as regras da árvore rubro-negra. Os valores da latência e da granularidade mínima foram escolhidos para ficarem visíveis nesta escala.']],
+    ],
+  },
+  loop: {
+    refs: [REF.libuv, REF.nodeloop, REF.nodeblock, REF.nodewiki],
+    secs: [
+      ['De onde veio', ['O Node.js foi apresentado por Ryan Dahl em 2009 [4] e levou o modelo de laço de eventos a um público amplo. Assíncrono é diferente de paralelo: aqui existe um só fluxo de execução.']],
+      ['Como decide', ['O libuv segue a abordagem usual de I/O assíncrono em uma só thread [1]. Ele vigia os sockets com o melhor mecanismo de cada sistema, como epoll, kqueue e IOCP [1]. No Node, o laço passa por fases, e cada fase tem uma fila FIFO de callbacks [2].']],
+      ['Por que ganha', ['Quem espera o banco não ocupa uma thread. Por isso, milhares de conexões esperando custam só o estado do callback. O desempenho é bom enquanto o trabalho de cada cliente, a cada instante, for pequeno [3].']],
+      ['Onde tropeça', ['Sem preempção, um callback que calcula por muito tempo segura todo mundo. A documentação do Node é direta: nunca bloqueie o laço de eventos [3]. E um só fluxo significa que só um núcleo é usado [1].']],
+      ['Nesta simulação', ['Fila única de callbacks no núcleo 0, sem custo de troca, com 8 KB por pedido em memória, um valor didático. As fases do laço são reduzidas a uma só fila. Os relatórios R! mostram o efeito de um callback longo.']],
+    ],
+  },
+  go: {
+    refs: [REF.go11sched, REF.goproc, REF.go114, REF.tokio],
+    secs: [
+      ['De onde veio', ['Dmitry Vyukov propôs em maio de 2012 introduzir o P (processador lógico) e montar um escalonador com roubo de trabalho [1]. O runtime ainda aponta para esse documento [2].']],
+      ['G, M e P', ['G é a goroutine, M é a thread do sistema e P é o recurso necessário para executar código Go [2]. A separação deixa uma thread bloqueada em chamada de sistema largar seu P, para que outra continue [1].']],
+      ['Como decide', ['Para escolher a próxima, um P olha o espaço runnext, depois a fila local [2]. A cada 61 escalonamentos, olha antes a fila global, para garantir justiça [2]. Sem trabalho, rouba metade da fila de outro P [2].']],
+      ['Preempção', ['Um G recebe 10 ms de fatia [2]. Desde o Go 1.14, goroutines podem ser interrompidas de forma assíncrona, e laços sem chamada de função já não travam o escalonador [3]. O runtime Tokio usa um espaço de “próxima tarefa” parecido com o runnext [4].']],
+      ['Nesta simulação', ['Cada núcleo é um P com fila local e runnext. A goroutine criada entra no runnext. A interrompida vai para a fila global, uma simplificação. O netpoller é o espaço “em espera”. Trocas de goroutine não custam tempo, e cada goroutine ocupa 8 KB, um valor didático.']],
+    ],
+  },
+  eas: {
+    refs: [REF.easdoc, REF.easarm, REF.biglittle, REF.threaddir, REF.alderlake],
+    secs: [
+      ['De onde veio', ['A Arm anunciou o big.LITTLE em outubro de 2011, combinando núcleos de alto desempenho e núcleos econômicos [3]. O Energy Aware Scheduling chegou ao Linux 5.0 [2].']],
+      ['Como decide', ['Com um modelo de energia registrado, o kernel avalia em que núcleo uma tarefa acordada causaria o menor gasto [1]. O EAS só funciona em topologias heterogêneas, como big.LITTLE [1].']],
+      ['Quando desiste', ['Quando um núcleo passa de 80% da capacidade, ele é considerado sobreutilizado. Aí o EAS é desativado e o balanceador comum volta a agir [1]. A lógica é que, com a máquina cheia, importa mais distribuir a carga do que economizar.']],
+      ['No hardware', ['A Intel lançou seu primeiro processador híbrido, o Alder Lake, em 2021 [5]. Seu Thread Director monitora em tempo real a mistura de instruções de cada thread e ajuda a colocá-la no núcleo adequado [4].']],
+      ['Nesta simulação', ['O uso de cada tarefa é uma média móvel. Ao acordar, ela vai para o núcleo que comporta a carga com menos energia, usando o limite de 80%. Uma tarefa pesada demais para um LITTLE sobe quando um núcleo grande fica livre. Os números de potência são didáticos: grande 3 W, LITTLE 0,75 W, ocioso 0,1 W.']],
+    ],
+  },
+  eevdf: {
+    refs: [REF.eevdfpaper, REF.eevdfdoc, REF.eevdflwn, REF.ostep9],
+    secs: [
+      ['De onde veio', ['Ion Stoica e Hussein Abdel-Wahab publicaram o algoritmo em 1995 [1][3]. Peter Zijlstra propôs seu uso no Linux em 2023 [2], e a partir do Linux 6.6 o EEVDF passou a ser o padrão [2][4].']],
+      ['Lag: quanto devem a você', ['Para cada tarefa, o lag é a diferença entre o tempo que ela deveria ter recebido e o que recebeu [3]. Lag positivo significa que há CPU devida a ela. Lag negativo significa que passou da sua parte [2].']],
+      ['Como decide', ['Uma tarefa é elegível se o lag for maior ou igual a zero [3]. Entre as elegíveis, roda a que tem o prazo virtual mais próximo [2][3]. O prazo virtual é o instante elegível somado à fatia [3].']],
+      ['O grande ganho', ['O CFS só tinha um parâmetro, o peso. O EEVDF tem dois: peso e fatia. Uma tarefa com fatia menor recebe prazos mais cedo. Ela roda com mais frequência, em pedaços menores, e sem ganhar mais CPU no total [3]. Latência e parcela de CPU se tornam escolhas independentes.']],
+      ['Nesta simulação', ['Na régua, V é a média ponderada do tempo virtual de cada fila. A área à esquerda de V é a das elegíveis, e cada barra termina no prazo. Editor, terminal e áudio pedem fatias menores. Tarefas que dormem mantêm o lag acumulado até um limite. O recurso RUN_TO_PARITY não é modelado.']],
+    ],
+  },
+  scx: {
+    refs: [REF.scxdoc, REF.scxpull],
+    secs: [
+      ['De onde veio', ['O sched_ext entrou no Linux 6.12 como uma nova classe de escalonamento, a ext_sched_class, em que a política é implementada em programas BPF [2].']],
+      ['Como funciona', ['O programa BPF decide quem roda onde, e pode ser carregado e descarregado com o sistema em funcionamento [1].']],
+      ['A rede de segurança', ['Se um erro é detectado, se uma tarefa pronta fica parada por tempo demais, ou se o usuário aciona SysRq-S, o comportamento padrão é restaurado, e as tarefas voltam à classe justa [1]. Assim, um escalonador experimental ruim não derruba a máquina.']],
+      ['Nesta simulação', ['Sua função recebe uma tarefa e devolve uma nota, e a de menor nota roda primeiro. Ela é executada aqui no seu navegador, sem BPF, e só serve de brincadeira com a mesma ideia. Em caso de erro, a tarefa cai para a ordem de chegada, em homenagem à rede de segurança. Uma função com laço infinito trava a aba, já que aqui não há verificador.']],
+    ],
+  },
+};
+
+// A regra de cada algoritmo em uma frase, para o painel Passo a passo.
+const REGRAS = {
+  fcfs: 'Roda quem chegou primeiro, até o fim.',
+  sjf: 'Quando o núcleo vaga, roda a menor rajada. Ninguém é interrompido.',
+  rr: 'Cada uma roda no máximo um quantum e volta para o fim da fila.',
+  prio: 'Roda a maior prioridade. Uma prioridade melhor interrompe a atual.',
+  mlfq: 'Roda a fila mais alta. Quem gasta a cota desce, e o reforço devolve todas ao topo.',
+  srtf: 'Roda quem tem menos trabalho restante, e a novata pode interromper.',
+  rm: 'Prioridade fixa: quanto menor o período, antes roda.',
+  edf: 'Roda o job de prazo mais próximo.',
+  gang: 'As threads de um job rodam juntas: cada linha da matriz é uma fatia de tempo.',
+  bsd: 'Roda o menor p_usrpri, que sobe com o uso recente de CPU.',
+  unica: 'Núcleo livre pega a trava e tira a primeira da fila única.',
+  ws: 'Primeiro o próprio deque; sem nada, rouba a tarefa mais antiga de outro núcleo.',
+  loteria: 'Sorteia um bilhete. Quanto mais bilhetes, mais chance.',
+  thread: 'Cada pedido tem sua thread, e o kernel as alterna.',
+  stride: 'Roda o menor passo acumulado, que cresce mais rápido para quem tem menos bilhetes.',
+  o1: 'O mapa de bits indica a melhor prioridade ocupada. Fatia gasta vai para as expiradas.',
+  cfs: 'Roda a tarefa mais à esquerda da árvore: a de menor vruntime.',
+  loop: 'Um callback de cada vez, cada um até devolver o controle.',
+  go: 'runnext, fila local, fila global e, por último, roubar metade de outro P.',
+  eas: 'Ao acordar, vai ao núcleo que comporta a tarefa com menos energia.',
+  eevdf: 'Entre as elegíveis (lag ≥ 0), roda a de prazo virtual mais próximo.',
+  scx: 'Roda a menor nota dada pela sua função.',
+};
+</script>
+<script>
+'use strict';
+/* Interface: guarda as escolhas, desenha o palco e o Gantt, e roda o comparativo. */
+const $ = s => document.querySelector(s);
+const defaultsDe = a => { const p = {}; for (const x of a.params) p[x.id] = x.def; return p; };
+const reduz = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const S = {
+  algo: ALGOS[0], carga: 'comboio', cores: 1, machine: 'smp', cs: 1, seed: 7, manter: false,
+  params: Object.fromEntries(ALGOS.map(a => [a.id, defaultsDe(a)])),
+  rodando: !reduz, vel: 30, ganttView: 'nucleos', cmpKpi: null, modo: 'guiada', seguraAte: 0, nDecisoes: 0,
+};
+S.params.scx.fonte = SCX_EXEMPLOS.justo;
+
+let sim = null, est = 100, acc = 0, frame = 0, proxLetra = 0;
+const tokens = new Map();
+let C = null;
+
+function leCores() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = n => cs.getPropertyValue(n).trim();
+  C = {
+    plate: v('--plate'), band: v('--band'), ink: v('--ink'), ink2: v('--ink2'), muted: v('--muted'), line: v('--line'),
+    accent: v('--accent'), crit: v('--crit'), warn: v('--warn'), paper: v('--paper'),
+    t: [1, 2, 3, 4, 5, 6, 7, 8].map(i => v(`--t${i}`)),
+  };
+}
+const luz = hex => {
+  const n = parseInt(hex.slice(1), 16);
+  return (0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255;
+};
+const textoSobre = hex => (luz(hex) > 0.58 ? '#111' : '#fff');
+const FM = (px, w = 500) => `${w} ${px}px "IBM Plex Mono", ui-monospace, monospace`;
+
+/* ---------- Simulação ---------- */
+
+function cfgAtual(rec) {
+  return { cores: S.cores, machine: S.machine, cs: S.cs, seed: S.seed, rec, params: S.params[S.algo.id] };
+}
+function especificacao() { return CARGAS[S.carga].gen(criaRng(S.seed)); }
+
+function estimaFim() {
+  const c = cfgAtual(false), w = CARGAS[S.carga];
+  const s = new Sim(c, especificacao(), S.algo);
+  while (!s.done && s.t < w.cap) s.step();
+  return s.t;
+}
+
+function reinicia() {
+  sim = new Sim(cfgAtual(true), especificacao(), S.algo);
+  est = Math.max(20, estimaFim());
+  acc = 0; proxLetra = 0;
+  tokens.clear();
+  sim.prepara();
+  S.nDecisoes = 0; S.seguraAte = 0; ultimoPasso = null;
+  if (S.rodando && S.modo !== 'continua' && decidiuAgora()) seguraDecisao();
+  atualizaErroScx();
+  atualizaKpis();
+  atualizaLegenda();
+  $('#log').textContent = '';
+}
+
+const terminou = () => sim.done || sim.t >= CARGAS[S.carga].cap;
+
+const DECIDE = new Set(['escolheu', 'interrompeu', 'moveu']);
+const decidiuAgora = () => {
+  for (let i = sim.log.length - 1; i >= 0 && sim.log[i].t >= sim.t; i--) if (DECIDE.has(sim.log[i].k) && sim.log[i].t === sim.t) return true;
+  return false;
+};
+
+// Segura mais nas primeiras decisões e acelera depois, para cargas com centenas delas não levarem minutos.
+function seguraDecisao() {
+  S.nDecisoes++;
+  if (S.modo === 'manual') { S.rodando = false; atualizaPlay(); return; }
+  if (S.modo === 'guiada') {
+    const fator = S.vel <= 8 ? 1.5 : S.vel >= 120 ? 0.45 : 1;
+    S.seguraAte = performance.now() + clamp(1700 - 45 * S.nDecisoes, 500, 1700) * fator;
+  }
+}
+
+function avanca(n) {
+  for (let i = 0; i < n && !terminou(); i++) {
+    sim.step();
+    if (terminou()) break;
+    sim.prepara();
+    if (S.modo !== 'continua' && S.rodando && decidiuAgora()) { acc = 0; seguraDecisao(); break; }
+  }
+}
+
+function proximaDecisao() {
+  if (terminou()) return;
+  S.rodando = false;
+  while (!terminou()) {
+    sim.step();
+    if (terminou()) break;
+    sim.prepara();
+    if (decidiuAgora()) break;
+  }
+  atualizaPlay();
+  atualizaKpis();
+}
+
+function atualizaErroScx() {
+  const el = $('#scx-erro');
+  const e = S.algo.scx && sim.p.erro && sim.p.erro();
+  el.hidden = !e;
+  if (e) el.textContent = `erro: ${e.message}. Caindo para a ordem de chegada.`;
+}
+
+/* ---------- Palco ---------- */
+
+const cv = $('#estagio'), g = cv.getContext('2d');
+const gv = $('#gantt'), gg = gv.getContext('2d');
+let W = 0, H = 0, GW = 0, GH = 0, TS = 26;
+
+function dimensiona() {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  W = cv.clientWidth || cv.parentElement.clientWidth;
+  const largo = W >= 720;
+  const nc = S.cores;
+  H = largo ? 336 : 262 + 62 + Math.ceil(nc / 2) * 56;
+  cv.style.height = `${H}px`;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  GW = gv.clientWidth || W;
+  const linhas = linhasGantt().length;
+  GH = 26 + clamp(linhas * 20, 60, 340);
+  gv.style.height = `${GH}px`;
+  gv.width = Math.round(GW * dpr); gv.height = Math.round(GH * dpr);
+  gg.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function caixa(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, Math.max(0, w), Math.max(0, h), r);
+}
+
+function etiqueta(ctx, txt, x, y, cor, px = 11, align = 'left', peso = 500) {
+  ctx.font = FM(px, peso);
+  ctx.textAlign = align;
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = cor;
+  ctx.fillText(txt, x, y);
+}
+
+function tk(t) {
+  let k = tokens.get(t.id);
+  if (!k) { k = { x: 4, y: H * 0.35, a: 0, t, tx: 4, ty: H * 0.35, vis: 0 }; tokens.set(t.id, k); }
+  return k;
+}
+function alvo(t, x, y) { const k = tk(t); k.tx = x; k.ty = y; k.vis = frame; }
+
+function pistas(v, r) {
+  const n = v.lanes.length;
+  const gap = v.compact ? 3 : 5;
+  const h = Math.min(64, (r.h - gap * (n - 1)) / n);
+  const LW = r.w < 340 ? 58 : 82;
+  const inicio = r.y + Math.max(0, (r.h - (h + gap) * n + gap) / 2);
+  v.lanes.forEach((l, i) => {
+    const y = inicio + i * (h + gap);
+    g.fillStyle = i % 2 ? C.plate : C.band;
+    caixa(g, r.x, y, r.w, h, 4); g.fill();
+    g.strokeStyle = C.line; g.lineWidth = 1;
+    caixa(g, r.x + 0.5, y + 0.5, r.w - 1, h - 1, 4); g.stroke();
+    const tudo = h >= 34 && l.note;
+    etiqueta(g, l.label, r.x + 8, y + (tudo ? h / 2 - 7 : h / 2), C.ink2, 11, 'left', 600);
+    if (tudo) etiqueta(g, l.note, r.x + 8, y + h / 2 + 7, C.muted, 10);
+    const x0 = r.x + LW, xf = r.x + r.w - 10;
+    const m = l.tasks.length;
+    const passo = m > 1 ? Math.min(TS + 4, (xf - x0 - TS) / (m - 1)) : 0;
+    const cy = y + h / 2 - (v.capt && h >= 44 ? 6 : 0);
+    if (m) {
+      g.fillStyle = C.accent;
+      g.beginPath();
+      g.moveTo(r.x + r.w - 2, y + h / 2); g.lineTo(r.x + r.w - 7, y + h / 2 - 4); g.lineTo(r.x + r.w - 7, y + h / 2 + 4); g.fill();
+    }
+    if (l.slot && m) {
+      g.strokeStyle = C.accent; g.lineWidth = 1.5; g.setLineDash([3, 2]);
+      caixa(g, xf - TS - 3, cy - TS * 0.5 - 3, TS + 6, TS + 6, 5); g.stroke();
+      g.setLineDash([]);
+    }
+    l.tasks.forEach((t, k) => {
+      const px = xf - TS / 2 - k * passo;
+      alvo(t, px, cy);
+      if (v.capt && h >= 44 && TS >= 20 && passo >= 22) {
+        const c = v.capt(t);
+        if (c !== '' && c != null) etiqueta(g, String(c), px, cy + TS / 2 + 8, C.muted, 10, 'center');
+      }
+    });
+  });
+  if (v.trava) etiqueta(g, 'trava ocupada', r.x + r.w - 6, r.y + 8, C.crit, 11, 'right', 600);
+}
+
+function roda(v, r) {
+  const cx = r.x + r.w / 2, cy = r.y + r.h / 2, R = Math.min(r.w, r.h) / 2 - TS * 0.75 - 2;
+  g.strokeStyle = C.line; g.lineWidth = 12;
+  g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.stroke();
+  g.lineWidth = 1;
+  const c0 = sim.cores.find(c => c.task);
+  const q = sim.cfg.params.q;
+  if (c0) {
+    g.strokeStyle = C.accent; g.lineWidth = 4;
+    g.beginPath(); g.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, c0.sliceUsed / q)); g.stroke();
+    g.lineWidth = 1;
+  }
+  etiqueta(g, `quantum ${q} ms`, cx, cy - 8, C.ink2, 12, 'center', 600);
+  etiqueta(g, `${v.tasks.length} na roda`, cx, cy + 9, C.muted, 11, 'center');
+  v.tasks.forEach((t, i) => {
+    const a = -Math.PI * 0 + (i / Math.max(1, v.tasks.length)) * Math.PI * 2;
+    alvo(t, cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+  });
+}
+
+function bilhetes(v, r) {
+  const rodando = sim.cores.map(c => c.task).filter(Boolean);
+  const lista = v.tasks.concat(rodando).sort((a, b) => a.id - b.id);
+  const total = lista.reduce((s, t) => s + v.bilhetes(t), 0) || 1;
+  const y = r.y + r.h * 0.5, alt = 30;
+  let x = r.x + 4;
+  const larg = r.w - 8;
+  const centros = new Map();
+  for (const t of lista) {
+    const w = larg * v.bilhetes(t) / total;
+    const fora = rodando.includes(t);
+    g.globalAlpha = fora ? 0.3 : 1;
+    g.fillStyle = C.t[t.cor];
+    caixa(g, x, y, Math.max(1, w - 2), alt, 3); g.fill();
+    g.globalAlpha = 1;
+    centros.set(t.id, x + (w - 2) / 2);
+    if (w > 42) etiqueta(g, `${v.bilhetes(t)}`, x + w / 2 - 1, y + alt / 2, textoSobre(C.t[t.cor]), 11, 'center', 600);
+    x += w;
+  }
+  v.tasks.forEach(t => alvo(t, centros.get(t.id), y - TS / 2 - 12));
+  etiqueta(g, 'bilhetes no sorteio; quem está na CPU fica apagado', r.x + 4, y + alt + 14, C.muted, 11);
+  const u = v.ultimo;
+  if (u && centros.has(u.id)) {
+    const px = centros.get(u.id);
+    g.fillStyle = C.ink;
+    g.beginPath(); g.moveTo(px, y + alt + 1); g.lineTo(px - 6, y + alt + 9); g.lineTo(px + 6, y + alt + 9); g.fill();
+    etiqueta(g, `sorteio ${u.sorteio} de ${u.total}`, r.x + r.w - 4, r.y + 12, C.ink2, 12, 'right', 600);
+  }
+}
+
+function regua(v, r) {
+  const n = v.rows.length;
+  const gap = 6, h = (r.h - 18 - gap * (n - 1)) / n;
+  let mn = Infinity, mx = -Infinity;
+  for (const row of v.rows) {
+    for (const t of row.tasks.concat(row.curr)) {
+      const a = row.v(t);
+      if (a == null) continue;
+      mn = Math.min(mn, a); mx = Math.max(mx, row.dl ? row.dl(t) : a);
+    }
+  }
+  if (mn === Infinity) { mn = 0; mx = 1; }
+  const folga = Math.max(4, (mx - mn) * 0.08);
+  mn -= folga; mx += folga;
+  const LW = n > 1 ? 18 : 6;
+  const X = a => r.x + LW + (a - mn) / (mx - mn) * (r.w - LW - 10);
+  etiqueta(g, v.eixo, r.x + r.w - 4, r.y + 8, C.muted, 11, 'right');
+  v.rows.forEach((row, i) => {
+    const y = r.y + 18 + i * (h + gap);
+    g.fillStyle = C.band;
+    caixa(g, r.x, y, r.w, h, 4); g.fill();
+    if (row.label) etiqueta(g, row.label, r.x + 4, y + h / 2, C.muted, 10);
+    const cy = y + h / 2;
+    if (row.V != null) {
+      const vx = X(row.V);
+      g.globalAlpha = 0.18; g.fillStyle = C.accent;
+      caixa(g, r.x, y, Math.max(0, vx - r.x), h, 4); g.fill();
+      g.globalAlpha = 1; g.strokeStyle = C.accent; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(vx, y); g.lineTo(vx, y + h); g.stroke(); g.lineWidth = 1;
+      if (i === 0) etiqueta(g, 'V', vx + 5, y + 8, C.accent, 11, 'left', 600);
+    }
+    const passoY = Math.min(TS * 0.72, (h - TS) / 2);
+    row.tasks.slice().sort((a, b) => row.v(a) - row.v(b)).forEach((t, k) => {
+      const ty = cy + (h > TS * 1.3 ? ((k % 3) - 1) * passoY : 0);
+      const tx = X(row.v(t));
+      if (row.dl) {
+        const dx = X(row.dl(t));
+        g.strokeStyle = C.t[t.cor]; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(tx, ty); g.lineTo(dx, ty); g.moveTo(dx, ty - 4); g.lineTo(dx, ty + 4); g.stroke(); g.lineWidth = 1;
+      }
+      alvo(t, tx, ty);
+    });
+    for (const t of row.curr) {
+      if (row.v(t) == null) continue;
+      g.strokeStyle = C.t[t.cor]; g.lineWidth = 2;
+      caixa(g, X(row.v(t)) - 6, cy - 6, 12, 12, 2); g.stroke(); g.lineWidth = 1;
+    }
+  });
+}
+
+function arvore(v, r) {
+  const n = v.rq.length, cols = Math.ceil(Math.sqrt(n)), rows = Math.ceil(n / cols);
+  const cw = r.w / cols, ch = r.h / rows;
+  v.rq.forEach((lista, c) => {
+    const ox = r.x + (c % cols) * cw, oy = r.y + Math.floor(c / cols) * ch;
+    const ord = lista.slice().sort((a, b) => a.vr - b.vr);
+    if (n > 1) etiqueta(g, `CPU ${c}`, ox + 4, oy + 8, C.muted, 10);
+    etiqueta(g, `min_vruntime ${v.minV[c].toFixed(0)}`, ox + cw - 6, oy + 8, C.muted, 10, 'right');
+    const prof = ord.length ? Math.floor(Math.log2(ord.length)) : 0;
+    const dy = Math.min(TS + 18, (ch - 26 - TS) / Math.max(1, prof));
+    const coloca = (a, b, x0, x1, d, pai) => {
+      if (a > b) return;
+      const m = (a + b) >> 1, x = (x0 + x1) / 2, y = oy + 22 + TS / 2 + d * dy;
+      if (pai) { g.strokeStyle = C.line; g.lineWidth = 1.5; g.beginPath(); g.moveTo(pai.x, pai.y); g.lineTo(x, y); g.stroke(); g.lineWidth = 1; }
+      coloca(a, m - 1, x0, x, d + 1, { x, y });
+      coloca(m + 1, b, x, x1, d + 1, { x, y });
+      const raio = TS * 0.74;
+      g.fillStyle = d === prof && prof > 0 ? C.crit : C.ink;
+      g.beginPath(); g.arc(x, y, raio, 0, Math.PI * 2); g.fill();
+      alvo(ord[m], x, y);
+      if (m === 0 && TS >= 20) etiqueta(g, 'próxima', Math.max(ox + 30, x), y + raio + 8, C.accent, 10, 'center', 600);
+    };
+    coloca(0, ord.length - 1, ox + 6, ox + cw - 6, 0, null);
+  });
+}
+
+function vetores(v, r) {
+  const n = v.rqs.length, rot = r.w < 340 ? 54 : 70;
+  const gap = 6, h = (r.h - gap * (n - 1)) / n;
+  const cel = (r.w - rot - 6) / 40;
+  const fila = (arr, x, y, altura, nome, ativo) => {
+    etiqueta(g, nome, r.x + 4, y + altura / 2, ativo ? C.ink2 : C.muted, 10, 'left', ativo ? 600 : 400);
+    for (let i = 0; i < 40; i++) {
+      const cx = x + i * cel;
+      g.fillStyle = arr[i].length ? (ativo ? C.accent : C.muted) : C.band;
+      g.fillRect(cx, y + altura - 4, Math.max(1, cel - 1), 3);
+      arr[i].forEach((t, k) => alvo(t, cx + cel / 2, y + (altura - 4) / 2 - k * 2));
+    }
+  };
+  v.rqs.forEach((q, c) => {
+    const y = r.y + c * (h + gap), a2 = (h - 12) / 2;
+    if (n > 1) etiqueta(g, `CPU ${c}`, r.x + r.w - 2, y + 5, C.muted, 10, 'right');
+    fila(q.a, r.x + rot, y + 10, a2, 'ativas', true);
+    fila(q.e, r.x + rot, y + 11 + a2, a2, 'expiradas', false);
+  });
+  if (n === 1) {
+    etiqueta(g, '100', r.x + rot, r.y + 3, C.muted, 10);
+    etiqueta(g, 'prioridade', r.x + rot + (r.w - rot) / 2, r.y + 3, C.muted, 10, 'center');
+    etiqueta(g, '139', r.x + r.w - 6, r.y + 3, C.muted, 10, 'right');
+  }
+}
+
+function matriz(v, r) {
+  const nc = sim.cores.length, nr = Math.max(1, v.grid.length);
+  const LW = 62, gap = 3;
+  const cw = (r.w - LW) / nc, ch = Math.min(52, (r.h - 18 - gap * (nr - 1)) / nr);
+  for (let c = 0; c < nc; c++) etiqueta(g, `CPU ${c}`, r.x + LW + c * cw + cw / 2, r.y + 8, C.muted, 10, 'center');
+  v.grid.forEach((l, i) => {
+    const y = r.y + 18 + i * (ch + gap);
+    const atual = i === v.cur;
+    if (atual) { g.fillStyle = C.accent; g.globalAlpha = 0.14; caixa(g, r.x, y - 1, r.w, ch + 2, 4); g.fill(); g.globalAlpha = 1; }
+    etiqueta(g, `fatia ${i}`, r.x + 4, y + ch / 2 - (atual ? 6 : 0), atual ? C.accent : C.muted, 11, 'left', atual ? 600 : 400);
+    if (atual) etiqueta(g, `${Math.max(0, v.resta)} ms`, r.x + 4, y + ch / 2 + 8, C.accent, 10);
+    l.forEach((t, c) => {
+      const x = r.x + LW + c * cw;
+      g.strokeStyle = C.line; g.lineWidth = 1;
+      caixa(g, x + 2, y, cw - 4, ch, 3); g.stroke();
+      if (t && t.state === 'ready') alvo(t, x + cw / 2, y + ch / 2);
+      else if (t && t.state !== 'done') {
+        g.globalAlpha = 0.28; g.fillStyle = C.t[t.cor];
+        caixa(g, x + cw / 2 - 10, y + ch / 2 - 7, 20, 14, 3); g.fill();
+        g.globalAlpha = 1;
+      }
+    });
+  });
+}
+
+const DESENHA = { lanes: pistas, ring: roda, ticket: bilhetes, ruler: regua, tree: arvore, o1: vetores, matrix: matriz };
+
+function desenhaNucleo(c, x, y, w, h, soZero) {
+  const fora = soZero && c.id !== 0;
+  g.globalAlpha = fora ? 0.4 : 1;
+  g.fillStyle = C.band;
+  caixa(g, x, y, w, h, 5); g.fill();
+  g.strokeStyle = c.task ? C.accent : C.line; g.lineWidth = c.task ? 1.5 : 1;
+  caixa(g, x + 0.5, y + 0.5, w - 1, h - 1, 5); g.stroke(); g.lineWidth = 1;
+  const nome = sim.cfg.machine === 'hetero' ? (c.big ? `grande ${c.id}` : `LITTLE ${c.id}`) : `CPU ${c.id}`;
+  // Com muitos núcleos a caixa fica baixa: nome, tarefa e estado dividem a mesma linha.
+  const baixa = h < 46;
+  const ly = baixa ? y + h / 2 : y + 11;
+  etiqueta(g, nome, x + 8, ly, C.ink2, 11, 'left', 600);
+  let estado = 'ociosa', cor = C.muted;
+  if (fora) estado = 'fora do laço';
+  else if (c.ovh.length) {
+    const k = c.ovh[0].kind;
+    estado = k === 'cs' ? 'trocando' : k === 'lock' ? 'na trava' : 'roubando';
+    cor = k === 'lock' ? C.crit : k === 'steal' ? C.warn : C.ink2;
+  } else if (c.task) { estado = c.task.spin ? 'girando' : 'rodando'; cor = c.task.spin ? C.warn : C.accent; }
+  etiqueta(g, estado, x + w - 8, ly, cor, 11, 'right');
+  const ty = baixa ? y + h / 2 : y + Math.min(h - TS / 2 - 3, 24 + TS / 2);
+  const tx = baixa ? x + 62 : x + 8;
+  if (c.task) {
+    alvo(c.task, tx + TS / 2, ty);
+    const op = c.task.ops[c.task.pc - 1];
+    const frac = op && op.n ? clamp(1 - c.task.rem / op.n, 0, 1) : 0;
+    const bx = tx + 8 + TS, bw = x + w - bx - (baixa ? 66 : 8);
+    if (bw > 10) {
+      g.fillStyle = C.line; g.fillRect(bx, ty - 2, bw, 4);
+      g.fillStyle = C.accent; g.fillRect(bx, ty - 2, bw * frac, 4);
+    }
+  }
+  g.globalAlpha = 1;
+}
+
+function desenhaPalco(dt) {
+  frame++;
+  if (!W) return;
+  g.clearRect(0, 0, W, H);
+  const v = sim.p.view();
+  const nc = sim.cores.length, largo = W >= 720, m = 10;
+  const coresW = 196;
+  const poolH = 52;
+  let st, pool, ncols, colX, colY, cw, chh;
+  if (largo) {
+    st = { x: m, y: m, w: W - coresW - m * 3, h: H - poolH - m * 3 };
+    pool = { x: m, y: H - poolH - m, w: W - coresW - m * 3, h: poolH };
+    ncols = 1; colX = W - coresW - m; colY = m; cw = coresW;
+    chh = Math.min(66, (H - m * 2 - 5 * (nc - 1)) / nc);
+  } else {
+    st = { x: m, y: m, w: W - m * 2, h: 242 };
+    pool = { x: m, y: m + 242 + 8, w: W - m * 2, h: poolH };
+    ncols = 2; colX = m; colY = pool.y + poolH + 8; cw = (W - m * 2 - 6) / 2;
+    chh = 50;
+  }
+  const vivos = sim.tasks.filter(t => t.state !== 'done').length;
+  TS = vivos > 34 ? 13 : vivos > 16 ? 19 : 26;
+
+  DESENHA[v.kind](v, st);
+
+  const espera = sim.tasks.filter(t => t.state === 'blocked' || t.state === 'joining');
+  g.fillStyle = C.plate;
+  g.strokeStyle = C.line;
+  caixa(g, pool.x + 0.5, pool.y + 0.5, pool.w - 1, pool.h - 1, 4); g.stroke();
+  etiqueta(g, v.blockedLabel || 'em espera', pool.x + 8, pool.y + 11, C.ink2, 11, 'left', 600);
+  etiqueta(g, `${sim.pending.length - sim.pi} a caminho · ${sim.tasks.filter(t => t.state === 'done').length} prontas`, pool.x + pool.w - 8, pool.y + 11, C.muted, 11, 'right');
+  const passo = espera.length > 1 ? Math.min(TS + 3, (pool.w - 20 - TS) / (espera.length - 1)) : 0;
+  espera.forEach((t, i) => alvo(t, pool.x + 10 + TS / 2 + i * passo, pool.y + pool.h - TS / 2 - 3 - (TS < 19 ? 2 : -1)));
+
+  sim.cores.forEach((c, i) => {
+    const col = i % ncols, lin = Math.floor(i / ncols);
+    desenhaNucleo(c, colX + col * (cw + 6), colY + lin * (chh + 5), cw, chh, v.soNucleo0);
+  });
+
+  const destacadas = new Set(sim.log.filter(e => e.k === 'escolheu' && e.t === sim.t).map(e => e.id));
+  const k = reduz ? 1 : 1 - Math.exp(-dt * 13);
+  for (const [id, b] of tokens) {
+    if (b.t.state === 'done') { b.a -= dt * 3; if (b.a <= 0) { tokens.delete(id); continue; } }
+    else b.a = Math.min(1, b.a + dt * 5);
+    if (b.vis === frame) { b.x += (b.tx - b.x) * k; b.y += (b.ty - b.y) * k; }
+    desenhaToken(b, destacadas.has(id));
+  }
+}
+
+function desenhaToken(b, destaque) {
+  const t = b.t, s = TS, cor = C.t[t.cor];
+  g.globalAlpha = clamp(b.a, 0, 1);
+  if (destaque) {
+    g.strokeStyle = C.accent; g.lineWidth = 3;
+    caixa(g, b.x - s / 2 - 4, b.y - s / 2 - 4, s + 8, s + 8, 6); g.stroke(); g.lineWidth = 1;
+  }
+  g.fillStyle = cor;
+  caixa(g, b.x - s / 2, b.y - s / 2, s, s, s < 16 ? 2 : 4); g.fill();
+  g.strokeStyle = t.missed ? C.crit : C.ink; g.lineWidth = t.missed ? 2.5 : 1;
+  caixa(g, b.x - s / 2, b.y - s / 2, s, s, s < 16 ? 2 : 4); g.stroke(); g.lineWidth = 1;
+  if (s >= 19) {
+    const r = t.name.slice(0, 3);
+    etiqueta(g, r, b.x, b.y + 0.5, textoSobre(cor), r.length > 2 ? 9 : s >= 26 ? 13 : 11, 'center', 600);
+  }
+  g.globalAlpha = 1;
+}
+
+/* ---------- Gantt ---------- */
+
+const NOMES_SEG = { cs: 'troca de contexto', lock: 'esperando a trava', steal: 'tentando roubar', spin: 'girando na barreira', run: 'rodando', idle: 'ocioso' };
+const GX = 58, GT = 6, GB = 20;
+
+function linhasGantt() {
+  if (S.ganttView === 'nucleos' || !sim) {
+    return Array.from({ length: S.cores }, (_, i) => ({ core: i, label: sim && sim.cores[i] && !sim.cores[i].big ? `L ${i}` : `CPU ${i}` }));
+  }
+  const vistos = new Map();
+  for (const t of sim.tasks) {
+    if (!vistos.has(t.name)) vistos.set(t.name, { nome: t.name, tasks: [] });
+    vistos.get(t.name).tasks.push(t);
+  }
+  return [...vistos.values()].slice(0, 16).map(x => ({ tarefas: x.tasks, label: x.nome }));
+}
+
+function fimEscala() { return Math.max(est, sim.t + 1); }
+
+function desenhaGantt() {
+  if (!GW) return;
+  const linhas = linhasGantt();
+  const h = (GH - GT - GB) / Math.max(1, linhas.length);
+  const fim = fimEscala();
+  const X = v => GX + v / fim * (GW - GX - 10);
+  gg.clearRect(0, 0, GW, GH);
+  linhas.forEach((l, i) => {
+    const y = GT + i * h;
+    if (i % 2 === 0) { gg.fillStyle = C.band; gg.fillRect(GX, y, GW - GX - 10, h); }
+    etiqueta(gg, l.label.slice(0, 6), GX - 7, y + h / 2, C.ink2, 11, 'right');
+    const a = Math.max(2, h - 4), yy = y + (h - a) / 2;
+    if (l.core != null) {
+      for (const s of sim.cores[l.core].segs) {
+        if (s.k === 'idle') continue;
+        const x = X(s.s), w = Math.max(1, X(s.e) - x - (X(s.e) - x > 3 ? 1 : 0));
+        const t = s.id >= 0 ? sim.tasks[s.id] : null;
+        if (s.k === 'run' || s.k === 'spin') {
+          const cor = C.t[t.cor];
+          gg.fillStyle = cor;
+          gg.globalAlpha = s.k === 'spin' ? 0.35 : 1;
+          gg.fillRect(x, yy, w, a);
+          gg.globalAlpha = 1;
+          if (s.k === 'spin') {
+            gg.fillStyle = cor;
+            for (let px = x; px < x + w; px += 5) gg.fillRect(px, yy, Math.min(1.5, x + w - px), a);
+          } else if (w > 15 && a >= 12) etiqueta(gg, t.name.slice(0, 3), x + w / 2, yy + a / 2 + 0.5, textoSobre(cor), 10, 'center', 600);
+        } else {
+          gg.fillStyle = s.k === 'lock' ? C.crit : s.k === 'steal' ? C.warn : C.muted;
+          gg.fillRect(x, yy, w, a);
+        }
+      }
+    } else {
+      for (const t of l.tarefas) {
+        for (const p of t.hist) {
+          const e = p.e == null ? sim.t : p.e;
+          if (e <= p.s) continue;
+          const x = X(p.s), w = Math.max(1, X(e) - x);
+          if (p.st === 'running') { gg.fillStyle = C.t[t.cor]; gg.fillRect(x, yy, w, a); }
+          else if (p.st === 'ready') { gg.fillStyle = C.t[t.cor]; gg.globalAlpha = 0.3; gg.fillRect(x, yy + a * 0.28, w, a * 0.44); gg.globalAlpha = 1; }
+          else if (p.st === 'blocked' || p.st === 'joining') { gg.fillStyle = C.line; gg.fillRect(x, yy + a / 2 - 1, w, 2); }
+        }
+        if (t.deadline !== Infinity) {
+          const dx = X(t.deadline);
+          gg.fillStyle = t.missed ? C.crit : C.ink2;
+          gg.fillRect(dx - 0.5, yy - 1, 1.5, a + 2);
+        }
+      }
+    }
+  });
+  const baseY = GH - GB;
+  gg.strokeStyle = C.line; gg.beginPath(); gg.moveTo(GX, baseY + 0.5); gg.lineTo(GW - 10, baseY + 0.5); gg.stroke();
+  const pa = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000].find(p => fim / p <= Math.max(4, (GW - GX) / 62)) || 5000;
+  for (let v = 0; v <= fim; v += pa) {
+    const x = X(v);
+    gg.fillStyle = C.line; gg.fillRect(x, baseY, 1, 4);
+    etiqueta(gg, `${v}`, x, baseY + 12, C.muted, 10, 'center');
+  }
+  const nx = X(sim.t);
+  gg.fillStyle = C.accent; gg.fillRect(nx - 0.75, GT - 3, 1.5, baseY - GT + 3);
+  etiqueta(gg, 'ms', GX - 7, baseY + 12, C.muted, 10, 'right');
+}
+
+const dica = $('#dica');
+function mostraDica(ev, txt) {
+  dica.hidden = false;
+  dica.textContent = txt;
+  const b = dica.getBoundingClientRect();
+  dica.style.left = `${clamp(ev.clientX + 12, 6, innerWidth - b.width - 6)}px`;
+  dica.style.top = `${clamp(ev.clientY - b.height - 10, 6, innerHeight - b.height - 6)}px`;
+}
+function escondeDica() { dica.hidden = true; }
+
+gv.addEventListener('pointermove', ev => {
+  const r = gv.getBoundingClientRect();
+  const px = ev.clientX - r.left, py = ev.clientY - r.top;
+  const linhas = linhasGantt();
+  const h = (GH - GT - GB) / Math.max(1, linhas.length);
+  const i = Math.floor((py - GT) / h);
+  if (i < 0 || i >= linhas.length || px < GX) return escondeDica();
+  const t = (px - GX) / (GW - GX - 10) * fimEscala();
+  const l = linhas[i];
+  if (l.core != null) {
+    const s = sim.cores[l.core].segs.find(x => t >= x.s && t < x.e);
+    if (!s) return mostraDica(ev, `${l.label} · t=${Math.floor(t)} · ocioso`);
+    const tn = s.id >= 0 ? sim.tasks[s.id].name : '';
+    mostraDica(ev, `${l.label} · ${s.s}–${s.e} ms\n${tn ? `${tn} · ` : ''}${NOMES_SEG[s.k]}`);
+  } else {
+    let achou = null;
+    for (const x of l.tarefas) for (const p of x.hist) if (t >= p.s && t < (p.e == null ? sim.t : p.e)) achou = { x, p };
+    if (!achou) return escondeDica();
+    const nomes = { ready: 'pronta, na fila', running: 'na CPU', blocked: 'esperando I/O', joining: 'esperando as filhas', done: 'terminou' };
+    mostraDica(ev, `${l.label} · ${achou.p.s}–${achou.p.e == null ? sim.t : achou.p.e} ms\n${nomes[achou.p.st]}`);
+  }
+});
+gv.addEventListener('pointerleave', escondeDica);
+
+cv.addEventListener('pointermove', ev => {
+  const r = cv.getBoundingClientRect();
+  const px = ev.clientX - r.left, py = ev.clientY - r.top;
+  for (const k of tokens.values()) {
+    if (Math.abs(k.x - px) <= TS / 2 + 2 && Math.abs(k.y - py) <= TS / 2 + 2 && k.t.state !== 'done') {
+      const t = k.t;
+      const nomes = { ready: 'pronta', running: 'na CPU', blocked: 'esperando I/O', joining: 'esperando as filhas' };
+      return mostraDica(ev, `${t.name} · ${nomes[t.state] || t.state}\nCPU usada ${Math.round(t.cpuUsed)} ms · esperou ${Math.round(t.wait)} ms${t.nice ? ` · nice ${t.nice}` : ''}`);
+    }
+  }
+  escondeDica();
+});
+cv.addEventListener('pointerleave', escondeDica);
+
+/* ---------- Painéis de texto ---------- */
+
+function fmtKpi(id, v) {
+  const k = KPIS[id];
+  if (v == null || Number.isNaN(v)) return '–';
+  const x = v * (k.esc || 1);
+  const dec = k.dec != null ? k.dec : (Math.abs(x) < 10 && !Number.isInteger(x) ? 1 : 0);
+  return x.toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+
+function atualizaKpis() {
+  const w = CARGAS[S.carga], st = sim.stats();
+  const box = $('#kpis');
+  if (box.dataset.c !== S.carga) {
+    box.dataset.c = S.carga;
+    box.innerHTML = '';
+    for (const id of w.kpis) {
+      const d = document.createElement('div');
+      d.className = 'kpi';
+      d.title = KPIS[id].dica;
+      d.innerHTML = `<h3>${KPIS[id].nome}</h3><strong data-k="${id}"></strong><p>${KPIS[id].dica}</p>`;
+      box.appendChild(d);
+    }
+  }
+  for (const el of box.querySelectorAll('strong')) {
+    const id = el.dataset.k;
+    let texto = fmtKpi(id, st[id]);
+    if (id === 'perdidos') texto += ` de ${st.prazos}`;
+    el.innerHTML = `${texto}${KPIS[id].un ? `<small>${KPIS[id].un}</small>` : ''}`;
+  }
+}
+
+function atualizaStatus() {
+  let txt = `t = ${sim.t} ms`;
+  if (terminou()) {
+    txt = sim.done ? `terminou em ${sim.t} ms` : `não terminou até ${sim.t} ms: tudo girando na barreira ou fila parada`;
+  } else {
+    const prontas = sim.tasks.filter(t => t.state === 'ready').length;
+    txt += ` · ${prontas} na fila`;
+  }
+  $('#status').textContent = txt;
+}
+
+let ultimoPasso = null, ultimoPassoEm = 0;
+const nomeCpu = i => {
+  const c = sim.cores[i];
+  return sim.cfg.machine === 'hetero' ? `${c.big ? 'grande' : 'LITTLE'} ${i}` : `CPU ${i}`;
+};
+
+function chipTarefa(nome, cor) {
+  const i = document.createElement('i');
+  i.textContent = nome;
+  i.style.background = C.t[cor];
+  i.style.color = textoSobre(C.t[cor]);
+  return i;
+}
+
+function atualizaPasso(agora) {
+  const log = sim.log;
+  let tp = -1;
+  for (let i = log.length - 1; i >= 0; i--) if (DECIDE.has(log[i].k) && log[i].t <= sim.t) { tp = log[i].t; break; }
+  const assin = `${tp}/${log.length}/${terminou()}`;
+  if (assin === ultimoPasso) return;
+  // No modo contínuo as decisões passam rápido demais para ler: atualiza o texto em ritmo fixo.
+  if (S.modo === 'continua' && S.rodando && agora - ultimoPassoEm < 450) return;
+  ultimoPasso = assin;
+  ultimoPassoEm = agora;
+  $('#p-regra').textContent = REGRAS[S.algo.id];
+  const fatos = $('#p-fatos'), dec = $('#p-decisoes');
+  fatos.textContent = '';
+  dec.textContent = '';
+  if (terminou()) {
+    $('#p-quando').textContent = `fim da execução · t = ${sim.t} ms`;
+    const li = document.createElement('li');
+    li.textContent = sim.done ? 'Todas as tarefas terminaram.' : 'O limite de tempo chegou com tarefas ainda presas, girando na barreira ou sem conseguir rodar.';
+    fatos.appendChild(li);
+    desenhaHistorico();
+    return;
+  }
+  if (tp < 0) {
+    $('#p-quando').textContent = `t = ${sim.t} ms`;
+    const li = document.createElement('li');
+    li.textContent = 'Nenhuma tarefa pronta ainda.';
+    fatos.appendChild(li);
+    return;
+  }
+  const grupo = log.filter(e => e.t === tp);
+  $('#p-quando').textContent = `decisão em t = ${tp} ms${tp < sim.t ? ` · agora t = ${sim.t} ms` : ''}`;
+  const lista = grupo.filter(e => e.k !== 'escolheu' && e.k !== 'moveu');
+  for (const e of lista.slice(0, 5)) {
+    const li = document.createElement('li');
+    if (e.nome) { const b = document.createElement('b'); b.textContent = e.nome; li.append(b, ' '); }
+    li.append(e.core != null ? `(${nomeCpu(e.core)}) ` : '', `${e.txt}.`);
+    fatos.appendChild(li);
+  }
+  if (lista.length > 5) { const li = document.createElement('li'); li.textContent = `e mais ${lista.length - 5} acontecimentos.`; fatos.appendChild(li); }
+  if (!lista.length) { const li = document.createElement('li'); li.textContent = 'Um núcleo estava livre e havia tarefa pronta.'; fatos.appendChild(li); }
+  const decisoes = grupo.filter(e => e.k === 'escolheu' || e.k === 'moveu');
+  for (const e of decisoes.slice(0, 3)) {
+    const d = document.createElement('div');
+    d.className = 'p-dec';
+    if (e.k === 'moveu') {
+      d.textContent = `${e.nome ? `${e.nome}: ` : ''}${e.txt}.`;
+    } else {
+      const b = document.createElement('b');
+      b.textContent = `${nomeCpu(e.core)} → ${e.nome}`;
+      d.append(b, `: ${e.txt}.`);
+      if (e.custo) { const sm = document.createElement('small'); sm.textContent = ` (${e.custo})`; d.append(sm); }
+      if (e.cand.length > 1) {
+        const ch = document.createElement('div');
+        ch.className = 'chips';
+        for (const c of e.cand) {
+          const sp = document.createElement('span');
+          sp.className = `chip${c.esc ? ' esc' : ''}`;
+          sp.append(chipTarefa(c.nome, c.cor), c.m ? (c.esc ? `✓ ${c.m}` : c.m) : (c.esc ? '✓' : ''));
+          ch.appendChild(sp);
+        }
+        if (e.mais) { const sp = document.createElement('span'); sp.className = 'chip'; sp.textContent = `+${e.mais}`; ch.appendChild(sp); }
+        d.appendChild(ch);
+      } else {
+        const sm = document.createElement('small');
+        sm.textContent = ' Era a única na disputa.';
+        d.append(sm);
+      }
+    }
+    dec.appendChild(d);
+  }
+  if (decisoes.length > 3) { const d = document.createElement('div'); d.className = 'p-dec'; d.textContent = `e mais ${decisoes.length - 3} decisões neste instante.`; dec.appendChild(d); }
+  desenhaHistorico();
+}
+
+function desenhaHistorico() {
+  const det = document.querySelector('.passo details');
+  if (!det.open) return;
+  const box = $('#log');
+  box.textContent = '';
+  for (const e of sim.log.filter(x => DECIDE.has(x.k)).slice(-120).reverse()) {
+    const li = document.createElement('li');
+    const quem = e.k === 'escolheu' ? `${nomeCpu(e.core)} → ${e.nome}` : e.nome || 'sistema';
+    li.innerHTML = '<small></small> <b></b> <span></span>';
+    li.querySelector('small').textContent = String(e.t).padStart(4, '\u00a0');
+    li.querySelector('b').textContent = quem;
+    li.querySelector('span').textContent = e.txt;
+    box.appendChild(li);
+  }
+}
+
+function atualizaLegenda() {
+  const box = $('#legenda');
+  box.textContent = '';
+  const add = (cor, txt, estilo) => {
+    const s = document.createElement('span');
+    const i = document.createElement('i');
+    i.style.background = cor;
+    if (estilo) i.style.cssText += estilo;
+    s.append(i, document.createTextNode(txt));
+    box.appendChild(s);
+  };
+  const nomes = new Map();
+  for (const sp of especificacao()) if (!nomes.has(sp.name) && nomes.size < 8) nomes.set(sp.name, sp.cor);
+  const w = CARGAS[S.carga];
+  if (S.carga === 'servidor') { add(C.t[0], 'pedido'); add(C.t[1], 'relatório pesado'); }
+  else if (S.carga === 'forkjoin') add(C.t[0], 'cor: ramo da árvore de tarefas');
+  else if (S.carga !== 'barreira') for (const [n, c] of nomes) add(C.t[c], n);
+  else { add(C.t[0], 'job A'); add(C.t[1], 'job B'); }
+  add(C.muted, 'troca de contexto');
+  if (S.algo.id === 'unica') add(C.crit, 'trava');
+  if (S.algo.id === 'ws' || S.algo.id === 'go') add(C.warn, 'roubo');
+  if (S.carga === 'barreira') add('transparent', 'girando na barreira', `background-image:repeating-linear-gradient(90deg,${C.t[0]} 0 1.5px,${C.t[0]}55 1.5px 5px)`);
+  if (S.ganttView === 'tarefas') {
+    add(C.line, 'barra fina: na fila ou esperando');
+    if (w.kpis.includes('perdidos')) add(C.crit, 'prazo perdido');
+  }
+}
+
+function montaFita() {
+  const trilho = $('#trilho');
+  let atual = null, linha = null;
+  for (const a of ALGOS) {
+    if (a.decada !== atual) {
+      atual = a.decada;
+      const d = document.createElement('div');
+      d.className = 'decada';
+      d.innerHTML = `<span>${atual}</span><div></div>`;
+      trilho.appendChild(d);
+      linha = d.lastChild;
+    }
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'furo'; b.setAttribute('role', 'tab');
+    b.dataset.a = a.id;
+    b.innerHTML = `<i>${a.ano}</i><b>${a.nome}</b>`;
+    b.addEventListener('click', () => escolheAlgo(a));
+    linha.appendChild(b);
+  }
+}
+
+function pintaFita() {
+  for (const b of document.querySelectorAll('.furo')) {
+    const on = b.dataset.a === S.algo.id;
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+    b.tabIndex = on ? 0 : -1;
+    if (on) {
+      const f = $('#fita'), r = b.getBoundingClientRect(), fr = f.getBoundingClientRect();
+      f.scrollBy({ left: (r.left + r.width / 2) - (fr.left + fr.width / 2), behavior: reduz ? 'auto' : 'smooth' });
+    }
+  }
+}
+
+function montaHistoria() {
+  const a = S.algo;
+  $('#a-nome').innerHTML = `<span>${a.ano}</span> ${a.nome}`;
+  $('#a-titulo').textContent = a.titulo;
+  $('#ex-titulo').textContent = `Como funciona: ${a.nome}`;
+  montaExplicacao(EXPLICA[a.id]);
+  $('#h-code').textContent = a.code;
+  const ul = $('#h-tente');
+  ul.textContent = '';
+  for (const t of a.tente) { const li = document.createElement('li'); li.textContent = t; ul.appendChild(li); }
+  const i = ALGOS.indexOf(a), prox = ALGOS[i + 1];
+  const btn = $('#h-prox');
+  btn.hidden = !prox;
+  if (prox) { btn.textContent = `A resposta seguinte: ${prox.nome} →`; btn.onclick = () => escolheAlgo(prox); }
+  $('#g-scx').hidden = !a.scx;
+  document.title = `${a.nome} · Schedulers, do Cartão Perfurado ao EEVDF · slop`;
+}
+
+function comCitacoes(el, texto) {
+  for (const parte of texto.split(/(\[\d+\])/)) {
+    const m = /^\[(\d+)\]$/.exec(parte);
+    if (!m) { el.append(parte); continue; }
+    const a = document.createElement('a');
+    a.className = 'cita';
+    a.href = `#ref-${m[1]}`;
+    a.textContent = `[${m[1]}]`;
+    a.setAttribute('aria-label', `referência ${m[1]}`);
+    a.addEventListener('click', ev => {
+      ev.preventDefault();
+      const alvoRef = document.getElementById(`ref-${m[1]}`);
+      alvoRef.scrollIntoView({ block: 'center', behavior: reduz ? 'auto' : 'smooth' });
+      alvoRef.tabIndex = -1;
+      alvoRef.focus({ preventScroll: true });
+    });
+    el.appendChild(a);
+  }
+}
+
+function montaExplicacao(ex) {
+  const box = $('#ex-texto');
+  box.textContent = '';
+  for (const [titulo, paragrafos] of ex.secs) {
+    const sec = document.createElement('section');
+    const h = document.createElement('h3');
+    h.textContent = titulo;
+    sec.appendChild(h);
+    for (const t of paragrafos) {
+      const p = document.createElement('p');
+      comCitacoes(p, t);
+      sec.appendChild(p);
+    }
+    box.appendChild(sec);
+  }
+  const ol = $('#ex-refs');
+  ol.textContent = '';
+  ex.refs.forEach((r, i) => {
+    const li = document.createElement('li');
+    li.id = `ref-${i + 1}`;
+    li.append(`${r.a}. `);
+    const titulo = document.createElement(r.u ? 'a' : 'em');
+    titulo.textContent = r.t;
+    if (r.u) { titulo.href = r.u; titulo.rel = 'noopener'; }
+    li.appendChild(titulo);
+    li.append(`. ${r.v}${r.y ? `, ${r.y}` : ''}.`);
+    ol.appendChild(li);
+  });
+}
+
+function montaParametros() {
+  const box = $('#g-params'), a = S.algo, vals = S.params[a.id];
+  box.textContent = '';
+  box.hidden = !a.params.length;
+  for (const p of a.params) {
+    if (p.tipo === 'bool') {
+      const l = document.createElement('label');
+      l.className = 'linha';
+      l.innerHTML = `<span>${p.nome}</span><input type="checkbox">`;
+      const c = l.querySelector('input');
+      c.checked = vals[p.id];
+      c.addEventListener('change', () => { vals[p.id] = c.checked; reinicia(); });
+      box.appendChild(l);
+    } else {
+      const d = document.createElement('div');
+      d.className = 'rng';
+      d.innerHTML = `<div class="linha"><span>${p.nome}</span><span class="val"></span></div><input type="range" min="${p.min}" max="${p.max}" step="${p.step || 1}" aria-label="${p.nome}">`;
+      const inp = d.querySelector('input'), val = d.querySelector('.val');
+      const mostra = () => { val.textContent = (p.zero && +inp.value === 0) ? p.zero : `${inp.value}${p.un ? ` ${p.un}` : ''}`; };
+      inp.value = vals[p.id]; mostra();
+      inp.addEventListener('input', () => { vals[p.id] = +inp.value; mostra(); reinicia(); });
+      box.appendChild(d);
+    }
+  }
+}
+
+function sincronizaMaquina() {
+  $('#cores').value = S.cores;
+  $('#v-cores').textContent = S.machine === 'hetero' ? `${Math.ceil(S.cores / 2)} grandes + ${Math.floor(S.cores / 2)} LITTLE` : `${S.cores}`;
+  $('#cs').value = S.cs;
+  $('#v-cs').textContent = `${S.cs} ms`;
+  for (const b of document.querySelectorAll('#maquina button')) b.setAttribute('aria-pressed', b.dataset.m === S.machine ? 'true' : 'false');
+  const sel = $('#carga');
+  sel.value = S.carga;
+  $('#carga-desc').textContent = CARGAS[S.carga].desc;
+  $('#sortear').hidden = false;
+  dimensiona();
+}
+
+function aplicaCarga(id) {
+  S.carga = id;
+  const w = CARGAS[id];
+  S.cores = w.cores; S.machine = w.machine; S.cs = w.cs;
+  S.cmpKpi = w.kpis[0];
+  montaSelectKpi();
+}
+
+function montaSelectKpi() {
+  const sel = $('#cmp-kpi'), w = CARGAS[S.carga];
+  sel.textContent = '';
+  for (const id of w.kpis) {
+    const o = document.createElement('option');
+    o.value = id; o.textContent = KPIS[id].nome;
+    sel.appendChild(o);
+  }
+  sel.value = S.cmpKpi;
+}
+
+function escolheAlgo(a) {
+  S.algo = a;
+  if (!S.manter) aplicaCarga(a.carga);
+  try { history.replaceState(null, '', `#${a.id}`); } catch (e) { /* file:// em alguns navegadores */ }
+  montaHistoria();
+  montaParametros();
+  pintaFita();
+  sincronizaMaquina();
+  S.rodando = !reduz && S.modo !== 'manual';
+  atualizaPlay();
+  reinicia();
+  dimensiona();
+  agendaComparativo();
+}
+
+function mudouMaquina() {
+  sincronizaMaquina();
+  reinicia();
+  dimensiona();
+  agendaComparativo();
+}
+
+let cmpTimer = null;
+function agendaComparativo() {
+  clearTimeout(cmpTimer);
+  cmpTimer = setTimeout(rodaComparativo, 120);
+}
+
+function rodaComparativo() {
+  const w = CARGAS[S.carga], id = S.cmpKpi, k = KPIS[id];
+  const res = ALGOS.map(a => {
+    const params = a.scx ? Object.assign(defaultsDe(a), { fonte: S.params.scx.fonte }) : defaultsDe(a);
+    const s = new Sim({ cores: S.cores, machine: S.machine, cs: S.cs, seed: S.seed, rec: false, params }, especificacao(), a);
+    while (!s.done && s.t < w.cap) s.step();
+    return { a, st: s.stats(), ok: s.done };
+  });
+  const validos = res.filter(r => r.ok && r.st[id] != null);
+  const mx = Math.max(1e-9, ...validos.map(r => r.st[id]));
+  res.sort((x, y) => {
+    if (x.ok !== y.ok) return x.ok ? -1 : 1;
+    if (!x.ok) return 0;
+    return ((x.st[id] - y.st[id]) * (k.dir < 0 ? 1 : -1)) || (ALGOS.indexOf(x.a) - ALGOS.indexOf(y.a));
+  });
+  const box = $('#cmp-linhas');
+  box.textContent = '';
+  for (const r of res) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `lin${r.ok ? '' : ' falhou'}`;
+    if (r.a === S.algo) b.setAttribute('aria-current', 'true');
+    const pct = r.ok ? clamp(r.st[id] / mx * 100, 0, 100) : 0;
+    b.innerHTML = `<span></span><span class="pista"><span class="barra" style="width:${pct}%"></span></span><span class="num"></span>`;
+    b.firstChild.textContent = r.a.nome;
+    let n = r.ok ? `${fmtKpi(id, r.st[id])}${k.un ? ` ${k.un}` : ''}` : 'não terminou';
+    if (r.ok && id === 'perdidos') n = `${fmtKpi(id, r.st[id])} de ${r.st.prazos}`;
+    b.lastChild.textContent = n;
+    b.title = `Abrir ${r.a.nome}`;
+    b.addEventListener('click', () => {
+      const m = S.manter;
+      S.manter = true;
+      escolheAlgo(r.a);
+      S.manter = m;
+      $('#manter').checked = m;
+    });
+    box.appendChild(b);
+  }
+  $('#cmp-nota').textContent = `${w.nome}, ${S.machine === 'hetero' ? 'big.LITTLE, ' : ''}${S.cores} ${S.cores > 1 ? 'núcleos' : 'núcleo'}, cada algoritmo com seus ajustes-padrão. ${k.dica[0].toUpperCase()}${k.dica.slice(1)}. Clique para abrir.`;
+}
+
+function atualizaPlay() { $('#play').textContent = S.rodando ? 'Pausar' : (sim && terminou() ? 'De novo' : 'Continuar'); }
+
+/* ---------- Comandos ---------- */
+
+function liga() {
+  $('#ant').addEventListener('click', () => { const i = ALGOS.indexOf(S.algo); if (i > 0) escolheAlgo(ALGOS[i - 1]); });
+  $('#prox').addEventListener('click', () => { const i = ALGOS.indexOf(S.algo); if (i < ALGOS.length - 1) escolheAlgo(ALGOS[i + 1]); });
+  $('#trilho').addEventListener('keydown', ev => {
+    if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
+    const i = ALGOS.indexOf(S.algo) + (ev.key === 'ArrowRight' ? 1 : -1);
+    if (i < 0 || i >= ALGOS.length) return;
+    ev.preventDefault();
+    escolheAlgo(ALGOS[i]);
+    const b = document.querySelector(`.furo[data-a="${ALGOS[i].id}"]`);
+    if (b) b.focus({ preventScroll: true });
+  });
+  $('#play').addEventListener('click', () => {
+    if (terminou()) { reinicia(); S.rodando = true; } else S.rodando = !S.rodando;
+    atualizaPlay();
+  });
+  $('#passo').addEventListener('click', () => {
+    S.rodando = false; atualizaPlay();
+    if (!terminou()) { sim.step(); if (!terminou()) sim.prepara(); }
+    atualizaKpis();
+  });
+  $('#p-prox').addEventListener('click', proximaDecisao);
+  document.querySelector('.passo details').addEventListener('toggle', desenhaHistorico);
+  for (const b of document.querySelectorAll('#modos button')) {
+    b.addEventListener('click', () => {
+      S.modo = b.dataset.modo;
+      S.seguraAte = 0;
+      for (const x of document.querySelectorAll('#modos button')) x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
+    });
+  }
+  $('#reini').addEventListener('click', () => { reinicia(); S.rodando = true; atualizaPlay(); });
+  for (const b of document.querySelectorAll('#vels button')) {
+    b.addEventListener('click', () => {
+      S.vel = +b.dataset.v;
+      for (const x of document.querySelectorAll('#vels button')) x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
+    });
+  }
+  for (const b of document.querySelectorAll('[data-gv]')) {
+    b.addEventListener('click', () => {
+      S.ganttView = b.dataset.gv;
+      for (const x of document.querySelectorAll('[data-gv]')) x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
+      dimensiona();
+      atualizaLegenda();
+    });
+  }
+  const sel = $('#carga');
+  for (const [id, w] of Object.entries(CARGAS)) {
+    const o = document.createElement('option');
+    o.value = id; o.textContent = w.nome;
+    sel.appendChild(o);
+  }
+  sel.addEventListener('change', () => { aplicaCarga(sel.value); S.rodando = !reduz; atualizaPlay(); mudouMaquina(); });
+  $('#manter').addEventListener('change', e => { S.manter = e.target.checked; });
+  $('#sortear').addEventListener('click', () => { S.seed = Math.floor(Math.random() * 1e9); S.rodando = true; atualizaPlay(); reinicia(); agendaComparativo(); });
+  $('#cores').addEventListener('input', e => { S.cores = +e.target.value; mudouMaquina(); });
+  $('#cs').addEventListener('input', e => { S.cs = +e.target.value; mudouMaquina(); });
+  for (const b of document.querySelectorAll('#maquina button')) {
+    b.addEventListener('click', () => { S.machine = b.dataset.m; mudouMaquina(); });
+  }
+  for (const b of document.querySelectorAll('[data-add]')) {
+    b.addEventListener('click', () => {
+      if (terminou()) return;
+      const tipo = b.dataset.add, n = `${String.fromCharCode(0x58 + (proxLetra++ % 3))}${proxLetra > 3 ? proxLetra : ''}`;
+      const spec = { name: n, cor: (sim.tasks.length + proxLetra) % 8, kind: tipo === 'inter' ? 'inter' : 'lote' };
+      spec.ops = tipo === 'curta' ? [cpu(8)] : tipo === 'longa' ? [cpu(120)] : repete(6, cpu(2), io(15));
+      sim.addTask(spec);
+      est = Math.max(est, sim.t) + (tipo === 'longa' ? 120 : tipo === 'curta' ? 8 : 100) / S.cores;
+      S.rodando = true; atualizaPlay();
+    });
+  }
+  $('#cmp-kpi').addEventListener('change', e => { S.cmpKpi = e.target.value; rodaComparativo(); });
+  const ta = $('#scx-fonte');
+  ta.value = S.params.scx.fonte;
+  for (const [id, nome] of [['fifo', 'ordem de chegada'], ['curta', 'mais curta'], ['justo', 'justo'], ['interativa', 'prefere I/O']]) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn'; b.textContent = nome;
+    b.addEventListener('click', () => { ta.value = SCX_EXEMPLOS[id]; aplicaScx(); });
+    $('#scx-ex').appendChild(b);
+  }
+  $('#scx-aplica').addEventListener('click', aplicaScx);
+  document.addEventListener('keydown', ev => {
+    if (ev.code !== 'Space' || /INPUT|TEXTAREA|SELECT|BUTTON/.test(ev.target.tagName)) return;
+    ev.preventDefault();
+    $('#play').click();
+  });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { leCores(); atualizaLegenda(); });
+  new ResizeObserver(() => { if (sim) dimensiona(); }).observe(cv.parentElement);
+  addEventListener('hashchange', deHash);
+}
+
+function aplicaScx() {
+  S.params.scx.fonte = $('#scx-fonte').value;
+  S.rodando = !reduz;
+  atualizaPlay();
+  reinicia();
+  agendaComparativo();
+}
+
+function deHash() {
+  const a = ALGOS.find(x => x.id === location.hash.slice(1));
+  if (a && a !== S.algo) escolheAlgo(a);
+}
+
+let antes = performance.now(), ultimoKpi = 0;
+function quadro(agora) {
+  const dt = Math.min(0.1, (agora - antes) / 1000);
+  antes = agora;
+  if (S.rodando && agora >= S.seguraAte) {
+    acc += dt * S.vel * (CARGAS[S.carga].ritmo || 1);
+    const n = Math.floor(acc);
+    acc -= n;
+    if (n) avanca(n);
+    if (terminou()) { S.rodando = false; atualizaPlay(); atualizaKpis(); }
+  }
+  desenhaPalco(dt);
+  desenhaGantt();
+  atualizaStatus();
+  atualizaPasso(agora);
+  if (agora - ultimoKpi > 200) { ultimoKpi = agora; atualizaKpis(); atualizaErroScx(); }
+  requestAnimationFrame(quadro);
+}
+
+function inicia() {
+  leCores();
+  montaFita();
+  liga();
+  const pedido = ALGOS.find(x => x.id === location.hash.slice(1)) || ALGOS[0];
+  escolheAlgo(pedido);
+  requestAnimationFrame(quadro);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { leCores(); });
+}
+inicia();
+</script>
+</body>
+</html>
