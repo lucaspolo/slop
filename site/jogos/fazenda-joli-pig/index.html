@@ -702,7 +702,7 @@ const PREDIOS = [
 const PREDIO = {}; PREDIOS.forEach(p => { PREDIO[p.id] = p; });
 const ARVORES = [[0,1,0],[1,5,1],[0,9,2],[1,13,0],[11,1,1],[20,0,0],[23,4,1],[23,8,0],[23,13,2],[2,0,1],[8,0,0],[23,0,1],[0,15,1],[26,0,2],[29,4,1],[29,0,0]];
 const ARBUSTOS = [[7,1],[12,6],[1,10],[16,2]];
-const Z_ORLA = 18, Z_MATA = 21, X_FIM_MATA = 15;
+const Z_ORLA = 18, Z_MATA = 21, X_FIM_MATA = 15, COL_CURVA = 18;
 // a floresta à venda, da coluna 0 até o arco; cada parcela tem uma trilha reta na coluna col, e a de trás continua a da frente
 const PARCELAS = [
   { nivel: 20, preco: 15000, x0: 8, z0: 21, x1: 15, z1: 28, col: 12, arvores: ['cacaueiro', 'seringueira', 'seringueira', 'cacaueiro', 'cacaueiro', 'seringueira'] },
@@ -719,7 +719,10 @@ const PASTO_G = [], PASTO_V = [];
 function montarMapa(){
   // a orla não tem árvores altas, que esconderiam a estrada e o arco na câmera inclinada
   for (let z = Z_ORLA; z < H; z++) for (let x = 0; x < W; x++) setT(x, z, z >= Z_MATA ? 'mata' : x <= X_FIM_MATA ? 'orla' : 'orlaF');
-  for (let x = 0; x < W; x++){ setT(x, 17, 'estrada'); setT(x, 16, 'cerca'); }
+  for (let x = 0; x < W; x++) setT(x, 16, 'cerca');
+  // a estrada dobra logo depois da porteira; a leste dela fica o terreno do canto Sul, ainda fechado
+  for (let x = 0; x < COL_CURVA; x++) setT(x, 17, 'estrada');
+  for (let z = 17; z < H; z++){ setT(COL_CURVA, z, 'estrada'); setT(COL_CURVA + 1, z, 'cerca'); for (let x = COL_CURVA + 2; x < W; x++) setT(x, z, 'canto'); }
   setT(15, 16, 'portao');
   for (let z = 5; z <= 15; z++) setT(15, z, 'caminho');
   for (let x = 4; x <= W - 1; x++) setT(x, 5, 'caminho');
@@ -739,7 +742,7 @@ function montarMapa(){
   for (const [x, z] of [...POMAR_BLOCOS[0].slots, ...COLMEIA_SLOTS]) setT(x, z, 'feno');
   for (let x = 18; x <= 21; x++){ for (let z = 7; z <= 9; z++) if (tipo(x, z) === 'pastoG') PASTO_G.push([x, z]); for (let z = 11; z <= 15; z++) if (tipo(x, z) === 'pastoV') PASTO_V.push([x, z]); }
 }
-const andavel = (x, z) => { const t = tipo(x, z); return !!t && t !== 'cerca' && t !== 'predio' && t !== 'arvore' && t !== 'feno' && t !== 'mata' && t !== 'orlaF'; };
+const andavel = (x, z) => { const t = tipo(x, z); return !!t && t !== 'cerca' && t !== 'predio' && t !== 'arvore' && t !== 'feno' && t !== 'mata' && t !== 'orlaF' && t !== 'canto'; };
 
 function rota(sx, sz, gx, gz){
   if (!andavel(gx, gz)) return null;
@@ -1472,6 +1475,23 @@ function vTrufa(){
   const v = new Vox(), c = (x, y, z) => hash(x, y, z) < 0.12 ? 0xcdbfa8 : hash(z, x, y) < 0.5 ? 0x3a2a24 : 0x4f3a30;
   v.ell(0, 3.4, 0, 4.2, 3.4, 3.8, c);
   for (const [x, y, z, r] of [[3, 5, 1, 1.8], [-3, 2, 2, 1.6], [1, 6, -2, 1.7], [-2, 5, -2, 1.5], [2, 1.6, -3, 1.4]]) v.ell(x, y, z, r, r, r, c);
+  return v;
+}
+// o mato do terreno largado; em voxel grande porque são centenas na tela
+function vMatagal(tipoA){
+  const v = new Vox(), capins = [0x5f8236, 0x6f8f3a, 0x547432, 0x8a9440], capim = (x, y, z) => capins[Math.floor(hash(x, y + 3, z) * 4)];
+  const tufo = (x, z, h) => { v.box(x, 0, z, x, h - 1, z, capim); if (hash(x, h, z) < 0.12) v.set(x, h, z, 0xc9b765); };
+  if (tipoA === 0) for (let x = 0; x < 8; x++) for (let z = 0; z < 8; z++){ if (hash(x, 11, z) < 0.16) tufo(x, z, 2 + Math.floor(hash(x, 12, z) * hash(z, 13, x) * 8)); }
+  else if (tipoA === 1){
+    v.ell(3.5, 2.2, 3.5, 3.4, 2.6, 3.4, (x, y, z) => [0x4f7a34, 0x44692e, 0x5f8238, 0x76703a][Math.floor(hash(x, y, z) * 4)]);
+    for (const [x, z, h] of [[1, 2, 6], [5, 1, 7], [6, 5, 6], [2, 6, 7]]) v.box(x, 3, z, x, h, z, 0x6b4a2c);
+  } else if (tipoA === 2){
+    v.ell(2.5, 0.8, 4.5, 2, 1.5, 1.7, (x, y, z) => hash(x, y, z) < 0.5 ? 0x9a968a : 0x87837a);
+    for (const [x, z, h] of [[5, 1, 2], [6, 3, 3], [1, 1, 3], [6, 6, 2], [4, 6, 2]]) tufo(x, z, h);
+  } else {
+    v.box(1, 0, 3, 6, 1, 4, (x, y) => y === 1 ? 0x7a5636 : 0x65462c); v.box(0, 0, 3, 0, 1, 4, 0xc2a06c);
+    for (const [x, z, h] of [[2, 2, 3], [5, 5, 3], [3, 5, 2], [6, 1, 2]]) tufo(x, z, h);
+  }
   return v;
 }
 function vArbusto(){ const v = new Vox(); v.ell(3.5, 2.6, 3.5, 3.6, 2.9, 3.6, (x, y, z) => hash(x, y, z) < 0.08 ? 0xf27fa4 : (hash(z, x, y) < 0.5 ? 0x5aa845 : 0x4f9a3d)); return v; }
@@ -2227,7 +2247,7 @@ let bichoMata = null, proxBichoMata = 0;
 function copasDaBeira(){
   const l = [];
   for (let z = Z_MATA; z <= Z_MATA + 1; z++) for (let x = 0; x < W; x++){
-    if (hash(x, 31, z) > 0.74) continue;
+    if (tipo(x, z) !== 'mata' || hash(x, 31, z) > 0.74) continue;
     const p = PARCELAS.findIndex(P => x >= P.x0 && x <= P.x1 && z >= P.z0 && z <= P.z1);
     if (p >= 0 && Math.abs(x - PARCELAS[p].col) <= 1) continue;
     const i = Math.floor(hash(x, 36, z) * MATA_MODELOS), s = 0.9 + hash(x, 35, z) * 0.3;
@@ -2250,7 +2270,7 @@ function caminhoBicho(tipo){
   }
   // os que andam pelo chão da orla: escolhe uma coluna que apareça na tela e que dê para ir e voltar
   const d = Math.random() < 0.5 ? 1 : -1, xs = [];
-  for (let x = 1; x < W - 5; x++) if (naTelaBicho(V(x + 0.5, 0, 19.5)) && naTelaBicho(V(x + 0.5 + d * 3.5, 0, 19.5))) xs.push(x + 0.5);
+  for (let x = 1; x < COL_CURVA - 5; x++) if (naTelaBicho(V(x + 0.5, 0, 19.5)) && naTelaBicho(V(x + 0.5 + d * 3.5, 0, 19.5))) xs.push(x + 0.5);
   if (!xs.length) return null;
   const x = sorteia(xs);
   if (tipo === 'jaguatirica') return [{ p: V(x, 0, Z_MATA + 0.9) }, { p: V(x + d * 0.6, 0, 19.6), dur: 2, para: rnd(1.5, 3) }, { p: V(x + d * 3, 0, 19.4), dur: 2.4, para: 0.6 }, { p: V(x + d * 3.6, 0, Z_MATA + 0.9), dur: 2 }];
@@ -3261,7 +3281,14 @@ function corChao(t, gx, gz){
       if ((gx < 12 || gx > W * 4 - 13) && gx % 3 === 0 && gz !== PISTA_Z0 * 4 && gz !== PISTA_Z1 * 4 + 3) return 0xf3efe2;
       return r < 0.5 ? 0xb5926a : 0xab8960;
     }
-    case 'estrada': { const lz = gz % 4; return (lz === 1 || lz === 2) && r < 0.6 ? 0xae8a5e : (r < 0.5 ? 0xc49e6c : 0xbb9564); }
+    case 'estrada': {
+      const i = gx % 4, k = gz % 4, cx = (gx >> 2) === COL_CURVA, cz = (gz >> 2) === 17, meioI = i === 1 || i === 2, meioK = k === 1 || k === 2;
+      const sulco = cx && cz ? (meioK && i <= 2) || (meioI && k >= 1) : cx ? meioI : meioK;
+      return sulco && r < 0.6 ? 0xae8a5e : (r < 0.5 ? 0xc49e6c : 0xbb9564);
+    }
+    case 'canto':
+      if (hash(gx >> 1, 3, gz >> 1) < 0.28) return r < 0.5 ? 0xa58c5a : 0x9a8252;
+      return r2 < 0.5 ? (r < 0.5 ? 0x9cbc57 : 0x95b652) : (r < 0.5 ? 0xa4c25c : 0x9dbb56);
     case 'pastoG': return r < 0.5 ? 0xd9c27d : 0xcfb56c;
     case 'pastoV': return r2 < 0.5 ? (r < 0.5 ? 0x6db24a : 0x67a945) : (r < 0.5 ? 0x75b94f : 0x6fb14b);
     case 'campo': return r2 < 0.5 ? (r < 0.5 ? 0x8fcb5f : 0x88c45a) : (r < 0.5 ? 0x94cf63 : 0x8cc85d);
@@ -3297,7 +3324,7 @@ function construirChao(){
   const tf = new Vox();
   for (let gz = Z_PISTA * 16; gz < H * 16; gz++) for (let gx = 0; gx < W * 16; gx++){
     const t = tipoChao(gx >> 4, Math.floor(gz / 16));
-    if (t !== 'grama' && t !== 'pastoV' && t !== 'orla' && t !== 'orlaF') continue;
+    if (t !== 'grama' && t !== 'pastoV' && t !== 'orla' && t !== 'orlaF' && t !== 'canto') continue;
     const r = hash(gx, 5, gz);
     if (r < 0.012){ const h = 1 + (r < 0.005 ? 1 : 0); tf.box(gx, 0, gz, gx, h - 1, gz, r < 0.006 ? 0x5ea341 : 0x6db74a); if (r < 0.0012) tf.set(gx, h, gz, sorteiaH([0xf2d14a, 0xffffff, 0xf27fa4], gx, gz)); }
   }
@@ -3307,7 +3334,7 @@ function colocar(m, x, y, z, ry = 0){ m.position.set(x, y, z); m.rotation.y = ry
 // a floresta do outro lado da estrada: a mata é desenhada por instâncias, centenas de árvores em poucas chamadas de desenho.
 // Não projeta sombra (o chão escuro faz esse papel), porque a passada de sombra dobraria os triângulos num celular
 const MATA_MODELOS = 3;
-const MATA_CORREDOR = [];
+const MATA_CORREDOR = [], MATAGAL = [], MATAGAL_MODELOS = 4;
 function instanciasMata(geom, lista){
   const im = new THREE.InstancedMesh(geom, MAT, lista.length), M = new THREE.Matrix4(), q = new THREE.Quaternion(), eixo = new THREE.Vector3(0, 1, 0);
   lista.forEach(([x, z, ry, s], i) => im.setMatrixAt(i, M.compose(new THREE.Vector3(x, 0, z), q.setFromAxisAngle(eixo, ry), new THREE.Vector3(s, s, s))));
@@ -3320,7 +3347,7 @@ function montarMata(){
   const modelos = Array.from({ length: MATA_MODELOS }, () => []);
   const corredores = PARCELAS.map(() => []);
   for (let z = Z_MATA; z < H; z++) for (let x = 0; x < W; x++){
-    if (hash(x, 31, z) > 0.74) continue;
+    if (tipo(x, z) !== 'mata' || hash(x, 31, z) > 0.74) continue;
     const item = [x + 0.5 + (hash(x, 32, z) - 0.5) * 0.4, z + 0.5 + (hash(x, 33, z) - 0.5) * 0.4, Math.floor(hash(x, 34, z) * 4) * Math.PI / 2, 0.9 + hash(x, 35, z) * 0.3];
     const p = PARCELAS.findIndex(P => x >= P.x0 && x <= P.x1 && z >= P.z0 && z <= P.z1);
     if (p >= 0 && Math.abs(x - PARCELAS[p].col) <= 1) corredores[p].push(item);
@@ -3329,6 +3356,14 @@ function montarMata(){
   const g = i => geo('copa' + i, () => vCopa(i).build(1 / 8, { origin: [4, 0, 4] }));
   modelos.forEach((lista, i) => instanciasMata(g(i), lista));
   corredores.forEach((lista, p) => { MATA_CORREDOR[p] = instanciasMata(g(0), lista); });
+  const pecas = Array.from({ length: MATAGAL_MODELOS }, () => []);
+  for (let z = Z_ORLA - 1; z < H; z++) for (let x = 0; x < W; x++){
+    // manchas fechadas e clareiras, para parecer abandono e não plantio
+    if (tipo(x, z) !== 'canto' || hash(x, 41, z) > (hash(x >> 2, 47, z >> 2) < 0.45 ? 0.05 : 0.4)) continue;
+    const r = hash(x, 42, z), i = r < 0.5 ? 0 : r < 0.68 ? 1 : r < 0.93 ? 2 : 3;
+    pecas[i].push([x + 0.5 + (hash(x, 43, z) - 0.5) * 0.5, z + 0.5 + (hash(x, 44, z) - 0.5) * 0.5, Math.floor(hash(x, 45, z) * 4) * Math.PI / 2, 0.85 + hash(x, 46, z) * 0.5]);
+  }
+  pecas.forEach((lista, i) => MATAGAL.push(instanciasMata(geo('matagal' + i, () => vMatagal(i).build(1 / 8, { origin: [4, 0, 4] })), lista)));
 }
 
 // ================= a floresta à venda
@@ -4379,7 +4414,15 @@ const VISITA = {
 const dadosVisita = () => VISITA[visita && visita === jaca ? 'jaca' : visita && visita === pelucio ? 'pelucio' : visita && visita === patrinho ? 'patrinho' : 'beto'];
 let presenteJaca = '';
 const caminhaoE = { estado: 'longe', x: -5, t: 0 };
-const PARADA = 15.5, Z_ESTRADA = 17.5;
+const PARADA = 15.5, Z_ESTRADA = 17.5, X_CURVA = COL_CURVA + 0.5, R_CURVA = 1, FIM_ESTRADA = X_CURVA + H - Z_ESTRADA + 7;
+// d é o quanto o veículo já andou, medido como o x da parte reta, para quem chega e para na porteira nem notar a curva
+function naEstrada(obj, d, sentido = 1){
+  const ini = X_CURVA - R_CURVA, arco = R_CURVA * Math.PI / 2;
+  let x = d, z = Z_ESTRADA, a = 0;
+  if (d > ini + arco){ x = X_CURVA; z = Z_ESTRADA + R_CURVA + d - ini - arco; a = -Math.PI / 2; }
+  else if (d > ini){ a = -(d - ini) / R_CURVA; x = ini + R_CURVA * Math.sin(-a); z = Z_ESTRADA + R_CURVA * (1 - Math.cos(a)); }
+  obj.position.x = x; obj.position.z = z; obj.rotation.y = a + (sentido < 0 ? Math.PI : 0);
+}
 const MODELO_JACA = { corpo: () => vJaca(false), braco: vBracoJaca, pe: vPeJaca, ombro: [11.5, 22, 2], quadril: [5.5, 7], mao: [-12, 1], altura: 1.1 };
 const modeloMoletom = altura => ({ corpo: () => vPorco(0, 0, false, 'moletom'), braco: vBracoMoletom, pe: vPe, ombro: [15.5, 28.5, 1], quadril: [7, 9], mao: [-16, 1.5], altura });
 const MODELO_HUD = { corpo: () => vPorco(COR.ed, COR.edBolso), braco: vBraco, pe: vPe, ombro: [15.5, 28.5, 1], quadril: [7, 9], mao: [-16, 1.5], altura: 0.7 };
@@ -4464,7 +4507,7 @@ function chamarBeto(){
   if (sorteado && !S.conheceuJaca && ed.estado === 'parado' && !tarefaAtual && !algumaJanela() && !menuAberto){ avancarTut(4); iniciarCine('jaca'); hud(); return; }
   visita = sorteado && S.conheceuJaca ? jaca : beto;
   caminhao = caminhaoMarket;
-  caminhaoE.estado = 'chegando'; caminhaoE.t = 0; caminhao.visible = true; caminhao.position.x = -5;
+  caminhaoE.estado = 'chegando'; caminhaoE.t = 0; caminhao.visible = true; naEstrada(caminhao, -5);
   Som.buzina(); aviso('Você ligou pro Joli Market. O caminhão já vem!'); hud();
   avancarTut(4);
 }
@@ -4473,7 +4516,7 @@ function chamarPatrinho(){
   if (caminhaoE.estado !== 'longe'){ aviso(`${dadosVisita().nome} ainda está por aqui. Espere ele ir embora.`); return; }
   if (cenaPedida){ aviso('Uma cena vai começar. Espere um pouquinho.'); return; }
   visita = patrinho; caminhao = caminhaoBistro;
-  caminhaoE.estado = 'chegando'; caminhaoE.t = 0; caminhao.visible = true; caminhao.position.x = -5;
+  caminhaoE.estado = 'chegando'; caminhaoE.t = 0; caminhao.visible = true; naEstrada(caminhao, -5);
   Som.buzina(); aviso('Você ligou pro Patrinho. A lambreta do Joli Bistrô já vem!'); hud();
 }
 function chamarPelucio(){
@@ -4481,7 +4524,7 @@ function chamarPelucio(){
   if (caminhaoE.estado !== 'longe'){ aviso(`${dadosVisita().nome} ainda está por aqui. Espere ele ir embora.`); return; }
   if (cenaPedida){ aviso('Uma cena vai começar. Espere um pouquinho.'); return; }
   visita = pelucio; caminhao = caminhaoCafe;
-  caminhaoE.estado = 'chegando'; caminhaoE.t = 0; caminhao.visible = true; caminhao.position.x = -5;
+  caminhaoE.estado = 'chegando'; caminhaoE.t = 0; caminhao.visible = true; naEstrada(caminhao, -5);
   Som.buzina(); aviso('Você ligou pro Pelúcio. A van da Joli Coffee já vem!'); hud();
 }
 function atualizarCaminhao(dt){
@@ -4521,7 +4564,7 @@ function atualizarCaminhao(dt){
   } else if (c.estado === 'saindo'){
     c.t += dt / 3.5;
     const e = Math.pow(Math.min(1, c.t), 2);
-    caminhao.position.x = lerp(PARADA, W + 7, e);
+    naEstrada(caminhao, lerp(PARADA, FIM_ESTRADA, e));
     caminhao.position.y = Math.abs(Math.sin(c.t * 40)) * 0.015;
     if (c.t >= 1){ c.estado = 'longe'; caminhao.visible = false; hud(); }
   }
@@ -4856,7 +4899,7 @@ const CENAS = {
     // a fala 3 espera o passeio da câmera terminar
     segurar: c => c.linha === 2 && c.t - c.tfala < PASSEIO.length * PASSEIO_T,
     iniciar(c){
-      caminhao = caminhaoMarket; caminhao.visible = true; caminhao.position.set(-5, 0, Z_ESTRADA);
+      caminhao = caminhaoMarket; caminhao.visible = true; naEstrada(caminhao, -5);
       caminhaoE.estado = 'cine';
       ed.trab = null; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; ed.ferramenta(null);
       ed.g.visible = false; ed.mochila.visible = true;
@@ -4978,7 +5021,7 @@ const CENAS = {
     foco: () => new THREE.Vector3((PONTO_ED[0] + PONTO_PELUCIO[0]) / 2 + 0.25, 0.35, (PONTO_ED[1] + PONTO_PELUCIO[1]) / 2 + 0.6),
     vista: () => 4,
     iniciar(){
-      caminhao = caminhaoBistro; caminhao.visible = true; caminhao.position.set(-5, 0, Z_ESTRADA);
+      caminhao = caminhaoBistro; caminhao.visible = true; naEstrada(caminhao, -5);
       caminhaoE.estado = 'cine';
       const pts = rota(clamp(Math.floor(ed.pos.x), 0, W - 1), clamp(Math.floor(ed.pos.y), 0, H - 1), Math.floor(PONTO_ED[0]), Math.floor(PONTO_ED[1]));
       if (pts) ed.ir(pts, () => ed.olhar(...PONTO_PELUCIO)); else { ed.colocar(...PONTO_ED); ed.olhar(...PONTO_PELUCIO); }
@@ -5009,7 +5052,7 @@ const CENAS = {
     foco: () => new THREE.Vector3((PONTO_ED[0] + PONTO_PELUCIO[0]) / 2 + 0.25, 0.35, (PONTO_ED[1] + PONTO_PELUCIO[1]) / 2 + 0.6),
     vista: () => 4,
     iniciar(){
-      caminhao = caminhaoCafe; caminhao.visible = true; caminhao.position.set(-5, 0, Z_ESTRADA);
+      caminhao = caminhaoCafe; caminhao.visible = true; naEstrada(caminhao, -5);
       caminhaoE.estado = 'cine';
       const pts = rota(clamp(Math.floor(ed.pos.x), 0, W - 1), clamp(Math.floor(ed.pos.y), 0, H - 1), Math.floor(PONTO_ED[0]), Math.floor(PONTO_ED[1]));
       if (pts) ed.ir(pts, () => ed.olhar(...PONTO_PELUCIO)); else { ed.colocar(...PONTO_ED); ed.olhar(...PONTO_PELUCIO); }
@@ -5053,7 +5096,7 @@ const CENAS = {
       return p === 'dialogo' || p === 'presente' || p === 'jacaesp' ? 4.4 * (telaEstreita() ? 1.9 : 1) : 6 * f;
     },
     iniciar(c){
-      caminhao = caminhaoMarket; caminhao.visible = true; caminhao.position.set(-5, 0, Z_ESTRADA);
+      caminhao = caminhaoMarket; caminhao.visible = true; naEstrada(caminhao, -5);
       caminhaoE.estado = 'cine';
       const pts = rota(clamp(Math.floor(ed.pos.x), 0, W - 1), clamp(Math.floor(ed.pos.y), 0, H - 1), Math.floor(JACA_ED[0]), Math.floor(JACA_ED[1]));
       if (pts) ed.ir(pts, () => ed.olhar(...JACA_CENA)); else { ed.colocar(...JACA_ED); ed.olhar(...JACA_CENA); }
@@ -5092,7 +5135,7 @@ const CENAS = {
     },
     fim(){
       S.conheceuJaca = true; S.visitas = (S.visitas || 0) + 1;
-      visita = jaca; caminhao = caminhaoMarket; caminhao.visible = true; caminhao.position.set(PARADA, 0, Z_ESTRADA);
+      visita = jaca; caminhao = caminhaoMarket; caminhao.visible = true; naEstrada(caminhao, PARADA);
       caminhaoE.estado = 'aqui'; presenteJaca = '';
       jaca.g.visible = true; jaca.pontos = []; jaca.estado = 'parado'; jaca.colocar(...JACA_ESPERA); jaca.ang = jaca.angAlvo = Math.PI; jaca.aceno = 1.6;
       setTimeout(() => { if (caminhaoE.estado === 'aqui' && visita === jaca && !algumaJanela() && !cine) abrirBeto(); }, 500);
@@ -5239,9 +5282,9 @@ const CENAS = {
     },
     iniciar(c){
       caminhaoE.estado = 'cine';
-      caminhaoMarket.visible = true; caminhaoMarket.position.set(-5, 0, Z_ESTRADA);
-      caminhaoCafe.visible = true; caminhaoCafe.position.set(-8.6, 0, Z_ESTRADA);
-      caminhaoBistro.visible = true; caminhaoBistro.position.set(-1.6, 0, Z_ESTRADA);
+      caminhaoMarket.visible = true; naEstrada(caminhaoMarket, -5);
+      caminhaoCafe.visible = true; naEstrada(caminhaoCafe, -8.6);
+      caminhaoBistro.visible = true; naEstrada(caminhaoBistro, -1.6);
       Som.buzina();
       const pts = rota(clamp(Math.floor(ed.pos.x), 0, W - 1), clamp(Math.floor(ed.pos.y), 0, H - 1), Math.floor(FESTA_ED[0]), Math.floor(FESTA_ED[1]));
       if (pts) { pts.push(FESTA_ED); ed.ir(pts, () => ed.olhar(FESTA_ED[0], 14)); } else { ed.colocar(...FESTA_ED); ed.olhar(FESTA_ED[0], 14); }
@@ -5330,7 +5373,10 @@ const CENAS = {
             vivos++;
             if (c.saida[veic] === undefined) continue;
             const k = Math.min(1, (c.t - c.saida[veic]) / 3.5);
-            v.position.x = lerp(x0, W + 7, k * k); v.position.y = Math.abs(Math.sin(c.t * 10)) * 0.015;
+            // a lambreta da festa fica parada em cima da curva, então só gira e desce a estrada
+            if (x0 >= X_CURVA){ v.rotation.y = -Math.PI / 2 * Math.min(1, k * 4); v.position.z = lerp(Z_ESTRADA, FIM_ESTRADA - X_CURVA + Z_ESTRADA, k * k); }
+            else naEstrada(v, lerp(x0, FIM_ESTRADA, k * k));
+            v.position.y = Math.abs(Math.sin(c.t * 10)) * 0.015;
             if (k >= 1) v.visible = false;
           }
           if (c.indo && !vivos && c.hudFora){ c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
@@ -5537,7 +5583,7 @@ function atualizarCine(dt){
       break;
     case 'partindo': {
       const e = Math.pow(Math.min(1, c.t / 3.5), 2);
-      caminhao.position.x = lerp(PARADA, W + 7, e);
+      naEstrada(caminhao, lerp(PARADA, FIM_ESTRADA, e));
       if (c.t >= 3.5){ caminhao.visible = false; c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
       break;
     }
@@ -6773,7 +6819,7 @@ function montarRedemoinho(){
 const pontoDaFazenda = () => [rnd(1, 34), rnd(0.5, 15.5)];
 function iniciarRedemoinho(){
   const portao = PARADA;
-  rd = { estado: 'vagando', x: rnd(8, 23), z: rnd(Z_MATA + 1, Z_MATA + 3), caminho: [[portao, Z_ORLA + 1], [portao, 16.5], [portao, 14.5]], alvo: pontoDaFazenda(), t: 0, vagaAte: rnd(...REDEMOINHO.vaga), esc: 0, escAlvo: 1 };
+  rd = { estado: 'vagando', x: rnd(8, X_FIM_MATA), z: rnd(Z_MATA + 1, Z_MATA + 3), caminho: [[portao, Z_ORLA + 1], [portao, 16.5], [portao, 14.5]], alvo: pontoDaFazenda(), t: 0, vagaAte: rnd(...REDEMOINHO.vaga), esc: 0, escAlvo: 1 };
   rdMesh.visible = true;
   aviso('Um redemoinho de vento saiu da floresta!', '', 3);
 }
@@ -6904,8 +6950,8 @@ function montarTransito(){
 function soltarVeiculo(i){
   if (carroRua) return false;
   const v = TRAFEGO[i], sentido = Math.random() < 0.5 ? 1 : -1;
-  carroRua = { v, sentido, x: sentido > 0 ? -9 : W + 9, saudou: false };
-  v.g.visible = true; v.g.rotation.y = sentido > 0 ? 0 : Math.PI; v.g.position.set(carroRua.x, 0, Z_ESTRADA);
+  carroRua = { v, sentido, x: sentido > 0 ? -9 : FIM_ESTRADA + 2, saudou: false };
+  v.g.visible = true; naEstrada(v.g, carroRua.x, sentido);
   return true;
 }
 function tirarVeiculo(){
@@ -6921,7 +6967,7 @@ function atualizarTransito(dt, t){
   if (cine || caminhaoE.estado !== 'longe'){ tirarVeiculo(); return; }
   const c = carroRua;
   c.x += c.sentido * c.v.vel * dt;
-  c.v.g.position.x = c.x; c.v.g.position.y = Math.abs(Math.sin(t * 18)) * 0.012;
+  naEstrada(c.v.g, c.x, c.sentido); c.v.g.position.y = Math.abs(Math.sin(t * 18)) * 0.012;
   for (const q of c.v.pilotos){
     const p = q.p;
     if (q.pedala){ p.estado = 'andando'; p.pontos = [[1e6, 0]]; }
@@ -6930,13 +6976,13 @@ function atualizarTransito(dt, t){
     if (!q.pedala) p.pE.rotation.x = p.pD.rotation.x = -1.3;
     p.bE.rotation.set(-1.25, 0, -0.35); p.bD.rotation.set(-1.25, 0, 0.35);
   }
-  if (!c.saudou && ed.g.visible && !emEncontroSaci() && !FALAS.some(f => f.quem === ed) && Math.hypot(c.x - ed.pos.x, Z_ESTRADA - ed.pos.y) <= TRANSITO.perto){
+  if (!c.saudou && ed.g.visible && !emEncontroSaci() && !FALAS.some(f => f.quem === ed) && Math.hypot(c.v.g.position.x - ed.pos.x, c.v.g.position.z - ed.pos.y) <= TRANSITO.perto){
     c.saudou = true;
     const fala = saudacaoDoEd();
     falar(ed, fala, tempoDeLeitura(fala)); ed.aceno = 1.6; Som.oinc();
-    if (ed.estado === 'parado') ed.olhar(c.x, Z_ESTRADA);
+    if (ed.estado === 'parado') ed.olhar(c.v.g.position.x, c.v.g.position.z);
   }
-  if (c.sentido > 0 ? c.x > W + 9 : c.x < -9) tirarVeiculo();
+  if (c.sentido > 0 ? c.x > FIM_ESTRADA + 2 : c.x < -9) tirarVeiculo();
 }
 
 // ================= a maçã das árvores
@@ -8217,6 +8263,7 @@ function alvoNaTela(cx, cy){
       if (p) return { k: 'predio', p };
       const t = tipo(x, z);
       if (t === 'mata' || t === 'orlaF') return { k: 'floresta', x, z };
+      if (t === 'canto') return null;
       if (t === 'arvore') return { k: 'arvore', x, z, arbusto: ARBUSTOS.some(([a, b]) => a === x && b === z) };
       for (const tp in COLETOR) if (S.coletor[tp] && COLETOR[tp].x === x && COLETOR[tp].z === z) return { k: 'coletor', tp };
       for (const tp in ALIMENTADOR) if (S.alimentador[tp] && ALIMENTADOR[tp].x === x && ALIMENTADOR[tp].z === z) return { k: 'alimentador', tp };
@@ -8512,7 +8559,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, obj: () => discoJogo }, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, obj: () => discoJogo }, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
@@ -8546,7 +8593,7 @@ function catalogoModelos(){
     { nome: 'Bichos', itens: [um('Galinha', vGalinha), um('Vaca', vVaca), um('Minhoca', vMinhoca), um('Bugio', vBugio), um('Jaguatirica', vJaguatirica), um('Tucano', vTucano), um('Papagaio', vPapagaio), um('Cobra-coral', vCobraCoral)] },
     { nome: 'Canteiros', itens: [...Object.keys(CULTURAS).map(k => { const C = CULTURAS[k]; return varios(C.nome, [['Semente', () => vPlanta(k, 0)], ['Muda', () => vPlanta(k, 1)], ['Crescendo', () => vPlanta(k, 2)], ['Pronta', () => vPlanta(k, 3)], ...produto(uso(C.produto || k))], 3); }), um('Mato', vMato), varios('Solo', [['Seco', () => vSolo(false, false)], ['Molhado', () => vSolo(true, false)], ['Adubado', () => vSolo(false, true)]])] },
     { nome: 'Pomar', itens: Object.keys(FRUTIFERAS).map(k => { uso(k); return varios(FRUTIFERAS[k].nome, [['Com fruta', () => vFrutifera(k, true)], ['Sem fruta', () => vFrutifera(k, false)], ...produto(uso(FRUTIFERAS[k].fruta))]); }) },
-    { nome: 'Floresta', itens: [...Object.keys(NATIVAS).map(k => { uso(k); return varios(NATIVAS[k].nome, [['Com fruto', () => vNativa(k, true)], ['Sem fruto', () => vNativa(k, false)], ...produto(uso(NATIVAS[k].produto))]); }), varios('Mata', [[ 'Copa redonda', () => vCopa(0)], ['Copa alta', () => vCopa(1)], ['Copa larga', () => vCopa(2)]])] },
+    { nome: 'Floresta', itens: [varios('Matagal', [['Capim alto', () => vMatagal(0)], ['Moita', () => vMatagal(1)], ['Capim e pedra', () => vMatagal(2)], ['Tronco caído', () => vMatagal(3)]]), ...Object.keys(NATIVAS).map(k => { uso(k); return varios(NATIVAS[k].nome, [['Com fruto', () => vNativa(k, true)], ['Sem fruto', () => vNativa(k, false)], ...produto(uso(NATIVAS[k].produto))]); }), varios('Mata', [[ 'Copa redonda', () => vCopa(0)], ['Copa alta', () => vCopa(1)], ['Copa larga', () => vCopa(2)]])] },
     { nome: 'Construções', itens: [um('Casa', vCasa), um('Celeiro', vCeleiro), um('Galinheiro', vGalinheiro), um('Curral', vAbrigo), um('Poço', vPoco), um('Moinho', VI.moinho), um('Queijaria', vQueijaria), um('Padaria', vPadaria), um('Cozinha de doces', vCozinha), varios('Terreiro de café', [['Cheio', () => vTerreiro(true)], ['Vazio', () => vTerreiro(false)]]), um('Torrador', vTorrador), um('Composteira', () => vComposteira(false)), um('Hangar', vHangar), um('Obra', vObra)] },
     { nome: 'Automação', itens: [varios('Alimentador', [['Galinheiro', () => vAlimentador(false)], ['Curral', () => vAlimentador(true)]]), varios('Coletor', [['Ovos', () => vColetor(false)], ['Ordenhadeira', () => vColetor(true)]]), um('Esteira', vEsteira), varios('Irrigador', [['Base', vIrrigadorBase], ['Cabeça', vIrrigadorCabeca]]), um('Colmeia', vColmeia)] },
     { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Tratorzinho', vTrator), varios('Bicicleta', CICLISTAS.map((c, i) => [['Vermelha', 'Azul', 'Amarela'][i], () => vBicicleta(c[0])])), um('Teco-teco', vTecoTeco), um('Hélice', vHelice), um('Biruta', vBiruta), { nome: 'Disco voador', variantes: [['Voando', false], ['Com o raio', true]].map(([n, r]) => ({ nome: n, cria: () => { const D = montarDisco(r); D.g.userData.anima = (dt, t) => animarDisco(D, t); D.g.userData.anima(0, 0); return D.g; } })) }] },
