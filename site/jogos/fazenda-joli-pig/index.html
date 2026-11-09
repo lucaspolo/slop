@@ -3303,7 +3303,7 @@ function comprarAlimentador(tp){
 }
 
 // ================= Ed, os visitantes do Joli Market e o caminhão
-let milton, irmaoHud, ed, beto, jaca, pelucio, visita, caminhao, caminhaoMarket, caminhaoCafe, mochilaChao;
+let milton, irmaoHud, ed, beto, jaca, pelucio, patrinho, pilotoBistro, visita, caminhao, caminhaoMarket, caminhaoCafe, caminhaoBistro, mochilaChao;
 // quem vem no caminhão: quase sempre o Beto, às vezes o Jaca (nunca na primeira visita)
 const VISITA = {
   beto: {
@@ -3357,7 +3357,19 @@ function construirPersonagens(){
   visita = beto;
   caminhaoMarket = criarCaminhao(...CAMINHAO_MARKET);
   caminhaoCafe = criarCaminhao(...CAMINHAO_CAFE);
+  caminhaoBistro = criarLambreta();
+  patrinho = new Porco(0, 0, 'patrinho', MODELO_PATRINHO); patrinho.g.visible = false; scene.add(patrinho.g);
+  // no caminhão o motorista não aparece; na lambreta, sim: um segundo Patrinho vai sentado nela enquanto o de verdade não desce
+  pilotoBistro = new Porco(0, 0, 'patrinho', MODELO_PATRINHO); pickaveis.pop();
+  pilotoBistro.colocar(-0.2, 0); pilotoBistro.ang = pilotoBistro.angAlvo = Math.PI / 2; pilotoBistro.sentado = 0.84;
+  caminhaoBistro.add(pilotoBistro.g);
   caminhao = caminhaoMarket;
+}
+function atualizarPiloto(dt, t){
+  pilotoBistro.g.visible = caminhaoBistro.visible && !patrinho.g.visible;
+  if (!pilotoBistro.g.visible) return;
+  pilotoBistro.update(dt, t);
+  pilotoBistro.bE.rotation.set(-1.25, 0, -0.35); pilotoBistro.bD.rotation.set(-1.25, 0, 0.35);
 }
 function criarLambreta(){
   const c = malha(vLambreta().build(1 / 16, { origin: [8, 0, 0.5] }));
@@ -3484,6 +3496,17 @@ const FALAS_INICIO = [
   ['ed', 'Ed', 'Agora vou trabalhar com o que eu mais gosto: plantar, colher e cuidar dos bichos!', 'galinhas'],
   ['beto', 'Beto', 'Quando tiver colheita, me liga que eu levo tudo pro Joli Market!'],
   ['ed', 'Ed', 'Combinado! Mãos à obra, quer dizer, patas à obra!'],
+];
+const FALAS_PATRINHO = [
+  ['patrinho', 'Patrinho', 'Bom dia, Ed! Olha só essa fazenda, irmãozinho. Tá ficando coisa fina!'],
+  ['ed', 'Ed', 'Aooooa! Patrinho! O que o chef do Joli Bistrô veio fazer longe das panelas?'],
+  ['patrinho', 'Patrinho', 'Vim atrás do meu focinho. Desde a estrada eu sinto um cheirinho conhecido: tem trufa crescendo por aqui!'],
+  ['ed', 'Ed', 'Trufa? Aquela de chocolate?'],
+  ['patrinho', 'Patrinho', 'Não, irmão! Trufa de verdade: um tesouro que nasce debaixo da terra, perto das árvores.'],
+  ['patrinho', 'Patrinho', 'Não dá para ver, mas dá para cheirar. De vez em quando nasce uma nova, e porco tem o melhor nariz do mundo pra isso.'],
+  ['ed', 'Ed', 'Snif snif... Então é só seguir o cheirinho e cavar?'],
+  ['patrinho', 'Patrinho', 'Isso! É um ingrediente maravilhoso. Por cada trufa que você achar, eu pago uma boa quantia. Me liga que eu venho buscar!'],
+  ['ed', 'Ed', 'Negócio fechado, irmão! Vou ficar de focinho atento.'],
 ];
 const FALAS_CINE = [
   ['pelucio', 'Pelúcio', 'Boa tarde, irmão! O que acha de vender café pra eu vender lá na minha cafeteria?'],
@@ -3883,6 +3906,36 @@ const CENAS = {
       milton.g.visible = false; aviaoFora();
     },
     fim(){ S.conheceuMilton = true; },
+  },
+  patrinho: {
+    flag: 'viuCinePatrinho', nivel: () => 10, falas: FALAS_PATRINHO, icone: 'patrinho',
+    titulo: 'O nariz do Patrinho', desc: 'O Patrinho, chef do Joli Bistrô, conta um segredo que nasce debaixo da terra.',
+    visitante: () => patrinho,
+    foco: () => new THREE.Vector3((PONTO_ED[0] + PONTO_PELUCIO[0]) / 2 + 0.25, 0.35, (PONTO_ED[1] + PONTO_PELUCIO[1]) / 2 + 0.6),
+    vista: () => 4,
+    iniciar(){
+      caminhao = caminhaoBistro; caminhao.visible = true; caminhao.position.set(-5, 0, Z_ESTRADA);
+      caminhaoE.estado = 'cine';
+      const pts = rota(clamp(Math.floor(ed.pos.x), 0, W - 1), clamp(Math.floor(ed.pos.y), 0, H - 1), Math.floor(PONTO_ED[0]), Math.floor(PONTO_ED[1]));
+      if (pts) ed.ir(pts, () => ed.olhar(...PONTO_PELUCIO)); else { ed.colocar(...PONTO_ED); ed.olhar(...PONTO_PELUCIO); }
+      Som.buzina();
+      return 'chegando';
+    },
+    desce(c){
+      patrinho.g.visible = true; patrinho.colocar(PARADA, 16.85); patrinho.ang = patrinho.angAlvo = Math.PI;
+      patrinho.ir([[PARADA, 16.4], PONTO_PELUCIO], () => { c.chegou = true; patrinho.olhar(...PONTO_ED); });
+    },
+    posicionar(){ virarNaCena(ed, ...PONTO_PELUCIO); virarNaCena(patrinho, ...PONTO_ED); },
+    fimDasFalas(c){
+      $('cineDialogo').hidden = true;
+      patrinho.aceno = 1.6; c.passo = 'despedida'; c.t = 0;
+    },
+    pular(){
+      patrinho.g.visible = false; patrinho.pontos = []; patrinho.aoChegar = null; patrinho.estado = 'parado';
+      caminhao.visible = false;
+    },
+    fim(){ S.viuCinePatrinho = true; },
+    restaurar(){ caminhaoBistro.visible = false; },
   },
   pelucio: {
     flag: 'viuCinePelucio', nivel: () => CULTURAS.cafe.nivel, falas: FALAS_CINE, icone: 'pelucio',
@@ -4339,7 +4392,7 @@ const CENAS = {
   },
 };
 // a ordem da história; uma cena que ainda não existe em CENAS fica de fora
-const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'pelucio', 'minhocas', 'festa', 'cafezinho'];
+const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'patrinho', 'pelucio', 'minhocas', 'festa', 'cafezinho'];
 const ordemCenas = () => ORDEM_CENAS.filter(id => CENAS[id]);
 // uma cena começa sozinha quando ainda não foi vista e está pronta (pelo nível, ou pela regra própria dela)
 const cenaPronta = id => { const C = CENAS[id]; return (!S[C.flag] || C.repete) && (C.pronta ? C.pronta() : nivel() >= C.nivel()); };
@@ -5951,7 +6004,7 @@ function itensDoAlvoBase(alvo){
     }
     return r;
   }
-  if (alvo.k === 'beto' || alvo.k === 'jaca' || alvo.k === 'pelucio' || alvo.k === 'caminhao'){ abrirBeto(); return null; }
+  if (alvo.k === 'beto' || alvo.k === 'jaca' || alvo.k === 'pelucio' || alvo.k === 'patrinho' || alvo.k === 'caminhao'){ abrirBeto(); return null; }
   if (alvo.k === 'telefone'){
     const cafe = S.celeiro.cafe || 0;
     r.titulo = 'Ligar para quem?'; r.icone = 'caminhao';
@@ -6949,6 +7002,8 @@ function quadro(agoraP){
   atualizarMaca(dt, t);
   ed.update(dt, t);
   if (pelucio.g.visible) pelucio.update(dt, t);
+  if (patrinho.g.visible) patrinho.update(dt, t);
+  atualizarPiloto(dt, t);
   if (milton.g.visible) milton.update(dt, t);
   atualizarPista(dt);
   atualizarHudIrmao(dt, t);
@@ -7067,7 +7122,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
