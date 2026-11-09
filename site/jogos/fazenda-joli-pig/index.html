@@ -140,6 +140,9 @@ button{font:inherit;color:inherit}
 .item:focus-visible{outline:3px solid var(--rosa);outline-offset:1px}
 .item.off{opacity:.45;cursor:default;pointer-events:none}
 .item.leve{background:transparent;border-style:dashed}
+.item.encomenda{background:#dcecf6}
+.item i.tag{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;background:#e8d6b0;font-style:normal;font-size:11px;font-weight:800;vertical-align:1px;white-space:nowrap}
+.item i.estrela{display:inline-block;margin-left:5px;font-style:normal;font-size:16px;line-height:1;color:#f5b800;-webkit-text-stroke:1px var(--borda);vertical-align:-1px}
 .item.perigo{margin-top:8px;background:transparent;border-style:dashed;border-color:#b5584a;color:#8a3a2e}
 .item.perigo.confirmar{background:#f8d2c9;border-style:solid}
 
@@ -5907,6 +5910,23 @@ const pedidosDe = mercado => S.pedidos.map((p, i) => [p, i]).filter(([p]) => p &
 function diaHoje(){ const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); }
 function ofertaDoDia(){ const disp = produtosLiberados(); return disp[Math.floor(hash(diaHoje(), 3, 7) * disp.length)]; }
 const preco = p => Math.round(PRODUTOS[p].venda * (p === ofertaDoDia() || vendeMaisNaEstacao(p) ? 1.5 : 1));
+// menu de sementes: o que um canteiro rende hoje (oferta do dia e estação), já tirando a semente
+const lucroColheita = k => preco(k) * rendCultura(k) - CULTURAS[k].semente;
+// canteiros com cada cultura, em qualquer fase, mais os plantios que estão na fila do Ed
+function canteirosPorCultura(){
+  const n = {};
+  for (const id in S.campo){ const t = S.campo[id]; if (t && t.e === 'plantado' && CULTURAS[t.c]) n[t.c] = (n[t.c] || 0) + 1; }
+  const tarefas = tarefaAtual && !fila.includes(tarefaAtual) ? [tarefaAtual, ...fila] : fila;
+  for (const tf of tarefas) if (tf.tipo === 'plantar' && CULTURAS[tf.param]){ const t = campo(tf.alvo.x, tf.alvo.z); if (t && t.e !== 'plantado') n[tf.param] = (n[tf.param] || 0) + 1; }
+  return n;
+}
+// o que os pedidos em aberto ainda pedem de cada cultura, descontando o celeiro e o que vai sair dos canteiros
+function faltaPedidos(cont){
+  const pede = {}, falta = {};
+  for (const p of S.pedidos || []) if (p && p.itens) for (const [k, q] of p.itens) if (CULTURAS[k]) pede[k] = (pede[k] || 0) + q;
+  for (const k in pede){ const f = pede[k] - (S.celeiro[k] || 0) - (cont[k] || 0) * rendCultura(k); if (f > 0) falta[k] = f; }
+  return falta;
+}
 
 // ================= interface: HUD
 function hud(){
@@ -6033,12 +6053,16 @@ function itensDoAlvoBase(alvo){
         r.titulo = 'Canteiro arado'; r.icone = 'lote'; r.estado = 'Escolha a semente:';
         // a lista é longa: as mais novas vêm primeiro, e a que libera no próximo nível fica no fim
         const liberadas = ORDEM_CULTURAS.filter(k => CULTURAS[k].nivel <= nivel()).reverse();
+        // ao lado do nome: quantos canteiros já têm a planta e a estrela no que rende mais por canteiro hoje; o que falta para os pedidos ganha outra cor
+        const cont = canteirosPorCultura(), falta = faltaPedidos(cont);
+        const top = liberadas.reduce((a, k) => lucroColheita(k) > (a ? lucroColheita(a) : 0) ? k : a, null);
         for (const k of [...liberadas, ...ORDEM_CULTURAS.filter(k => CULTURAS[k].nivel === nivel() + 1)]){
           const c = CULTURAS[k], tem = S.bolsa[k] || 0;
-          const bloq = c.nivel > nivel();
+          const bloq = c.nivel > nivel(), f = bloq ? 0 : falta[k] || 0;
           r.itens.push({
             rotulo: c.nome, icone: k,
-            sub: bloq ? `nível ${c.nivel}` : (tem ? `${tem} na bolsa · ${tempo(c.tempo)}` : `compra na hora · ${tempo(c.tempo)}`) + (daEstacao(k) && !bloq ? ' · da estação' : ''),
+            canteiros: bloq ? 0 : cont[k] || 0, estrela: k === top, encomenda: f > 0,
+            sub: bloq ? `nível ${c.nivel}` : (tem ? `${tem} na bolsa · ${tempo(c.tempo)}` : `compra na hora · ${tempo(c.tempo)}`) + (daEstacao(k) && !bloq ? ' · da estação' : '') + (f ? ` · ${f > 1 ? 'faltam' : 'falta'} ${f} pro pedido` : ''),
             preco: bloq || tem ? '' : reais(c.semente),
             off: bloq || (!tem && S.dinheiro < c.semente),
             fn: () => enfileirar('plantar', alvo, k), modo: { tipo: 'plantar', param: k },
@@ -6235,7 +6259,8 @@ function abrirMenu(alvo, px, py, manter){
   else if (r.prog != null && r.prog < 1) h += `<div class="prog"><i style="width:${Math.round(clamp(r.prog, 0, 1) * 100)}%"></i></div>`;
   h += '<div class="itens">';
   r.itens.forEach((it, i) => {
-    h += `<button class="item${it.off ? ' off' : ''}${it.leve ? ' leve' : ''}${it.perigo ? ' perigo' : ''}" type="button" role="menuitem" data-i="${i}"${it.off ? ' aria-disabled="true"' : ''}><img src="${icone(it.icone)}" alt=""><span>${esc(it.rotulo)}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>${it.preco ? `<b>${esc(it.preco)}</b>` : ''}</button>`;
+    const marcas = (it.canteiros ? `<i class="tag" title="canteiros com ${esc(it.rotulo.toLowerCase())}">${it.canteiros} canteiro${it.canteiros > 1 ? 's' : ''}</i>` : '') + (it.estrela ? '<i class="estrela" title="rende mais por canteiro hoje">★</i>' : '');
+    h += `<button class="item${it.off ? ' off' : ''}${it.leve ? ' leve' : ''}${it.perigo ? ' perigo' : ''}${it.encomenda ? ' encomenda' : ''}" type="button" role="menuitem" data-i="${i}"${it.off ? ' aria-disabled="true"' : ''}><img src="${icone(it.icone)}" alt=""><span>${esc(it.rotulo)}${marcas}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>${it.preco ? `<b>${esc(it.preco)}</b>` : ''}</button>`;
   });
   h += '</div>';
   m.innerHTML = h;
@@ -6816,7 +6841,7 @@ function mostrarAjuda(intro, aba){
     <p>Este é o Ed. Ele cuida da fazendinha e o irmão dele, o Beto, tem um mercado na cidade: o Joli Market.</p>
     <ol class="passos">
       <li><b>Toque no chão</b> para ver o que dá para fazer. O Ed anda até lá e faz.</li>
-      <li><b>Are, plante e regue.</b> A semente precisa de água para brotar; as culturas curtas pedem mais água no meio do caminho. Se nascer mato, tire.</li>
+      <li><b>Are, plante e regue.</b> A semente precisa de água para brotar; as culturas curtas pedem mais água no meio do caminho. Se nascer mato, tire. Na lista de sementes, o número ao lado do nome diz quantos canteiros já têm a planta, a estrela marca a que rende mais por canteiro hoje e o fundo azul marca o que ainda falta para os pedidos.</li>
       <li><b>Cuide dos bichos.</b> Galinhas e vacas comem ração e dão ovos e leite.</li>
       <li><b>Colha</b> e tudo vai para o celeiro.</li>
       <li><b>Chame o Beto</b> para vender. Às vezes quem vem é o Jaca, o melhor amigo e sócio do Beto, e ele sempre traz um presentinho.</li>
@@ -7142,7 +7167,7 @@ function atualizarEstadoMenu(){
   const r = itensDoAlvo(menuAberto.alvo);
   if (!r) return;
   // botões que mudaram (xp, "o Ed já vai", ligado ou desligado): só reabre se algo for diferente
-  const assina = x => JSON.stringify(x.itens.map(i => [i.rotulo, i.sub, !!i.off]));
+  const assina = x => JSON.stringify(x.itens.map(i => [i.rotulo, i.sub, !!i.off, i.canteiros || 0, !!i.estrela, !!i.encomenda]));
   if (assina(r) !== assina(menuAberto.r)){ const m = $('menu'); abrirMenu(menuAberto.alvo, 0, 0, true); return; }
   const e = $('menu').querySelector('.estado'), p = $('menu').querySelector('.prog i');
   // composteira: a cor da caixa e a barra mudam com o estado, então reabre
