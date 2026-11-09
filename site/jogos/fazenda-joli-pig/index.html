@@ -153,6 +153,7 @@ button{font:inherit;color:inherit}
 .fala.jaca{background:#e8f6dc}
 .fala.pelucio{background:#fde4e1}
 .fala.milton{background:#ffe3d2}
+.fala.luma{background:#ffeedd}
 .fala.minhoquinha{background:#fde0e8}
 .dialogo .quem.minhoquinha{color:#d4607f}
 .dialogo .quem.beto{color:#2f6fb3}
@@ -1216,7 +1217,10 @@ function vCapim(seed){
 }
 const sorteiaH = (arr, a, b) => arr[Math.floor(hash(a, 11, b) * arr.length)];
 
-function vCasa(){
+// a portinha da Luma: madeira clara, dobradiça escura em cima e um coraçãozinho rosa (coordenadas da casa)
+const corPortinha = (x, y) => y === 6 ? 0x8b5634 : (x === 15 || x === 16) && (y === 3 || y === 4) ? 0xf28fac : 0xc99a66;
+// portinhaSolta: no jogo a portinha da Luma é uma peça à parte, que balança quando ela passa
+function vCasa(portinhaSolta){
   const v = new Vox();
   const parede = 0xf6bccb, branco = 0xfff7ee, porta = 0x8b5634, vidro = 0xbfe5f5, pedra = 0xb9b0a3;
   v.box(2, 0, 4, 29, 1, 29, pedra);
@@ -1228,7 +1232,11 @@ function vCasa(){
   v.box(21, 23, 10, 23, 31, 12, 0xa95b46); v.box(20, 31, 9, 24, 31, 13, 0x7a3f30);
   v.box(13, 2, 29, 18, 11, 29, (x) => x % 2 ? 0x7e4c2e : porta);
   v.box(12, 2, 29, 12, 12, 29, branco); v.box(19, 2, 29, 19, 12, 29, branco); v.box(12, 12, 29, 19, 12, 29, branco);
-  v.set(17, 6, 30, 0xf2c335);
+  v.set(17, 8, 30, 0xf2c335);
+  // portinha da Luma embaixo da porta, com moldura branca
+  v.box(13, 2, 29, 13, 7, 29, branco); v.box(18, 2, 29, 18, 7, 29, branco); v.box(13, 7, 29, 18, 7, 29, branco);
+  if (portinhaSolta){ v.box(14, 2, 29, 17, 6, 29, null); v.box(14, 2, 28, 17, 6, 28, 0x3a2a22); }
+  else v.box(14, 2, 29, 17, 6, 29, corPortinha);
   for (const wx of [4, 22]){
     v.box(wx, 6, 29, wx + 5, 11, 29, branco); v.box(wx + 1, 7, 29, wx + 4, 10, 29, vidro); v.box(wx + 1, 8, 29, wx + 4, 8, 29, branco);
     v.box(wx, 4, 30, wx + 5, 5, 31, 0x9a6038);
@@ -1608,6 +1616,9 @@ function vBolinha(){
   v.ell(0, 4.9, 0, 4.9, 4.9, 4.9, (x, y, z) => Math.abs((y - 4.9) - Math.sin(2 * Math.atan2(z, x)) * 2.2) < 0.8 ? CL.bola2 : CL.bola);
   return v;
 }
+// a bolinha com o centro na origem, para rolar girando em volta de si mesma; R_BOLA é o raio na escala da Luma
+const malhaBolinha = () => { const vb = vBolinha(), m = malha(vb.build(1 / 57, { origin: [0.5, 5.4, 0.5], jitter: 0.015, ao: AO_SUAVE })); m.userData.cubos = vb.m.size; return m; };
+const R_BOLA = 5.4 / 57 * LUMA.escala, BOCA_LUMA = [0, 3.4 / 57, 17.5 / 57];
 function montarLuma(comBola){
   const s = 1 / 57, op = { origin: [0.5, 0, 0.5], jitter: 0.015, ao: AO_SUAVE }, Q = LUMA.quadril;
   const g = new THREE.Group(), corpo = new THREE.Group();
@@ -1620,7 +1631,7 @@ function montarLuma(comBola){
   const cabeca = parte(vLumaCabeca(), LUMA.pescoco), rabo = parte(vLumaRabo(), LUMA.rabo);
   const pernas = LUMA.pernas.map(([x, z], i) => parte(vLumaPerna(i < 2), [x, Q[1], z]));
   let bola = null;
-  if (comBola){ const vb = vBolinha(); bola = malha(vb.build(s, { jitter: 0.015, ao: AO_SUAVE })); bola.userData.cubos = vb.m.size; bola.position.set(0, -2 * s, 17.5 * s); cabeca.add(bola); }
+  if (comBola){ bola = malhaBolinha(); bola.position.set(...BOCA_LUMA); cabeca.add(bola); }
   return { g, corpo, cabeca, rabo, pernas, bola };
 }
 // poses do catálogo: parada, andando (trote em diagonal), sentada com a cabeça de lado e brincando com a bolinha na boca
@@ -1650,6 +1661,195 @@ function animarLuma(L, modo, t){
     cabeca.rotation.y = Math.sin(t * 0.45) * 0.25;
     cabeca.rotation.z = Math.sin(t * 0.7) * 0.1;
   }
+}
+
+// ================= a Luma na fazenda: de vez em quando sai pela portinha da casa e brinca com a bolinha em volta do chafariz
+// (sem chafariz, no caminho e na grama da frente da casa). Se o Ed estiver por perto e parado, larga a bolinha e vai dar
+// uma mordidinha no rabicó dele. Não mexe no save: os tempos contam só com o jogo aberto e recomeçam ao abrir.
+const LUMA_JOGO = { primeira: [60, 150], intervalo: [240, 480], fora: [70, 110], vel: 2.1, corre: 3.1, perto: 4 };
+// a portinha fica embaixo da porta da casa (x 4,75 a 5,25); a Luma nasce lá dentro, escondida pela parede, e o chão da casa e o degrau ficam a 0,25
+const PORTINHA = { x: 5, y: 0.875, z: 4.6875, dentro: 4.25, fora: 5.35 };
+let luma = null, portinha = null;
+function criarLuma(){
+  const L = montarLuma(false), raiz = new THREE.Group();
+  raiz.add(L.g); raiz.visible = false; scene.add(raiz);
+  luma = { nome: 'luma', L, g: raiz, pos: new THREE.Vector2(PORTINHA.x, PORTINHA.dentro), ang: 0, angAlvo: 0, pontos: [], vel: LUMA_JOGO.vel,
+    estado: 'dentro', acao: '', ta: 0, prox: rnd(...LUMA_JOGO.primeira), fora: 0, limite: 0, mordeu: false, mordido: false, forcarMordida: false, lugares: null,
+    bola: { m: malhaBolinha(), boca: true, pos: new THREE.Vector2(), v: new THREE.Vector2(), y: 0, vy: 0 },
+    topo(){ return new THREE.Vector3(this.pos.x, 0.8 + this.g.position.y, this.pos.y); } };
+  bolaNaBoca();
+  const vp = new Vox(); vp.box(-2, -5, 0, 1, -1, 0, (x, y) => corPortinha(x + 16, y + 7));
+  portinha = { m: new THREE.Group(), ang: 0, v: 0 };
+  const pm = malha(vp.build(1 / 8, { origin: [0, 0, 0.5] }));
+  // tocar na portinha é tocar na casa
+  pm.userData.alvo = { k: 'predio', p: PREDIOS.find(p => p.id === 'casa') }; pickaveis.push(pm);
+  portinha.m.add(pm);
+  portinha.m.position.set(PORTINHA.x, PORTINHA.y, PORTINHA.z); scene.add(portinha.m);
+}
+function bolaNaBoca(){ const b = luma.bola; b.boca = true; b.v.set(0, 0); b.m.scale.setScalar(1); b.m.rotation.set(0, 0, 0); b.m.position.set(...BOCA_LUMA); luma.L.cabeca.add(b.m); }
+// a bolinha sai da boca: com força, ela é jogada para um canto da brincadeira; sem, só cai no chão
+function soltarBola(forca){
+  const b = luma.bola, w = new THREE.Vector3(); b.m.getWorldPosition(w);
+  b.boca = false; scene.add(b.m); b.m.scale.setScalar(LUMA.escala);
+  b.pos.set(w.x, w.z); b.y = Math.max(R_BOLA, w.y); b.vy = forca ? 1.4 : 0;
+  let a = luma.ang;
+  if (forca){ const [x, z] = pontoLuma(); a = Math.atan2(x - w.x, z - w.z) + rnd(-0.35, 0.35); }
+  b.v.set(Math.sin(a) * forca, Math.cos(a) * forca);
+}
+// onde a Luma e a bolinha andam: grama e caminho, nunca canteiro, construção, cerca nem enfeite
+const chaoLuma = (x, z) => { const t = tipo(x, z); return t === 'grama' || t === 'caminho'; };
+function atualizarBola(dt){
+  const b = luma.bola;
+  if (b.boca) return;
+  const nx = b.pos.x + b.v.x * dt, nz = b.pos.y + b.v.y * dt;
+  if (chaoLuma(Math.floor(nx), Math.floor(nz))) b.pos.set(nx, nz);
+  else if (chaoLuma(Math.floor(nx), Math.floor(b.pos.y))){ b.pos.x = nx; b.v.y *= -0.5; }
+  else if (chaoLuma(Math.floor(b.pos.x), Math.floor(nz))){ b.pos.y = nz; b.v.x *= -0.5; }
+  else b.v.multiplyScalar(-0.5);
+  b.v.multiplyScalar(Math.exp(-dt * 2.2)); if (b.v.lengthSq() < 0.0004) b.v.set(0, 0);
+  b.vy -= 9 * dt; b.y += b.vy * dt;
+  if (b.y < R_BOLA){ b.y = R_BOLA; b.vy = b.vy < -0.6 ? -b.vy * 0.45 : 0; }
+  b.m.position.set(b.pos.x, b.y, b.pos.y);
+  b.m.rotation.x += b.v.y * dt / R_BOLA; b.m.rotation.z -= b.v.x * dt / R_BOLA;
+}
+// os ladrilhos da brincadeira: em volta do chafariz mais perto da casa, se houver espaço; senão, na frente da casa
+function lugaresLuma(){
+  const fontes = (S.enfeites || []).filter(e => e.tipo === 'fonte').sort((a, b) => Math.hypot(a.x - 5, a.z - 5) - Math.hypot(b.x - 5, b.z - 5));
+  for (const f of fontes){
+    const l = [];
+    for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) if ((dx || dz) && chaoLuma(f.x + dx, f.z + dz) && rota(5, 5, f.x + dx, f.z + dz)) l.push([f.x + dx, f.z + dz]);
+    if (l.length >= 4) return { tiles: l, fonte: f };
+  }
+  const l = [];
+  for (let x = 2; x <= 9; x++) for (const z of [5, 6]) if (chaoLuma(x, z)) l.push([x, z]);
+  return { tiles: l, fonte: null };
+}
+function pontoLuma(){ const [x, z] = sorteia(luma.lugares.tiles); return [x + rnd(0.25, 0.75), z + rnd(0.25, 0.75)]; }
+// anda até (x, z) pela rota dos ladrilhos, com o último trecho direto
+function lumaIr(x, z, vel){
+  const L = luma, sx = Math.floor(L.pos.x), sz = Math.floor(L.pos.y), gx = Math.floor(x), gz = Math.floor(z);
+  const pts = sx === gx && sz === gz ? [] : rota(sx, sz, gx, gz);
+  if (!pts) return false;
+  pts.pop(); pts.push([x, z]);
+  L.pontos = pts; L.vel = vel;
+  return true;
+}
+// vai até a bolinha e para com a boca nela
+function lumaAteBola(){
+  const L = luma, b = L.bola, dx = b.pos.x - L.pos.x, dz = b.pos.y - L.pos.y, d = Math.hypot(dx, dz);
+  if (d < 0.36) return true;
+  return lumaIr(b.pos.x - dx / d * 0.3, b.pos.y - dz / d * 0.3, LUMA_JOGO.corre);
+}
+const edPertoDaLuma = () => ed.g.visible && ed.estado !== 'andando' && !ed.sentado && Math.hypot(ed.pos.x - luma.pos.x, ed.pos.y - luma.pos.y) < LUMA_JOGO.perto;
+// atrás do Ed, de frente para o rabicó: a boca dela alcança uns 0,35 à frente do corpo, e o rabicó fica uns 0,28 atrás do Ed
+function atrasDoEd(){ const x = ed.pos.x - Math.sin(ed.ang) * 0.62, z = ed.pos.y - Math.cos(ed.ang) * 0.62; return andavel(Math.floor(x), Math.floor(z)) ? [x, z] : null; }
+function lumaSair(){
+  const L = luma, lug = lugaresLuma();
+  if (!lug.tiles.length){ L.prox = rnd(...LUMA_JOGO.intervalo); return; }
+  Object.assign(L, { lugares: lug, estado: 'fora', acao: 'saindo', ta: 0, fora: 0, limite: rnd(...LUMA_JOGO.fora), mordeu: false, ang: 0, angAlvo: 0, pontos: [[PORTINHA.x, PORTINHA.fora]], vel: 1.3 });
+  L.pos.set(PORTINHA.x, PORTINHA.dentro);
+  bolaNaBoca(); L.g.visible = true;
+}
+// as cenas usam a frente da casa: a Luma some na hora e volta mais tarde
+function lumaRecolher(){
+  const L = luma;
+  Object.assign(L, { estado: 'dentro', acao: '', pontos: [], prox: rnd(60, 180) });
+  L.g.visible = false; if (!L.bola.boca) bolaNaBoca();
+}
+function lumaVoltar(){
+  const L = luma;
+  if (!L.bola.boca){ L.acao = 'buscarVolta'; L.ta = 0; if (!lumaAteBola()) lumaRecolher(); return; }
+  if (lumaIr(PORTINHA.x, PORTINHA.fora, LUMA_JOGO.vel)) L.acao = 'voltar'; else lumaRecolher();
+}
+function lumaLevar(){ const [x, z] = pontoLuma(); if (lumaIr(x, z, LUMA_JOGO.vel)){ luma.acao = 'levar'; luma.ta = 0; } else lumaVoltar(); }
+// depois de pegar a bolinha: hora de voltar, mordidinha no Ed, festinha ou mais uma jogada
+function lumaDecidir(){
+  const L = luma;
+  if (L.fora > L.limite){ lumaVoltar(); return; }
+  if (!L.mordeu && edPertoDaLuma() && (L.forcarMordida || Math.random() < 0.6)){
+    const b = atrasDoEd();
+    if (b && lumaIr(b[0], b[1], LUMA_JOGO.corre)){ L.forcarMordida = false; soltarBola(0); L.acao = 'morder'; L.ta = 0; return; }
+  }
+  if (Math.random() < 0.35){ L.acao = 'festa'; L.ta = 0; return; }
+  lumaLevar();
+}
+function mordidinha(){
+  ed.pulo = 0.45; Som.oinc(); Som.au();
+  if (ed.estado === 'parado' && !tarefaAtual) ed.olhar(luma.pos.x, luma.pos.y);
+  falar(ed, sorteia(['Ai! Luma!', 'Ui, meu rabicó!', 'Luma, sua sapeca!', 'Hihi, faz cócegas!']), 2);
+  const x = ed.pos.x - Math.sin(ed.ang) * 0.3, z = ed.pos.y - Math.cos(ed.ang) * 0.3;
+  for (let i = 0; i < 6; i++) particula(x, 0.3, z, 0xff7ac8, 0.7);
+}
+function atualizarPortinha(dt){
+  // a portinha abre para o lado em que a Luma está indo e volta balançando
+  let alvo = 0;
+  if (luma && luma.g.visible && Math.abs(luma.pos.x - PORTINHA.x) < 0.3){
+    const saindo = Math.cos(luma.ang) > 0, lo = luma.pos.y - (saindo ? 0.22 : 0.35), hi = luma.pos.y + (saindo ? 0.35 : 0.22);
+    if (lo < PORTINHA.z && hi > PORTINHA.z) alvo = saindo ? -1.25 : 1.25;
+  }
+  portinha.v += ((alvo - portinha.ang) * 90 - portinha.v * 8) * dt;
+  portinha.ang += portinha.v * dt;
+  portinha.m.rotation.x = portinha.ang;
+}
+function atualizarLuma(dt, t){
+  if (!luma) return;
+  const L = luma;
+  atualizarPortinha(dt);
+  if (L.estado === 'dentro'){
+    if (!cine && S.viuCineInicio){ L.prox -= dt; if (L.prox <= 0) lumaSair(); }
+    if (L.estado === 'dentro') return;
+  }
+  if (cine){ lumaRecolher(); return; }
+  L.fora += dt; L.ta += dt;
+  // anda
+  if (L.pontos.length){
+    const p = L.pontos[0], dx = p[0] - L.pos.x, dz = p[1] - L.pos.y, d = Math.hypot(dx, dz), passo = L.vel * dt;
+    if (d <= passo){ L.pos.set(p[0], p[1]); L.pontos.shift(); }
+    else { L.pos.x += dx / d * passo; L.pos.y += dz / d * passo; L.angAlvo = Math.atan2(dx, dz); }
+  }
+  const chegou = !L.pontos.length, b = L.bola;
+  switch (L.acao){
+    case 'saindo': if (chegou) lumaLevar(); break;
+    case 'levar': if (chegou){ soltarBola(rnd(1.4, 2.4)); L.acao = 'olhar'; L.ta = 0; } break;
+    case 'olhar':
+      L.angAlvo = Math.atan2(b.pos.x - L.pos.x, b.pos.y - L.pos.y);
+      if (L.ta > 0.8 && b.v.lengthSq() < 0.25){ L.acao = 'buscar'; L.ta = 0; if (!lumaAteBola()){ bolaNaBoca(); lumaDecidir(); } }
+      break;
+    case 'buscar': case 'buscarVolta': {
+      const d = Math.hypot(b.pos.x - L.pos.x, b.pos.y - L.pos.y);
+      if (d < 0.42 && b.v.lengthSq() < 0.09){ L.pontos = []; L.angAlvo = Math.atan2(b.pos.x - L.pos.x, b.pos.y - L.pos.y); L.acao = L.acao === 'buscar' ? 'pegar' : 'pegarVolta'; L.ta = 0; }
+      // a bolinha ainda rola: corrige o rumo de tempos em tempos
+      else if (chegou || L.ta > 0.5){ L.ta = 0; if (!lumaAteBola()){ bolaNaBoca(); if (L.acao === 'buscarVolta') lumaVoltar(); else lumaDecidir(); } }
+      break;
+    }
+    case 'pegar': case 'pegarVolta': if (L.ta > 0.35){ bolaNaBoca(); if (L.acao === 'pegarVolta') lumaVoltar(); else lumaDecidir(); } break;
+    case 'festa': if (L.ta > 1.4) lumaLevar(); break;
+    case 'morder':
+      // o Ed saiu andando: desiste e volta para a bolinha
+      if (ed.estado === 'andando' || !ed.g.visible){ L.acao = 'buscar'; L.ta = 0; if (!lumaAteBola()) lumaVoltar(); break; }
+      if (chegou){ L.acao = 'mordendo'; L.ta = 0; L.mordido = false; }
+      break;
+    case 'mordendo':
+      L.angAlvo = Math.atan2(ed.pos.x - L.pos.x, ed.pos.y - L.pos.y);
+      if (!L.mordido && L.ta > 0.45){ L.mordido = L.mordeu = true; mordidinha(); }
+      if (L.ta > 1.3){ falar(L, 'Au! Au!', 1.3); L.acao = 'buscar'; L.ta = 0; if (!lumaAteBola()) lumaVoltar(); }
+      break;
+    case 'voltar': if (chegou){ L.acao = 'entrando'; L.pontos = [[PORTINHA.x, PORTINHA.dentro]]; L.vel = 1.3; } break;
+    case 'entrando': if (chegou){ L.g.visible = false; L.estado = 'dentro'; L.acao = ''; L.prox = rnd(...LUMA_JOGO.intervalo); } break;
+  }
+  atualizarBola(dt);
+  // pose: trota quando anda, festinha com a bolinha, cabeça baixa para pegar e mordiscar
+  L.ang = anguloPerto(L.ang, L.angAlvo, Math.min(1, dt * 10));
+  const a = L.acao, anda = L.pontos.length > 0;
+  animarLuma(L.L, anda ? 'Andando' : a === 'festa' ? 'Com a bolinha' : 'Parada', t * (anda && L.vel > 2.5 ? 1.4 : 1));
+  const C = L.L.cabeca, R = L.L.rabo;
+  if (a === 'olhar'){ C.rotation.set(0.1, 0, 0.18); R.rotation.z = Math.sin(t * 16) * 0.4; }
+  else if (a === 'pegar' || a === 'pegarVolta') C.rotation.set(0.55, 0, 0);
+  else if (a === 'mordendo'){ C.rotation.set(0.5 + Math.sin(t * 28) * 0.12, 0, 0); R.rotation.z = Math.sin(t * 18) * 0.45; }
+  // degrau da porta: o chão da casa e o degrau ficam a 0,25; na frente dele ela desce para a grama
+  const naPorta = Math.abs(L.pos.x - PORTINHA.x) < 0.6, z = L.pos.y;
+  L.g.position.set(L.pos.x, naPorta && z < 5 ? 0.25 : naPorta && z < 5.2 ? 0.25 * (5.2 - z) / 0.2 : 0, z);
+  L.g.rotation.y = L.ang;
 }
 // alimentador automático: silo de metal do lado de fora da cerca, com a calha descendo até o cocho dentro do cercado (para -x)
 function vAlimentador(vaca){
@@ -2348,6 +2548,7 @@ const Som = {
   moeda(){ this.tom(988, 0.07, 'square', 0.04); this.tom(1319, 0.18, 'square', 0.04, 0, 0.07); },
   jaca(){ this.tom(520, 0.09, 'triangle', 0.07, 760); this.tom(640, 0.12, 'triangle', 0.07, 900, 0.11); },
   oinc(){ this.tom(330, 0.12, 'sawtooth', 0.05, 180); this.tom(300, 0.14, 'sawtooth', 0.05, 160, 0.15); },
+  au(){ this.tom(900, 0.06, 'square', 0.03, 640); this.tom(860, 0.08, 'square', 0.03, 600, 0.11); },
   co(){ this.tom(900, 0.06, 'square', 0.03, 600); this.tom(1100, 0.08, 'square', 0.03, 700, 0.09); },
   muu(){ this.tom(160, 0.5, 'sawtooth', 0.05, 120); },
   buzina(){ this.tom(392, 0.16, 'square', 0.05); this.tom(392, 0.24, 'square', 0.05, 0, 0.2); },
@@ -2556,7 +2757,7 @@ function construirCenario(){
   for (const p of PREDIOS){
     if (p.fab) continue;
     let g = null;
-    if (p.id === 'casa') g = vCasa().build(1 / 8, { origin: [16, 0, 16] });
+    if (p.id === 'casa') g = vCasa(true).build(1 / 8, { origin: [16, 0, 16] });
     if (p.id === 'celeiro') g = vCeleiro().build(1 / 8, { origin: [20, 0, 20] });
     if (p.id === 'poco') g = vPoco().build(1 / 8, { origin: [4, 0, 4] });
     if (p.id === 'galinheiro') g = vGalinheiro().build(1 / 8, { origin: [8, 0, 8] });
@@ -3511,6 +3712,7 @@ function construirPersonagens(){
   // o Hud é igualzinho ao Ed, só que com metade do tamanho
   irmaoHud = new Porco(COR.ed, COR.edBolso, 'hud', MODELO_HUD);
   irmaoHud.g.scale.setScalar(0.5); irmaoHud.g.visible = false; irmaoHud.vel = 2.5; scene.add(irmaoHud.g);
+  criarLuma();
   visita = beto;
   caminhaoMarket = criarCaminhao(...CAMINHAO_MARKET);
   caminhaoCafe = criarCaminhao(...CAMINHAO_CAFE);
@@ -7032,6 +7234,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Figurinhas:</b> metas de longo prazo no caderno, que dão xp.</li>
       <li><b>Floresta</b>${nv(PARCELAS[0].nivel)}: do outro lado da estrada há uma mata nativa protegida, vendida em ${PARCELAS.length} parcelas, nos níveis ${PARCELAS.map(P => P.nivel).join(', ')}. O Ed só coleta das árvores que já estão lá, sem plantar nem cortar: ${Object.values(NATIVAS).map(N => N.nomeP.toLowerCase()).join(', ')}. Cada árvore guarda uma coleta pronta, mesmo com o jogo fechado.</li>
       <li><b>Trufas</b>${nv(CENAS.patrinho.nivel())}: depois da visita do Patrinho, de vez em quando nasce uma trufa perto de uma árvore, enquanto você joga. Siga o cheirinho que sobe do chão e toque ali para o Ed cavar. Só o Patrinho compra: use o botão Ligar e ele vem de lambreta pagar ${reais(PRODUTOS.trufa.venda)} por trufa.</li>
+      <li><b>Luma:</b> a irmã chihuahua dos porquinhos. De vez em quando ela sai pela portinha da casa para brincar com a bolinha roxa, em volta do chafariz se tiver um, e, se o Ed estiver por perto, dá uma mordidinha no rabicó dele.</li>
       <li><b>Maçã:</b> de vez em quando uma árvore deixa cair uma maçã. Toque nela para o Ed comer: ele agradece à árvore e anda ${MACA.fator}× mais rápido por ${MACA.minutos} minutos de jogo.</li>
       <li><b>Outro aparelho:</b> a fazenda fica salva só neste navegador. Para jogar em outro aparelho, abra os Ajustes, escolha Levar a fazenda e mande o link para você mesmo. Depois disso, cada aparelho segue sozinho.</li>
       <li><b>Cenas:</b> as cenas da história ficam guardadas e podem ser revistas nos Ajustes ou no caderno do Ed. Rever uma cena não muda nada na fazenda. De vez em quando o Ed para para um cafezinho na frente da casa, às vezes com visita. Para chamar na hora, toque na casa e escolha Tomar um lanchinho.</li>
@@ -7281,6 +7484,7 @@ function quadro(agoraP){
   atualizarMaca(dt, t);
   atualizarTrufas(dt, t);
   ed.update(dt, t);
+  atualizarLuma(dt, t);
   if (pelucio.g.visible) pelucio.update(dt, t);
   if (patrinho.g.visible) patrinho.update(dt, t);
   atualizarPiloto(dt, t);
@@ -7404,7 +7608,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
