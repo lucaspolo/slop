@@ -1928,6 +1928,50 @@ function animarDisco(D, t){
   D.et.rotation.y = Math.sin(t * 0.8) * 0.5;
   if (D.raio) D.raio.material.opacity = 0.22 + Math.sin(t * 5) * 0.07;
 }
+// ================= o disco voador na fazenda: de vez em quando cruza o céu bem pequeno, de um lado ao outro da tela,
+// e o Ed leva um susto. Não mexe no save: os tempos contam só com o jogo aberto e recomeçam ao abrir.
+const DISCO_JOGO = { primeira: [240, 480], intervalo: [600, 1200], escala: 0.3, dur: 7, altura: 3, topo: 0.36 };
+let discoJogo = null;
+function criarDiscoJogo(){
+  const D = montarDisco(false), raiz = new THREE.Group();
+  raiz.add(D.g); raiz.scale.setScalar(DISCO_JOGO.escala); raiz.visible = false;
+  // lá no alto não faz sombra no chão
+  raiz.traverse(o => { if (o.isMesh) o.castShadow = false; });
+  scene.add(raiz);
+  discoJogo = { D, g: raiz, prox: rnd(...DISCO_JOGO.primeira), t: -1, de: new THREE.Vector3(), ate: new THREE.Vector3(), reagiu: false };
+}
+// o caminho é montado a partir da câmera: entra por um lado da tela e sai pelo outro, na parte de cima
+function passarDisco(){
+  const P = discoJogo, a = cam.az, direita = new THREE.Vector3(Math.cos(a), 0, -Math.sin(a)), longe = new THREE.Vector3(-Math.sin(a), 0, -Math.cos(a));
+  const meia = cam.vista * innerWidth / innerHeight / 2 + 2, h = DISCO_JOGO.altura;
+  const fundo = (cam.vista * DISCO_JOGO.topo - h * Math.cos(cam.el)) / Math.sin(cam.el), lado = Math.random() < 0.5 ? 1 : -1;
+  const base = cam.alvo.clone().addScaledVector(longe, fundo); base.y = h;
+  P.de.copy(base).addScaledVector(direita, -meia * lado); P.ate.copy(base).addScaledVector(direita, meia * lado);
+  P.t = 0; P.reagiu = false; P.g.visible = true; Som.disco();
+}
+function sustoDoEd(){
+  if (!ed.g.visible) return;
+  ed.pulo = 0.45; Som.oinc();
+  if (ed.estado === 'parado' && !tarefaAtual) ed.olhar(discoJogo.g.position.x, discoJogo.g.position.z);
+  falar(ed, 'AOOOA! Um etzinho!', 2.8);
+  if (luma && luma.estado === 'fora') falar(luma, 'Au! Au! Au!', 1.6);
+}
+function atualizarDisco(dt, t){
+  const P = discoJogo;
+  if (!P) return;
+  if (P.t < 0){
+    // só começa sem cena, janela ou menu na frente, para dar para ver
+    if (!cine && S.viuCineInicio && !algumaJanela() && !menuAberto){ P.prox -= dt; if (P.prox <= 0) passarDisco(); }
+    return;
+  }
+  P.t += dt;
+  const k = P.t / DISCO_JOGO.dur;
+  if (k >= 1 || cine){ P.g.visible = false; P.t = -1; P.prox = rnd(...DISCO_JOGO.intervalo); return; }
+  // atravessa em linha reta, subindo e descendo um pouquinho
+  P.g.position.lerpVectors(P.de, P.ate, k); P.g.position.y += Math.sin(k * Math.PI * 3) * 0.35;
+  animarDisco(P.D, t);
+  if (!P.reagiu && k > 0.35){ P.reagiu = true; sustoDoEd(); }
+}
 // alimentador automático: silo de metal do lado de fora da cerca, com a calha descendo até o cocho dentro do cercado (para -x)
 function vAlimentador(vaca){
   const v = new Vox();
@@ -2627,6 +2671,7 @@ const Som = {
   jaca(){ this.tom(520, 0.09, 'triangle', 0.07, 760); this.tom(640, 0.12, 'triangle', 0.07, 900, 0.11); },
   oinc(){ this.tom(330, 0.12, 'sawtooth', 0.05, 180); this.tom(300, 0.14, 'sawtooth', 0.05, 160, 0.15); },
   au(){ this.tom(900, 0.06, 'square', 0.03, 640); this.tom(860, 0.08, 'square', 0.03, 600, 0.11); },
+  disco(){ for (let i = 0; i < 4; i++) this.tom(i % 2 ? 1150 : 700, 0.28, 'sine', 0.03, i % 2 ? 700 : 1150, i * 0.28); },
   co(){ this.tom(900, 0.06, 'square', 0.03, 600); this.tom(1100, 0.08, 'square', 0.03, 700, 0.09); },
   muu(){ this.tom(160, 0.5, 'sawtooth', 0.05, 120); },
   buzina(){ this.tom(392, 0.16, 'square', 0.05); this.tom(392, 0.24, 'square', 0.05, 0, 0.2); },
@@ -3791,6 +3836,7 @@ function construirPersonagens(){
   irmaoHud = new Porco(COR.ed, COR.edBolso, 'hud', MODELO_HUD);
   irmaoHud.g.scale.setScalar(0.5); irmaoHud.g.visible = false; irmaoHud.vel = 2.5; scene.add(irmaoHud.g);
   criarLuma();
+  criarDiscoJogo();
   visita = beto;
   caminhaoMarket = criarCaminhao(...CAMINHAO_MARKET);
   caminhaoCafe = criarCaminhao(...CAMINHAO_CAFE);
@@ -7320,6 +7366,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Floresta</b>${nv(PARCELAS[0].nivel)}: do outro lado da estrada há uma mata nativa protegida, vendida em ${PARCELAS.length} parcelas, nos níveis ${PARCELAS.map(P => P.nivel).join(', ')}. O Ed só coleta das árvores que já estão lá, sem plantar nem cortar: ${Object.values(NATIVAS).map(N => N.nomeP.toLowerCase()).join(', ')}. Cada árvore guarda uma coleta pronta, mesmo com o jogo fechado.</li>
       <li><b>Trufas</b>${nv(CENAS.patrinho.nivel())}: depois da visita do Patrinho, de vez em quando nasce uma trufa perto de uma árvore, enquanto você joga. Siga o cheirinho que sobe do chão e toque ali para o Ed cavar. Só o Patrinho compra: use o botão Ligar e ele vem de lambreta pagar ${reais(PRODUTOS.trufa.venda)} por trufa.</li>
       <li><b>Luma:</b> a irmã chihuahua dos porquinhos. De vez em quando ela sai pela portinha da casa para brincar com a bolinha roxa, em volta do chafariz se tiver um, e, se o Ed estiver por perto, dá uma mordidinha no rabicó dele. Para ela sair na hora, use Chamar a Luma na janela Cenas.</li>
+      <li><b>Disco voador:</b> de vez em quando um disquinho voador cruza o céu bem lá no alto, e o Ed leva um susto.</li>
       <li><b>Maçã:</b> de vez em quando uma árvore deixa cair uma maçã. Toque nela para o Ed comer: ele agradece à árvore e anda ${MACA.fator}× mais rápido por ${MACA.minutos} minutos de jogo.</li>
       <li><b>Outro aparelho:</b> a fazenda fica salva só neste navegador. Para jogar em outro aparelho, abra os Ajustes, escolha Levar a fazenda e mande o link para você mesmo. Depois disso, cada aparelho segue sozinho.</li>
       <li><b>Cenas:</b> as cenas da história ficam guardadas e podem ser revistas nos Ajustes ou no caderno do Ed. Rever uma cena não muda nada na fazenda. De vez em quando o Ed para para um cafezinho na frente da casa, às vezes com visita. Para chamar na hora, toque na casa e escolha Tomar um lanchinho.</li>
@@ -7570,6 +7617,7 @@ function quadro(agoraP){
   atualizarTrufas(dt, t);
   ed.update(dt, t);
   atualizarLuma(dt, t);
+  atualizarDisco(dt, t);
   if (pelucio.g.visible) pelucio.update(dt, t);
   if (patrinho.g.visible) patrinho.update(dt, t);
   atualizarPiloto(dt, t);
@@ -7693,7 +7741,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { disco: { passar: () => { discoJogo.prox = 0; }, obj: () => discoJogo }, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
