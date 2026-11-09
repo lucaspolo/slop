@@ -6730,9 +6730,9 @@ function atualizarTrufas(dt, t){
   }
 }
 
-// ================= o redemoinho que vira Saci: passeia pela fazenda, vai atrás do Ed e se desfaz na frente dele
+// ================= o redemoinho que vira Saci: sai da floresta, entra pela porteira, passeia pela fazenda e se desfaz na frente do Ed
 const REDEMOINHO = { espera: [5, 12], depois: [12, 25], vaga: [10, 18], vel: 1.8, perto: 1.3 };
-const FALA_SUSTO = 'AOOOOA! Que isso?!', FALA_SACI = 'Oi Saci! Sem dar nó no meu rabinho ou das vaquinhas';
+const FALA_SUSTO = 'AOOOA! O que é isso?', FALA_SACI = 'Sou eu, o Saci Pererê!', FALA_ED_SACI = 'Oi, Saci! Fica à vontade, mas não é para dar nó no meu rabinho!';
 let rd = null, rdEspera = Infinity, rdMesh, rdPoeira = 0;
 // durante a conversa o Ed fica parado onde estiver, mesmo no meio de um caminho
 const emEncontroSaci = () => !!rd && rd.estado !== 'vagando' && rd.estado !== 'foge';
@@ -6743,27 +6743,27 @@ function montarRedemoinho(){
 }
 const pontoDaFazenda = () => [rnd(1, 34), rnd(0.5, 15.5)];
 function iniciarRedemoinho(){
-  let p = pontoDaFazenda();
-  for (let i = 0; i < 30 && Math.hypot(p[0] - ed.pos.x, p[1] - ed.pos.y) < 9; i++) p = pontoDaFazenda();
-  rd = { estado: 'vagando', x: p[0], z: p[1], alvo: pontoDaFazenda(), t: 0, vagaAte: rnd(...REDEMOINHO.vaga), esc: 0, escAlvo: 1 };
+  const portao = PARADA;
+  rd = { estado: 'vagando', x: rnd(8, 23), z: rnd(Z_MATA + 1, Z_MATA + 3), caminho: [[portao, Z_ORLA + 1], [portao, 16.5], [portao, 14.5]], alvo: pontoDaFazenda(), t: 0, vagaAte: rnd(...REDEMOINHO.vaga), esc: 0, escAlvo: 1 };
   rdMesh.visible = true;
-  aviso('Um redemoinho de vento apareceu na fazenda!', '', 3);
+  aviso('Um redemoinho de vento saiu da floresta!', '', 3);
 }
-// pelo catálogo de cenas: vai logo atrás do Ed, com a câmera nele para dar para assistir
+// pelo catálogo de cenas: a câmera acompanha o redemoinho, e ele passeia pouco antes de ir atrás do Ed
 function chamarRedemoinho(){
   if (rd) return;
   iniciarRedemoinho();
-  rd.vagaAte = 3;
-  cam.alvo.set(ed.pos.x, 0, ed.pos.y);
+  rd.vagaAte = 3; rd.seguir = true;
+  cam.alvo.set(rd.x, 0, rd.z);
 }
 function encerrarRedemoinho(){
   rd = null; rdMesh.visible = false; saci.g.visible = false;
   rdEspera = rnd(...REDEMOINHO.depois) * 60;
 }
-// um lugar de chão livre ao lado do Ed, do lado da câmera, para o Saci não nascer dentro de uma construção nem atrás dele
+// chão livre ao lado do Ed na tela: na linha da câmera, um esconderia o outro
 function lugarDoSaci(){
   const dirs = Array.from({ length: 8 }, (_, i) => [Math.sin(i * Math.PI / 4), Math.cos(i * Math.PI / 4)]);
-  dirs.sort((a, b) => (b[0] * Math.sin(cam.az) + b[1] * Math.cos(cam.az)) - (a[0] * Math.sin(cam.az) + a[1] * Math.cos(cam.az)));
+  const naLinha = d => Math.abs(d[0] * Math.sin(cam.az) + d[1] * Math.cos(cam.az));
+  dirs.sort((a, b) => naLinha(a) - naLinha(b));
   for (const [dx, dz] of dirs){
     const x = ed.pos.x + dx * 1.25, z = ed.pos.y + dz * 1.25;
     if (andavel(Math.floor(x), Math.floor(z))) return [x, z];
@@ -6784,8 +6784,15 @@ function atualizarRedemoinho(dt, t){
   // uma cena tira o Ed do lugar: o vento passa e volta outro dia
   if (rd.estado === 'vagando' && cine){ encerrarRedemoinho(); return; }
   rd.t += dt;
+  if (rd.seguir){ const k = Math.min(1, dt * 4); cam.alvo.x += (rd.x - cam.alvo.x) * k; cam.alvo.z += (rd.z - cam.alvo.z) * k; }
   switch (rd.estado){
     case 'vagando': {
+      // só depois de passar pela porteira ele pode encontrar o Ed
+      if (rd.caminho.length){
+        if (andarRedemoinho(rd.caminho[0][0], rd.caminho[0][1], REDEMOINHO.vel * 1.4, dt)) rd.caminho.shift();
+        if (!rd.caminho.length) rd.t = 0;
+        break;
+      }
       if (rd.t < rd.vagaAte){ if (andarRedemoinho(rd.alvo[0], rd.alvo[1], REDEMOINHO.vel, dt)) rd.alvo = pontoDaFazenda(); }
       // mais rápido que o Ed, mesmo com botas e maçã: o encontro sempre acontece
       else andarRedemoinho(ed.pos.x, ed.pos.y, Math.max(3.4, ed.vel * ed.turbo * 1.15), dt);
@@ -6809,11 +6816,17 @@ function atualizarRedemoinho(dt, t){
         rdMesh.visible = false;
         saci.g.visible = true; saci.colocar(rd.x, rd.z); saci.olhar(ed.pos.x, ed.pos.y); saci.ang = saci.angAlvo; saci.pulo = 0.45; saci.aceno = 3;
         ed.olhar(rd.x, rd.z);
-        rd.estado = 'oi'; rd.t = 0; rd.dur = tempoDeLeitura(FALA_SACI) + 0.4;
-        falar(ed, FALA_SACI, rd.dur); Som.oinc();
+        rd.estado = 'oi'; rd.t = 0; rd.dur = tempoDeLeitura(FALA_SACI);
+        falar(saci, FALA_SACI, rd.dur); Som.oinc();
       }
       break;
     case 'oi':
+      if (rd.t >= rd.dur){
+        rd.estado = 'responde'; rd.t = 0; rd.dur = tempoDeLeitura(FALA_ED_SACI) + 0.4;
+        falar(ed, FALA_ED_SACI, rd.dur); ed.aceno = 1.6; Som.oinc();
+      }
+      break;
+    case 'responde':
       if (rd.t >= rd.dur){ rd.estado = 'volta'; rd.t = 0; rd.esc = 0; rd.escAlvo = 1; rdMesh.visible = true; }
       break;
     case 'volta':
@@ -7721,7 +7734,7 @@ function abrirCenas(){
   h += `<div class="cartao"><div class="cab"><img src="${icone('disco')}" alt=""><div><h4>Disco voador</h4></div></div><div class="info">Um disquinho voador passeia pelo céu da fazenda.${motivoD ? `<br><small>${esc(motivoD)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-disco type="button"${motivoD ? ' disabled' : ''}>Chamar o disco</button></div></div>`;
   // o redemoinho também não é cena gravada: o botão manda um de verdade atrás do Ed
   const motivoR = rd ? 'O redemoinho já está na fazenda.' : null;
-  h += `<div class="cartao"><div class="cab"><img src="${icone('saci')}" alt=""><div><h4>O redemoinho do Saci</h4></div></div><div class="info">Um redemoinho de vento passeia pela fazenda, assusta o Ed e vira o Saci Pererê.${motivoR ? `<br><small>${esc(motivoR)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-redemoinho type="button"${motivoR ? ' disabled' : ''}>Chamar o redemoinho</button></div></div>`;
+  h += `<div class="cartao"><div class="cab"><img src="${icone('saci')}" alt=""><div><h4>O redemoinho do Saci</h4></div></div><div class="info">Um redemoinho de vento sai da floresta, entra pela porteira, assusta o Ed e vira o Saci Pererê.${motivoR ? `<br><small>${esc(motivoR)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-redemoinho type="button"${motivoR ? ' disabled' : ''}>Chamar o redemoinho</button></div></div>`;
   h += '</div>';
   abrirJanela(topo('claquete', 'Cenas', 'Reveja a história da fazenda', 'rosa2') + `<div class="janela-corpo">${h}</div>`);
   $('janela').querySelectorAll('[data-cena]').forEach(b => b.addEventListener('click', () => { Som.clique(); fecharJanela(); pedirCena(b.dataset.cena); }));
