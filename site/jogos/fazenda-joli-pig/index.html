@@ -717,6 +717,8 @@ const PREDIO = {}; PREDIOS.forEach(p => { PREDIO[p.id] = p; });
 const ARVORES = [[0,1,0],[1,5,1],[0,9,2],[1,13,0],[11,1,1],[20,0,0],[23,4,1],[23,8,0],[23,13,2],[2,0,1],[8,0,0],[23,0,1],[0,15,1],[26,0,2],[29,4,1],[29,0,0]];
 const ARBUSTOS = [[7,1],[12,6],[1,10],[16,2]];
 const Z_ORLA = 18, Z_MATA = 21, X_FIM_MATA = 15, COL_CURVA = 18;
+// o canto Sul: S.canto é 1 depois de pagar e 2 depois que o Ed tira a cerca. A cerca ao sul do curral fica, senão as vacas saem
+const ARRENDAMENTO = { nivel: 30, preco: 50000, xCerca: 23, placa: [29.5, 17.7], ed: { k: 'cercaCanto', x: 29, z: 15 } };
 // a floresta à venda, da coluna 0 até o arco; cada parcela tem uma trilha reta na coluna col, e a de trás continua a da frente
 const PARCELAS = [
   { nivel: 20, preco: 15000, x0: 8, z0: 21, x1: 15, z1: 28, col: 12, arvores: ['cacaueiro', 'seringueira', 'seringueira', 'cacaueiro', 'cacaueiro', 'seringueira'] },
@@ -3309,7 +3311,7 @@ function corChao(t, gx, gz){
     default: return r2 < 0.5 ? (r < 0.5 ? 0x7cc657 : 0x76bf52) : (r < 0.5 ? 0x84cc5d : 0x7fc458);
   }
 }
-let chao;
+let chao, tufos;
 // pista do Milton: faixa de terra atrás da fazenda (z negativo), fora da grade em que o Ed anda
 const Z_PISTA = -6, PISTA_Z0 = -4, PISTA_Z1 = -3;
 const tipoChao = (x, z) => z >= 0 ? tipo(x, z) : (z >= PISTA_Z0 && z <= PISTA_Z1 && x >= 1 && x <= W - 2 ? 'pista' : 'grama');
@@ -3342,7 +3344,7 @@ function construirChao(){
     const r = hash(gx, 5, gz);
     if (r < 0.012){ const h = 1 + (r < 0.005 ? 1 : 0); tf.box(gx, 0, gz, gx, h - 1, gz, r < 0.006 ? 0x5ea341 : 0x6db74a); if (r < 0.0012) tf.set(gx, h, gz, sorteiaH([0xf2d14a, 0xffffff, 0xf27fa4], gx, gz)); }
   }
-  const mt = new THREE.Mesh(tf.build(1 / 16, { origin: [0, 0, 0], jitter: 0.02 }), MAT); mt.receiveShadow = true; scene.add(mt);
+  tufos = new THREE.Mesh(tf.build(1 / 16, { origin: [0, 0, 0], jitter: 0.02 }), MAT); tufos.receiveShadow = true; scene.add(tufos);
 }
 function colocar(m, x, y, z, ry = 0){ m.position.set(x, y, z); m.rotation.y = ry; scene.add(m); return m; }
 // a floresta do outro lado da estrada: a mata é desenhada por instâncias, centenas de árvores em poucas chamadas de desenho.
@@ -3485,12 +3487,81 @@ function itensParcela(p){
   return { titulo: 'Mata à venda', icone: 'mata', estado: `Parcela ${p + 1} da floresta nativa, com ${tem}. A mata é protegida: aqui só se colhe o que ela oferece.`,
     itens: [{ rotulo: 'Comprar a parcela', sub: motivo || `${P.arvores.length} árvores para coletar`, icone: 'moeda', preco: reais(P.preco), off: !!motivo, fn: () => comprarParcela(p) }] };
 }
+// ================= o terreno do canto Sul
+const CERCA_CANTO = [];
+let placaCanto = null, bolhaCanto = null;
+function liberarTilesDoCanto(){
+  for (let z = 17; z < H; z++) for (let x = COL_CURVA + 2; x < W; x++) setT(x, z, 'grama');
+  for (let x = ARRENDAMENTO.xCerca; x < W; x++) setT(x, 16, 'grama');
+}
+function montarPlacaCanto(){
+  if (placaCanto){ scene.remove(placaCanto); pickaveis.splice(pickaveis.indexOf(placaCanto), 1); placaCanto = null; }
+  if (bolhaCanto){ scene.remove(bolhaCanto); BOLHAS.splice(BOLHAS.indexOf(bolhaCanto), 1); bolhaCanto = null; }
+  const A = ARRENDAMENTO, est = S.canto || 0;
+  if (est === 2) return;
+  const [x, z] = A.placa, pl = malha(geo('placa', () => vPlaca().build(1 / 16, { origin: [8, 0, 8] })));
+  const linhas = est ? [['ARRENDADO', 1, '#2f7a3a'], ['falta a cerca', 0.7, '#7a4a2a']] : [['A ARRENDAR', 1, '#a8324a'], [`nível ${A.nivel}`, 0.7, '#7a4a2a']];
+  const tx = placaDeTexto(texturaTexto(linhas, 256, 112, '#f3e3c3'), 13 / 16, 6 / 16);
+  tx.position.set(0, 11 / 16, 1.1 / 16); pl.add(tx);
+  pl.position.set(x, 0, z); scene.add(pl); placaCanto = pl;
+  pl.traverse(o => { o.userData.alvo = { k: 'canto' }; }); pickaveis.push(pl);
+  if (est || nivel() >= A.nivel){
+    const b = novaBolha(est ? 'enxada' : 'moeda'); b.position.set(x, 1.25, z); b.userData.base = 1.25; b.userData.fase = 2;
+    scene.add(b); BOLHAS.push(b); bolhaCanto = b;
+  }
+}
+function motivoCanto(){
+  if (nivel() < ARRENDAMENTO.nivel) return `libera no nível ${ARRENDAMENTO.nivel}`;
+  if (S.dinheiro < ARRENDAMENTO.preco) return 'dinheiro insuficiente';
+  return null;
+}
+function itensCanto(){
+  if (S.canto === 1) return { titulo: 'Terreno arrendado', icone: 'enxada', estado: 'Já é seu! Falta o Ed tirar a cerca para juntar com a fazenda.',
+    itens: [{ rotulo: 'Tirar a cerca', sub: 'o Ed vai até lá', icone: 'enxada', fn: () => enfileirar('tirarCerca', ARRENDAMENTO.ed) }] };
+  const motivo = motivoCanto();
+  return { titulo: 'Terreno abandonado', icone: 'moeda', estado: 'Ninguém cuida daqui faz tempo. Arrendando, o Ed tira a cerca e o terreno vira parte da fazenda.',
+    itens: [{ rotulo: 'Arrendar o terreno', sub: motivo || 'pagamento único', icone: 'moeda', preco: reais(ARRENDAMENTO.preco), off: !!motivo, fn: arrendarCanto }] };
+}
+function arrendarCanto(){
+  if (S.canto) return false;
+  const motivo = motivoCanto();
+  if (motivo){ aviso(`Esse terreno: ${motivo}`, 'ruim'); Som.erro(); return false; }
+  gastar(ARRENDAMENTO.preco); chipPulsa('chipDinheiro');
+  S.canto = 1;
+  montarPlacaCanto();
+  Som.moeda();
+  aviso('Terreno arrendado! Agora o Ed vai tirar a cerca.', 'grande', 3.5);
+  enfileirar('tirarCerca', ARRENDAMENTO.ed, null, true);
+  hud(); salvar();
+  return true;
+}
+function executarTirarCerca(){
+  if (S.canto !== 1) return;
+  S.canto = 2;
+  liberarTilesDoCanto();
+  for (let x = ARRENDAMENTO.xCerca; x < W; x++){ scene.remove(CERCA_CANTO[x]); for (let k = 0; k < 4; k++) particula(x + rnd(0, 1), 0.4, 16.5 + rnd(-0.3, 0.3), [0x8a5a36, 0xb98a5a][k % 2], 1); }
+  // a última estaca que fica perdia o vizinho e continuaria com a ponta da cerca para fora
+  const x = ARRENDAMENTO.xCerca - 1; scene.remove(CERCA_CANTO[x]); CERCA_CANTO[x] = colocarCerca(x, 16);
+  MATAGAL.splice(0).forEach(m => scene.remove(m));
+  scene.remove(chao); chao.geometry.dispose(); scene.remove(tufos); tufos.geometry.dispose();
+  construirChao();
+  montarPlacaCanto();
+  const fala = 'Aoooa! A fazenda cresceu!';
+  falar(ed, fala, tempoDeLeitura(fala)); Som.colher();
+  setTimeout(() => aviso('O matagal foi embora e o terreno agora faz parte da fazenda!', 'grande', 3.5), tempoDeLeitura(fala) * 1000);
+  hud(); salvar();
+}
 function itensFloresta(x, z){
   const p = parcelaEm(x, z);
   if (p >= 0 && !parcelaComprada(p)) return itensParcela(p);
   return { titulo: 'Mata nativa', icone: 'mata', estado: p >= 0 ? 'Floresta protegida: aqui ninguém corta nem planta.' : 'Essa parte da mata ainda está fechada. Um dia a fazenda chega aqui.', itens: [] };
 }
 
+const ehCerca = (x, z) => { const t = tipo(x, z); return t === 'cerca' || t === 'portao'; };
+function colocarCerca(x, z){
+  const m = (ehCerca(x + 1, z) ? 1 : 0) | (ehCerca(x - 1, z) ? 2 : 0) | (ehCerca(x, z + 1) ? 4 : 0) | (ehCerca(x, z - 1) ? 8 : 0);
+  return colocar(malha(geo('cerca' + m, () => vCerca(m).build(1 / 16, { origin: [8, 0, 8] }))), x + 0.5, 0, z + 0.5);
+}
 function construirCenario(){
   for (const p of PREDIOS){
     if (p.fab) continue;
@@ -3514,12 +3585,11 @@ function construirCenario(){
   for (const [x, z] of FENOS) colocar(malha(geo('feno', () => vFeno().build(1 / 16, { origin: [8, 0, 8] }))), x + 0.5, 0, z + 0.5, Math.PI / 2 * (z % 2));
   FLORES.forEach(([x, z], i) => colocar(malha(geo('flor' + i, () => vFlores(i + 3).build(1 / 16, { origin: [8, 0, 8] })), false), x + 0.5, 0, z + 0.5));
   // cercas
-  const ehCerca = (x, z) => { const t = tipo(x, z); return t === 'cerca' || t === 'portao'; };
   for (let z = 0; z < H; z++) for (let x = 0; x < W; x++){
     const t = tipo(x, z);
     if (t === 'cerca'){
-      const m = (ehCerca(x + 1, z) ? 1 : 0) | (ehCerca(x - 1, z) ? 2 : 0) | (ehCerca(x, z + 1) ? 4 : 0) | (ehCerca(x, z - 1) ? 8 : 0);
-      colocar(malha(geo('cerca' + m, () => vCerca(m).build(1 / 16, { origin: [8, 0, 8] }))), x + 0.5, 0, z + 0.5);
+      const mc = colocarCerca(x, z);
+      if (z === 16 && x >= ARRENDAMENTO.xCerca - 1) CERCA_CANTO[x] = mc;
     } else if (t === 'portao'){
       const arco = x === 15 && z === 16;
       const aoLongoX = ehCerca(x + 1, z) || ehCerca(x - 1, z);
@@ -6471,15 +6541,16 @@ function itensHud(){
 
 // ================= tarefas do Ed
 const fila = [];
-const NOMES_ACAO = { colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa' };
-const DUR = { colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, coletarMata: 1.0, cavarTrufa: 1.6 };
-const FERR = { colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', coletarMata: 'cesta', cavarTrufa: 'enxada' };
+const NOMES_ACAO = { tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa' };
+const DUR = { tirarCerca: 2.4, colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, coletarMata: 1.0, cavarTrufa: 1.6 };
+const FERR = { tirarCerca: 'enxada', colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', coletarMata: 'cesta', cavarTrufa: 'enxada' };
 const mesmoAlvo = (a, b) => a.k === b.k && (a.k === 'animal' ? a.a === b.a : a.x === b.x && a.z === b.z);
-function reservado(alvo){ if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
+function reservado(alvo){ if (alvo.k === 'cercaCanto') return fila.some(t => t.tipo === 'tirarCerca'); if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
 const visSlot = alvo => { const L = alvo.k === 'pomar' ? POMAR_VIS : alvo.k === 'mata' ? MATA_VIS : COLMEIA_VIS; return L[alvo.i] || (L[alvo.i] = {}); };
-function setReserva(alvo, v){ if (alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
+function setReserva(alvo, v){ if (alvo.k === 'cercaCanto' || alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
 // diz se a ação vale para o alvo; devolve o custo ou um motivo
 function checar(tipoA, alvo, param){
+  if (alvo.k === 'cercaCanto') return { ok: tipoA === 'tirarCerca' && S.canto === 1, custo: {} };
   if (alvo.k === 'maca') return { ok: tipoA === 'comerMaca' && !!S.maca, custo: {} };
   if (alvo.k === 'trufa') return { ok: tipoA === 'cavarTrufa' && S.trufas.some(t => t.x === alvo.x && t.z === alvo.z), custo: {} };
   if (alvo.k === 'composteira') return checarComposteira(tipoA, param);
@@ -6703,6 +6774,7 @@ function executar(tarefa){
     atualizarCampo(alvo.x, alvo.z); salvar(); return;
   }
   if (alvo.k === 'maca'){ comerMaca(); return; }
+  if (alvo.k === 'cercaCanto'){ executarTirarCerca(); return; }
   if (alvo.k === 'trufa'){ executarTrufa(tarefa); return; }
   if (alvo.k === 'mata'){ executarMata(tarefa); return; }
   if (alvo.k === 'coletor'){ esvaziarCaixa(alvo.tp); return; }
@@ -7110,6 +7182,7 @@ function subiuNivel(n){
   if (n === ADUBO.nivel) libs.push('adubo na loja');
   if (POMAR_BLOCOS.some(B => B.nivel === n)) libs.push('mais um terreno de pomar');
   if (PARCELAS.some(P => P.nivel === n)){ libs.push('mata nativa do outro lado da estrada'); montarPlacasMata(); }
+  if (n === ARRENDAMENTO.nivel){ libs.push('o terreno abandonado, para arrendar'); montarPlacaCanto(); }
   if (n === HUD.nivel){ libs.push('a ajuda do Hud'); setTimeout(() => aviso('O Hud, irmão caçula do Ed, pode regar, tirar o mato e colher por você. Toque na casa para chamar.', '', 6), 4200); }
   if (n === IRRIGADOR.nivel) libs.push('irrigador automático');
   for (const id in MELHORIAS) for (const d of MELHORIAS[id].degraus) if (d.nivel === n) libs.push(d.nome.toLowerCase());
@@ -7451,6 +7524,7 @@ function itensDoAlvoBase(alvo){
   if (alvo.k === 'ed'){ falar(ed, sorteia(['Oinc! Bora trabalhar.', 'Essa fazenda não se cuida sozinha.', 'Será que o Beto vem hoje?', 'Cenoura é vida.', 'Toque no chão que eu vou até lá.']), 2); Som.oinc(); return null; }
   if (alvo.k === 'floresta') return itensFloresta(alvo.x, alvo.z);
   if (alvo.k === 'parcela') return itensParcela(alvo.p);
+  if (alvo.k === 'canto') return itensCanto();
   if (alvo.k === 'mata') return itensNativa(alvo.i);
   if (alvo.k === 'trufa'){
     r.titulo = 'Cheirinho de trufa'; r.icone = 'trufa';
@@ -7855,6 +7929,7 @@ function objetivosPorNivel(){
   add(COMPOSTEIRA.nivel, 'composteira', 'Composteira pra reciclar os restinhos', COMPOSTEIRA.preco);
   for (const m of COMPOSTEIRA.melhorias) add(m.nivel, 'composteira', 'Mais ajudantes na composteira', m.preco);
   for (const k in ENFEITES) add(ENFEITES[k].nivel, k === 'canteiroFlor' ? 'flores' : k, apelido(k, ENFEITES[k].nome), ENFEITES[k].preco);
+  add(ARRENDAMENTO.nivel, 'moeda', 'Arrendar o terreno do matagal', ARRENDAMENTO.preco);
   for (const P of PARCELAS){
     const tem = [...new Set(P.arvores)];
     add(P.nivel, NATIVAS[tem[0]].produto, `Aventura na mata: ${lista(tem.map(t => NATIVAS[t].nomeP.toLowerCase()))}`, P.preco);
@@ -8258,6 +8333,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Floresta</b>${nv(PARCELAS[0].nivel)}: do outro lado da estrada há uma mata nativa protegida, vendida em ${PARCELAS.length} parcelas, nos níveis ${PARCELAS.map(P => P.nivel).join(', ')}. O Ed só coleta das árvores que já estão lá, sem plantar nem cortar: ${Object.values(NATIVAS).map(N => N.nomeP.toLowerCase()).join(', ')}. Cada árvore guarda uma coleta pronta, mesmo com o jogo fechado.</li>
       <li><b>Trufas</b>${nv(CENAS.patrinho.nivel())}: depois da visita do Patrinho, de vez em quando nasce uma trufa perto de uma árvore, enquanto você joga. Siga o cheirinho que sobe do chão e toque ali para o Ed cavar. Só o Patrinho compra: use o botão Ligar e ele vem de lambreta pagar ${reais(PRODUTOS.trufa.venda)} por trufa.</li>
       <li><b>Luma:</b> a irmã chihuahua dos porquinhos. De vez em quando ela sai pela portinha da casa para brincar com a bolinha roxa, em volta do chafariz se tiver um, e, se o Ed estiver por perto, dá uma mordidinha no rabicó dele. Para ela sair na hora, use Chamar a Luma na janela Cenas.</li>
+      <li><b>Terreno abandonado</b>${nv(ARRENDAMENTO.nivel)}: ao lado da estrada, por ${reais(ARRENDAMENTO.preco)} em pagamento único. Toque na placa para arrendar; depois o Ed tira a cerca e o terreno vira parte da fazenda.</li>
       <li><b>Bichos da mata:</b> de vez em quando um bugio, um tucano, um papagaio, uma jaguatirica ou uma cobra-coral aparece na beira da floresta e some de novo.</li>
       <li><b>Disco voador:</b> de vez em quando um disquinho voador passeia pelo céu da fazenda, para em cima do Ed e ele leva um susto. Para ver na hora, use Chamar o disco na janela Cenas.</li>
       <li><b>Maçã:</b> de vez em quando uma árvore deixa cair uma maçã. Toque nela para o Ed comer: ele agradece à árvore e anda ${MACA.fator}× mais rápido por ${MACA.minutos} minutos de jogo.</li>
@@ -8346,7 +8422,7 @@ function alvoNaTela(cx, cy){
       if (p) return { k: 'predio', p };
       const t = tipo(x, z);
       if (t === 'mata' || t === 'orlaF') return { k: 'floresta', x, z };
-      if (t === 'canto') return null;
+      if (t === 'canto') return { k: 'canto' };
       if (t === 'arvore') return { k: 'arvore', x, z, arbusto: ARBUSTOS.some(([a, b]) => a === x && b === z) };
       for (const tp in COLETOR) if (S.coletor[tp] && COLETOR[tp].x === x && COLETOR[tp].z === z) return { k: 'coletor', tp };
       for (const tp in ALIMENTADOR) if (S.alimentador[tp] && ALIMENTADOR[tp].x === x && ALIMENTADOR[tp].z === z) return { k: 'alimentador', tp };
@@ -8573,6 +8649,7 @@ async function iniciar(){
   montarMapa();
   const codigo = codigoNoEndereco(), chegando = codigo ? await decodificarFazenda(codigo) : null;
   const novo = carregar();
+  if (S.canto === 2) liberarTilesDoCanto();
   fazendaNova = novo;
   proxCafezinho = sorteioCafezinho();
   // o tempo do Hud e o prazo dos pedidos ficam parados enquanto o jogo está fechado
@@ -8584,6 +8661,7 @@ async function iniciar(){
   if (!Array.isArray(S.parcelas)) S.parcelas = []; if (!Array.isArray(S.mata)) S.mata = [];
   PARCELAS.forEach((_, p) => { if (parcelaComprada(p)) abrirParcela(p); });
   montarPlacasMata();
+  montarPlacaCanto();
   if (!Array.isArray(S.trufas)) S.trufas = [];
   S.trufas.forEach(montarTrufa);
   montarLotes();
@@ -8642,7 +8720,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, obj: () => discoJogo }, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, obj: () => discoJogo }, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
