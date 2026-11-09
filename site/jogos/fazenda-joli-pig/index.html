@@ -2201,9 +2201,9 @@ function atualizarBichosMata(dt, t){
 }
 // ================= easter egg: o Nano Hostel, atrás do celeiro. As nano pessoas têm 5 cm de altura; chegam e vão embora
 // pelo Nano Metrô, passeiam até o banquinho e entram e saem do hostel. Tudo fica escondido pelo celeiro na câmera de
-// sempre: só aparece girando o mapa. Feito na escala 1/64 (cada cubinho tem 1,6 cm), sem mexer no save.
+// sempre: só aparece girando o mapa. O hostel é feito na escala 1/40 e as nanos em 1/56, sem mexer no save.
 // a parede de trás do celeiro fica em z 0,625 (x de 13,5 a 17,5); daí para trás, tudo o que fica perto dela é escondido pelo celeiro
-const NANO = { s: 1 / 64, hostel: [15.6, 0.43], porta: [15.6, 0.21], metro: [13.95, -0.05], banco: [16.75, 0.32], rua: -0.05, vel: 0.22, max: 5 };
+const NANO = { s: 1 / 40, sNano: 1 / 56, hostel: [15.35, 0.34], porta: [15.35, 0.02], metro: [13.95, -0.32], banco: [16.5, 0.22], rua: -0.2, vel: 0.3, max: 5 };
 const CNANO = { parede: 0xf6d36b, branco: 0xfff7ee, telhado: 0x3f7fcf, telhadoE: 0x3570b8, porta: 0x7a4a2c, janela: 0xffe9a3, cortina: 0xf28fac, flor: 0xf05d7e, folha: 0x5ea341 };
 function vNanoHostel(){
   const v = new Vox(), C = CNANO;
@@ -2232,17 +2232,36 @@ function vNanoMetro(){
   return v;
 }
 function vNanoBanco(){ const v = new Vox(); v.box(-4, 3, -1, 4, 3, 1, 0xc99a66); v.box(-4, 4, -2, 4, 6, -2, 0xc99a66); for (const x of [-3, 3]) v.box(x, 0, -1, x, 2, 1, 0x5e5e5e); return v; }
-// uma nano pessoa: dez cubinhos de altura, com roupa, pele e cabelo sorteados; às vezes com uma malinha
-const NANO_CORES = { roupa: [0xd8302a, 0x2f6fd6, 0x3cae3c, 0xf28fac, 0xf29a3a, 0x8b4fd6], pele: [0xf3d2b3, 0xd9a47c, 0xa8704a, 0x6e4a32], cabelo: [0x1a1414, 0x5a3a22, 0xe8c25a, 0xb8432a], calca: [0x2a3a5a, 0x3a3a3a, 0x6a5040] };
+// uma nano pessoa: sapato, calça ou saia, cinto, camisa (lisa ou listrada, com gola), braços com as mãos, rosto com olhos,
+// boca e bochechas, e cabelo de um jeito sorteado (curto, comprido, rabo de cavalo ou boné); às vezes óculos, mochila ou mala de rodinha
+const NANO_CORES = { roupa: [0xd8302a, 0x2f6fd6, 0x3cae3c, 0xf28fac, 0xf29a3a, 0x8b4fd6, 0x2fb5b0, 0xf2d14a], pele: [0xf3d2b3, 0xe2b48c, 0xc68a5e, 0x8a5a3c, 0x5e3e2a], cabelo: [0x1a1414, 0x5a3a22, 0xe8c25a, 0xb8432a, 0x9a9a9a], calca: [0x2a3a5a, 0x3a3a3a, 0x6a5040, 0x5a7a3a], sapato: [0x1a1414, 0xf2f2f2, 0x8b5634, 0xd8302a] };
 function vNano(k, mala){
-  const v = new Vox(), N = NANO_CORES, roupa = N.roupa[k % 6], pele = N.pele[(k >> 1) % 4], cabelo = N.cabelo[(k * 7 >> 2) % 4], calca = N.calca[k % 3];
-  for (const x of [-1, 1]) v.box(x, 0, 0, x, 2, 1, calca);
-  v.box(-1, 3, 0, 1, 6, 1, roupa);
-  for (const x of [-2, 2]) v.box(x, 4, 0, x, 6, 1, roupa);
-  v.box(-1, 7, 0, 1, 9, 1, pele);
-  v.box(-1, 10, 0, 1, 10, 1, cabelo); v.box(-1, 8, 0, 1, 9, 0, cabelo);
-  for (const x of [-1, 1]) v.set(x, 8, 2, 0x1a1414);
-  if (mala){ v.box(3, 0, 0, 4, 3, 1, 0x8b5634); v.set(3, 4, 0, 0x5e3a22); }
+  const v = new Vox(), N = NANO_CORES, h = i => Math.floor(hash(k, i, 77) * 1000);
+  const roupa = N.roupa[h(1) % 8], pele = N.pele[h(2) % 5], cabelo = N.cabelo[h(3) % 5], calca = N.calca[h(4) % 4], sapato = N.sapato[h(5) % 4];
+  const listras = h(6) % 3 === 0, saia = h(7) % 3 === 0, penteado = h(8) % 4, oculos = h(9) % 4 === 0, mochila = !mala && h(10) % 3 === 0;
+  const claro = new THREE.Color(roupa).lerp(new THREE.Color(0xffffff), 0.45).getHex();
+  // pés e pernas, com um vão no meio
+  for (const x of [-2, -1, 1, 2]){ v.box(x, 0, -1, x, 0, 2, sapato); v.box(x, 1, -1, x, 5, 1, saia ? pele : calca); }
+  if (saia) for (let y = 4; y <= 6; y++) v.box(-3 + (y - 4 > 1 ? 1 : 0), y, -2, 3 - (y - 4 > 1 ? 1 : 0), y, 2, roupa);
+  v.box(-2, 6, -1, 2, 6, 1, saia ? roupa : 0x3a2a22);
+  // tronco e gola
+  v.box(-2, 7, -1, 2, 11, 1, (x, y) => listras && y % 2 ? claro : roupa);
+  v.box(-1, 11, 2, 1, 11, 2, claro);
+  // braços: manga em cima, mão embaixo
+  for (const x of [-3, 3]){ v.box(x, 9, 0, x, 11, 0, roupa); v.box(x, 7, 0, x, 8, 0, pele); }
+  v.box(-1, 12, -1, 1, 12, 1, pele);
+  // cabeça e rosto
+  v.box(-2, 13, -1, 2, 17, 2, pele);
+  for (const x of [-1, 1]) v.set(x, 15, 3, 0x1a1414);
+  v.set(0, 14, 3, 0xc2185b); for (const x of [-2, 2]) v.set(x, 14, 3, 0xf4a3a3);
+  if (oculos){ for (const x of [-2, -1, 0, 1, 2]) v.set(x, 16, 3, 0x2a2a2a); }
+  // cabelo
+  v.box(-2, 18, -1, 2, 18, 2, cabelo); v.box(-2, 13, -2, 2, 18, -2, cabelo); for (const x of [-3, 3]) v.box(x, 16, -1, x, 18, 1, cabelo);
+  if (penteado === 1) for (const x of [-3, 3]) v.box(x, 11, -2, x, 18, 0, cabelo);
+  if (penteado === 2){ v.box(-1, 15, -3, 1, 17, -3, cabelo); v.box(0, 13, -4, 0, 15, -4, cabelo); }
+  if (penteado === 3){ const bone = N.roupa[(h(11) + 3) % 8]; v.box(-3, 18, -2, 3, 19, 2, bone); v.box(-2, 18, 3, 2, 18, 4, bone); }
+  if (mochila) v.box(-2, 7, -3, 2, 11, -2, N.roupa[(h(12) + 5) % 8]);
+  if (mala){ v.box(4, 1, -1, 6, 6, 1, 0x8b5634); v.box(4, 0, -1, 4, 0, -1, 0x1a1414); v.box(6, 0, 1, 6, 0, 1, 0x1a1414); v.box(5, 7, 0, 5, 9, 0, 0x8a8a8a); v.set(4, 9, 0, 0x8a8a8a); }
   return v;
 }
 let nanoHostel = null;
@@ -2253,8 +2272,12 @@ function criarNanoHostel(){
   // a placa com o nome, em cima da porta
   const c = document.createElement('canvas'); c.width = 256; c.height = 44;
   const x = c.getContext('2d'); x.fillStyle = '#3f7fcf'; x.fillRect(0, 0, 256, 44); x.fillStyle = '#fff'; x.font = '900 28px "Arial Black", Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('NANO HOSTEL', 128, 24);
-  const placa = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.052), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c) }));
-  placa.position.set(0, 8.6 * s, 11.5 * s); g.add(placa);
+  const placa = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.073), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c) }));
+  // a placa fica num cavalete na frente do hostel, ao lado da porta
+  const cav = new THREE.Group(); cav.position.set(NANO.porta[0] + 0.42, 0, NANO.porta[1] - 0.06); cav.rotation.y = Math.PI; scene.add(cav);
+  placa.position.set(0, 0.2, 0.012); cav.add(placa);
+  const madeira = new THREE.MeshLambertMaterial({ color: 0x8b5634 });
+  for (const x of [-0.2, 0.2]){ const pe = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.26, 0.022), madeira); pe.position.set(x, 0.13, 0); pe.castShadow = true; cav.add(pe); }
   casa.userData.alvo = placa.userData.alvo = { k: 'nanoHostel' }; pickaveis.push(casa, placa);
   const metro = malha(vNanoMetro().build(s, op)); metro.position.set(NANO.metro[0], 0, NANO.metro[1]); metro.rotation.y = Math.PI / 2; scene.add(metro);
   const banco = malha(vNanoBanco().build(s, op)); banco.position.set(NANO.banco[0], 0, NANO.banco[1] - 0.04); banco.rotation.y = Math.PI; scene.add(banco);
@@ -2266,9 +2289,9 @@ function itensNanoHostel(){
 }
 // um nano andando por uma lista de pontos; sobe da escada do metrô ou desce por ela, ou sai e entra pela porta
 function novoNano(pts, opc){
-  const k = Math.floor(Math.random() * 24), mala = !!opc.mala, g = new THREE.Group();
-  g.add(malha(geo('nano' + k + (mala ? 'm' : ''), () => vNano(k, mala).build(NANO.s, { origin: [0.5, 0, 0.5], jitter: 0.02 }))));
-  g.position.set(pts[0][0], opc.sobe ? -0.18 : 0, pts[0][1]); scene.add(g);
+  const k = Math.floor(Math.random() * 40), mala = !!opc.mala, g = new THREE.Group();
+  g.add(malha(geo('nano' + k + (mala ? 'm' : ''), () => vNano(k, mala).build(NANO.sNano, { origin: [0.5, 0, 0.5], jitter: 0.02 }))));
+  g.position.set(pts[0][0], opc.sobe ? -0.34 : 0, pts[0][1]); scene.add(g);
   nanoHostel.nanos.push({ g, pts, i: 1, t: 0, sobe: opc.sobe, desce: opc.desce, senta: opc.senta || 0, fim: opc.fim, fase: rnd(0, 6) });
 }
 function atualizarNanos(dt, t){
@@ -2286,17 +2309,17 @@ function atualizarNanos(dt, t){
   for (let j = H.nanos.length - 1; j >= 0; j--){
     const n = H.nanos[j], g = n.g;
     // subindo a escada do metrô
-    if (n.sobe && g.position.y < 0){ g.position.y = Math.min(0, g.position.y + dt * 0.25); continue; }
-    if (n.pausa > 0){ n.pausa -= dt; g.position.y = 0.02; continue; }
+    if (n.sobe && g.position.y < 0){ g.position.y = Math.min(0, g.position.y + dt * 0.4); continue; }
+    if (n.pausa > 0){ n.pausa -= dt; g.position.y = 0.05; continue; }
     const alvo = n.pts[n.i];
     if (!alvo){
-      if (n.desce && g.position.y > -0.2){ g.position.y -= dt * 0.25; continue; }
+      if (n.desce && g.position.y > -0.36){ g.position.y -= dt * 0.4; continue; }
       scene.remove(g); H.nanos.splice(j, 1); if (n.fim) n.fim(); continue;
     }
     const dx = alvo[0] - g.position.x, dz = alvo[1] - g.position.z, d = Math.hypot(dx, dz), passo = NANO.vel * dt;
     if (d <= passo){ g.position.x = alvo[0]; g.position.z = alvo[1]; n.i++; if (n.senta && n.i === n.senta + 1){ n.pausa = rnd(4, 8); g.rotation.y = Math.PI; } }
     else { g.position.x += dx / d * passo; g.position.z += dz / d * passo; g.rotation.y = Math.atan2(dx, dz); }
-    g.position.y = Math.abs(Math.sin(t * 14 + n.fase)) * 0.006;
+    g.position.y = Math.abs(Math.sin(t * 12 + n.fase)) * 0.01;
   }
 }
 // alimentador automático: silo de metal do lado de fora da cerca, com a calha descendo até o cocho dentro do cercado (para -x)
@@ -8115,7 +8138,7 @@ function catalogoModelos(){
     { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Teco-teco', vTecoTeco), um('Hélice', vHelice), um('Biruta', vBiruta), { nome: 'Disco voador', variantes: [['Voando', false], ['Com o raio', true]].map(([n, r]) => ({ nome: n, cria: () => { const D = montarDisco(r); D.g.userData.anima = (dt, t) => animarDisco(D, t); D.g.userData.anima(0, 0); return D.g; } })) }] },
     { nome: 'Cenário', itens: [varios('Árvore', [['Maçãs', () => vArvore(0)], ['Sem fruta', () => vArvore(1)], ['Laranjas', () => vArvore(2)]]), um('Arbusto', vArbusto), um('Fardo de feno', vFeno), um('Flores', () => vFlores(3)), um('Capim', () => vCapim(1)), um('Cova', vCova), varios('Cerca', [['Reta', () => vCerca(3)], ['Canto', () => vCerca(5)]]), varios('Portão', [['Arco da entrada', () => vPortao(true)], ['Simples', () => vPortao(false)]]), um('Placa', vPlaca), um('Correio', vCorreio)] },
     { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), um('Chafariz', vFonte), um('Estátua do Ed', vEstatua)] },
-    { nome: 'Objetos', itens: [um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Nano Hostel', vNanoHostel), um('Nano Metrô', vNanoMetro), varios('Nano pessoa', [0, 5, 10, 15].map(k => ['Nano ' + (k / 5 + 1), () => vNano(k, k === 5)])), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
+    { nome: 'Objetos', itens: [um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Nano Hostel', vNanoHostel), um('Nano Metrô', vNanoMetro), varios('Nano pessoa', [0, 1, 2, 3, 4, 5].map(k => ['Nano ' + (k + 1), () => vNano(k * 7, k === 2)])), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
   ];
   grupos.push({ nome: 'Ícones', itens: Object.keys(VI).filter(k => !usados.has(k)).sort().map(k => um((PRODUTOS[k] && PRODUTOS[k].nome) || k, VI[k])) });
   return grupos.flatMap(g => g.itens.map(it => ({ ...it, grupo: g.nome, ini: it.ini || 0, id: (g.nome + '-' + it.nome).normalize('NFD').replace(/[^\w]+/g, '-').toLowerCase() })));
