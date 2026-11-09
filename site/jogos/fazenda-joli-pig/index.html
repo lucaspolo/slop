@@ -1998,6 +1998,108 @@ function atualizarDisco(dt, t){
   }
   animarDisco(P.D, t);
 }
+// ================= bichos da mata (por enquanto só no catálogo de modelos): bugio, jaguatirica, tucano, papagaio e cobra-coral
+// pinta o cubinho da frente (+z) e salta um para fora, para olhos e narizes
+function olhoBicho(v, x, y, c, brilho){ x = Math.round(x); y = Math.round(y); for (let z = 40; z >= -40; z--) if (v.has(x, y, z)){ v.set(x, y, z + 1, c); if (brilho) v.set(x, y + 1, z + 1, brilho); return; } }
+// o bugio-ruivo: sentado, pelo ruivo, cara preta, barbona no pescoço e o rabo comprido enrolado na ponta
+function vBugio(){
+  const v = new Vox(), pelo = (x, y, z) => hash(x, y >> 1, z) > 0.8 ? 0xb5582a : 0xa0471f, escuro = 0x7a3216, cara = 0x2b1b16;
+  v.ell(0, 9, -1, 5, 6.5, 4.5, pelo);
+  v.ell(0, 17, 1, 4.2, 4, 4, pelo);
+  v.ell(0, 13.5, 3, 3.2, 2.6, 2.2, escuro);
+  v.ell(0, 16, 4.4, 2.6, 2.6, 1.6, cara);
+  v.ell(0, 15, 5.4, 1.8, 1.4, 1, cara);
+  for (const x of [-1, 1]) v.set(x, 17, 6, 0x6b3a1c);
+  for (const lado of [-1, 1]){
+    v.ell(lado * 5.2, 9, 1.5, 1.6, 5.5, 1.7, pelo);
+    v.ell(lado * 4.6, 3.6, 4, 1.4, 1, 1.6, cara);
+    v.ell(lado * 3, 3, 2.5, 2.2, 2.2, 3.6, pelo);
+    v.ell(lado * 2.6, 1, 5.5, 1.3, 1, 1.8, cara);
+  }
+  // rabo: sai de trás, sobe e enrola a ponta
+  for (let i = 0; i <= 40; i++){
+    const t = i / 40, a = t < 0.75 ? 0 : (t - 0.75) / 0.25 * Math.PI * 1.6;
+    const y = 3 + t * 14 + (t > 0.75 ? Math.sin(a) * 2.5 : 0), z = -5 - Math.sin(t * Math.PI * 0.9) * 4 + (t > 0.75 ? (1 - Math.cos(a)) * 2.5 : 0);
+    v.ell(0, y, z, 1.1, 1.1, 1.1, pelo);
+  }
+  return v;
+}
+// a jaguatirica: em pé, cor de mel com rosetas pretas, barriga creme, rabo listrado
+function vJaguatirica(){
+  const v = new Vox(), mel = 0xd9a35a, melE = 0xb7803e, creme = 0xf3e2c2, preto = 0x1d1714;
+  v.ell(0, 9, 0, 4, 3.8, 9, (x, y) => y < 7 ? creme : mel);
+  for (const [x, z] of [[-2.5, 6], [2.5, 6], [-2.5, -6], [2.5, -6]]) v.ell(x, 3.5, z, 1.4, 3.8, 1.5, (xx, y) => y < 1 ? creme : mel, (xx, y) => y >= 0);
+  v.ell(0, 13, 9.5, 3.6, 3.2, 3.4, mel);
+  v.ell(0, 11.8, 12.6, 2, 1.6, 1.4, creme);
+  v.set(0, 13, 14, 0xd98a8a);
+  for (const lado of [-1, 1]){
+    v.ell(lado * 2.4, 16, 8.6, 1.3, 1.6, 0.8, preto); v.set(lado * 2, 16, 9, 0xf3f0e6);
+    olhoBicho(v, lado * 1.6, 13.6, 0x9aa83a);
+    for (let z = 9; z <= 11; z++) v.set(lado * 3.4, 12 + (z - 9) * 0.4 | 0, z, preto);
+  }
+  // rosetas: um anel preto com o meio mais escuro, numa grade torta pelo corpo
+  for (const e of [...v.m.values()]){
+    if (e.c !== mel || e.z > 8.5 || e.y < 6) continue;
+    const gy = Math.floor((e.y + 1) / 3), gz = Math.floor((e.z + 9) / 3.2), lado = e.x >= 0 ? 1 : 0;
+    if (hash(gy, gz, lado) < 0.35) continue;
+    const cy = gy * 3 - 1 + 1.5, cz = gz * 3.2 - 9 + 1.6, d = Math.hypot(e.y - cy, e.z - cz);
+    if (d >= 0.9 && d <= 1.6) e.c = preto; else if (d < 0.9) e.c = melE;
+  }
+  for (let i = 0; i <= 16; i++){ const z = -9 - i * 0.55, y = 8.5 - i * 0.32; v.ell(0, y, z, 1, 1, 0.8, (i % 4 < 2 && i > 3) ? preto : mel); }
+  return v;
+}
+// galho onde o tucano e o papagaio ficam pousados
+function galhoBicho(v){ for (let x = -7; x <= 7; x++) v.ell(x, 1, 0, 0.6, 1.1, 1.1, 0x7a5232); v.set(5, 2, 1, 0x6cbf47); v.set(-6, 2, -1, 0x6cbf47); }
+// o tucano-toco: preto, papo branco, olho com anel azul e o bicão laranja com a ponta preta
+function vTucano(){
+  const v = new Vox(), preto = 0x161616, branco = 0xf5f0e0;
+  galhoBicho(v);
+  v.ell(0, 8, -0.5, 3.2, 5, 3, (x, y, z) => z > 1 && y > 8 ? branco : preto, (x, y) => y >= 2);
+  v.ell(0, 13.5, 0.5, 2.8, 2.8, 2.8, (x, y, z) => z > 1.5 && y < 13 ? branco : preto);
+  for (let y = 2; y <= 6; y++) for (let x = -1; x <= 1; x++) v.set(x, y - 1, -3 - (6 - y) * 0.4 | 0, preto);
+  v.set(0, 3, -1, 0xd23a2a); v.set(0, 3, 0, 0xd23a2a);
+  for (const lado of [-1, 1]){ v.set(lado * 2.6 | 0, 14, 1, 0x3fa0e6); v.set(lado * 2.6 | 0, 14, 2, 0x3fa0e6); v.set(lado * 3, 14, 1, preto); v.set(lado, 2, 1, 0x8a8a8a); }
+  for (let z = 3; z <= 12; z++){
+    const t = (z - 3) / 9, r = 1.9 * (1 - t * 0.55), cy = 13.5 - t * 1.6;
+    v.ell(0, cy, z, r * 0.8, r, 0.6, (x, y) => z >= 11 ? preto : y > cy + r * 0.5 ? 0xffc93a : 0xff8a1f);
+  }
+  return v;
+}
+// o papagaio-verdadeiro: verde, testa azul, cara amarela, ombro vermelho, pontas das asas azuis e bico preto curvo
+function vPapagaio(){
+  const v = new Vox(), verde = 0x3cae3c, verdeE = 0x2e8f30, preto = 0x2a2a2a;
+  galhoBicho(v);
+  v.ell(0, 8, 0, 3, 5, 3, verde, (x, y) => y >= 2);
+  for (const lado of [-1, 1]){
+    v.ell(lado * 2.8, 8, -0.5, 1, 4, 2.4, (x, y) => y > 10 ? 0xd8332a : y < 6 ? 0x2f6fd6 : verdeE);
+    v.set(lado, 2, 1, 0x8a8a8a);
+  }
+  for (let i = 0; i <= 6; i++) v.ell(0, 3.5 - i * 0.55, -2.4 - i * 0.45, 1.6 - i * 0.12, 0.8, 0.8, i > 4 ? 0xf7d23a : verde);
+  v.ell(0, 13.5, 0.8, 2.8, 2.8, 2.8, (x, y, z) => z > 2 && y > 14.5 ? 0x4a8fe0 : z > 1.5 && y <= 14.5 ? 0xf7d23a : verde);
+  for (const lado of [-1, 1]) olhoBicho(v, lado * 1.4, 14, 0x111111, 0xf2f2f2);
+  v.box(-1, 12, 3, 1, 13, 4, preto); v.box(-1, 11, 4, 1, 11, 4, preto); v.set(0, 10, 4, preto);
+  return v;
+}
+// a cobra-coral: enrolada, com anéis vermelho, preto e branco, e a cabeça levantada no meio
+function vCobraCoral(){
+  const v = new Vox(), cores = [[0xd8302a, 4], [0x141414, 1.4], [0xf2ead0, 0.9], [0x141414, 1.4], [0xf2ead0, 0.9], [0x141414, 1.4]];
+  const total = cores.reduce((a, c) => a + c[1], 0);
+  const anel = s => { let k = s % total; for (const [c, l] of cores){ if (k < l) return c; k -= l; } return cores[0][0]; };
+  let s = 0, ant = null;
+  for (let th = 0; th <= Math.PI * 4.3; th += 0.05){
+    const r = 7.5 - th * 0.38, x = Math.cos(th) * r, z = Math.sin(th) * r, fim = th > Math.PI * 3.8, y = 1.3 + (fim ? (th - Math.PI * 3.8) * 2.4 : 0);
+    if (ant) s += Math.hypot(x - ant[0], y - ant[1], z - ant[2]);
+    ant = [x, y, z];
+    const rr = th < 0.6 ? 0.5 + th : 1.3;
+    v.ell(x, y, z, rr, rr, rr, anel(s));
+  }
+  // a cabeça preta com a faixa branca, olhinhos e a língua
+  const [hx, hy, hz] = ant;
+  v.ell(hx, hy + 0.5, hz + 1.2, 1.5, 1.2, 1.8, (x, y, z) => z > hz + 1.6 ? 0x141414 : 0xf2ead0);
+  for (const lado of [-1, 1]) v.set(Math.round(hx + lado * 1.2), Math.round(hy + 1), Math.round(hz + 2), 0xf5c518);
+  v.set(Math.round(hx), Math.round(hy), Math.round(hz + 3.4), 0xff4d6d); v.set(Math.round(hx), Math.round(hy), Math.round(hz + 4.2), 0xff4d6d);
+  return v;
+}
 // alimentador automático: silo de metal do lado de fora da cerca, com a calha descendo até o cocho dentro do cercado (para -x)
 function vAlimentador(vaca){
   const v = new Vox();
@@ -7798,7 +7900,7 @@ function catalogoModelos(){
   const uso = k => { usados.add(k); return k; };
   const grupos = [
     { nome: 'Personagens', itens: [porco('Ed', COR.ed, COR.edBolso, 'ed'), porco('Beto', COR.beto, COR.betoBolso, 'beto'), porco('Hud', COR.ed, COR.edBolso, 'hud', MODELO_HUD), porco('Pelúcio', 0, 0, 'pelucio', modeloMoletom(1.32)), porco('Milton', 0, 0, 'milton', modeloMoletom(0.7)), porco('Jaca', 0, 0, 'jaca', MODELO_JACA), porco('Patrinho', 0, 0, 'patrinho', MODELO_PATRINHO), luma('Luma')] },
-    { nome: 'Bichos', itens: [um('Galinha', vGalinha), um('Vaca', vVaca), um('Minhoca', vMinhoca)] },
+    { nome: 'Bichos', itens: [um('Galinha', vGalinha), um('Vaca', vVaca), um('Minhoca', vMinhoca), um('Bugio', vBugio), um('Jaguatirica', vJaguatirica), um('Tucano', vTucano), um('Papagaio', vPapagaio), um('Cobra-coral', vCobraCoral)] },
     { nome: 'Canteiros', itens: [...Object.keys(CULTURAS).map(k => { const C = CULTURAS[k]; return varios(C.nome, [['Semente', () => vPlanta(k, 0)], ['Muda', () => vPlanta(k, 1)], ['Crescendo', () => vPlanta(k, 2)], ['Pronta', () => vPlanta(k, 3)], ...produto(uso(C.produto || k))], 3); }), um('Mato', vMato), varios('Solo', [['Seco', () => vSolo(false, false)], ['Molhado', () => vSolo(true, false)], ['Adubado', () => vSolo(false, true)]])] },
     { nome: 'Pomar', itens: Object.keys(FRUTIFERAS).map(k => { uso(k); return varios(FRUTIFERAS[k].nome, [['Com fruta', () => vFrutifera(k, true)], ['Sem fruta', () => vFrutifera(k, false)], ...produto(uso(FRUTIFERAS[k].fruta))]); }) },
     { nome: 'Floresta', itens: [...Object.keys(NATIVAS).map(k => { uso(k); return varios(NATIVAS[k].nome, [['Com fruto', () => vNativa(k, true)], ['Sem fruto', () => vNativa(k, false)], ...produto(uso(NATIVAS[k].produto))]); }), varios('Mata', [[ 'Copa redonda', () => vCopa(0)], ['Copa alta', () => vCopa(1)], ['Copa larga', () => vCopa(2)]])] },
