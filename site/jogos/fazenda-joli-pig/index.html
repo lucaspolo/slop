@@ -269,6 +269,19 @@ a{color:var(--rosa)}
 .caderno small{font-size:17px;color:#7a7aa8}
 .caderno .grifo{background:linear-gradient(transparent 55%,#fff07a 55% 90%,transparent 90%)}
 .caderno .botao{font-family:var(--f-texto);margin-top:6px}
+.abas.do-caderno{margin:0;padding:10px 14px 0}
+.linha-tempo{margin-top:30px}
+.marco{position:relative;padding:0 0 30px 44px}
+.marco::before{content:"";position:absolute;left:13px;top:4px;bottom:-4px;width:4px;background:#cfcfe4}
+.marco:last-child::before{display:none}
+.marco.liberado::before{background:#2e9e3c}
+.marco .bolinha{position:absolute;left:0;top:0;width:30px;height:30px;box-sizing:border-box;border-radius:50%;border:3px solid #3b3a7a;background:#fffdf4;display:grid;place-items:center;font-size:19px;line-height:1;z-index:1}
+.marco.liberado .bolinha{background:#bfe59a}
+.marco.aqui .bolinha{background:#f6e27c;box-shadow:0 0 0 4px #ffb3c9}
+.marco h3{margin-top:0;font-size:24px}
+.marco li{align-items:flex-start}
+.marco li img,.marco li .caixa{margin-top:3px}
+.marco li .texto{min-width:0}
 .figs{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px 6px;margin:8px 0 30px}
 .fig{text-align:center;font-size:17px;line-height:18px}
 .fig .disco{width:62px;height:62px;border-radius:50%;margin:0 auto 4px;display:grid;place-items:center;background:#fff3b0;border:3px solid #3b3a7a;transform:rotate(var(--r,0deg));box-shadow:2px 3px 0 rgba(59,58,122,.25)}
@@ -7805,7 +7818,65 @@ function lembretes(){
   for (const id in FABRICAS){ const st = estFab(id); if (st.feita && st.feitos.length) out.push([Object.keys(RECEITAS[st.feitos[0]].sai)[0], `recolher o que ficou pronto: ${FABRICAS[id].nome.toLowerCase()}`]); }
   return out;
 }
-function abrirCaderno(){
+// a linha do tempo sai das tabelas do jogo, então o que entrar nelas aparece aqui sozinho.
+// Cena ainda não vista fica como surpresa, igual à janela Cenas, e o que ela apresenta só entra depois dela
+function objetivosPorNivel(){
+  const grupos = {}, add = (n, ic, texto, preco) => (grupos[n] = grupos[n] || []).push({ icone: ic, texto, preco });
+  for (const id of ORDEM_CENAS){
+    const C = CENAS[id], n = C.nivel();
+    if (n > 1) S[C.flag] ? add(n, C.icone, `Cena: ${C.titulo}`) : add(n, 'claquete', 'Uma cena surpresa');
+  }
+  if (S.viuCineHud) add(HUD.nivel, 'hud', 'Chamar o Hud para ajudar', HUD.preco);
+  if (S.viuCinePatrinho) add(CENAS.patrinho.nivel(), 'trufa', 'Trufas para achar pelo cheiro');
+  for (const k of ORDEM_CULTURAS) add(CULTURAS[k].nivel, CULTURAS[k].produto || k, CULTURAS[k].nome);
+  for (const k in ANIMAIS) add(ANIMAIS[k].nivel, k, ANIMAIS[k].nome, ANIMAIS[k].preco);
+  NIVEL_LOTE.forEach((n, i) => { if (i) add(n, 'enxada', `Terreno ${i + 1} da horta`, PRECO_LOTE[i]); });
+  for (const k in FABRICAS) add(FABRICAS[k].nivel, k, FABRICAS[k].nome, FABRICAS[k].preco);
+  for (const k in MELHORIAS) for (const d of MELHORIAS[k].degraus) add(d.nivel, MELHORIAS[k].icone, d.nome, d.preco);
+  add(IRRIGADOR.nivel, 'irrigador', 'Irrigador automático', IRRIGADOR.preco);
+  add(COLETOR.galinha.nivel, 'coletor', COLETOR.galinha.nome, COLETOR.galinha.preco);
+  add(COLETOR.vaca.nivel, 'ordenhadeira', COLETOR.vaca.nome, COLETOR.vaca.preco);
+  for (const k in ALIMENTADOR) add(ALIMENTADOR[k].nivel, 'alimentador', `Alimentador do ${ALIMENTADOR[k].lugar}`, ALIMENTADOR[k].preco);
+  add(ADUBO.nivel, 'adubo', 'Adubo', ADUBO.preco);
+  for (const k in FRUTIFERAS) add(FRUTIFERAS[k].nivel, FRUTIFERAS[k].fruta, FRUTIFERAS[k].nome, FRUTIFERAS[k].preco);
+  POMAR_BLOCOS.forEach((b, i) => { if (i) add(b.nivel, 'cova', 'Mais seis covas de pomar', b.preco); });
+  add(COLMEIA.nivel, 'colmeia', 'Colmeia', COLMEIA.preco);
+  add(COMPOSTEIRA.nivel, 'composteira', 'Composteira', COMPOSTEIRA.preco);
+  for (const m of COMPOSTEIRA.melhorias) add(m.nivel, 'composteira', 'Mais minhocas na composteira', m.preco);
+  for (const k in ENFEITES) add(ENFEITES[k].nivel, k === 'canteiroFlor' ? 'flores' : k, ENFEITES[k].nome, ENFEITES[k].preco);
+  for (const P of PARCELAS){
+    const tem = [...new Set(P.arvores)];
+    add(P.nivel, NATIVAS[tem[0]].produto, `Parcela da floresta: ${tem.map(t => NATIVAS[t].nome.toLowerCase()).join(' e ')}`, P.preco);
+  }
+  return grupos;
+}
+function abasDoCaderno(atual){
+  const aba = (id, nome) => `<button class="aba" role="tab" type="button" data-pagina="${id}" aria-selected="${id === atual}">${nome}</button>`;
+  return `<div class="abas do-caderno" role="tablist">${aba('pedidos', 'Pedidos')}${aba('objetivos', 'Objetivos')}</div>`;
+}
+function ligarAbasDoCaderno(){
+  document.querySelectorAll('.do-caderno .aba').forEach(b => b.addEventListener('click', () => { Som.clique(); abrirCaderno(b.dataset.pagina); }));
+}
+function abrirObjetivos(){
+  const n = nivel(), grupos = objetivosPorNivel(), niveis = Object.keys(grupos).map(Number).sort((a, b) => a - b);
+  const aqui = niveis.filter(v => v <= n).pop(), prox = niveis.find(v => v > n);
+  let h = `<div class="caderno"><h2>Objetivos</h2>`;
+  h += prox ? `<p>Estou no <span class="grifo">nível ${n}</span>. Faltam <span class="grifo">${xpPara(prox) - S.xp} xp</span> pro nível ${prox}!</p>` : `<p>Estou no <span class="grifo">nível ${n}</span> e já liberei tudo!</p>`;
+  h += '<div class="linha-tempo">';
+  for (const v of niveis){
+    const lib = v <= n;
+    h += `<div class="marco${lib ? ' liberado' : ''}${v === aqui ? ' aqui' : ''}"${v === aqui ? ' id="objAqui"' : ''}><div class="bolinha">${v}</div><h3>Nível ${v}${v === aqui ? ' <small>(estou aqui!)</small>' : ''}</h3><ul>`;
+    h += grupos[v].map(it => `<li><span class="caixa">${lib ? '✓' : ''}</span><img src="${icone(it.icone)}" alt=""><span class="texto">${esc(it.texto)}${!lib && it.preco ? ` <small>${reais(it.preco)}</small>` : ''}</span></li>`).join('');
+    h += '</ul></div>';
+  }
+  h += '</div></div>';
+  abrirJanela(topo('caderno', 'Caderno do Ed', 'Pedidos, desenhos e objetivos', 'rosa') + abasDoCaderno('objetivos') + `<div class="janela-corpo">${h}</div>`);
+  ligarAbasDoCaderno();
+  const corpo = document.querySelector('#janela .janela-corpo'), alvo = $('objAqui');
+  if (alvo) corpo.scrollTop = alvo.offsetTop - 70;
+}
+function abrirCaderno(pagina){
+  if (pagina === 'objetivos'){ abrirObjetivos(); return; }
   const of = ofertaDoDia();
   let h = `<div class="caderno">`;
   h += `<div class="rabisco-canto" style="right:10px;top:4px">${rabisco(RABISCO.sol(), '0 0 80 80', 64, 8)}</div>`;
@@ -7846,7 +7917,8 @@ function abrirCaderno(){
   h += `<p><button class="botao" id="jCenas" type="button"><img src="${icone('claquete')}" alt="">Rever as cenas</button></p>`;
   h += `<div style="display:flex;justify-content:flex-end">${rabisco(RABISCO.caminhao(), '0 0 80 60', 70, -3)}</div>`;
   h += `</div>`;
-  abrirJanela(topo('caderno', 'Caderno do Ed', 'Pedidos, lembretes e desenhos', 'rosa') + `<div class="janela-corpo">${h}</div>`);
+  abrirJanela(topo('caderno', 'Caderno do Ed', 'Pedidos, desenhos e objetivos', 'rosa') + abasDoCaderno('pedidos') + `<div class="janela-corpo">${h}</div>`);
+  ligarAbasDoCaderno();
   $('jBeto').addEventListener('click', () => { fecharJanela(); chamarBeto(); });
   $('jCenas').addEventListener('click', () => { Som.clique(); abrirCenas(); });
   const bp = $('jPelucio'); if (bp) bp.addEventListener('click', () => { fecharJanela(); chamarPelucio(); });
@@ -8559,7 +8631,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, obj: () => discoJogo }, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, obj: () => discoJogo }, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
