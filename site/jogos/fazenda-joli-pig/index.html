@@ -2051,9 +2051,9 @@ function vJaguatirica(){
 // galho onde o tucano e o papagaio ficam pousados
 function galhoBicho(v){ for (let x = -7; x <= 7; x++) v.ell(x, 1, 0, 0.6, 1.1, 1.1, 0x7a5232); v.set(5, 2, 1, 0x6cbf47); v.set(-6, 2, -1, 0x6cbf47); }
 // o tucano-toco: preto, papo branco, olho com anel azul e o bicão laranja com a ponta preta
-function vTucano(){
+function vTucano(semGalho){
   const v = new Vox(), preto = 0x161616, branco = 0xf5f0e0;
-  galhoBicho(v);
+  if (!semGalho) galhoBicho(v);
   v.ell(0, 8, -0.5, 3.2, 5, 3, (x, y, z) => z > 1 && y > 8 ? branco : preto, (x, y) => y >= 2);
   v.ell(0, 13.5, 0.5, 2.8, 2.8, 2.8, (x, y, z) => z > 1.5 && y < 13 ? branco : preto);
   for (let y = 2; y <= 6; y++) for (let x = -1; x <= 1; x++) v.set(x, y - 1, -3 - (6 - y) * 0.4 | 0, preto);
@@ -2066,9 +2066,9 @@ function vTucano(){
   return v;
 }
 // o papagaio-verdadeiro: verde, testa azul, cara amarela, ombro vermelho, pontas das asas azuis e bico preto curvo
-function vPapagaio(){
+function vPapagaio(semGalho){
   const v = new Vox(), verde = 0x3cae3c, verdeE = 0x2e8f30, preto = 0x2a2a2a;
-  galhoBicho(v);
+  if (!semGalho) galhoBicho(v);
   v.ell(0, 8, 0, 3, 5, 3, verde, (x, y) => y >= 2);
   for (const lado of [-1, 1]){
     v.ell(lado * 2.8, 8, -0.5, 1, 4, 2.4, (x, y) => y > 10 ? 0xd8332a : y < 6 ? 0x2f6fd6 : verdeE);
@@ -2099,6 +2099,105 @@ function vCobraCoral(){
   for (const lado of [-1, 1]) v.set(Math.round(hx + lado * 1.2), Math.round(hy + 1), Math.round(hz + 2), 0xf5c518);
   v.set(Math.round(hx), Math.round(hy), Math.round(hz + 3.4), 0xff4d6d); v.set(Math.round(hx), Math.round(hy), Math.round(hz + 4.2), 0xff4d6d);
   return v;
+}
+// a cobra-coral esticada, em S, para rastejar (a enrolada fica no catálogo)
+function vCobraCoralEsticada(){
+  const v = new Vox(), cores = [[0xd8302a, 4], [0x141414, 1.4], [0xf2ead0, 0.9], [0x141414, 1.4], [0xf2ead0, 0.9], [0x141414, 1.4]];
+  const total = cores.reduce((a, c) => a + c[1], 0), anel = s => { let k = s % total; for (const [c, l] of cores){ if (k < l) return c; k -= l; } return cores[0][0]; };
+  let s = 0, ant = null;
+  for (let z = -10; z <= 9; z += 0.25){
+    const x = Math.sin(z * 0.45) * 1.6;
+    if (ant) s += Math.hypot(x - ant[0], z - ant[1]);
+    ant = [x, z];
+    const r = z < -8 ? 0.4 + (z + 10) * 0.45 : 1.2;
+    v.ell(x, 1.2, z, r, r, r, anel(s));
+  }
+  const [hx, hz] = ant;
+  v.ell(hx, 1.4, hz + 1.2, 1.4, 1.1, 1.7, (x, y, z) => z > hz + 1.6 ? 0x141414 : 0xf2ead0);
+  for (const lado of [-1, 1]) v.set(Math.round(hx + lado), 2, Math.round(hz + 2), 0xf5c518);
+  v.set(Math.round(hx), 1, Math.round(hz + 3), 0xff4d6d);
+  return v;
+}
+
+// ================= bichos da mata: de vez em quando um bicho aparece na beira da floresta e some de novo, como os de verdade.
+// Um de cada vez: o bugio sobe na copa de uma árvore, uiva e desce; o tucano e o papagaio chegam voando, pousam numa copa
+// e vão embora; a jaguatirica sai da mata, anda pela orla e volta; a cobra-coral cruza a orla rastejando.
+// Só aparecem onde dá para ver na tela, somem nas cenas e não mexem no save.
+const BICHOS_MATA = { primeira: [30, 90], intervalo: [45, 120], tipos: ['bugio', 'tucano', 'papagaio', 'jaguatirica', 'cobra'],
+  modelos: { bugio: [() => vBugio(), 1 / 22], tucano: [() => vTucano(true), 1 / 22], papagaio: [() => vPapagaio(true), 1 / 22], jaguatirica: [() => vJaguatirica(), 1 / 20], cobra: [() => vCobraCoralEsticada(), 1 / 22] } };
+let bichoMata = null, proxBichoMata = 0;
+// o topo das copas da primeira fileira da floresta (a que dá para a fazenda), sem as árvores das trilhas que somem na compra
+function copasDaBeira(){
+  const l = [];
+  for (let z = Z_MATA; z <= Z_MATA + 1; z++) for (let x = 0; x < W; x++){
+    if (hash(x, 31, z) > 0.74) continue;
+    const p = PARCELAS.findIndex(P => x >= P.x0 && x <= P.x1 && z >= P.z0 && z <= P.z1);
+    if (p >= 0 && Math.abs(x - PARCELAS[p].col) <= 1) continue;
+    const i = Math.floor(hash(x, 36, z) * MATA_MODELOS), s = 0.9 + hash(x, 35, z) * 0.3;
+    const g = geo('copa' + i, () => vCopa(i).build(1 / 8, { origin: [4, 0, 4] }));
+    l.push(new THREE.Vector3(x + 0.5 + (hash(x, 32, z) - 0.5) * 0.4, g.boundingBox.max.y * s - 0.06, z + 0.5 + (hash(x, 33, z) - 0.5) * 0.4));
+  }
+  return l;
+}
+const naTelaBicho = p => { const s = tela(p); return s.x > innerWidth * 0.1 && s.x < innerWidth * 0.9 && s.y > innerHeight * 0.15 && s.y < innerHeight * 0.82; };
+// o caminho de cada bicho: pontos com a duração do trecho até lá e quanto tempo fica parado
+function caminhoBicho(tipo){
+  const direita = new THREE.Vector3(Math.cos(cam.az), 0, -Math.sin(cam.az)), V = (x, y, z) => new THREE.Vector3(x, y, z);
+  if (tipo === 'bugio' || tipo === 'tucano' || tipo === 'papagaio'){
+    const copas = copasDaBeira().filter(naTelaBicho);
+    if (!copas.length) return null;
+    const c = sorteia(copas);
+    if (tipo === 'bugio') return [{ p: c.clone().add(V(0, -0.6, 0)) }, { p: c, dur: 1.8, para: rnd(8, 13), fala: 'Uuuuooo!' }, { p: c.clone().add(V(0, -0.6, 0)), dur: 1.8 }];
+    const lado = Math.random() < 0.5 ? 1 : -1;
+    return [{ p: c.clone().addScaledVector(direita, -8 * lado).add(V(0, 4, 0)), voa: true }, { p: c, dur: 3, para: rnd(8, 12), voa: true, fala: tipo === 'papagaio' ? 'Currupaco!' : null }, { p: c.clone().addScaledVector(direita, 8 * lado).add(V(0, 4.5, 0)), dur: 3, voa: true }];
+  }
+  // os que andam pelo chão da orla: escolhe uma coluna que apareça na tela e que dê para ir e voltar
+  const d = Math.random() < 0.5 ? 1 : -1, xs = [];
+  for (let x = 1; x < W - 5; x++) if (naTelaBicho(V(x + 0.5, 0, 19.5)) && naTelaBicho(V(x + 0.5 + d * 3.5, 0, 19.5))) xs.push(x + 0.5);
+  if (!xs.length) return null;
+  const x = sorteia(xs);
+  if (tipo === 'jaguatirica') return [{ p: V(x, 0, Z_MATA + 0.9) }, { p: V(x + d * 0.6, 0, 19.6), dur: 2, para: rnd(1.5, 3) }, { p: V(x + d * 3, 0, 19.4), dur: 2.4, para: 0.6 }, { p: V(x + d * 3.6, 0, Z_MATA + 0.9), dur: 2 }];
+  // a cobra vai até perto da estrada, onde as copas da beira não escondem
+  return [{ p: V(x, 0, Z_MATA + 0.5) }, { p: V(x + d * 1.6, 0, 18.5), dur: 5, para: 1.5 }, { p: V(x + d * 3.2, 0, Z_MATA + 0.5), dur: 5 }];
+}
+function soltarBichoMata(tipo){
+  tipo = tipo || sorteia(BICHOS_MATA.tipos);
+  const pts = caminhoBicho(tipo);
+  if (!pts) return false;
+  const [fn, esc] = BICHOS_MATA.modelos[tipo], g = new THREE.Group();
+  g.add(malha(geo('bichoMata' + tipo, () => fn().build(esc, { origin: [0.5, 0, 0.5], jitter: 0.03 }))));
+  g.position.copy(pts[0].p); g.rotation.y = cam.az; scene.add(g);
+  bichoMata = { tipo, g, pts, i: 1, tt: 0, falou: false, nome: 'bicho', topo(){ return this.g.position.clone().add(new THREE.Vector3(0, 1.1, 0)); } };
+  return true;
+}
+function sumirBichoMata(){ if (bichoMata){ scene.remove(bichoMata.g); bichoMata = null; } proxBichoMata = rnd(...BICHOS_MATA.intervalo); }
+function atualizarBichosMata(dt, t){
+  if (!bichoMata){
+    if (!cine && S.viuCineInicio){ proxBichoMata -= dt; if (proxBichoMata <= 0 && !soltarBichoMata()) proxBichoMata = rnd(10, 25); }
+    return;
+  }
+  if (cine){ sumirBichoMata(); return; }
+  const B = bichoMata, P = B.pts[B.i];
+  if (!P){ sumirBichoMata(); return; }
+  B.tt += dt;
+  const de = B.pts[B.i - 1].p, g = B.g;
+  if (B.tt < P.dur){
+    const k = B.tt / P.dur, e = k * k * (3 - 2 * k);
+    g.position.lerpVectors(de, P.p, e);
+    const dx = P.p.x - de.x, dz = P.p.z - de.z;
+    if (Math.hypot(dx, dz) > 0.05) g.rotation.y = anguloPerto(g.rotation.y, Math.atan2(dx, dz), Math.min(1, dt * 8));
+    if (P.voa){ g.position.y += Math.sin(k * Math.PI) * 0.8 + Math.sin(t * 18) * 0.05; g.rotation.z = Math.sin(t * 18) * 0.12; }
+    else if (B.tipo === 'jaguatirica') g.position.y += Math.abs(Math.sin(t * 9)) * 0.03;
+    else if (B.tipo === 'cobra') g.rotation.y += Math.sin(t * 7) * 0.012;
+  } else {
+    // parado: vira para a câmera e se mexe um pouquinho
+    const q = B.tt - P.dur;
+    g.position.copy(P.p); g.rotation.z = 0;
+    g.rotation.y = anguloPerto(g.rotation.y, cam.az + Math.sin(q * 0.9) * 0.5, Math.min(1, dt * 3));
+    if (B.tipo === 'tucano' || B.tipo === 'papagaio') g.position.y += Math.max(0, Math.sin(q * 5)) * 0.03;
+    if (P.fala && !B.falou && q > 1.5){ B.falou = true; falar(B, P.fala, 2); if (B.tipo === 'bugio') Som.tom(150, 0.8, 'sawtooth', 0.02, 230); else Som.tom(1300, 0.09, 'square', 0.02, 850); }
+    if (q >= (P.para || 0)){ B.i++; B.tt = 0; if (B.i >= B.pts.length) sumirBichoMata(); }
+  }
 }
 // alimentador automático: silo de metal do lado de fora da cerca, com a calha descendo até o cocho dentro do cercado (para -x)
 function vAlimentador(vaca){
@@ -3966,6 +4065,7 @@ function construirPersonagens(){
   irmaoHud.g.scale.setScalar(0.5); irmaoHud.g.visible = false; irmaoHud.vel = 2.5; scene.add(irmaoHud.g);
   criarLuma();
   criarDiscoJogo();
+  proxBichoMata = rnd(...BICHOS_MATA.primeira);
   visita = beto;
   caminhaoMarket = criarCaminhao(...CAMINHAO_MARKET);
   caminhaoCafe = criarCaminhao(...CAMINHAO_CAFE);
@@ -7500,6 +7600,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Floresta</b>${nv(PARCELAS[0].nivel)}: do outro lado da estrada há uma mata nativa protegida, vendida em ${PARCELAS.length} parcelas, nos níveis ${PARCELAS.map(P => P.nivel).join(', ')}. O Ed só coleta das árvores que já estão lá, sem plantar nem cortar: ${Object.values(NATIVAS).map(N => N.nomeP.toLowerCase()).join(', ')}. Cada árvore guarda uma coleta pronta, mesmo com o jogo fechado.</li>
       <li><b>Trufas</b>${nv(CENAS.patrinho.nivel())}: depois da visita do Patrinho, de vez em quando nasce uma trufa perto de uma árvore, enquanto você joga. Siga o cheirinho que sobe do chão e toque ali para o Ed cavar. Só o Patrinho compra: use o botão Ligar e ele vem de lambreta pagar ${reais(PRODUTOS.trufa.venda)} por trufa.</li>
       <li><b>Luma:</b> a irmã chihuahua dos porquinhos. De vez em quando ela sai pela portinha da casa para brincar com a bolinha roxa, em volta do chafariz se tiver um, e, se o Ed estiver por perto, dá uma mordidinha no rabicó dele. Para ela sair na hora, use Chamar a Luma na janela Cenas.</li>
+      <li><b>Bichos da mata:</b> de vez em quando um bugio, um tucano, um papagaio, uma jaguatirica ou uma cobra-coral aparece na beira da floresta e some de novo.</li>
       <li><b>Disco voador:</b> de vez em quando um disquinho voador passeia pelo céu da fazenda, para em cima do Ed e ele leva um susto. Para ver na hora, use Chamar o disco na janela Cenas.</li>
       <li><b>Maçã:</b> de vez em quando uma árvore deixa cair uma maçã. Toque nela para o Ed comer: ele agradece à árvore e anda ${MACA.fator}× mais rápido por ${MACA.minutos} minutos de jogo.</li>
       <li><b>Outro aparelho:</b> a fazenda fica salva só neste navegador. Para jogar em outro aparelho, abra os Ajustes, escolha Levar a fazenda e mande o link para você mesmo. Depois disso, cada aparelho segue sozinho.</li>
@@ -7752,6 +7853,7 @@ function quadro(agoraP){
   ed.update(dt, t);
   atualizarLuma(dt, t);
   atualizarDisco(dt, t);
+  atualizarBichosMata(dt, t);
   if (pelucio.g.visible) pelucio.update(dt, t);
   if (patrinho.g.visible) patrinho.update(dt, t);
   atualizarPiloto(dt, t);
@@ -7875,7 +7977,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { disco: { passar: () => { discoJogo.prox = 0; }, obj: () => discoJogo }, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, obj: () => discoJogo }, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
