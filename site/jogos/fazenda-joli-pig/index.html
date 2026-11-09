@@ -59,6 +59,11 @@ button{font:inherit;color:inherit}
 .chip.estacao{font-family:var(--f-texto);font-weight:800;font-size:13px;padding:5px 11px;cursor:pointer}
 .chip.estacao.chuva{background:#d6e9f8}
 .chip.pulsa{animation:pulsa .35s ease-out}
+/* ração acabando: amarelo quando dá para menos de 10 minutos, vermelho quando não dá para alimentar ninguém */
+#chipRacao{cursor:pointer}
+#chipRacao.pouca{background:var(--amarelo)}
+#chipRacao.acabou{background:#f6b3a8;animation:alertaRacao 1.2s ease-in-out infinite}
+@keyframes alertaRacao{50%{transform:scale(1.06)}}
 @keyframes pulsa{40%{transform:scale(1.12)}}
 
 /* barra de baixo */
@@ -350,7 +355,7 @@ body.modelos #tela{position:absolute;top:var(--md-topo,84px);left:300px;width:ca
     </div>
     <div class="recursos">
       <div class="chip painel" id="chipDinheiro" title="Dinheiro"><img data-icone="moeda" alt=""><span id="dinheiro">R$ 0</span></div>
-      <div class="chip painel" id="chipRacao" title="Ração para os bichos"><img data-icone="racao" alt=""><span id="racao">0</span></div>
+      <div class="chip painel" id="chipRacao" title="Ração para os bichos (toque para comprar)"><img data-icone="racao" alt=""><span id="racao">0</span></div>
       <div class="chip painel" id="chipAdubo" title="Adubo" hidden><img data-icone="adubo" alt=""><span id="adubo">0</span></div>
       <div class="chip painel estacao" id="chipEstacao" title="Estação"><span id="estacao"></span></div>
     </div>
@@ -662,6 +667,34 @@ const ALIMENTADOR = {
   galinha: { nivel: 5, preco: 1000, x: 23, z: 9, lugar: 'galinheiro' },
   vaca:    { nivel: 6, preco: 1000, x: 23, z: 14, lugar: 'curral' },
 };
+// quanto a ração dura: cada bicho come a sua parte a cada ciclo; com menos de RACAO_ALERTA minutos o contador fica amarelo
+// e aparece um aviso; sem ração para alimentar nem um bicho, fica vermelho
+const RACAO_ALERTA = 10;
+let estadoRacao = '';
+const avisoRacaoEm = { pouca: 0, acabou: 0 };
+function minutosDeRacao(){
+  let porSeg = 0;
+  for (const a of ANI){ const A = ANIMAIS[a.d.tipo]; porSeg += A.racao / A.tempo; }
+  return porSeg ? S.racao / porSeg / 60 : Infinity;
+}
+function avisarRacao(){
+  const min = minutosDeRacao(), menor = ANI.length ? Math.min(...ANI.map(a => ANIMAIS[a.d.tipo].racao)) : 0;
+  const est = !ANI.length ? '' : S.racao < menor ? 'acabou' : min < RACAO_ALERTA ? 'pouca' : '';
+  const chip = $('chipRacao');
+  chip.classList.toggle('pouca', est === 'pouca'); chip.classList.toggle('acabou', est === 'acabou');
+  chip.title = est === 'acabou' ? 'A ração acabou! Toque para comprar.' : est === 'pouca' ? `Ração para uns ${Math.max(1, Math.round(min))} min. Toque para comprar.` : 'Ração para os bichos (toque para comprar)';
+  // o aviso aparece quando o estado piora, no máximo uma vez a cada 3 minutos para cada estado
+  const piorou = (est === 'pouca' && !estadoRacao) || (est === 'acabou' && estadoRacao !== 'acabou');
+  if (piorou && Date.now() - avisoRacaoEm[est] > 180000 && S.viuCineInicio && !cine){
+    avisoRacaoEm[est] = Date.now();
+    aviso(est === 'acabou' ? 'A ração acabou! Os bichos estão ficando com fome. Toque na ração para comprar.' : `A ração está acabando: dá para uns ${Math.max(1, Math.round(min))} minutos. Toque na ração para comprar.`, 'ruim', 4);
+  }
+  estadoRacao = est;
+}
+// pacotes de ração da loja: quanto maior, mais barata cada ração; os grandes liberam com o nível
+const PACOTES_RACAO = [{ q: 5, p: 15, nivel: 1 }, { q: 20, p: 54, nivel: 1 }, { q: 50, p: 125, nivel: 1 }, { q: 200, p: 450, nivel: 8 }, { q: 500, p: 1000, nivel: 12 }, { q: 1000, p: 1800, nivel: 16 }];
+// o desconto de cada pacote em relação ao menor, em porcentagem
+const descontoRacao = (q, p) => Math.round((1 - p / q / (PACOTES_RACAO[0].p / PACOTES_RACAO[0].q)) * 100);
 // adubo: um saco corta o tempo que falta de uma planta longa (minTempo em segundos) pela metade
 const ADUBO = { nivel: 6, preco: 70, pacote: [5, 330], minTempo: 300, fator: 0.5 };
 // curva de XP: começo rápido e miolo mais longo, para o dinheiro acompanhar o que cada nível libera
@@ -7758,6 +7791,7 @@ function hud(){
   if (!S) return;
   $('dinheiro').textContent = reais(S.dinheiro);
   $('racao').textContent = S.racao;
+  avisarRacao();
   $('adubo').textContent = S.adubo || 0; $('chipAdubo').hidden = !(S.adubo > 0);
   const n = nivel(), a = xpPara(n), b = xpPara(n + 1);
   $('nivel').textContent = n;
@@ -8219,10 +8253,11 @@ function abrirLoja(aba){
         <div class="botoes">${tem || bloq ? '' : `<button class="botao mini" data-irrig="${i}" type="button"${S.dinheiro < IRRIGADOR.preco ? ' disabled' : ''}>Comprar · ${reais(IRRIGADOR.preco)}</button>`}</div></div>`;
     });
   } else {
-    for (const [q, p] of [[5, 15], [20, 54], [50, 125]]){
-      corpo += `<div class="cartao"><div class="cab"><img src="${icone('racao')}" alt=""><div><h4>${q} rações</h4><div class="info">você tem ${S.racao}</div></div></div>
-        <div class="info">Ração de milho para galinhas e vacas.</div>
-        <div class="botoes"><button class="botao mini" data-racao="${q}" data-p="${p}" type="button"${S.dinheiro < p ? ' disabled' : ''}>Comprar · ${reais(p)}</button></div></div>`;
+    for (const { q, p, nivel: nv } of PACOTES_RACAO){
+      const bloqR = n < nv, desc = descontoRacao(q, p);
+      corpo += `<div class="cartao${bloqR ? ' bloq' : ''}"><div class="cab"><img src="${icone('racao')}" alt=""><div><h4>${q} rações${desc ? `<span class="selo">-${desc}%</span>` : ''}</h4><div class="info">${bloqR ? `libera no nível ${nv}` : `você tem ${S.racao}`}</div></div></div>
+        <div class="info">Ração de milho para galinhas e vacas. R$ ${(p / q).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} cada.</div>
+        <div class="botoes">${bloqR ? '' : `<button class="botao mini" data-racao="${q}" data-p="${p}" type="button"${S.dinheiro < p ? ' disabled' : ''}>Comprar · ${reais(p)}</button>`}</div></div>`;
     }
     const bloqA = n < ADUBO.nivel;
     for (const [q, p] of [[1, ADUBO.preco], ADUBO.pacote]){
@@ -8253,8 +8288,9 @@ function abrirLoja(aba){
     gastar(p); S.adubo = (S.adubo || 0) + q; Som.moeda(); chipPulsa('chipAdubo'); hud(); salvar(); abrirLoja();
   }));
   j.querySelectorAll('[data-racao]').forEach(b => b.addEventListener('click', () => {
-    const q = +b.dataset.racao, p = +b.dataset.p;
-    if (S.dinheiro < p) return;
+    const P = PACOTES_RACAO.find(k => k.q === +b.dataset.racao);
+    if (!P || nivel() < P.nivel || S.dinheiro < P.p) return;
+    const q = P.q, p = P.p;
     gastar(p); S.racao += q; Som.moeda(); chipPulsa('chipRacao'); hud(); salvar(); abrirLoja();
   }));
 }
@@ -8987,6 +9023,7 @@ function eventos(){
     else chamarBeto();
   });
   $('chipEstacao').addEventListener('click', () => { Som.ligar(); Som.clique(); abrirEstacao(); });
+  $('chipRacao').addEventListener('click', () => { Som.ligar(); Som.clique(); if (!cine) abrirLoja('racao'); });
   $('hudPill').addEventListener('click', () => { Som.clique(); mostrarAjuda(false, 'ajuda'); });
   $('btnAjustes').addEventListener('click', () => { Som.ligar(); Som.clique(); abrirAjustes(); });
   $('btnCaderno').addEventListener('click', () => { Som.ligar(); Som.clique(); abrirCaderno(); });
@@ -9193,7 +9230,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, Musica, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, Musica, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
