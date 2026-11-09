@@ -4167,9 +4167,12 @@ function itensFabrica(id){
     r.itens.push({ rotulo: `Recolher (${st.feitos.length})`, sub: recolhendo ? 'o Ed já vai buscar' : 'vai para o celeiro', icone: Object.keys(RECEITAS[st.feitos[0]].sai)[0], off: recolhendo, fn: () => enfileirar('recolher', { k: 'fabrica', id }) });
   }
   const cheia = st.fila.length + naFila >= VAGAS_FAB;
+  // o que já vai sair daqui conta como entregue, para não pedir para fazer de novo
+  const saindo = {}, somar = rid => { for (const [k, q] of Object.entries(RECEITAS[rid].sai)) saindo[k] = (saindo[k] || 0) + q; };
+  st.fila.forEach(f => somar(f.r)); st.feitos.forEach(somar); levando.forEach(t => somar(t.param));
   for (const rid of F.receitas){
-    const R = RECEITAS[rid], sai = Object.keys(R.sai)[0];
-    r.itens.push({ rotulo: R.nome, sub: `${textoItens(R.entra)} → ${textoItens(R.sai)} · ${tempo(R.tempo)}`, icone: sai === 'racao' ? 'racao' : sai, off: cheia || !temItens(R.entra), fn: () => enfileirar('produzir', { k: 'fabrica', id }, rid) });
+    const R = RECEITAS[rid], sai = Object.keys(R.sai)[0], f = faltaNoPedido(sai, saindo[sai] || 0);
+    r.itens.push({ rotulo: R.nome, sub: `${textoItens(R.entra)} → ${textoItens(R.sai)} · ${tempo(R.tempo)}${textoFalta(f)}`, icone: sai === 'racao' ? 'racao' : sai, encomenda: f > 0, off: cheia || !temItens(R.entra), fn: () => enfileirar('produzir', { k: 'fabrica', id }, rid) });
   }
   if (cheia) r.itens.push({ rotulo: 'Fila cheia', sub: `até ${VAGAS_FAB} receitas por vez`, icone: id, off: true, leve: true, fn: () => {} });
   {
@@ -4301,7 +4304,8 @@ function itensPomar(i){
     for (const tipo in FRUTIFERAS){
       const F = FRUTIFERAS[tipo], bloq = nivel() < F.nivel;
       if (F.nivel > nivel() + 2) continue;
-      r.itens.push({ rotulo: F.nome, sub: bloq ? `nível ${F.nivel}` : `${F.rend} ${PRODUTOS[F.fruta].plural} a cada ${tempo(tempoFruta(tipo))}`, icone: tipo, preco: reais(F.preco), off: bloq || S.dinheiro < F.preco, fn: () => plantarFrutifera(i, tipo) });
+      const f = bloq ? 0 : faltaNoPedido(F.fruta, S.pomar.filter(p => p && p.tipo === tipo).length * F.rend);
+      r.itens.push({ rotulo: F.nome, sub: bloq ? `nível ${F.nivel}` : `${F.rend} ${PRODUTOS[F.fruta].plural} a cada ${tempo(tempoFruta(tipo))}${textoFalta(f)}`, icone: tipo, encomenda: f > 0, preco: reais(F.preco), off: bloq || S.dinheiro < F.preco, fn: () => plantarFrutifera(i, tipo) });
     }
     if (!r.itens.length) r.estado += ` O pomar libera no nível ${FRUTIFERAS.laranjeira.nivel}.`;
     return r;
@@ -7815,6 +7819,13 @@ function faltaPedidos(cont){
   for (const k in pede){ const f = pede[k] - (S.celeiro[k] || 0) - (cont[k] || 0) * rendCultura(k); if (f > 0) falta[k] = f; }
   return falta;
 }
+// o mesmo para qualquer produto, descontando o que já está a caminho (fila de construção, árvores plantadas)
+function faltaNoPedido(k, aCaminho = 0){
+  let pede = 0;
+  for (const p of S.pedidos || []) if (p && p.itens) for (const [k2, q] of p.itens) if (k2 === k) pede += q;
+  return Math.max(0, pede - (S.celeiro[k] || 0) - aCaminho);
+}
+const textoFalta = f => f ? ` · ${f > 1 ? 'faltam' : 'falta'} ${f} pro pedido` : '';
 
 // ================= interface: HUD
 function hud(){
@@ -7940,11 +7951,13 @@ function itensDoAlvoBase(alvo){
       }
       if (t.e === 'arado'){
         r.titulo = 'Canteiro arado'; r.icone = 'lote'; r.estado = 'Escolha a semente:';
-        // a lista é longa: as mais novas vêm primeiro, e a que libera no próximo nível fica no fim
-        const liberadas = ORDEM_CULTURAS.filter(k => CULTURAS[k].nivel <= nivel()).reverse();
         // ao lado do nome: quantos canteiros já têm a planta e a estrela no que rende mais por canteiro hoje; o que falta para os pedidos ganha outra cor
         const cont = canteirosPorCultura(), falta = faltaPedidos(cont);
-        const top = liberadas.reduce((a, k) => lucroColheita(k) > (a ? lucroColheita(a) : 0) ? k : a, null);
+        const disp = ORDEM_CULTURAS.filter(k => CULTURAS[k].nivel <= nivel());
+        const top = disp.reduce((a, k) => lucroColheita(k) > (a ? lucroColheita(a) : 0) ? k : a, null);
+        // a lista é longa: primeiro o que falta para os pedidos, depois a estrela, depois o resto em ordem alfabética; a do próximo nível fica no fim
+        const alfabetica = (a, b) => CULTURAS[a].nome.localeCompare(CULTURAS[b].nome, 'pt-BR');
+        const liberadas = [...disp.filter(k => falta[k]).sort(alfabetica), ...(top && !falta[top] ? [top] : []), ...disp.filter(k => !falta[k] && k !== top).sort(alfabetica)];
         for (const k of [...liberadas, ...ORDEM_CULTURAS.filter(k => CULTURAS[k].nivel === nivel() + 1)]){
           const c = CULTURAS[k], tem = S.bolsa[k] || 0;
           const bloq = c.nivel > nivel(), f = bloq ? 0 : falta[k] || 0;
@@ -9260,7 +9273,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, Musica, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, Musica, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
