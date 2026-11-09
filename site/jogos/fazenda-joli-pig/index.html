@@ -3552,12 +3552,13 @@ const FALAS_MILTON = [
   ['ed', 'Ed', 'Claro, maninho! Traz umas sementes quando vier.'],
   ['milton', 'Milton', 'Combinado! E eu pago a manutenção da pista.'],
 ];
-// festa do nível 20: a fala 4 vai para o Beto quando o Jaca ainda não conheceu a fazenda
+// festa do nível 20: a família inteira vem, mesmo quem o Ed ainda não recebeu na fazenda
 const falasFesta = () => [
   ['beto', 'Beto', 'Surpresa, maninho! Viemos comemorar!'],
   ['ed', 'Ed', 'Aooooa! Todo mundo aqui? Que festa é essa?'],
   ['pelucio', 'Pelúcio', 'Nível 20, irmão! A sua fazenda é a mais famosa da região.'],
-  S.conheceuJaca ? ['jaca', 'Jaca', 'E o Joli Market não para de vender as suas coisas!'] : ['beto', 'Beto', 'E o Joli Market não para de vender as suas coisas!'],
+  ['jaca', 'Jaca', 'E o Joli Market não para de vender as suas coisas!'],
+  ['patrinho', 'Patrinho', 'E as suas trufas viraram a estrela do Joli Bistrô, irmãozinho!'],
   ['hud', 'Hud', 'Eu ajudei! Eu ajudei!'],
   ['ed', 'Ed', 'Ajudou muito, Hud! Mas cadê o Milton?', 'milton'],
   ['milton', 'Milton', 'Milton na área! Parabéns, Ed!'],
@@ -3607,8 +3608,9 @@ function presenteMiltonCena(){
   presenteMilton();
 }
 // Festa: o Ed no cruzamento em frente ao celeiro, os outros em meia-lua na frente dele
-const FESTA_ED = [15.5, 6.5], FESTA_VAN = PARADA - 3.4;
-const festaRoda = () => (S.conheceuJaca ? { pelucio: [-1.5, 0.3], beto: [-0.95, 1.2], jaca: [0.2, 1.5], hud: [1.15, 0.95] } : { pelucio: [-1.5, 0.3], beto: [-0.5, 1.4], hud: [1.0, 1.1] });
+// a lambreta para à frente do caminhão e sai primeiro, senão atravessaria os outros veículos na estrada
+const FESTA_ED = [15.5, 6.5], FESTA_VAN = PARADA - 3.4, FESTA_LAMBRETA = PARADA + 3;
+const festaRoda = () => ({ pelucio: [-1.5, 0.3], beto: [-0.95, 1.2], jaca: [0.2, 1.5], hud: [1.15, 0.95], patrinho: [0.95, -0.15] });
 const CORES_FESTA = [0xff4d6d, 0xffd23f, 0x4dabf7, 0x69db7c, 0xf783ac, 0xffffff, 0xb197fc];
 function confete(x, y, z, n = 1, espalha = 0.8){
   for (let i = 0; i < n; i++){
@@ -3619,9 +3621,9 @@ function confete(x, y, z, n = 1, espalha = 0.8){
 // tudo o que a festa deixa para trás: a família, o Hud, os veículos e o avião
 function limparFesta(){
   if (tarefaHud){ setReserva(tarefaHud.alvo, null); tarefaHud = null; }
-  for (const p of [beto, jaca, pelucio, irmaoHud]){ p.g.visible = false; p.pontos = []; p.aoChegar = null; p.estado = 'parado'; p.aceno = 0; p.pulo = 0; }
+  for (const p of [beto, jaca, pelucio, patrinho, irmaoHud]){ p.g.visible = false; p.pontos = []; p.aoChegar = null; p.estado = 'parado'; p.aceno = 0; p.pulo = 0; }
   irmaoHud.saindo = false;
-  caminhaoMarket.visible = false; caminhaoCafe.visible = false;
+  caminhaoMarket.visible = false; caminhaoCafe.visible = false; caminhaoBistro.visible = false;
   if (voo.estado === 'festa') aviaoFora();
 }
 // Um cafezinho (nível 3+, se repete): o Ed para na frente da casa com uma mesinha, chocolate quente e bolo ou fruta, às vezes com o Milton e um convidado.
@@ -4184,7 +4186,7 @@ const CENAS = {
       const p = c.passo, v = (x, z) => new THREE.Vector3(x, 0.4, z);
       const dx = telaEstreita() ? -2.4 : 0; // em tela estreita a câmera abre mais para a esquerda, onde a van para
       if (p === 'f-chega') return v(14.6 + dx, 11.3);
-      if (p === 'f-sobem'){ const zs = [beto, jaca, pelucio].filter(q => q.g.visible).map(q => q.pos.y); return v(15.3 + dx, zs.length ? clamp(zs.reduce((a, b) => a + b) / zs.length, 8.5, 12.5) : 12); }
+      if (p === 'f-sobem'){ const zs = [beto, jaca, pelucio, patrinho].filter(q => q.g.visible).map(q => q.pos.y); return v(15.3 + dx, zs.length ? clamp(zs.reduce((a, b) => a + b) / zs.length, 8.5, 12.5) : 12); }
       if (p === 'festa' && c.t >= 2.4) return v(14.4, 12.5);
       return v(15.4, 7.3);
     },
@@ -4196,6 +4198,7 @@ const CENAS = {
       caminhaoE.estado = 'cine';
       caminhaoMarket.visible = true; caminhaoMarket.position.set(-5, 0, Z_ESTRADA);
       caminhaoCafe.visible = true; caminhaoCafe.position.set(-8.6, 0, Z_ESTRADA);
+      caminhaoBistro.visible = true; caminhaoBistro.position.set(-1.6, 0, Z_ESTRADA);
       Som.buzina();
       const pts = rota(clamp(Math.floor(ed.pos.x), 0, W - 1), clamp(Math.floor(ed.pos.y), 0, H - 1), Math.floor(FESTA_ED[0]), Math.floor(FESTA_ED[1]));
       if (pts) { pts.push(FESTA_ED); ed.ir(pts, () => ed.olhar(FESTA_ED[0], 14)); } else { ed.colocar(...FESTA_ED); ed.olhar(FESTA_ED[0], 14); }
@@ -4208,14 +4211,13 @@ const CENAS = {
       switch (c.passo){
         case 'f-chega': {
           const e = 1 - Math.pow(1 - Math.min(1, c.t / 4.2), 3);
-          caminhaoMarket.position.x = lerp(-5, PARADA, e); caminhaoCafe.position.x = lerp(-8.6, FESTA_VAN, e);
-          caminhaoMarket.position.y = caminhaoCafe.position.y = Math.abs(Math.sin(c.t * 10)) * 0.015;
+          caminhaoMarket.position.x = lerp(-5, PARADA, e); caminhaoCafe.position.x = lerp(-8.6, FESTA_VAN, e); caminhaoBistro.position.x = lerp(-1.6, FESTA_LAMBRETA, e);
+          caminhaoMarket.position.y = caminhaoCafe.position.y = caminhaoBistro.position.y = Math.abs(Math.sin(c.t * 10)) * 0.015;
           if (c.t >= 4.2){
-            caminhaoMarket.position.y = caminhaoCafe.position.y = 0; Som.buzina();
+            caminhaoMarket.position.y = caminhaoCafe.position.y = caminhaoBistro.position.y = 0; Som.buzina();
             c.passo = 'f-sobem'; c.t = 0; c.n = 0;
             // quem desce de cada veículo, com um pequeno atraso entre eles
-            c.fila = [[0, beto, PARADA, 'caminhao', 'beto'], [0.8, pelucio, FESTA_VAN, 'van', 'pelucio']];
-            if (S.conheceuJaca) c.fila.push([1.5, jaca, PARADA, 'caminhao', 'jaca']);
+            c.fila = [[0, beto, PARADA, 'caminhao', 'beto'], [0.8, pelucio, FESTA_VAN, 'van', 'pelucio'], [1.2, patrinho, FESTA_LAMBRETA, 'lambreta', 'patrinho'], [1.5, jaca, PARADA, 'caminhao', 'jaca']];
             c.total = c.fila.length + 1; c.hud = false;
           }
           break;
@@ -4235,12 +4237,12 @@ const CENAS = {
             it.ok = true;
             const [lx, lz] = lugar(nome);
             p.g.visible = true; p.colocar(x0, 16.85); p.ang = p.angAlvo = Math.PI; p.estado = 'parado'; p.pontos = [];
-            const subida = veic === 'van' ? [[x0 + 1.9, 16.85], [PARADA, 16.4], [PARADA, 15.4]] : [[x0 + (nome === 'jaca' ? 0.25 : -0.2), 16.4], [x0 + (nome === 'jaca' ? 0.25 : -0.2), 15.4]];
+            const subida = veic !== 'caminhao' ? [[x0 + (veic === 'van' ? 1.9 : -1.9), 16.85], [PARADA, 16.4], [PARADA, 15.4]] : [[x0 + (nome === 'jaca' ? 0.25 : -0.2), 16.4], [x0 + (nome === 'jaca' ? 0.25 : -0.2), 15.4]];
             p.ir([...subida, [Ex, 9.6], [lx, lz]], () => chegou(p));
           }
           if (c.n >= c.total && ed.estado === 'parado'){
             ed.olhar(Ex, Ez + 1.3); ed.angAlvo = anguloPerto(ed.angAlvo, cam.azAlvo, 0.42);
-            for (const nome in roda){ const p = nome === 'hud' ? irmaoHud : { beto, jaca, pelucio }[nome]; virarNaCena(p, Ex, Ez); }
+            for (const nome in roda){ const p = nome === 'hud' ? irmaoHud : { beto, jaca, pelucio, patrinho }[nome]; virarNaCena(p, Ex, Ez); }
             beto.aceno = 1.4;
             if (COMP_VIS.mesh) for (const w of MINHOCAS) w.pulo = 0.45;
             c.passo = 'dialogo'; mostrarFalaCine(0);
@@ -4260,27 +4262,27 @@ const CENAS = {
         // fala 9: todo mundo pula, chove confete, e a família volta para os veículos e vai embora
         case 'festa': {
           if (!c.ini){
-            c.ini = true; c.acc = 0; c.indo = false; c.vagas = { caminhao: 0, van: 0 }; c.hudFora = false; c.saida = {};
-            for (const p of [ed, beto, jaca, pelucio, irmaoHud]) if (p.g.visible){ p.pulo = 0.45; p.aceno = 1.6; }
+            c.ini = true; c.acc = 0; c.indo = false; c.vagas = { caminhao: 0, van: 0, lambreta: 0 }; c.hudFora = false; c.saida = {};
+            for (const p of [ed, beto, jaca, pelucio, patrinho, irmaoHud]) if (p.g.visible){ p.pulo = 0.45; p.aceno = 1.6; }
             confete(Ex, 2.8, Ez + 0.9, 90, 2); Som.nivel();
           }
           c.acc += dt;
           while (c.acc > 0.1){ c.acc -= 0.1; if (c.t < 2) confete(Ex, 2.8, Ez + 0.9, 5, 1.6); }
-          if (c.t > 1 && !c.pulo2){ c.pulo2 = true; for (const p of [ed, beto, jaca, pelucio, irmaoHud]) if (p.g.visible) p.pulo = 0.45; confete(Ex, 2.8, Ez + 0.9, 50, 2); }
+          if (c.t > 1 && !c.pulo2){ c.pulo2 = true; for (const p of [ed, beto, jaca, pelucio, patrinho, irmaoHud]) if (p.g.visible) p.pulo = 0.45; confete(Ex, 2.8, Ez + 0.9, 50, 2); }
           if (c.t >= 2.4 && !c.indo){
             c.indo = true;
-            for (const [p, veic] of [[beto, 'caminhao'], [jaca, 'caminhao'], [pelucio, 'van']]){
+            for (const [p, veic] of [[beto, 'caminhao'], [jaca, 'caminhao'], [pelucio, 'van'], [patrinho, 'lambreta']]){
               if (!p.g.visible) continue;
               c.vagas[veic]++;
-              const xv = veic === 'van' ? FESTA_VAN : PARADA;
-              const volta = [[Ex, 9.6], [PARADA, 15.4], [PARADA, 16.4], ...(veic === 'van' ? [[xv + 1.9, 16.85]] : []), [xv, 16.85]];
+              const xv = veic === 'van' ? FESTA_VAN : veic === 'lambreta' ? FESTA_LAMBRETA : PARADA;
+              const volta = [[Ex, 9.6], [PARADA, 15.4], [PARADA, 16.4], ...(veic !== 'caminhao' ? [[xv + (veic === 'van' ? 1.9 : -1.9), 16.85]] : []), [xv, 16.85]];
               p.ir(volta, () => { p.g.visible = false; c.vagas[veic]--; if (!c.vagas[veic]){ c.saida[veic] = c.t; Som.buzina(); } });
             }
             const hpts = rota(clamp(Math.floor(irmaoHud.pos.x), 0, W - 1), clamp(Math.floor(irmaoHud.pos.y), 0, H - 1), 5, 5) || [];
             irmaoHud.ir(hpts, () => { irmaoHud.g.visible = false; c.hudFora = true; });
           }
           let vivos = 0;
-          for (const [veic, v, x0] of [['caminhao', caminhaoMarket, PARADA], ['van', caminhaoCafe, FESTA_VAN]]){
+          for (const [veic, v, x0] of [['caminhao', caminhaoMarket, PARADA], ['van', caminhaoCafe, FESTA_VAN], ['lambreta', caminhaoBistro, FESTA_LAMBRETA]]){
             if (!v.visible) continue;
             vivos++;
             if (c.saida[veic] === undefined) continue;
