@@ -58,6 +58,10 @@ button{font:inherit;color:inherit}
 .chip img{width:30px;height:30px}
 .chip.estacao{font-family:var(--f-texto);font-weight:800;font-size:13px;padding:5px 11px;cursor:pointer}
 .chip.estacao.chuva{background:#d6e9f8}
+.chip.hora.tarde{background:#ffe1b8}
+.chip.hora.noite{background:#2c3a6a;color:#fff8e9}
+/* estrelas atrás do mapa, que aparecem à noite */
+#estrelas{position:fixed;inset:0;pointer-events:none;opacity:0}
 .chip.pulsa{animation:pulsa .35s ease-out}
 /* ração acabando: amarelo quando dá para menos de 10 minutos, vermelho quando não dá para alimentar ninguém */
 #chipRacao{cursor:pointer}
@@ -346,6 +350,7 @@ body.modelos #tela{position:absolute;top:var(--md-topo,84px);left:300px;width:ca
 </style>
 </head>
 <body>
+<canvas id="estrelas"></canvas>
 <div id="jogo">
   <canvas id="tela" aria-label="A fazenda vista de cima"></canvas>
 
@@ -359,6 +364,7 @@ body.modelos #tela{position:absolute;top:var(--md-topo,84px);left:300px;width:ca
       <div class="chip painel" id="chipRacao" title="Ração para os bichos (toque para comprar)"><img data-icone="racao" alt=""><span id="racao">0</span></div>
       <div class="chip painel" id="chipAdubo" title="Adubo" hidden><img data-icone="adubo" alt=""><span id="adubo">0</span></div>
       <div class="chip painel estacao" id="chipEstacao" title="Estação"><span id="estacao"></span></div>
+      <div class="chip painel estacao hora" id="chipHora" title="Hora do dia"><span id="hora"></span></div>
     </div>
   </div>
 
@@ -500,6 +506,8 @@ class Vox {
     const pos = [], nor = [], col = [], idx = [];
     const c = new THREE.Color();
     for (const e of this.m.values()){
+      // opt.so: monta só os voxels dessas cores (o brilho das janelas e lâmpadas), com a mesma origem do modelo inteiro
+      if (opt.so && !opt.so.has(e.c)) continue;
       const { x, y, z } = e;
       c.setHex(e.c);
       const j = 1 + (hash(x, y, z) - 0.5) * 2 * jitter;
@@ -2743,7 +2751,8 @@ function pegarAluguel(){
 let nanoHostel = null;
 function criarNanoHostel(){
   const s = NANO.s, op = { origin: [0.5, 0, 0.5], jitter: 0.02 };
-  const g = new THREE.Group(), casa = malha(vNanoHostel().build(s, { origin: [15, 0, 11], jitter: 0.02 }));
+  const vh = vNanoHostel(), g = new THREE.Group(), casa = malha(vh.build(s, { origin: [15, 0, 11], jitter: 0.02 }));
+  casa.add(brilhoDe(vh, s, { origin: [15, 0, 11] }, [CNANO.janela]));
   g.add(casa); g.position.set(NANO.hostel[0], 0, NANO.hostel[1]); g.rotation.y = Math.PI; scene.add(g);
   // a placa com o nome, em cima da porta
   const c = document.createElement('canvas'); c.width = 256; c.height = 44;
@@ -3610,7 +3619,7 @@ function posicionarCamera(){
   camera.position.copy(cam.alvo).addScaledVector(d, 60);
   // a sombra cobre um quadrado em volta da câmera, porque o mapa inteiro não caberia nela com nitidez; anda de ladrilho em ladrilho para não tremer
   const sx = Math.round(cam.alvo.x), sz = Math.round(cam.alvo.z);
-  sol.position.set(sx + 14, 26, sz + 8); sol.target.position.set(sx, 0, sz);
+  sol.position.set(sx + LUZ.dir.x, LUZ.dir.y, sz + LUZ.dir.z); sol.target.position.set(sx, 0, sz);
   camera.lookAt(cam.alvo);
   const a = innerWidth / innerHeight;
   camera.left = -cam.vista * a / 2; camera.right = cam.vista * a / 2; camera.top = cam.vista / 2; camera.bottom = -cam.vista / 2;
@@ -4060,13 +4069,15 @@ function construirCenario(){
   for (const p of PREDIOS){
     if (p.fab) continue;
     let g = null;
-    if (p.id === 'casa') g = vCasa(true).build(1 / 8, { origin: [16, 0, 16] });
+    let brilho = null;
+    if (p.id === 'casa'){ const v = vCasa(true); g = v.build(1 / 8, { origin: [16, 0, 16] }); brilho = brilhoDe(v, 1 / 8, { origin: [16, 0, 16] }, [0xbfe5f5]); }
     if (p.id === 'celeiro') g = vCeleiro().build(1 / 8, { origin: [20, 0, 20] });
     if (p.id === 'poco') g = vPoco().build(1 / 8, { origin: [4, 0, 4] });
     if (p.id === 'galinheiro') g = vGalinheiro().build(1 / 8, { origin: [8, 0, 8] });
     if (p.id === 'curral') g = vAbrigo().build(1 / 8, { origin: [8, 0, 4] });
     if (p.id === 'correio') g = vCorreio().build(1 / 16, { origin: [8, 0, 8] });
     const m = colocar(malha(g), (p.x0 + p.x1 + 1) / 2, 0, (p.z0 + p.z1 + 1) / 2);
+    if (brilho) m.add(brilho);
     m.userData.alvo = { k: 'predio', p };
     pickaveis.push(m);
   }
@@ -6828,18 +6839,23 @@ function livreSemColetor(x, z){
   return t === 'grama';
 }
 const livreParaEnfeite = (x, z) => livreSemColetor(x, z) && !pertoDoColetor(x, z);
+let brilhoPoste = null;
+const geoBrilhoPoste = () => { if (!brilhoPoste) brilhoPoste = brilhoDe(vPoste(), 1 / 16, { origin: [8, 0, 8] }, [0xfff1a8]); return brilhoPoste.clone(); };
 function montarEnfeite(e){
   const k = e.x + ',' + e.z;
   if (ENF_VIS[k]){ scene.remove(ENF_VIS[k]); const i = pickaveis.indexOf(ENF_VIS[k]); if (i >= 0) pickaveis.splice(i, 1); }
   const modelos = { canteiroFlor: () => vCanteiroFlor(), banco: vBanco, espantalho: vEspantalho, poste: vPoste, fonte: vFonte, estatua: vEstatua };
   const escala = e.tipo === 'estatua' ? 1 / 40 : 1 / 16;
   const m = colocar(malha(geo('enf' + e.tipo, () => modelos[e.tipo]().build(escala, { origin: e.tipo === 'estatua' ? [0.5, 0, 0.5] : [8, 0, 8] }))), e.x + 0.5, 0, e.z + 0.5, (e.rot || 0) * Math.PI / 2);
+  // o poste acende à noite: a lâmpada brilha e ganha um halo
+  if (e.tipo === 'poste'){ m.add(geoBrilhoPoste()); const h = haloLuz(); h.position.set(0, 1.42, 0); m.add(h); }
   m.traverse(o => { o.userData.alvo = { k: 'enfeite', e }; }); pickaveis.push(m);
   ENF_VIS[k] = m;
   setT(e.x, e.z, 'feno');
 }
 function removerEnfeite(e){
   const k = e.x + ',' + e.z;
+  if (ENF_VIS[k]) ENF_VIS[k].traverse(o => { if (o.userData.halo) HALOS.splice(HALOS.indexOf(o), 1); });
   if (ENF_VIS[k]){ scene.remove(ENF_VIS[k]); const i = pickaveis.indexOf(ENF_VIS[k]); if (i >= 0) pickaveis.splice(i, 1); delete ENF_VIS[k]; }
   S.enfeites.splice(S.enfeites.indexOf(e), 1);
   setT(e.x, e.z, 'grama');
@@ -6907,7 +6923,7 @@ const chovendo = () => !!S.chuvaAte && Date.now() < S.chuvaAte;
 let gotas = null, proxChuvaCheck = 0;
 function climaInicio(){
   const e = estacaoAtual();
-  document.body.style.background = `linear-gradient(180deg,${e.ceu[0]},${e.ceu[1]})`;
+  if (S.relogio == null) S.relogio = CICLO.inicio;
   if (!S.proxChuva) S.proxChuva = Date.now() + rnd(8, 20) * 60000;
   // com o jogo fechado, a chuva que caiu enquanto isso já regou tudo
   const fora = Date.now() - (S.salvoEm || Date.now());
@@ -6944,6 +6960,112 @@ function comecarChuva(){
   Som.ruido(2.5, 0.05, 900);
   atualizarChipEstacao(); salvar();
 }
+// ================= dia, tarde e noite: um ciclo próprio do jogo, de 30 minutos de jogo aberto
+// S.relogio vai de 0 a 1: dia de 0 a 0,4 (com o amanhecer no começo), tarde de 0,4 a 0,7 (com o pôr do sol no fim) e
+// noite de 0,7 a 1. O relógio só anda com o jogo aberto. A luz, o céu, as estrelas e as luzes das janelas e dos postes
+// seguem quadros-chave e mudam aos poucos entre eles.
+const CICLO = { minutos: 30, inicio: 0.08 };
+const PERIODOS = [
+  { id: 'dia', nome: 'Dia', icone: '☀︎', ini: 0, fim: 0.4 },
+  { id: 'tarde', nome: 'Tarde', icone: '☀︎', ini: 0.4, fim: 0.7 },
+  { id: 'noite', nome: 'Noite', icone: '☾', ini: 0.7, fim: 1 },
+];
+const periodo = () => PERIODOS.find(q => (S.relogio || 0) >= q.ini && (S.relogio || 0) < q.fim) || PERIODOS[0];
+// sol e ceu: intensidade e cor das duas luzes; chao: cor de baixo da luz do céu; ceu1/ceu2: o degradê do fundo (null usa o
+// céu da estação); noite: quanto as janelas, postes e estrelas acendem
+const LUZ_CICLO = [
+  { p: 0.00, sol: 0.46, solCor: 0xffc8a0, ceu: 0.5, ceuCor: 0xffe8d8, chao: 0xa08878, ceu1: '#f4b5a4', ceu2: '#fde2c2', noite: 0.25 },
+  { p: 0.06, sol: 0.68, solCor: 0xfff0d8, ceu: 0.58, ceuCor: 0xfffaf0, chao: 0xa89a78, ceu1: null, ceu2: null, noite: 0 },
+  { p: 0.38, sol: 0.68, solCor: 0xfff0d8, ceu: 0.58, ceuCor: 0xfffaf0, chao: 0xa89a78, ceu1: null, ceu2: null, noite: 0 },
+  { p: 0.48, sol: 0.66, solCor: 0xffd49a, ceu: 0.56, ceuCor: 0xffeccc, chao: 0xa89070, ceu1: '#a8d0ea', ceu2: '#f8e2bc', noite: 0 },
+  { p: 0.63, sol: 0.56, solCor: 0xffb070, ceu: 0.52, ceuCor: 0xffdcc0, chao: 0x9c7c68, ceu1: '#f0957a', ceu2: '#ffd296', noite: 0.15 },
+  { p: 0.72, sol: 0.32, solCor: 0xa898e0, ceu: 0.46, ceuCor: 0x9c98d8, chao: 0x504860, ceu1: '#3c3f7c', ceu2: '#8c6c9c', noite: 0.8 },
+  { p: 0.80, sol: 0.28, solCor: 0xaac0ff, ceu: 0.44, ceuCor: 0x8494d0, chao: 0x3c3a54, ceu1: '#141c3e', ceu2: '#2c3a6a', noite: 1 },
+  { p: 0.94, sol: 0.28, solCor: 0xaac0ff, ceu: 0.44, ceuCor: 0x8494d0, chao: 0x3c3a54, ceu1: '#141c3e', ceu2: '#2c3a6a', noite: 1 },
+  { p: 1.00, sol: 0.46, solCor: 0xffc8a0, ceu: 0.5, ceuCor: 0xffe8d8, chao: 0xa08878, ceu1: '#f4b5a4', ceu2: '#fde2c2', noite: 0.25 },
+];
+// a luz de agora, já misturada entre os dois quadros-chave
+const LUZ = { sol: 0.68, ceu: 0.58, noite: 0, solCor: new THREE.Color(), ceuCor: new THREE.Color(), chao: new THREE.Color(), ceu1: new THREE.Color(), ceu2: new THREE.Color(), dir: new THREE.Vector3(14, 26, 8) };
+// o brilho das janelas e lâmpadas: um material só, com a opacidade que a noite pede
+const MAT_LUZ = new THREE.MeshBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
+function brilhoDe(v, s, opt, cores){
+  const m = new THREE.Mesh(v.build(s, Object.assign({}, opt, { so: new Set(cores), jitter: 0 })), MAT_LUZ);
+  m.renderOrder = 2; m.userData.brilho = true;
+  return m;
+}
+// o halo em volta das lâmpadas dos postes
+let texHalo = null;
+function haloLuz(){
+  if (!texHalo){
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    r.addColorStop(0, 'rgba(255,230,160,0.9)'); r.addColorStop(0.35, 'rgba(255,214,120,0.35)'); r.addColorStop(1, 'rgba(255,200,100,0)');
+    g.fillStyle = r; g.fillRect(0, 0, 64, 64); texHalo = new THREE.CanvasTexture(c);
+  }
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: texHalo, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
+  sp.scale.setScalar(1.3); sp.userData.halo = true; HALOS.push(sp);
+  return sp;
+}
+const HALOS = [];
+// luzes de verdade em volta dos postes mais perto da câmera e da porta de casa: um número fixo, para o three.js não
+// recompilar os materiais quando a quantidade muda
+const LUZES_NOITE = [];
+function criarLuzesNoite(){
+  for (let i = 0; i < 4; i++){ const l = new THREE.PointLight(0xffd890, 0, 4.5, 2); scene.add(l); LUZES_NOITE.push(l); }
+}
+function pontosDeLuz(){
+  const pts = S.enfeites.filter(e => e.tipo === 'poste').map(e => [e.x + 0.5, 1.4, e.z + 0.5]);
+  const casa = PREDIOS.find(q => q.id === 'casa');
+  if (casa) pts.push([(casa.x0 + casa.x1 + 1) / 2, 1.1, casa.z1 + 1.3]);
+  return pts;
+}
+let estrelasFeitas = 0;
+function desenharEstrelas(){
+  const c = $('estrelas'), w = innerWidth, h = innerHeight;
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  for (let i = 0; i < Math.round(w * h / 5000); i++){
+    const x = hash(i, 3, 7) * w, y = hash(i, 5, 11) * h * 0.75, r = 0.6 + hash(i, 9, 2) * 1.2;
+    g.fillStyle = `rgba(255,250,230,${0.5 + hash(i, 1, 4) * 0.5})`;
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  }
+  estrelasFeitas = w * 10000 + h;
+}
+let ceuAplicado = '';
+function atualizarCiclo(dt){
+  S.relogio = ((S.relogio == null ? CICLO.inicio : S.relogio) + dt / (CICLO.minutos * 60)) % 1;
+  const p = S.relogio;
+  let i = 0; while (i < LUZ_CICLO.length - 2 && p >= LUZ_CICLO[i + 1].p) i++;
+  const a = LUZ_CICLO[i], b = LUZ_CICLO[i + 1], k = clamp((p - a.p) / (b.p - a.p), 0, 1), e = k * k * (3 - 2 * k);
+  const est = estacaoAtual(), cor = (x, padrao) => x || padrao;
+  LUZ.sol = lerp(a.sol, b.sol, e); LUZ.ceu = lerp(a.ceu, b.ceu, e); LUZ.noite = lerp(a.noite, b.noite, e);
+  LUZ.solCor.setHex(a.solCor).lerp(new THREE.Color(b.solCor), e);
+  LUZ.ceuCor.setHex(a.ceuCor).lerp(new THREE.Color(b.ceuCor), e);
+  LUZ.chao.setHex(a.chao).lerp(new THREE.Color(b.chao), e);
+  LUZ.ceu1.set(cor(a.ceu1, est.ceu[0])).lerp(new THREE.Color(cor(b.ceu1, est.ceu[0])), e);
+  LUZ.ceu2.set(cor(a.ceu2, est.ceu[1])).lerp(new THREE.Color(cor(b.ceu2, est.ceu[1])), e);
+  // o sol nasce de um lado, passa alto ao meio-dia e se põe do outro; à noite a lua faz o mesmo caminho, mais baixa
+  const dia = p < 0.72, t = dia ? p / 0.72 : (p - 0.72) / 0.28, ang = lerp(-0.9, 0.9, t), alto = dia ? 16 + 12 * Math.sin(Math.PI * t) : 18 + 6 * Math.sin(Math.PI * t);
+  LUZ.dir.set(Math.cos(ang) * 16, alto, Math.sin(ang) * 16 + 4);
+  sol.color.copy(LUZ.solCor); ceuLuz.color.copy(LUZ.ceuCor); ceuLuz.groundColor.copy(LUZ.chao);
+  // brilho das janelas, halos dos postes e luzes de verdade
+  const n = LUZ.noite;
+  MAT_LUZ.opacity = n * 0.85; MAT_LUZ.visible = n > 0.02;
+  for (const h of HALOS) h.material.opacity = n * 0.9;
+  if (!LUZES_NOITE.length) criarLuzesNoite();
+  const pts = n > 0.02 ? pontosDeLuz().sort((q, r) => Math.hypot(q[0] - cam.alvo.x, q[2] - cam.alvo.z) - Math.hypot(r[0] - cam.alvo.x, r[2] - cam.alvo.z)) : [];
+  LUZES_NOITE.forEach((l, j) => { const q = pts[j]; l.intensity = q ? n * 1.3 : 0; if (q) l.position.set(q[0], q[1], q[2]); });
+  // céu do fundo e estrelas (só mexe no CSS quando a cor muda de verdade)
+  const css = `linear-gradient(180deg,#${LUZ.ceu1.getHexString()},#${LUZ.ceu2.getHexString()})`;
+  if (css !== ceuAplicado){ ceuAplicado = css; document.body.style.background = css; }
+  if (n > 0.02 && estrelasFeitas !== innerWidth * 10000 + innerHeight) desenharEstrelas();
+  $('estrelas').style.opacity = n.toFixed(2);
+  const q = periodo();
+  if ($('hora').dataset.p !== q.id){
+    $('hora').dataset.p = q.id; $('hora').textContent = `${q.icone} ${q.nome}`;
+    $('chipHora').classList.toggle('tarde', q.id === 'tarde'); $('chipHora').classList.toggle('noite', q.id === 'noite');
+  }
+}
 function atualizarClima(dt){
   const agora = Date.now();
   if (agora > proxChuvaCheck){
@@ -6953,10 +7075,9 @@ function atualizarClima(dt){
     atualizarChipEstacao();
   }
   const ch = chovendo();
-  // céu e luz escurecem um pouco durante a chuva
-  const alvoLuz = ch ? 0.42 : 0.68;
-  sol.intensity = lerp(sol.intensity, alvoLuz, Math.min(1, dt * 1.5));
-  ceuLuz.intensity = lerp(ceuLuz.intensity, ch ? 0.5 : 0.58, Math.min(1, dt * 1.5));
+  // a luz vem do horário (atualizarCiclo); a chuva escurece um pouco
+  sol.intensity = lerp(sol.intensity, LUZ.sol * (ch ? 0.62 : 1), Math.min(1, dt * 1.5));
+  ceuLuz.intensity = lerp(ceuLuz.intensity, LUZ.ceu * (ch ? 0.86 : 1), Math.min(1, dt * 1.5));
   if (ch && !gotas) gotas = criarGotas();
   if (gotas){
     const pos = gotas.geometry.attributes.position, a = pos.array;
@@ -7731,8 +7852,7 @@ const ROUPA_VERMELHA = [0xd9483c, 0xf2b632], ROUPA_VERDE = [0x46a352, 0xbfe59a],
 const CICLISTAS = [[0xd9483c, ...ROUPA_VERDE], [0x3f8fd0, ...ROUPA_VERMELHA], [0xf0b432, ...ROUPA_ROXA]];
 let TRAFEGO = [], carroRua = null, transitoEspera = Infinity;
 function saudacaoDoEd(){
-  const h = new Date().getHours();
-  return variar(SAUDACOES[h >= 5 && h < 12 ? 'dia' : h >= 12 && h < 18 ? 'tarde' : 'noite']);
+  return variar(SAUDACOES[periodo().id]);
 }
 function montarTransito(){
   // o Porco se registra para receber toque, mas quem passa na estrada não abre menu
@@ -9347,6 +9467,7 @@ function quadro(agoraP){
   atualizarFabricas(dt);
   atualizarAbelhas(t);
   atualizarComposteira(dt, t);
+  atualizarCiclo(dt);
   atualizarClima(dt);
   atualizarParticulas(dt);
   atualizarFalas();
@@ -9456,7 +9577,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, Musica, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
