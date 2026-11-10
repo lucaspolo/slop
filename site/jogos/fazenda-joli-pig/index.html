@@ -819,8 +819,9 @@ const PREDIOS = [
   { id:'cozinha',    nome:'Cozinha de doces',    x0:27, z0:2,  x1:28, z1:3,  porta:[27, 4], fab:'cozinha' },
   { id:'terreiro',   nome:'Terreiro de café',    x0:24, z0:7,  x1:26, z1:8,  porta:[25, 6], fab:'terreiro' },
   { id:'torrador',   nome:'Torrador de café',    x0:28, z0:7,  x1:29, z1:8,  porta:[28, 6], fab:'torrador', ry: Math.PI },
-  { id:'chocolateria', nome:'Chocolateria',      x0:30, z0:2,  x1:31, z1:3,  porta:[30, 4], fab:'chocolateria' },
-  { id:'oficina',    nome:'Oficina de borracha', x0:31, z0:7,  x1:32, z1:8,  porta:[31, 6], fab:'oficina', ry: Math.PI },
+  // as construções da mata ficam numa clareira do outro lado da estrada, de frente para ela, perto da floresta
+  { id:'chocolateria', nome:'Chocolateria',      x0:21, z0:17, x1:22, z1:18, porta:[20, 17], fab:'chocolateria', ry: -Math.PI / 2 },
+  { id:'oficina',    nome:'Oficina de borracha', x0:21, z0:21, x1:22, z1:22, porta:[20, 21], fab:'oficina', ry: -Math.PI / 2 },
 ];
 const PREDIO = {}; PREDIOS.forEach(p => { PREDIO[p.id] = p; });
 const ARVORES = [[0,1,0],[1,5,1],[0,9,2],[1,13,0],[11,1,1],[20,0,0],[23,4,1],[23,8,0],[23,13,2],[2,0,1],[8,0,0],[23,0,1],[0,15,1],[26,0,2],[29,4,1],[29,0,0]];
@@ -849,6 +850,9 @@ function montarMapa(){
   for (let x = 0; x < COL_CURVA; x++) setT(x, 17, 'estrada');
   for (let z = 17; z < H; z++){ setT(COL_CURVA, z, 'estrada'); setT(COL_CURVA + 1, z, 'cerca'); for (let x = COL_CURVA + 2; x < W; x++) setT(x, z, 'canto'); }
   setT(15, 16, 'portao');
+  // a clareira das construções da mata, no canto do terreno abandonado, com uma passagem na cerca para cada porta
+  for (let x = COL_CURVA + 2; x <= COL_CURVA + 6; x++) for (let z = 17; z <= 23; z++) setT(x, z, 'grama');
+  for (const id of ['chocolateria', 'oficina']){ const pt = PREDIOS.find(q => q.id === id).porta; setT(COL_CURVA + 1, pt[1], 'caminho'); }
   for (let z = 5; z <= 15; z++) setT(15, z, 'caminho');
   for (let x = 4; x <= W - 1; x++) setT(x, 5, 'caminho');
   setT(9, 4, 'caminho'); setT(16, 8, 'caminho'); setT(16, 13, 'caminho');
@@ -4509,7 +4513,8 @@ function itensParcela(p){
 const CERCA_CANTO = [];
 let placaCanto = null, bolhaCanto = null;
 function liberarTilesDoCanto(){
-  for (let z = 17; z < H; z++) for (let x = COL_CURVA + 2; x < W; x++) setT(x, z, 'grama');
+  // as construções da clareira continuam lá
+  for (let z = 17; z < H; z++) for (let x = COL_CURVA + 2; x < W; x++) if (tipo(x, z) !== 'predio') setT(x, z, 'grama');
   for (let x = ARRENDAMENTO.xCerca; x < W; x++) setT(x, 16, 'grama');
 }
 function montarPlacaCanto(){
@@ -4673,7 +4678,9 @@ function montarFabrica(id){
     const pl = malha(geo('placa', () => vPlaca().build(1 / 16, { origin: [8, 0, 8] })));
     const tx = placaDeTexto(texturaTexto([[F.nome.toUpperCase(), 1, '#7a4a2a'], [`nível ${F.nivel}`, 0.7, '#c2365f']], 256, 112, '#f3e3c3'), 13 / 16, 6 / 16);
     tx.position.set(0, 11 / 16, 1.1 / 16); pl.add(tx);
-    pl.position.set(cx, 0, (p.ry ? p.z0 : p.z1 + 1) - 0.15); if (p.ry) pl.rotation.y = Math.PI;
+    // a placa fica na frente da obra, para o lado da porta
+    const ry = p.ry || 0, meio = Math.abs(Math.sin(ry)) > 0.5 ? (p.x1 - p.x0 + 1) / 2 : (p.z1 - p.z0 + 1) / 2;
+    pl.position.set(cx + Math.sin(ry) * (meio - 0.15), 0, cz + Math.cos(ry) * (meio - 0.15)); pl.rotation.y = ry;
     scene.add(pl); V.placa = pl;
     pl.traverse(o => { o.userData.alvo = { k: 'predio', p }; }); pickaveis.push(pl);
   } else {
