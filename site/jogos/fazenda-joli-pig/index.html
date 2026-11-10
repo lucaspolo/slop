@@ -5609,6 +5609,7 @@ function construirPersonagens(){
   pilotoBistro.colocar(-0.2, 0); pilotoBistro.ang = pilotoBistro.angAlvo = Math.PI / 2; pilotoBistro.sentado = 0.84;
   caminhaoBistro.add(pilotoBistro.g);
   caminhao = caminhaoMarket;
+  acenderFarois(caminhaoMarket); acenderFarois(caminhaoCafe); acenderFarois(caminhaoBistro, { um: true, h: 0.4, comp: 2 });
 }
 function atualizarPiloto(dt, t){
   pilotoBistro.g.visible = caminhaoBistro.visible && !patrinho.g.visible;
@@ -7562,10 +7563,11 @@ function texturaHalo(){
   }
   return texHalo;
 }
-function haloLuz(){
+function haloLuz(cor, tam = 1.3){
   texturaHalo();
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: texHalo, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
-  sp.scale.setScalar(1.3); sp.userData.halo = true; HALOS.push(sp);
+  if (cor) sp.material.color.setHex(cor);
+  sp.scale.setScalar(tam); sp.userData.halo = true; HALOS.push(sp);
   return sp;
 }
 const HALOS = [];
@@ -7594,7 +7596,9 @@ const MAT_VARAL_HALO = new THREE.PointsMaterial({ size: 10, vertexColors: true, 
 // soma essa luz à cor de tudo o que está perto (chão, construções, bichos, enfeites), mais fraca no alto e embaixo das coisas
 const MAPA_LUZ = { P: 4, raio: 2.3, ganho: 0.32, quente: [1, 0.8, 0.55] };
 const texVazia = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat);
-const UNI_LUZ = { mapaLuz: { value: texVazia }, forcaLuz: { value: 0 }, caixaLuz: { value: new THREE.Vector4(0, 0, W, H) } };
+const UNI_LUZ = { mapaLuz: { value: texVazia }, forcaLuz: { value: 0 }, caixaLuz: { value: new THREE.Vector4(0, Z_PISTA, W, H - Z_PISTA) } };
+// as fontes do mapa de luz: [x, z, cor, raio, peso]; o varal entra quando é comprado, a pista sempre
+let fontesVaral = [], fontesPista = [];
 MAT.onBeforeCompile = sh => {
   Object.assign(sh.uniforms, UNI_LUZ);
   sh.vertexShader = 'varying vec3 vMundo;\nvarying vec3 vNormMundo;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -7613,6 +7617,82 @@ MAT.onBeforeCompile = sh => {
     #include <envmap_fragment>`);
 };
 let varalMalha = null;
+// o mapa de luz: cada fonte ilumina em volta, num tom quente puxado para a cor dela
+function montarMapaLuz(){
+  const { P, ganho, quente } = MAPA_LUZ, nx = W * P, nz = (H - Z_PISTA) * P, acc = new Float32Array(nx * nz * 3), cor = new THREE.Color();
+  for (const [x, zm, c, raio, peso] of [...fontesPista, ...fontesVaral]){
+    const z = zm - Z_PISTA;
+    cor.setHex(c); const cr = (quente[0] * 0.65 + cor.r * 0.35) * peso, cg = (quente[1] * 0.65 + cor.g * 0.35) * peso, cb = (quente[2] * 0.65 + cor.b * 0.35) * peso;
+    for (let j = Math.max(0, Math.floor((z - raio) * P)); j < Math.min(nz, Math.ceil((z + raio) * P)); j++)
+      for (let i = Math.max(0, Math.floor((x - raio) * P)); i < Math.min(nx, Math.ceil((x + raio) * P)); i++){
+        const d = Math.hypot((i + 0.5) / P - x, (j + 0.5) / P - z); if (d >= raio) continue;
+        const f = (1 - d / raio) ** 2, o = (j * nx + i) * 3;
+        acc[o] += cr * f; acc[o + 1] += cg * f; acc[o + 2] += cb * f;
+      }
+  }
+  const dados = new Uint8Array(nx * nz * 4);
+  for (let q = 0; q < nx * nz; q++){
+    for (let c = 0; c < 3; c++) dados[q * 4 + c] = Math.round(255 * (1 - Math.exp(-acc[q * 3 + c] * ganho)));
+    dados[q * 4 + 3] = 255;
+  }
+  const tex = new THREE.DataTexture(dados, nx, nz, THREE.RGBAFormat);
+  tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.needsUpdate = true;
+  if (UNI_LUZ.mapaLuz.value !== texVazia) UNI_LUZ.mapaLuz.value.dispose();
+  UNI_LUZ.mapaLuz.value = tex;
+}
+// luzes da pista de pouso: balizas baixinhas nas duas beiradas e, nas cabeceiras, uma fileira verde e uma vermelha.
+// Ficam sempre lá e acendem à noite, como o varal
+const LUZES_PISTA = { passo: 1.5, cor: 0xfff0c0, inicio: 0x6cf08a, fim: 0xff5a4a, raio: 1.9, peso: 4 };
+const MAT_PISTA_HALO = new THREE.PointsMaterial({ size: 8, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: false });
+function montarLuzesPista(){
+  const R = RES_VARAL, v = new Vox(), luzes = [], z0 = PISTA_Z0 - 0.06, z1 = PISTA_Z1 + 1.06, x0 = 1.06, x1 = W - 1.06;
+  for (let x = x0 + 0.44; x < x1 - 0.3; x += LUZES_PISTA.passo) luzes.push([x, z0, LUZES_PISTA.cor], [x, z1, LUZES_PISTA.cor]);
+  for (let k = 0; k < 4; k++){ const z = PISTA_Z0 + 0.25 + k * 0.5; luzes.push([x0, z, LUZES_PISTA.inicio], [x1, z, LUZES_PISTA.fim]); }
+  for (const [x, z, c] of luzes){
+    const a = Math.round(x * R) - 1, b = Math.round(z * R) - 1;
+    v.box(a, 0, b, a + 1, 1, b + 1, 0x4a4a4e); v.box(a, 2, b, a + 1, 3, b + 1, c);
+  }
+  const m = malha(v.build(1 / R, { origin: [0, 0, 0] }), false);
+  m.add(brilhoDe(v, 1 / R, { origin: [0, 0, 0], ao: [1, 1, 1, 1] }, [LUZES_PISTA.cor, LUZES_PISTA.inicio, LUZES_PISTA.fim], MAT_LUZ_COR));
+  const hp = [], hc = [], cor = new THREE.Color();
+  for (const [x, z, c] of luzes){ hp.push(x, 2.5 / R, z); cor.setHex(c); hc.push(cor.r, cor.g, cor.b); }
+  const gh = new THREE.BufferGeometry();
+  gh.setAttribute('position', new THREE.Float32BufferAttribute(hp, 3)); gh.setAttribute('color', new THREE.Float32BufferAttribute(hc, 3));
+  MAT_PISTA_HALO.map = texturaHalo();
+  const halos = new THREE.Points(gh, MAT_PISTA_HALO); halos.renderOrder = 3; m.add(halos);
+  scene.add(m);
+  fontesPista = luzes.map(([x, z, c]) => [x, z, c, LUZES_PISTA.raio, LUZES_PISTA.peso]);
+  montarMapaLuz();
+}
+// faróis: à noite os veículos da estrada andam com farol aceso (um facho no chão à frente e o brilho das lanternas).
+// A frente dos veículos é o +x deles, que é o sentido em que andam pela estrada
+let texFacho = null;
+const MAT_FACHO = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+function texturaFacho(){
+  if (texFacho) return texFacho;
+  const c = document.createElement('canvas'); c.width = 128; c.height = 64;
+  const g = c.getContext('2d'), img = g.createImageData(128, 64), suave = (a, b, t) => { const k = clamp((t - a) / (b - a), 0, 1); return k * k * (3 - 2 * k); };
+  for (let y = 0; y < 64; y++) for (let x = 0; x < 128; x++){
+    const u = x / 127, v = Math.abs((y - 31.5) / 32), meia = 0.3 + 0.7 * u;
+    const a = (1 - u) ** 1.4 * (1 - suave(meia * 0.55, meia, v)) * suave(0, 0.06, u), o = (y * 128 + x) * 4;
+    img.data[o] = 255; img.data[o + 1] = 238; img.data[o + 2] = 196; img.data[o + 3] = Math.round(255 * a);
+  }
+  g.putImageData(img, 0, 0);
+  return (texFacho = new THREE.CanvasTexture(c));
+}
+function acenderFarois(g, opt = {}){
+  const geom = g.geometry; if (!geom.boundingBox) geom.computeBoundingBox();
+  const bb = geom.boundingBox, frente = bb.max.x, tras = bb.min.x, larg = bb.max.z - bb.min.z, cz = (bb.max.z + bb.min.z) / 2;
+  const h = opt.h != null ? opt.h : clamp(bb.max.y * 0.28, 0.18, 0.42), lados = opt.um ? [0] : [-0.32, 0.32];
+  for (const l of lados){
+    const f = haloLuz(0xfff2c8, opt.um ? 0.32 : 0.4); f.position.set(frente + 0.02, h, cz + l * larg); g.add(f);
+    const t = haloLuz(0xff3a2a, opt.um ? 0.18 : 0.22); t.position.set(tras - 0.02, h, cz + l * larg); g.add(t);
+  }
+  MAT_FACHO.map = texturaFacho();
+  const comp = opt.comp || 2.6, largF = Math.max(larg, 0.45) * 2.2;
+  const facho = new THREE.Mesh(new THREE.PlaneGeometry(comp, largF).rotateX(-Math.PI / 2).translate(frente + comp / 2 - 0.05, 0.03, cz), MAT_FACHO);
+  facho.renderOrder = 1; g.add(facho);
+}
 function montarVaral(){
   if (varalMalha || !S.varalLuzes) return;
   const R = RES_VARAL, v = new Vox(), lamps = [];
@@ -7635,25 +7715,8 @@ function montarVaral(){
   gh.setAttribute('position', new THREE.Float32BufferAttribute(hp, 3)); gh.setAttribute('color', new THREE.Float32BufferAttribute(hc, 3));
   MAT_VARAL_HALO.map = texturaHalo();
   const halos = new THREE.Points(gh, MAT_VARAL_HALO); halos.renderOrder = 3; varalMalha.add(halos);
-  // o mapa de luz: cada lâmpada ilumina em volta, num tom quente puxado para a cor dela
-  const { P, raio, ganho, quente } = MAPA_LUZ, nx = W * P, nz = H * P, acc = new Float32Array(nx * nz * 3);
-  for (const [x, , z, c] of lamps){
-    cor.setHex(c); const cr = quente[0] * 0.65 + cor.r * 0.35, cg = quente[1] * 0.65 + cor.g * 0.35, cb = quente[2] * 0.65 + cor.b * 0.35;
-    for (let j = Math.max(0, Math.floor((z - raio) * P)); j < Math.min(nz, Math.ceil((z + raio) * P)); j++)
-      for (let i = Math.max(0, Math.floor((x - raio) * P)); i < Math.min(nx, Math.ceil((x + raio) * P)); i++){
-        const d = Math.hypot((i + 0.5) / P - x, (j + 0.5) / P - z); if (d >= raio) continue;
-        const f = (1 - d / raio) ** 2, o = (j * nx + i) * 3;
-        acc[o] += cr * f; acc[o + 1] += cg * f; acc[o + 2] += cb * f;
-      }
-  }
-  const dados = new Uint8Array(nx * nz * 4);
-  for (let q = 0; q < nx * nz; q++){
-    for (let c = 0; c < 3; c++) dados[q * 4 + c] = Math.round(255 * (1 - Math.exp(-acc[q * 3 + c] * ganho)));
-    dados[q * 4 + 3] = 255;
-  }
-  const tex = new THREE.DataTexture(dados, nx, nz, THREE.RGBAFormat);
-  tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.needsUpdate = true;
-  UNI_LUZ.mapaLuz.value = tex;
+  fontesVaral = lamps.map(([x, , z, c]) => [x, z, c, MAPA_LUZ.raio, 1]);
+  montarMapaLuz();
   varalMalha.castShadow = LUZ.noite < 0.5;
   scene.add(varalMalha);
 }
@@ -7704,7 +7767,10 @@ function atualizarCiclo(dt){
   const n = LUZ.noite;
   MAT_LUZ.opacity = n * 0.85; MAT_LUZ.visible = n > 0.02;
   MAT_LUZ_COR.opacity = n * 0.95; MAT_LUZ_COR.visible = n > 0.02;
-  UNI_LUZ.forcaLuz.value = varalMalha ? n * 0.8 : 0;
+  UNI_LUZ.forcaLuz.value = n * 0.8;
+  MAT_PISTA_HALO.opacity = n * 0.9; MAT_PISTA_HALO.visible = n > 0.02;
+  MAT_PISTA_HALO.size = 0.3 * innerHeight / cam.vista;
+  MAT_FACHO.opacity = n * 0.7; MAT_FACHO.visible = n > 0.02;
   MAT_VARAL_HALO.opacity = n * 0.9; MAT_VARAL_HALO.visible = n > 0.02;
   MAT_VARAL_HALO.size = 0.5 * innerHeight / cam.vista;
   if (varalMalha) varalMalha.castShadow = n < 0.5;
@@ -7846,6 +7912,7 @@ function construirPista(){
   const hg = colocar(malha(vHangar().build(1 / 16, { origin: [16, 0, 12] })), W - 3.2, 0, Z_PISTA + 1.6, Math.PI);
   hg.traverse(o => { o.userData.alvo = { k: 'pista' }; }); pickaveis.push(hg);
   if (!S.proxMilton || S.proxMilton < Date.now()) S.proxMilton = Date.now() + rnd(2, 4) * 60000;
+  montarLuzesPista();
 }
 function motor(ligar){
   if (!Som.ctx || !S.som){ motorSom = null; return; }
@@ -8542,6 +8609,7 @@ function montarTransito(){
     veiculo(novoMesh(vTrator, [10, 0, 0.5], 'trator'), 2.2, [piloto('trator', [...ROUPA_VERMELHA, 'tratorista'], -0.34, 0.68, 0.72)]),
     ...CICLISTAS.map((c, i) => veiculo(novoMesh(() => vBicicleta(c[0]), [9, 0, 0.5], 'bicicleta' + i), 3 + i * 0.5, [piloto('bike', [c[1], c[2], 'ciclista' + i], -0.05, 0.56, 0.5, true)])),
   ];
+  TRAFEGO.forEach((v, i) => acenderFarois(v.g, i === 2 ? { um: true, h: 0.4, comp: 2 } : i === 3 ? { h: 0.45, comp: 2.2 } : i > 3 ? { um: true, h: 0.32, comp: 1.4 } : {}));
   transitoEspera = rnd(...TRANSITO.espera);
 }
 function soltarVeiculo(i){
@@ -10312,7 +10380,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha }, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
