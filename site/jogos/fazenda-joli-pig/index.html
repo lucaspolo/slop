@@ -3681,30 +3681,32 @@ function vPoste(){
   return v;
 }
 // varal de luzes: mourões de madeira com um fio caído entre eles e lâmpadas coloridas de festa penduradas.
+// Tem o dobro da resolução dos outros modelos (32 voxels por ladrilho), para o mourão e o fio ficarem finos.
 // fioVaral desenha um vão; ponto(a, y, w) põe o voxel com a = posição ao longo do fio e w = posição de lado
 const CORES_VARAL = [0xffd84a, 0xff8fc8, 0x7ad4ff, 0x9be27a, 0xffa04a];
+const RES_VARAL = 32;
 function mouraoVaral(v, ponto, a, w, alto){
   for (let y = 0; y <= alto; y++) for (const da of [0, 1]) for (const dw of [0, 1]) ponto(a + da, y, w + dw, y === alto ? 0x5e3a20 : hash(a + da, y, w + dw) < 0.5 ? 0x8a5a34 : 0x7c4f2c);
 }
 function fioVaral(v, ponto, a0, a1, w, alto, k0 = 0){
   // a0 e a1: o primeiro voxel de cada mourão; o fio vai do topo de um ao topo do outro, caindo no meio
-  const ini = a0 + 2, fim = a1 - 1, meio = (a0 + 1 + a1) / 2, meia = (a1 - a0 - 1) / 2, caida = Math.max(2, Math.round((a1 - a0) / 10));
-  const yFio = a => Math.round(alto - 1 - caida * (1 - ((a - meio) / meia) ** 2));
-  let ant = alto - 1, k = k0;
-  for (let a = ini; a <= fim; a++){ const y = yFio(a); for (let yy = Math.min(y, ant); yy <= Math.max(y, ant); yy++) ponto(a, yy, w + 1, 0x2d2a2a); ant = y; }
+  const ini = a0 + 2, fim = a1 - 1, meio = (a0 + 1 + a1) / 2, meia = (a1 - a0 - 1) / 2, caida = Math.max(3, Math.round((a1 - a0) / 9));
+  const yFio = a => Math.round(alto - 2 - caida * (1 - ((a - meio) / meia) ** 2));
+  let ant = alto - 2, k = k0;
+  for (let a = ini; a <= fim; a++){ const y = yFio(a); for (let yy = Math.min(y, ant); yy <= Math.max(y, ant); yy++) ponto(a, yy, w, 0x2d2a2a); ant = y; }
   const lamps = [];
-  for (let a = ini + 4; a <= fim - 4; a += 7){
+  for (let a = ini + 7; a <= fim - 7; a += 14){
     const y = yFio(a), cor = CORES_VARAL[k++ % CORES_VARAL.length];
-    ponto(a, y - 1, w + 1, 0x3a3a3e);
-    for (let yy = y - 3; yy <= y - 2; yy++) for (const da of [0, 1]) for (const dw of [0, 1]) ponto(a + da - 1, yy, w + dw, cor);
-    lamps.push({ a, y: y - 2, cor });
+    ponto(a, y - 1, w, 0x3a3a3e);
+    for (let yy = y - 4; yy <= y - 2; yy++) for (let da = -1; da <= 1; da++) for (let dw = -1; dw <= 1; dw++) ponto(a + da, yy, w + dw, cor);
+    lamps.push({ a: a + 0.5, y: y - 2.5, w: w + 0.5, cor });
   }
   return { lamps, k };
 }
 function vVaralTrecho(){
   const v = new Vox(), ponto = (a, y, w, c) => v.set(a, y, w, c);
-  mouraoVaral(v, ponto, 0, 7, 22); mouraoVaral(v, ponto, 30, 7, 22);
-  fioVaral(v, ponto, 0, 30, 7, 22);
+  mouraoVaral(v, ponto, 0, 15, 44); mouraoVaral(v, ponto, 62, 15, 44);
+  fioVaral(v, ponto, 0, 62, 15, 44);
   return v;
 }
 function vFonte(){
@@ -7581,30 +7583,51 @@ function pontosDeLuz(){
 }
 // ================= varal de luzes: compra única, um varal ao longo dos caminhos da fazenda que acende à noite.
 // Os mourões ficam na beira dos caminhos (em ladrilhos): a rua de terra na beira de baixo e o caminho até a porteira
-// na beira de lá. O chão dos caminhos ganha um brilho quente (uma malha só, somada à cor do chão), sem luz de verdade
-const VARAL = { nivel: 8, preco: 2000, xp: 10, alto: 22,
+// na beira de lá. A luz que ele espalha vem do mapa de luz (MAPA_LUZ), sem luz de verdade do three.js
+const VARAL = { nivel: 8, preco: 2000, xp: 10, alto: 44,
   linhas: [
     { eixo: 'x', w: 5.92, pos: [4.1, 7, 10, 13, 15.08, 18, 21, 24, 27, 30, 33, 35.85] },
     { eixo: 'z', w: 15.08, pos: [5.92, 9.3, 12.6, 15.85] },
   ] };
-const MAT_VARAL_CHAO = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
 const MAT_VARAL_HALO = new THREE.PointsMaterial({ size: 10, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: false });
+// mapa de luz da noite: uma textura vista de cima com a luz que o varal espalha em volta. O material dos voxels (MAT)
+// soma essa luz à cor de tudo o que está perto (chão, construções, bichos, enfeites), mais fraca no alto e embaixo das coisas
+const MAPA_LUZ = { P: 4, raio: 2.3, ganho: 0.32, quente: [1, 0.8, 0.55] };
+const texVazia = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat);
+const UNI_LUZ = { mapaLuz: { value: texVazia }, forcaLuz: { value: 0 }, caixaLuz: { value: new THREE.Vector4(0, 0, W, H) } };
+MAT.onBeforeCompile = sh => {
+  Object.assign(sh.uniforms, UNI_LUZ);
+  sh.vertexShader = 'varying vec3 vMundo;\nvarying vec3 vNormMundo;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+    #ifdef USE_INSTANCING
+      vMundo = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+      vNormMundo = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * objectNormal);
+    #else
+      vMundo = (modelMatrix * vec4(transformed, 1.0)).xyz;
+      vNormMundo = normalize(mat3(modelMatrix) * objectNormal);
+    #endif`);
+  sh.fragmentShader = 'varying vec3 vMundo;\nvarying vec3 vNormMundo;\nuniform sampler2D mapaLuz;\nuniform float forcaLuz;\nuniform vec4 caixaLuz;\n' + sh.fragmentShader.replace('#include <envmap_fragment>', `if (forcaLuz > 0.0){
+      vec3 luz = texture2D(mapaLuz, (vMundo.xz - caixaLuz.xy) / caixaLuz.zw).rgb;
+      float alto = 1.0 - smoothstep(1.6, 3.6, vMundo.y), lado = clamp(0.72 + 0.28 * vNormMundo.y, 0.35, 1.0);
+      outgoingLight += diffuseColor.rgb * luz * (forcaLuz * alto * lado);
+    }
+    #include <envmap_fragment>`);
+};
 let varalMalha = null;
 function montarVaral(){
   if (varalMalha || !S.varalLuzes) return;
-  const v = new Vox(), lamps = [];
+  const R = RES_VARAL, v = new Vox(), lamps = [];
   let k = 0;
   for (const L of VARAL.linhas){
-    const w = Math.round(L.w * 16) - 1, ponto = L.eixo === 'x' ? (a, y, ww, c) => v.set(a, y, ww, c) : (a, y, ww, c) => v.set(ww, y, a, c);
-    const as = L.pos.map(t => Math.round(t * 16) - 1);
+    const w = Math.round(L.w * R) - 1, ponto = L.eixo === 'x' ? (a, y, ww, c) => v.set(a, y, ww, c) : (a, y, ww, c) => v.set(ww, y, a, c);
+    const as = L.pos.map(t => Math.round(t * R) - 1);
     as.forEach(a => mouraoVaral(v, ponto, a, w, VARAL.alto));
     for (let i = 0; i + 1 < as.length; i++){
       const r = fioVaral(v, ponto, as[i], as[i + 1], w, VARAL.alto, k); k = r.k;
-      for (const l of r.lamps){ const a = l.a / 16, ww = (w + 1) / 16; lamps.push([L.eixo === 'x' ? a : ww, l.y / 16, L.eixo === 'x' ? ww : a, l.cor]); }
+      for (const l of r.lamps){ const a = l.a / R, ww = l.w / R; lamps.push([L.eixo === 'x' ? a : ww, l.y / R, L.eixo === 'x' ? ww : a, l.cor]); }
     }
   }
-  varalMalha = malha(v.build(1 / 16, { origin: [0, 0, 0] }));
-  varalMalha.add(brilhoDe(v, 1 / 16, { origin: [0, 0, 0], ao: [1, 1, 1, 1] }, CORES_VARAL, MAT_LUZ_COR));
+  varalMalha = malha(v.build(1 / R, { origin: [0, 0, 0] }));
+  varalMalha.add(brilhoDe(v, 1 / R, { origin: [0, 0, 0], ao: [1, 1, 1, 1] }, CORES_VARAL, MAT_LUZ_COR));
   // halos: um ponto por lâmpada, numa malha só
   const hp = [], hc = [], cor = new THREE.Color();
   for (const [x, y, z, c] of lamps){ hp.push(x, y, z); cor.setHex(c); hc.push(cor.r, cor.g, cor.b); }
@@ -7612,28 +7635,25 @@ function montarVaral(){
   gh.setAttribute('position', new THREE.Float32BufferAttribute(hp, 3)); gh.setAttribute('color', new THREE.Float32BufferAttribute(hc, 3));
   MAT_VARAL_HALO.map = texturaHalo();
   const halos = new THREE.Points(gh, MAT_VARAL_HALO); halos.renderOrder = 3; varalMalha.add(halos);
-  // o chão dos caminhos perto do varal: uma grade de 1/4 de ladrilho, com a borda do caminho esfumada
-  const fios = VARAL.linhas.map(L => L.eixo === 'x' ? [L.pos[0], L.w, L.pos[L.pos.length - 1], L.w] : [L.w, L.pos[0], L.w, L.pos[L.pos.length - 1]]);
-  const dSeg = (x, z, [x0, z0, x1, z1]) => Math.hypot(x - clamp(x, Math.min(x0, x1), Math.max(x0, x1)), z - clamp(z, Math.min(z0, z1), Math.max(z0, z1)));
-  const suave = (a, b, t) => { const k = clamp((t - a) / (b - a), 0, 1); return k * k * (3 - 2 * k); };
-  const caminhos = []; for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) if (tipo(x, z) === 'caminho') caminhos.push([x, z]);
-  const forca = (x, z) => {
-    let dc = Infinity; for (const [cx, cz] of caminhos){ const d = Math.hypot(x - clamp(x, cx, cx + 1), z - clamp(z, cz, cz + 1)); if (d < dc) dc = d; }
-    const df = Math.min(...fios.map(f => dSeg(x, z, f)));
-    return (1 - suave(0, 0.3, dc)) * (1 - suave(1.3, 2, df));
-  };
-  const P = 4, x0 = 3, x1 = W, z0 = 4, z1 = 17, nx = (x1 - x0) * P + 1, nz = (z1 - z0) * P + 1, I = new Float32Array(nx * nz);
-  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) I[j * nx + i] = forca(x0 + i / P, z0 + j / P);
-  const pos = [], col = [], idx = [], quente = [1, 0.78, 0.45];
-  const vert = (i, j) => { const f = I[j * nx + i]; pos.push(x0 + i / P, 0.012, z0 + j / P); col.push(quente[0] * f, quente[1] * f, quente[2] * f); return pos.length / 3 - 1; };
-  for (let j = 0; j + 1 < nz; j++) for (let i = 0; i + 1 < nx; i++){
-    if (Math.max(I[j * nx + i], I[j * nx + i + 1], I[(j + 1) * nx + i], I[(j + 1) * nx + i + 1]) < 0.01) continue;
-    const a = vert(i, j), b = vert(i + 1, j), c = vert(i + 1, j + 1), d = vert(i, j + 1);
-    idx.push(a, d, b, b, d, c);
+  // o mapa de luz: cada lâmpada ilumina em volta, num tom quente puxado para a cor dela
+  const { P, raio, ganho, quente } = MAPA_LUZ, nx = W * P, nz = H * P, acc = new Float32Array(nx * nz * 3);
+  for (const [x, , z, c] of lamps){
+    cor.setHex(c); const cr = quente[0] * 0.65 + cor.r * 0.35, cg = quente[1] * 0.65 + cor.g * 0.35, cb = quente[2] * 0.65 + cor.b * 0.35;
+    for (let j = Math.max(0, Math.floor((z - raio) * P)); j < Math.min(nz, Math.ceil((z + raio) * P)); j++)
+      for (let i = Math.max(0, Math.floor((x - raio) * P)); i < Math.min(nx, Math.ceil((x + raio) * P)); i++){
+        const d = Math.hypot((i + 0.5) / P - x, (j + 0.5) / P - z); if (d >= raio) continue;
+        const f = (1 - d / raio) ** 2, o = (j * nx + i) * 3;
+        acc[o] += cr * f; acc[o + 1] += cg * f; acc[o + 2] += cb * f;
+      }
   }
-  const gc = new THREE.BufferGeometry();
-  gc.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); gc.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); gc.setIndex(idx);
-  const chaoLuz = new THREE.Mesh(gc, MAT_VARAL_CHAO); chaoLuz.renderOrder = 1; varalMalha.add(chaoLuz);
+  const dados = new Uint8Array(nx * nz * 4);
+  for (let q = 0; q < nx * nz; q++){
+    for (let c = 0; c < 3; c++) dados[q * 4 + c] = Math.round(255 * (1 - Math.exp(-acc[q * 3 + c] * ganho)));
+    dados[q * 4 + 3] = 255;
+  }
+  const tex = new THREE.DataTexture(dados, nx, nz, THREE.RGBAFormat);
+  tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.needsUpdate = true;
+  UNI_LUZ.mapaLuz.value = tex;
   varalMalha.castShadow = LUZ.noite < 0.5;
   scene.add(varalMalha);
 }
@@ -7684,7 +7704,7 @@ function atualizarCiclo(dt){
   const n = LUZ.noite;
   MAT_LUZ.opacity = n * 0.85; MAT_LUZ.visible = n > 0.02;
   MAT_LUZ_COR.opacity = n * 0.95; MAT_LUZ_COR.visible = n > 0.02;
-  MAT_VARAL_CHAO.opacity = n * 0.55; MAT_VARAL_CHAO.visible = n > 0.02;
+  UNI_LUZ.forcaLuz.value = varalMalha ? n * 0.8 : 0;
   MAT_VARAL_HALO.opacity = n * 0.9; MAT_VARAL_HALO.visible = n > 0.02;
   MAT_VARAL_HALO.size = 0.5 * innerHeight / cam.vista;
   if (varalMalha) varalMalha.castShadow = n < 0.5;
@@ -10331,7 +10351,7 @@ function catalogoModelos(){
     { nome: 'Automação', itens: [varios('Alimentador', [['Galinheiro', () => vAlimentador(false)], ['Curral', () => vAlimentador(true)]]), varios('Coletor', [['Ovos', () => vColetor(false)], ['Ordenhadeira', () => vColetor(true)]]), um('Esteira', vEsteira), varios('Irrigador', [['Base', vIrrigadorBase], ['Cabeça', vIrrigadorCabeca]]), um('Colmeia', vColmeia)] },
     { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Tratorzinho', vTrator), varios('Bicicleta', CICLISTAS.map((c, i) => [['Vermelha', 'Azul', 'Amarela'][i], () => vBicicleta(c[0])])), um('Teco-teco', vTecoTeco), um('Hélice', vHelice), um('Biruta', vBiruta), { nome: 'Disco voador', variantes: [['Voando', false], ['Com o raio', true]].map(([n, r]) => ({ nome: n, cria: () => { const D = montarDisco(r); D.g.userData.anima = (dt, t) => animarDisco(D, t); D.g.userData.anima(0, 0); return D.g; } })) }] },
     { nome: 'Cenário', itens: [varios('Árvore', [['Maçãs', () => vArvore(0)], ['Sem fruta', () => vArvore(1)], ['Laranjas', () => vArvore(2)]]), um('Arbusto', vArbusto), um('Redemoinho', vRedemoinho), um('Fardo de feno', vFeno), um('Flores', () => vFlores(3)), um('Capim', () => vCapim(1)), um('Cova', vCova), varios('Cerca', [['Reta', () => vCerca(3)], ['Canto', () => vCerca(5)]]), varios('Portão', [['Arco da entrada', () => vPortao(true)], ['Simples', () => vPortao(false)]]), um('Placa', vPlaca), um('Correio', vCorreio)] },
-    { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), um('Varal de luzes', vVaralTrecho), um('Chafariz', vFonte), um('Estátua do Ed', vEstatua)] },
+    { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), { nome: 'Varal de luzes', variantes: [{ nome: '', cria: () => { const v = vVaralTrecho(), m = malha(v.build(1 / RES_VARAL)); m.userData.cubos = v.m.size; return m; } }] }, um('Chafariz', vFonte), um('Estátua do Ed', vEstatua)] },
     { nome: 'Objetos', itens: [um('Chocolateria', vChocolateria), um('Oficina de borracha', vOficina), um('Mirante da mata', vMirante), varios('Fogo na mata', [0, 1, 2].map(f => ['Fase ' + (f + 1), () => vFogo(f)])), varios('Lixo na mata', [['Garrafa', () => vLixo(0)], ['Latinha', () => vLixo(1)], ['Saquinho', () => vLixo(2)]]), um('Galho caído', vGalho), um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Nano Hostel', vNanoHostel), um('Nano Metrô', vNanoMetro), varios('Nano pessoa', [0, 1, 2, 3, 4, 5].map(k => ['Nano ' + (k + 1), () => vNano(k * 7, k === 2)])), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
   ];
   grupos.push({ nome: 'Ícones', itens: Object.keys(VI).filter(k => !usados.has(k)).sort().map(k => um((PRODUTOS[k] && PRODUTOS[k].nome) || k, VI[k])) });
