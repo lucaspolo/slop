@@ -71,6 +71,8 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - À noite acendem as janelas da casa e do Nano Hostel, as lâmpadas dos postes (com halo) e aparecem estrelas no fundo. Brilho novo de janela ou lâmpada usa `brilhoDe(vox, escala, opções, [cores])`, que monta só os voxels daquela cor com o material `MAT_LUZ`.
 - As luzes de verdade da noite são sempre 4 (`LUZES_NOITE`), postas nos postes mais perto da câmera e na porta de casa. Não crie luz nova por objeto: mudar a quantidade de luzes faz o three.js recompilar os materiais.
 - A saudação na estrada segue o período do jogo, não a hora do aparelho.
+- Poste aceso não faz sombra da lua (`castShadow` desliga com a noite acima de 0,5): a sombra da cabeça caía dentro da luz do próprio poste.
+- O varal de luzes (`VARAL`, nível 8) é uma compra única da loja, na aba Enfeites, e fica em `S.varalLuzes`. Ele não se coloca por ladrilho: os mourões ficam em lugares fixos na beira dos caminhos (`VARAL.linhas`: a rua de terra e o caminho até a porteira). À noite as lâmpadas acendem (`MAT_LUZ_COR`, que mantém a cor de cada voxel), os halos são uma malha de pontos só, e o chão dos caminhos perto do varal ganha um brilho quente numa malha somada à cor do chão. Ele não usa as `LUZES_NOITE`. Caminho novo que deva ficar iluminado entra em `VARAL.linhas`.
 
 ## Mata: guardião e trilha ecológica
 

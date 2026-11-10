@@ -3680,6 +3680,33 @@ function vPoste(){
   for (const [x, z] of [[5, 5], [10, 5], [5, 10], [10, 10]]) v.box(x, 21, z, x, 24, z, 0x3a3a3e);
   return v;
 }
+// varal de luzes: mourões de madeira com um fio caído entre eles e lâmpadas coloridas de festa penduradas.
+// fioVaral desenha um vão; ponto(a, y, w) põe o voxel com a = posição ao longo do fio e w = posição de lado
+const CORES_VARAL = [0xffd84a, 0xff8fc8, 0x7ad4ff, 0x9be27a, 0xffa04a];
+function mouraoVaral(v, ponto, a, w, alto){
+  for (let y = 0; y <= alto; y++) for (const da of [0, 1]) for (const dw of [0, 1]) ponto(a + da, y, w + dw, y === alto ? 0x5e3a20 : hash(a + da, y, w + dw) < 0.5 ? 0x8a5a34 : 0x7c4f2c);
+}
+function fioVaral(v, ponto, a0, a1, w, alto, k0 = 0){
+  // a0 e a1: o primeiro voxel de cada mourão; o fio vai do topo de um ao topo do outro, caindo no meio
+  const ini = a0 + 2, fim = a1 - 1, meio = (a0 + 1 + a1) / 2, meia = (a1 - a0 - 1) / 2, caida = Math.max(2, Math.round((a1 - a0) / 10));
+  const yFio = a => Math.round(alto - 1 - caida * (1 - ((a - meio) / meia) ** 2));
+  let ant = alto - 1, k = k0;
+  for (let a = ini; a <= fim; a++){ const y = yFio(a); for (let yy = Math.min(y, ant); yy <= Math.max(y, ant); yy++) ponto(a, yy, w + 1, 0x2d2a2a); ant = y; }
+  const lamps = [];
+  for (let a = ini + 4; a <= fim - 4; a += 7){
+    const y = yFio(a), cor = CORES_VARAL[k++ % CORES_VARAL.length];
+    ponto(a, y - 1, w + 1, 0x3a3a3e);
+    for (let yy = y - 3; yy <= y - 2; yy++) for (const da of [0, 1]) for (const dw of [0, 1]) ponto(a + da - 1, yy, w + dw, cor);
+    lamps.push({ a, y: y - 2, cor });
+  }
+  return { lamps, k };
+}
+function vVaralTrecho(){
+  const v = new Vox(), ponto = (a, y, w, c) => v.set(a, y, w, c);
+  mouraoVaral(v, ponto, 0, 7, 22); mouraoVaral(v, ponto, 30, 7, 22);
+  fioVaral(v, ponto, 0, 30, 7, 22);
+  return v;
+}
 function vFonte(){
   const v = new Vox();
   for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++){ const d = Math.hypot(x - 7.5, z - 7.5); if (d <= 7.6){ v.box(x, 0, z, x, d >= 6.2 ? 3 : 1, z, d >= 6.2 ? 0xc9c2b4 : 0x5fb0e6); } }
@@ -3893,7 +3920,7 @@ const VI = {
   goiabada(){ const v = new Vox(); v.box(-4, 0, -3, 4, 4, 3, 0xb8344a); v.box(-4, 5, -3, 4, 5, 3, 0xd8506a); return v; },
   bolomel(){ const v = new Vox(); v.ell(0, 2, 0, 5, 2.5, 5, (x, y) => y >= 4 ? 0xf2b42a : 0xc98a3a); v.ell(0, 0, 0, 6, 0.6, 6, 0xfdf8ef); return v; },
   colmeia(){ return vColmeia(); }, cova(){ return vCova(); },
-  flores(){ return vCanteiroFlor(); }, banco(){ return vBanco(); }, espantalho(){ return vEspantalho(); }, poste(){ return vPoste(); }, fonte(){ return vFonte(); }, estatua(){ const v = vEstatua(); return v; },
+  flores(){ return vCanteiroFlor(); }, banco(){ return vBanco(); }, espantalho(){ return vEspantalho(); }, poste(){ return vPoste(); }, varal(){ return vVaralTrecho(); }, fonte(){ return vFonte(); }, estatua(){ const v = vEstatua(); return v; },
   laranjeira(){ return vFrutifera('laranjeira', true); }, goiabeira(){ return vFrutifera('goiabeira', true); }, mangueira(){ return vFrutifera('mangueira', true); },
   botas(){ const v = new Vox(); for (const e of vPeBota(0x46a352, 0x2c6e35).m.values()) v.set(e.x - 6, e.y, e.z, e.c); for (const e of vPeBota(0x46a352, 0x2c6e35).m.values()) v.set(e.x + 6, e.y, e.z - 2, e.c); return v; },
   carrinho(){ return vCarrinho(); },
@@ -7515,20 +7542,26 @@ const LUZ_CICLO = [
 const LUZ = { sol: 0.68, ceu: 0.58, noite: 0, solCor: new THREE.Color(), ceuCor: new THREE.Color(), chao: new THREE.Color(), ceu1: new THREE.Color(), ceu2: new THREE.Color(), dir: new THREE.Vector3(14, 26, 8) };
 // o brilho das janelas e lâmpadas: um material só, com a opacidade que a noite pede
 const MAT_LUZ = new THREE.MeshBasicMaterial({ color: 0xffd36e, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
-function brilhoDe(v, s, opt, cores){
-  const m = new THREE.Mesh(v.build(s, Object.assign({}, opt, { so: new Set(cores), jitter: 0 })), MAT_LUZ);
+// MAT_LUZ_COR: o mesmo brilho, mas cada voxel na própria cor (as lâmpadas coloridas do varal)
+const MAT_LUZ_COR = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
+function brilhoDe(v, s, opt, cores, mat = MAT_LUZ){
+  const m = new THREE.Mesh(v.build(s, Object.assign({}, opt, { so: new Set(cores), jitter: 0 })), mat);
   m.renderOrder = 2; m.userData.brilho = true;
   return m;
 }
 // o halo em volta das lâmpadas dos postes
 let texHalo = null;
-function haloLuz(){
+function texturaHalo(){
   if (!texHalo){
     const c = document.createElement('canvas'); c.width = c.height = 64;
     const g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
     r.addColorStop(0, 'rgba(255,230,160,0.9)'); r.addColorStop(0.35, 'rgba(255,214,120,0.35)'); r.addColorStop(1, 'rgba(255,200,100,0)');
     g.fillStyle = r; g.fillRect(0, 0, 64, 64); texHalo = new THREE.CanvasTexture(c);
   }
+  return texHalo;
+}
+function haloLuz(){
+  texturaHalo();
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: texHalo, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
   sp.scale.setScalar(1.3); sp.userData.halo = true; HALOS.push(sp);
   return sp;
@@ -7545,6 +7578,78 @@ function pontosDeLuz(){
   const casa = PREDIOS.find(q => q.id === 'casa');
   if (casa) pts.push([(casa.x0 + casa.x1 + 1) / 2, 1.1, casa.z1 + 1.3]);
   return pts;
+}
+// ================= varal de luzes: compra única, um varal ao longo dos caminhos da fazenda que acende à noite.
+// Os mourões ficam na beira dos caminhos (em ladrilhos): a rua de terra na beira de baixo e o caminho até a porteira
+// na beira de lá. O chão dos caminhos ganha um brilho quente (uma malha só, somada à cor do chão), sem luz de verdade
+const VARAL = { nivel: 8, preco: 2000, xp: 10, alto: 22,
+  linhas: [
+    { eixo: 'x', w: 5.92, pos: [4.1, 7, 10, 13, 15.08, 18, 21, 24, 27, 30, 33, 35.85] },
+    { eixo: 'z', w: 15.08, pos: [5.92, 9.3, 12.6, 15.85] },
+  ] };
+const MAT_VARAL_CHAO = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+const MAT_VARAL_HALO = new THREE.PointsMaterial({ size: 10, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: false });
+let varalMalha = null;
+function montarVaral(){
+  if (varalMalha || !S.varalLuzes) return;
+  const v = new Vox(), lamps = [];
+  let k = 0;
+  for (const L of VARAL.linhas){
+    const w = Math.round(L.w * 16) - 1, ponto = L.eixo === 'x' ? (a, y, ww, c) => v.set(a, y, ww, c) : (a, y, ww, c) => v.set(ww, y, a, c);
+    const as = L.pos.map(t => Math.round(t * 16) - 1);
+    as.forEach(a => mouraoVaral(v, ponto, a, w, VARAL.alto));
+    for (let i = 0; i + 1 < as.length; i++){
+      const r = fioVaral(v, ponto, as[i], as[i + 1], w, VARAL.alto, k); k = r.k;
+      for (const l of r.lamps){ const a = l.a / 16, ww = (w + 1) / 16; lamps.push([L.eixo === 'x' ? a : ww, l.y / 16, L.eixo === 'x' ? ww : a, l.cor]); }
+    }
+  }
+  varalMalha = malha(v.build(1 / 16, { origin: [0, 0, 0] }));
+  varalMalha.add(brilhoDe(v, 1 / 16, { origin: [0, 0, 0], ao: [1, 1, 1, 1] }, CORES_VARAL, MAT_LUZ_COR));
+  // halos: um ponto por lâmpada, numa malha só
+  const hp = [], hc = [], cor = new THREE.Color();
+  for (const [x, y, z, c] of lamps){ hp.push(x, y, z); cor.setHex(c); hc.push(cor.r, cor.g, cor.b); }
+  const gh = new THREE.BufferGeometry();
+  gh.setAttribute('position', new THREE.Float32BufferAttribute(hp, 3)); gh.setAttribute('color', new THREE.Float32BufferAttribute(hc, 3));
+  MAT_VARAL_HALO.map = texturaHalo();
+  const halos = new THREE.Points(gh, MAT_VARAL_HALO); halos.renderOrder = 3; varalMalha.add(halos);
+  // o chão dos caminhos perto do varal: uma grade de 1/4 de ladrilho, com a borda do caminho esfumada
+  const fios = VARAL.linhas.map(L => L.eixo === 'x' ? [L.pos[0], L.w, L.pos[L.pos.length - 1], L.w] : [L.w, L.pos[0], L.w, L.pos[L.pos.length - 1]]);
+  const dSeg = (x, z, [x0, z0, x1, z1]) => Math.hypot(x - clamp(x, Math.min(x0, x1), Math.max(x0, x1)), z - clamp(z, Math.min(z0, z1), Math.max(z0, z1)));
+  const suave = (a, b, t) => { const k = clamp((t - a) / (b - a), 0, 1); return k * k * (3 - 2 * k); };
+  const caminhos = []; for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) if (tipo(x, z) === 'caminho') caminhos.push([x, z]);
+  const forca = (x, z) => {
+    let dc = Infinity; for (const [cx, cz] of caminhos){ const d = Math.hypot(x - clamp(x, cx, cx + 1), z - clamp(z, cz, cz + 1)); if (d < dc) dc = d; }
+    const df = Math.min(...fios.map(f => dSeg(x, z, f)));
+    return (1 - suave(0, 0.3, dc)) * (1 - suave(1.3, 2, df));
+  };
+  const P = 4, x0 = 3, x1 = W, z0 = 4, z1 = 17, nx = (x1 - x0) * P + 1, nz = (z1 - z0) * P + 1, I = new Float32Array(nx * nz);
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) I[j * nx + i] = forca(x0 + i / P, z0 + j / P);
+  const pos = [], col = [], idx = [], quente = [1, 0.78, 0.45];
+  const vert = (i, j) => { const f = I[j * nx + i]; pos.push(x0 + i / P, 0.012, z0 + j / P); col.push(quente[0] * f, quente[1] * f, quente[2] * f); return pos.length / 3 - 1; };
+  for (let j = 0; j + 1 < nz; j++) for (let i = 0; i + 1 < nx; i++){
+    if (Math.max(I[j * nx + i], I[j * nx + i + 1], I[(j + 1) * nx + i], I[(j + 1) * nx + i + 1]) < 0.01) continue;
+    const a = vert(i, j), b = vert(i + 1, j), c = vert(i + 1, j + 1), d = vert(i, j + 1);
+    idx.push(a, d, b, b, d, c);
+  }
+  const gc = new THREE.BufferGeometry();
+  gc.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); gc.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); gc.setIndex(idx);
+  const chaoLuz = new THREE.Mesh(gc, MAT_VARAL_CHAO); chaoLuz.renderOrder = 1; varalMalha.add(chaoLuz);
+  varalMalha.castShadow = LUZ.noite < 0.5;
+  scene.add(varalMalha);
+}
+function comprarVaral(){
+  if (S.varalLuzes) return false;
+  if (nivel() < VARAL.nivel){ aviso(`O varal de luzes libera no nível ${VARAL.nivel}`, 'ruim'); Som.erro(); return false; }
+  if (S.dinheiro < VARAL.preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return false; }
+  gastar(VARAL.preco); S.varalLuzes = true; montarVaral();
+  for (const L of VARAL.linhas) for (const t of L.pos) for (let i = 0; i < 6; i++){
+    const x = L.eixo === 'x' ? t : L.w, z = L.eixo === 'x' ? L.w : t;
+    particula(x + rnd(-0.2, 0.2), rnd(0.4, 1.3), z + rnd(-0.2, 0.2), CORES_VARAL[i % CORES_VARAL.length], 1.1);
+  }
+  Som.moeda(); chipPulsa('chipDinheiro');
+  ganharXP(VARAL.xp, ed.g.position.clone().add(new THREE.Vector3(0, 1.2, 0)));
+  aviso('Varal de luzes nos caminhos! À noite ele acende sozinho.', 'grande', 3);
+  hud(); salvar(); return true;
 }
 let estrelasFeitas = 0;
 function desenharEstrelas(){
@@ -7578,6 +7683,11 @@ function atualizarCiclo(dt){
   // brilho das janelas, halos dos postes e luzes de verdade
   const n = LUZ.noite;
   MAT_LUZ.opacity = n * 0.85; MAT_LUZ.visible = n > 0.02;
+  MAT_LUZ_COR.opacity = n * 0.95; MAT_LUZ_COR.visible = n > 0.02;
+  MAT_VARAL_CHAO.opacity = n * 0.55; MAT_VARAL_CHAO.visible = n > 0.02;
+  MAT_VARAL_HALO.opacity = n * 0.9; MAT_VARAL_HALO.visible = n > 0.02;
+  MAT_VARAL_HALO.size = 0.5 * innerHeight / cam.vista;
+  if (varalMalha) varalMalha.castShadow = n < 0.5;
   for (const h of HALOS) h.material.opacity = n * 0.9;
   // poste aceso não faz sombra da lua: a luz dele é mais forte, e a sombra da cabeça caía dentro da própria luz
   for (const k in ENF_VIS){ const m = ENF_VIS[k]; if (m.userData.poste) m.castShadow = n < 0.5; }
@@ -8559,6 +8669,7 @@ function subiuNivel(n){
   for (const id in FABRICAS) if (FABRICAS[id].nivel === n && FABRICAS[id].preco) libs.push(FABRICAS[id].nome.toLowerCase());
   for (const tipo in FRUTIFERAS) if (FRUTIFERAS[tipo].nivel === n) libs.push(FRUTIFERAS[tipo].nome.toLowerCase());
   for (const id in ENFEITES) if (ENFEITES[id].nivel === n) libs.push(ENFEITES[id].nome.toLowerCase());
+  if (VARAL.nivel === n) libs.push('varal de luzes');
   if (n === COLMEIA.nivel) libs.push('colmeias');
   if (n === ADUBO.nivel) libs.push('adubo na loja');
   if (POMAR_BLOCOS.some(B => B.nivel === n)) libs.push('mais um terreno de pomar');
@@ -9145,6 +9256,12 @@ function abrirLoja(aba){
         <div class="botoes">${bloq || tem ? '' : `<button class="botao mini" data-coletor="${tp}" type="button"${S.dinheiro < C.preco ? ' disabled' : ''}>Comprar · ${reais(C.preco)}</button>`}</div></div>`;
     }
   } else if (abaLoja === 'enfeites'){
+    {
+      const bloq = VARAL.nivel > nivel(), tem = S.varalLuzes;
+      corpo += `<div class="cartao${bloq ? ' bloq' : ''}"><div class="cab"><img src="${icone('varal')}" alt=""><div><h4>Varal de luzes</h4><div class="info">${tem ? 'já instalado' : bloq ? `libera no nível ${VARAL.nivel}` : 'compra única'}</div></div></div>
+        <div class="info">Um varal de lâmpadas coloridas ao longo dos caminhos da fazenda. À noite ele acende e ilumina os caminhos. Dá ${VARAL.xp} xp só na compra.</div>
+        <div class="botoes">${bloq || tem ? '' : `<button class="botao mini" data-varal type="button"${S.dinheiro < VARAL.preco ? ' disabled' : ''}>Comprar · ${reais(VARAL.preco)}</button>`}</div></div>`;
+    }
     for (const id in ENFEITES){
       const E = ENFEITES[id], bloq = E.nivel > nivel(), guard = S.guardados[id] || 0, postos = S.enfeites.filter(e => e.tipo === id).length;
       corpo += `<div class="cartao${bloq ? ' bloq' : ''}"><div class="cab"><img src="${icone(id === 'canteiroFlor' ? 'flores' : id)}" alt=""><div><h4>${E.nome}</h4><div class="info">${bloq ? `libera no nível ${E.nivel}` : `${postos} na fazenda${guard ? ` · ${guard} guardado${guard > 1 ? 's' : ''}` : ''}`}</div></div></div>
@@ -9196,6 +9313,7 @@ function abrirLoja(aba){
   j.querySelectorAll('[data-coletor]').forEach(b => b.addEventListener('click', () => { comprarColetor(b.dataset.coletor); abrirLoja(); }));
   j.querySelectorAll('[data-alim]').forEach(b => b.addEventListener('click', () => { comprarAlimentador(b.dataset.alim); abrirLoja(); }));
   j.querySelectorAll('[data-enfeite]').forEach(b => b.addEventListener('click', () => { if (comprarEnfeite(b.dataset.enfeite)) ligarModoEnfeite(b.dataset.enfeite); }));
+  j.querySelectorAll('[data-varal]').forEach(b => b.addEventListener('click', () => { comprarVaral(); abrirLoja(); }));
   j.querySelectorAll('[data-pin]').forEach(b => b.addEventListener('click', () => ligarModoEnfeite(b.dataset.pin)));
   j.querySelectorAll('[data-melhoria]').forEach(b => b.addEventListener('click', () => { comprarMelhoria(b.dataset.melhoria); abrirLoja(); }));
   j.querySelectorAll('[data-irrig]').forEach(b => b.addEventListener('click', () => { comprarIrrigador(+b.dataset.irrig); abrirLoja(); }));
@@ -9355,6 +9473,7 @@ function objetivosPorNivel(){
   add(COMPOSTEIRA.nivel, 'composteira', 'Composteira pra reciclar os restinhos', COMPOSTEIRA.preco);
   for (const m of COMPOSTEIRA.melhorias) add(m.nivel, 'composteira', 'Mais ajudantes na composteira', m.preco);
   for (const k in ENFEITES) add(ENFEITES[k].nivel, k === 'canteiroFlor' ? 'flores' : k, apelido(k, ENFEITES[k].nome), ENFEITES[k].preco);
+  add(VARAL.nivel, 'varal', 'Varal de luzes nos caminhos', VARAL.preco);
   add(ARRENDAMENTO.nivel, 'moeda', 'Arrendar o terreno do matagal', ARRENDAMENTO.preco);
   for (const P of PARCELAS){
     const tem = [...new Set(P.arvores)];
@@ -10124,6 +10243,7 @@ async function iniciar(){
   if (!Array.isArray(S.enfeites)) S.enfeites = []; if (!S.guardados) S.guardados = {};
   liberarLugarComposteira();
   for (const e of S.enfeites) montarEnfeite(e);
+  montarVaral();
   if (!Array.isArray(S.pomar)) S.pomar = []; if (!Array.isArray(S.colmeias)) S.colmeias = [];
   simularPomar();
   if (!Array.isArray(S.pomarBlocos)) S.pomarBlocos = [];
@@ -10172,7 +10292,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha }, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
@@ -10211,7 +10331,7 @@ function catalogoModelos(){
     { nome: 'Automação', itens: [varios('Alimentador', [['Galinheiro', () => vAlimentador(false)], ['Curral', () => vAlimentador(true)]]), varios('Coletor', [['Ovos', () => vColetor(false)], ['Ordenhadeira', () => vColetor(true)]]), um('Esteira', vEsteira), varios('Irrigador', [['Base', vIrrigadorBase], ['Cabeça', vIrrigadorCabeca]]), um('Colmeia', vColmeia)] },
     { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Tratorzinho', vTrator), varios('Bicicleta', CICLISTAS.map((c, i) => [['Vermelha', 'Azul', 'Amarela'][i], () => vBicicleta(c[0])])), um('Teco-teco', vTecoTeco), um('Hélice', vHelice), um('Biruta', vBiruta), { nome: 'Disco voador', variantes: [['Voando', false], ['Com o raio', true]].map(([n, r]) => ({ nome: n, cria: () => { const D = montarDisco(r); D.g.userData.anima = (dt, t) => animarDisco(D, t); D.g.userData.anima(0, 0); return D.g; } })) }] },
     { nome: 'Cenário', itens: [varios('Árvore', [['Maçãs', () => vArvore(0)], ['Sem fruta', () => vArvore(1)], ['Laranjas', () => vArvore(2)]]), um('Arbusto', vArbusto), um('Redemoinho', vRedemoinho), um('Fardo de feno', vFeno), um('Flores', () => vFlores(3)), um('Capim', () => vCapim(1)), um('Cova', vCova), varios('Cerca', [['Reta', () => vCerca(3)], ['Canto', () => vCerca(5)]]), varios('Portão', [['Arco da entrada', () => vPortao(true)], ['Simples', () => vPortao(false)]]), um('Placa', vPlaca), um('Correio', vCorreio)] },
-    { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), um('Chafariz', vFonte), um('Estátua do Ed', vEstatua)] },
+    { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), um('Varal de luzes', vVaralTrecho), um('Chafariz', vFonte), um('Estátua do Ed', vEstatua)] },
     { nome: 'Objetos', itens: [um('Chocolateria', vChocolateria), um('Oficina de borracha', vOficina), um('Mirante da mata', vMirante), varios('Fogo na mata', [0, 1, 2].map(f => ['Fase ' + (f + 1), () => vFogo(f)])), varios('Lixo na mata', [['Garrafa', () => vLixo(0)], ['Latinha', () => vLixo(1)], ['Saquinho', () => vLixo(2)]]), um('Galho caído', vGalho), um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Nano Hostel', vNanoHostel), um('Nano Metrô', vNanoMetro), varios('Nano pessoa', [0, 1, 2, 3, 4, 5].map(k => ['Nano ' + (k + 1), () => vNano(k * 7, k === 2)])), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
   ];
   grupos.push({ nome: 'Ícones', itens: Object.keys(VI).filter(k => !usados.has(k)).sort().map(k => um((PRODUTOS[k] && PRODUTOS[k].nome) || k, VI[k])) });
