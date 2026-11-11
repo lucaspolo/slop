@@ -24,7 +24,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 | Milton | Irmão, metade do tamanho do Pelúcio. Pilota o PIG-MTP. Bordão: "Milton na área!" |
 | Minhoquinhas | Sócias do Ed. Moram na composteira e fazem adubo |
 | Lúcia | Nano arteira, dona do Nano Hostel. Cabelo preto com chiquinhas, vestido amarelo até o joelho. Chama o Ed de "tomada" e paga aluguel |
-| Maurinho (Mauro Lúcio) | Irmão, arquiteto e muito inteligente. Igual ao Patrinho, com o suéter branco de ursinho marrom (`MODELO_MAURINHO`). Por enquanto só no visualizador, com uma variante de óculos redondos como ideia |
+| Maurinho (Mauro Lúcio) | Irmão, arquiteto e muito inteligente. Igual ao Patrinho, com o suéter branco de ursinho marrom (`MODELO_MAURINHO`). Põe os óculos redondos só nas obras, com a prancheta na mão (`MODELO_MAURINHO_OCULOS`, `vPrancheta`). Chega no nível 31 na garupa da lambreta do Patrinho |
 | Luma | Irmã chihuahua, meiga e brincalhona. Sai pela portinha da casa, brinca com a bolinha roxa e às vezes morde o rabicó do Ed |
 
 ## Cenas (cinematics)
@@ -113,6 +113,13 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 
 - Depois de uma ação num canteiro ou bicho (plantar, arar, regar, tirar o mato, colher, alimentar), a barra amarela liga a ação repetida por 20 s: tocar em outro repete. Arrastar com ela ligada aplica a ação em cada canteiro ou bicho por onde o dedo passa (`pintarAte`); sem ela, arrastar move a câmera. Dois dedos dão zoom e também movem a câmera.
 - Plantando, a barra tem "Plantar nos N vazios · R$ X" (`plantarTodosVazios`): enche os canteiros arados e livres dos terrenos do Ed com a mesma semente, usando primeiro as da bolsa, os mais perto primeiro e até o limite de 40 tarefas na fila (`LIMITE_FILA`).
+
+## Reformas do Maurinho (em construção)
+
+- A partir do nível 31, tocando numa construção, o Ed chama o Maurinho para reformar. Cada uma tem duas reformas: a 1ª no nível 31 e a 2ª no nível 35. Só uma obra por vez, e a construção continua funcionando durante a obra.
+- Fábricas (e o terreiro) passam de 3 vagas para 4 e depois 5. O galinheiro passa de 8 galinhas para 12 e 16, e o curral de 4 vacas para 6 e 8. Casa, celeiro e poço só mudam o visual. A composteira fica de fora.
+- Preços (1ª e 2ª): moinho 9 mil e 24 mil, queijaria 15 mil e 30 mil, padaria 24 mil e 48 mil, cozinha 36 mil e 72 mil, terreiro 15 mil e 36 mil, torrador 54 mil e 108 mil, chocolateria 84 mil e 168 mil, oficina 96 mil e 192 mil, galinheiro 18 mil e 45 mil, curral 24 mil e 60 mil, casa e celeiro 30 mil e 90 mil, poço 9 mil e 24 mil.
+- A reforma é o desenho original com acréscimos (`REFORMA_1`, `vReforma(id, n)`), sem sair do lugar da construção. Durante a obra a construção ganha o andaime (`vAndaime(id)`). Os modelos estão no visualizador, no grupo "Reformas do Maurinho"; a cena, o sistema e a 2ª reforma ainda não entraram no jogo.
 
 ## Economia
 

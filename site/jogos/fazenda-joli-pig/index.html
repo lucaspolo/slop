@@ -3541,13 +3541,13 @@ function vMoinho(){
   v.box(12, 2, 14, 13, 3, 15, 0xe2cfa0); v.set(13, 4, 14, 0xd2bd8a);
   return v;
 }
-function vPas(){
-  const v = new Vox();
+function vPas(n = 0){
+  const v = new Vox(), fim = n ? 15 : 12, lona = i => n && (i >> 1) % 2 ? 0xd9483c : 0xfdf8ef;
   v.box(-1, -1, 0, 1, 1, 1, 0x7a4a2a);
   for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){
-    for (let i = 2; i <= 12; i++){
+    for (let i = 2; i <= fim; i++){
       v.set(dx * i, dy * i, 0, 0x8a5a3c);
-      if (i >= 4) for (let k = 1; k <= 3; k++) v.set(dx * i + dy * k, dy * i - dx * k, 0, (i === 4 || i === 12 || k === 3) ? 0x9c6a40 : 0xfdf8ef);
+      if (i >= 4) for (let k = 1; k <= 3; k++) v.set(dx * i + dy * k, dy * i - dx * k, 0, (i === 4 || i === fim || k === 3) ? 0x9c6a40 : lona(i));
     }
   }
   return v;
@@ -3797,6 +3797,162 @@ function vEstatua(){
   for (const e of ed.m.values()){ const g = (new THREE.Color(e.c).r + new THREE.Color(e.c).g + new THREE.Color(e.c).b) / 3; const c = new THREE.Color(0.55 + g * 0.35, 0.53 + g * 0.35, 0.5 + g * 0.33).getHex(); v.set(e.x, e.y + 10, e.z, c); }
   return v;
 }
+// ================= reformas do Maurinho: cada construção tem a 1ª reforma (nível 31) e a 2ª (nível 35).
+// A reforma é o desenho original com acréscimos, no mesmo lugar: a fazenda não tem espaço para crescer para os lados
+const MODELO_BASE = { casa: () => vCasa(true), celeiro: vCeleiro, poco: vPoco, galinheiro: vGalinheiro, curral: vAbrigo,
+  moinho: vMoinho, queijaria: vQueijaria, padaria: vPadaria, cozinha: vCozinha, terreiro: () => vTerreiro(false), torrador: vTorrador, chocolateria: vChocolateria, oficina: vOficina };
+const recolorir = (v, mapa) => { for (const e of v.m.values()) if (mapa[e.c] != null) e.c = mapa[e.c]; };
+const vasinho = (v, x, z, flor) => { v.box(x, 0, z, x + 1, 1, z + 1, 0xb5603c); v.box(x, 2, z, x + 1, 2, z + 1, (X, Y, Z) => (X + Z) % 2 ? flor : 0x4f9a3d); v.set(x + (z % 2), 3, z, flor); };
+const toldo = (v, x0, x1, y, z, cor) => {
+  for (let x = x0; x <= x1; x++){
+    const c = (x >> 1) % 2 ? cor : 0xfdf8ef;
+    v.set(x, y, z, c); v.set(x, y, z + 1, c); v.set(x, y - 1, z + 2, c);
+    if (x % 2) v.set(x, y - 2, z + 2, c);
+  }
+};
+const REFORMA_1 = {
+  // moinho: base de pedra, bandeirinha no topo (as pás maiores ficam em vPas)
+  moinho(v){
+    for (let y = 2; y <= 4; y++) for (let x = -1; x < 17; x++) for (let z = -1; z < 17; z++){
+      const d = Math.hypot(x - 7.5, z - 7.5);
+      if (d > 6.2 && d <= 7.3 && !(z > 12 && x >= 6 && x <= 9)) v.set(x, y, z, hash(x, y, z) < 0.5 ? 0xaaa59c : 0x928d84);
+    }
+    v.box(7, 31, 7, 7, 35, 7, 0x6a4428); v.box(8, 33, 7, 10, 35, 7, (x, y) => (x + y) % 2 ? 0xd9483c : 0xf2c335);
+    v.box(12, 2, 14, 13, 3, 15, 0xe2cfa0); v.box(10, 2, 15, 11, 3, 16, 0xe2cfa0); v.set(11, 4, 15, 0xd2bd8a);
+  },
+  // queijaria: toldo listrado de azul e vasinhos nos cantos
+  queijaria(v){ toldo(v, 1, 14, 7, 14, 0x4a8fc0); vasinho(v, 0, 15, 0xf28fac); vasinho(v, 14, 15, 0xf5d142); },
+  // padaria: forno a lenha do lado de fora, com a lenha empilhada
+  padaria(v){
+    v.box(15, 0, 6, 19, 2, 12, (x, y, z) => (x + z) % 3 ? 0xb9b0a3 : 0xa9a196);
+    v.ell(17, 3, 9, 2.6, 3, 3.2, (x, y, z) => (x + y + z) % 3 ? 0xb5603c : 0xa04e30, (x, y) => y >= 3);
+    v.box(16, 3, 12, 18, 4, 12, 0x2a1c14); v.set(17, 3, 12, 0xf08a2c);
+    v.box(17, 6, 8, 17, 8, 8, 0x6e4a3a);
+    for (const [y, z0] of [[0, 13], [1, 13], [0, 15]]) v.box(15, y, z0, 19, y, z0 + 1, (x) => x % 2 ? 0x8a5a36 : 0x6b4426);
+    // a lousa do cardápio na porta
+    v.box(11, 0, 16, 11, 4, 16, 0x8a5a36); v.box(13, 0, 16, 13, 4, 16, 0x8a5a36); v.box(11, 2, 17, 13, 4, 17, (x, y) => y === 3 && x === 12 ? 0xfdf8ef : 0x2f4a3a);
+  },
+  // cozinha de doces: mesinha de potes de doce na porta e bandeirinhas
+  cozinha(v){
+    v.box(11, 0, 16, 11, 1, 16, 0x8a5a36); v.box(14, 0, 16, 14, 1, 16, 0x8a5a36); v.box(11, 0, 18, 11, 1, 18, 0x8a5a36); v.box(14, 0, 18, 14, 1, 18, 0x8a5a36);
+    v.box(10, 2, 15, 15, 2, 19, 0xfdf8ef);
+    [[11, 0xd8344a], [13, 0xf08a2c], [11, 0x8f5bbf, 18], [13, 0xf5d142, 18]].forEach(([x, c, z = 16]) => { v.box(x, 3, z, x + 1, 4, z + 1, c); v.box(x, 5, z, x + 1, 5, z + 1, 0xfdf8ef); });
+    for (let x = 1; x <= 14; x++) v.set(x, 9 - (x % 3 === 1 ? 1 : 0), 15, [0xf28fac, 0xf5d142, 0x58b6f0, 0x8fd06a][x % 4]);
+    vasinho(v, 3, 16, 0xf28fac);
+  },
+  // terreiro: barraca de lona listrada num canto, com sacas de café embaixo, e o rastelo
+  terreiro(v){
+    for (const [x, z] of [[0, 0], [6, 0], [0, 6], [6, 6]]) v.box(x, 1, z, x, 7, z, 0x8a5a36);
+    for (let z = 0; z <= 6; z++) v.box(-1, 8 - (z > 3 ? 1 : 0), z, 7, 8 - (z > 3 ? 1 : 0), z, (x) => (x >> 1) % 2 ? 0x4f9a3d : 0xfdf8ef);
+    for (const [x, z] of [[1, 1], [3, 1], [1, 3], [2, 2]]) v.box(x, 1 + (x === 2 ? 2 : 0), z, x + 1, 2 + (x === 2 ? 2 : 0), z + 1, (X, Y) => Y % 2 ? 0xc8a878 : 0xb8956a);
+  },
+  // torrador: chaminé de cobre mais alta e a placa do grão de café
+  torrador(v){
+    v.box(2, 9, 3, 5, 21, 6, null);
+    for (let y = 9; y <= 23; y++) v.box(3, y, 4, 4, y, 5, y % 4 === 0 ? 0x9a5a28 : 0xc0783a);
+    v.box(2, 23, 3, 5, 23, 6, 0x9a5a28);
+    v.box(5, 9, 15, 10, 12, 15, 0xf3e3c3);
+    v.ell(7.5, 10.5, 16, 1.6, 1.3, 0.6, 0x6b3a22); v.box(7, 10, 16, 8, 11, 16, 0x6b3a22); v.set(7, 11, 17, 0x3a2216); v.set(8, 10, 17, 0x3a2216);
+    for (const [x, z] of [[1, 15], [3, 15], [2, 16]]) v.box(x, 0, z, x + 1, 1, z, 0xc8a878);
+  },
+  // chocolateria: toldo listrado de chocolate e creme, e um vaso de cacau
+  chocolateria(v){ toldo(v, 1, 14, 7, 14, 0x6a3a24); vasinho(v, 0, 15, 0xc0783a); vasinho(v, 14, 15, 0xf2c13a); },
+  // oficina: pilha de pneus na frente e um barril de látex do lado
+  oficina(v){
+    for (let k = 0; k < 3; k++) for (let x = 0; x <= 4; x++) for (let z = 14; z <= 18; z++){
+      const d = Math.hypot(x - 2, z - 16); if (d <= 2.4 && d >= 1.2) v.set(x, k, z, k % 2 ? 0x2a2a2e : 0x45454a); else if (d < 1.2 && k === 2) v.set(x, k, z, 0x9aa3ab);
+    }
+    for (let y = 0; y <= 4; y++) for (let x = 14; x <= 18; x++) for (let z = 7; z <= 11; z++){
+      const d = Math.hypot(x - 16, z - 9); if (d <= 2.3) v.set(x, y, z, y === 4 ? 0xf3ecd8 : y % 2 ? 0x3a6fa8 : 0x2f5f94);
+    }
+  },
+  // galinheiro: rampa com degraus, caixa de ninhos com ovos do lado e galo de cata-vento no telhado
+  galinheiro(v){
+    v.box(6, 3, 14, 9, 4, 15, null);
+    for (let i = 0; i <= 4; i++) v.box(6, 4 - i, 14 + i, 9, 4 - i, 14 + i, i % 2 ? 0x9a6a40 : 0xb07e4a);
+    v.box(15, 5, 3, 17, 5, 12, 0x9a6a40);
+    for (let z = 3; z <= 12; z++) for (let y = 6; y <= 8; y++) v.set(17, y, z, (z % 3 === 0) ? 0x7a5232 : (y === 6 ? 0xf0cf63 : null));
+    for (let z = 3; z <= 12; z++){ v.set(16, 6, z, 0xf0cf63); v.set(15, 6, z, 0xf0cf63); if (z % 3 === 0){ v.box(15, 6, z, 17, 8, z, 0x7a5232); } }
+    for (const z of [4, 7, 10]) v.set(17, 7, z + 1, 0xfdf8ef);
+    v.box(15, 9, 3, 17, 9, 12, 0xb8433a);
+    v.box(7, 21, 7, 7, 23, 7, 0x6a4428); v.box(6, 24, 7, 9, 25, 7, 0xd0503f); v.set(9, 26, 7, 0xd8344a); v.set(6, 26, 7, 0x2a2a2e); v.set(10, 25, 7, 0xf2c335);
+  },
+  // curral: parede de tábuas atrás, telhado novo de telha e cocho maior
+  curral(v){
+    v.box(0, 0, 0, 15, 6, 0, (x, y) => y % 2 ? 0x9c6a40 : 0x8a5a36);
+    v.box(-1, 11, -1, 16, 11, 3, (x) => x % 2 ? 0xb8433a : 0xd0503f); v.box(-1, 10, 4, 16, 10, 8, (x) => x % 2 ? 0xb8433a : 0xd0503f);
+    v.box(-1, 12, -1, 16, 12, 1, 0xa03a32);
+    v.box(8, 0, 5, 15, 2, 7, 0x9c6a40); v.box(9, 2, 5, 14, 2, 6, 0x58b6f0);
+    v.box(15, 7, 7, 15, 8, 7, 0xf2c335);
+  },
+  // casa: varanda de madeira na frente, com rede, gradil e vasos
+  casa(v){
+    v.box(2, 0, 30, 29, 1, 33, (x) => x % 2 ? 0xb07e4a : 0x9a6a40);
+    for (const x of [2, 29, 10, 21]) v.box(x, 2, 33, x, 13, 33, 0xfff7ee);
+    for (let z = 29; z <= 34; z++) v.box(1, 14 - (z > 31 ? 1 : 0), z, 30, 14 - (z > 31 ? 1 : 0), z, (x) => x % 2 ? 0xbb4436 : 0xd2513f);
+    for (let x = 3; x <= 28; x++) if (x < 12 || x > 19){ v.set(x, 4, 33, 0xfff7ee); if (x % 2) v.set(x, 3, 33, 0xfff7ee); }
+    for (let x = 22; x <= 28; x++) v.set(x, Math.round(9 - 3 * Math.sin((x - 21) / 8 * Math.PI)), 32, [0xf05d7e, 0xffd34d, 0x58b6f0][x % 3]);
+    vasinho(v, 10, 31, 0xf05d7e); vasinho(v, 20, 31, 0xffd34d);
+  },
+  // celeiro: pintura nova, beiral branco, floreiras nas janelas do lado e lampiões na porta
+  celeiro(v){
+    recolorir(v, { 0xc9483c: 0xd9533f, 0xa93a30: 0xb8402f });
+    for (const z of [5, 34]) v.box(4, 19, z, 35, 19, z, 0xfff4ea);
+    for (const z of [12, 25]){ v.box(36, 8, z, 37, 8, z + 4, 0x9a6038); for (let k = 0; k <= 4; k++) v.set(36, 9, z + k, k % 2 ? 0xf05d7e : 0xffd34d); }
+    for (const x of [10, 29]){ v.box(x, 12, 35, x, 12, 35, 0x3a3a3e); v.box(x, 10, 35, x, 11, 36, 0xffd34d); }
+    // roldana do palheiro: viga saindo por cima da porta de cima, com a corda e um fardo pendurado
+    v.box(19, 30, 34, 20, 30, 39, 0x6a4428); v.set(19, 29, 39, 0x9aa3ab);
+    v.box(19, 26, 39, 19, 28, 39, 0xe2cfa0); v.box(18, 23, 38, 21, 25, 40, (x, y, z) => (x + y) % 3 ? 0xf0cf63 : 0xd9b84a);
+    // cantos brancos mais largos
+    for (const [x, z] of [[5, 5], [34, 5], [5, 34], [34, 34], [4, 6], [35, 6], [4, 33], [35, 33]]) v.box(x, 2, z, x, 19, z, 0xfff4ea);
+  },
+  // poço: pedra nova mais clara, manivela, balde de cobre e flores em volta
+  poco(v){
+    recolorir(v, { 0xaaa59c: 0xd9d2c4, 0x928d84: 0xc4bdb0 });
+    v.box(8, 9, 3, 9, 9, 3, 0x6a4428); v.box(9, 7, 3, 9, 8, 3, 0x6a4428);
+    v.box(3, 4, 3, 4, 5, 4, 0xc0783a); v.box(3, 6, 3, 4, 6, 4, 0x9a5a28);
+    for (const [x, z, c] of [[-1, 6, 0xf05d7e], [-1, 1, 0xffd34d], [8, 7, 0x58b6f0]]){ v.set(x, 0, z, 0x4f9a3d); v.set(x, 1, z, c); }
+  },
+};
+function vReforma(id, n){
+  const v = MODELO_BASE[id]();
+  if (n >= 1) REFORMA_1[id](v);
+  return v;
+}
+// moinho com as pás (para o visualizador e o ícone)
+function vMoinhoCompleto(n = 0){
+  const v = vReforma('moinho', n);
+  for (const e of vPas(n).m.values()) v.set(e.x + 8, e.y + 19, 15, e.c);
+  return v;
+}
+// andaime da obra: tubos cinza em volta da construção, tábuas a cada andar, travas em X e uma tela laranja embaixo
+const ANDAIME = { casa: [2, 29, 4, 29, 26], celeiro: [4, 35, 5, 34, 30], poco: [0, 7, 0, 7, 13], galinheiro: [0, 15, 0, 15, 18], curral: [0, 15, 0, 7, 12],
+  moinho: [1, 14, 1, 14, 28], terreiro: [0, 23, 0, 15, 6] };
+const ANDAIME_FAB = [1, 14, 2, 13, 15];
+function vAndaime(id){
+  const [x0, x1, z0, z1, alto] = ANDAIME[id] || ANDAIME_FAB, v = new Vox(), tubo = 0x9aa3ab, tabua = 0xc99a66;
+  const X0 = x0 - 2, X1 = x1 + 2, Z0 = z0 - 2, Z1 = z1 + 2;
+  // colunas nos cantos e a cada uns 10 cubinhos, andares a cada 6, tábuas na frente e no lado direito
+  const colunas = (a, b) => { const n = Math.max(1, Math.round((b - a) / 10)), l = []; for (let i = 0; i <= n; i++) l.push(Math.round(a + (b - a) * i / n)); return l; };
+  const cx = colunas(X0, X1), cz = colunas(Z0, Z1);
+  for (const x of cx) for (const z of [Z0, Z1]) v.box(x, 0, z, x, alto, z, tubo);
+  for (const z of cz) for (const x of [X0, X1]) v.box(x, 0, z, x, alto, z, tubo);
+  for (let y = 5; y <= alto; y += 6){
+    v.box(X0, y, Z0, X1, y, Z0, tubo); v.box(X0, y, Z1, X1, y, Z1, tubo); v.box(X0, y, Z0, X0, y, Z1, tubo); v.box(X1, y, Z0, X1, y, Z1, tubo);
+    v.box(X0 + 1, y, Z1 - 1, X1 - 1, y, Z1 - 1, tabua); v.box(X1 - 1, y, Z0 + 1, X1 - 1, y, Z1 - 1, tabua);
+  }
+  // uma trava em diagonal em cada vão de baixo da frente
+  for (let i = 0; i + 1 < cx.length; i++){ const a = cx[i], b = cx[i + 1]; for (let x = a; x <= b; x++) v.set(x, Math.round((x - a) / (b - a) * 5), Z1, tubo); }
+  // faixa de obra listrada na frente, bem baixinha
+  for (let x = X0; x <= X1; x++) v.set(x, 1, Z1 + 1, (x >> 1) % 2 ? 0xf08a2c : 0xfdf8ef);
+  for (const x of cx) v.box(x, 0, Z1 + 1, x, 1, Z1 + 1, 0xf08a2c);
+  return v;
+}
+function vEmObra(id){
+  const v = id === 'moinho' ? vMoinhoCompleto(0) : MODELO_BASE[id]();
+  for (const e of vAndaime(id).m.values()) if (!v.has(e.x, e.y, e.z)) v.set(e.x, e.y, e.z, e.c);
+  return v;
+}
 function vObra(){
   const v = new Vox();
   v.box(1, 0, 1, 14, 0, 14, (x, y, z) => hash(x, 1, z) < 0.5 ? 0x9c7650 : 0x8a6644);
@@ -3865,6 +4021,14 @@ function vHangar(){
 }
 function vEnxada(){ const v = new Vox(); v.box(0, -3, 0, 0, 12, 0, 0x9c6a40); v.box(-1, 11, 1, 1, 12, 3, 0x9aa3ad); return v; }
 function vRegador(){ const v = new Vox(); v.box(-2, -6, -2, 2, -1, 2, 0x5aa86a); v.box(0, -3, 3, 0, -2, 6, 0x4c9a5c); v.set(0, -1, 6, 0x4c9a5c); v.box(-1, 0, 0, 1, 0, 0, 0x3f7f4c); v.box(0, 0, -3, 0, -1, -3, 0x3f7f4c); return v; }
+// prancheta do Maurinho: tábua com a planta azul presa no clipe
+function vPrancheta(){
+  const v = new Vox();
+  v.box(-2, -6, 0, 2, 0, 0, 0x9a6a40);
+  v.box(-1, -5, 1, 1, -1, 1, (x, y) => (y === -3 || x === 0) ? 0xfdf8ef : 0x3f7fc8);
+  v.box(-1, 0, 1, 1, 0, 1, 0x9aa3ab);
+  return v;
+}
 function vCesta(){ const v = new Vox(); v.box(-3, -7, -2, 3, -3, 2, (x, y) => y % 2 ? 0xb7864e : 0xa47442); v.box(-3, -2, 0, -3, 0, 0, 0x8a5a36); v.box(3, -2, 0, 3, 0, 0, 0x8a5a36); v.box(-3, 1, 0, 3, 1, 0, 0x8a5a36); v.box(-2, -3, -1, 2, -3, 1, COR.laranja); return v; }
 // caneca de chocolate quente (na mão do Ed, na mesinha e no ícone)
 function vCaneca(){ const v = new Vox(); v.box(-2, 0, -2, 2, 4, 2, 0xf4efe6); v.box(-2, 1, -2, 2, 1, 2, 0xd8344a); v.box(-1, 4, -1, 1, 4, 1, 0x5a3320); v.box(3, 1, 0, 3, 3, 0, 0xf4efe6); v.set(0, 5, 0, 0xfdfcf8); v.set(1, 5, 0, 0xfdfcf8); return v; }
@@ -5394,7 +5558,7 @@ class Porco {
     for (const k in this.ferramentas) this.ferramentas[k].visible = false;
     if (!n) return;
     if (!this.ferramentas[n]){
-      const fn = { enxada: vEnxada, regador: vRegador, cesta: vCesta, saco: vSaco, caneca: vCaneca, maca: VI.maca }[n];
+      const fn = { enxada: vEnxada, regador: vRegador, cesta: vCesta, saco: vSaco, caneca: vCaneca, maca: VI.maca, prancheta: vPrancheta }[n];
       if (!fn) return; // 'comer' e afins: só o gesto, sem ferramenta
       const mm = malha(geo('ferr' + n, () => fn().build(1 / 19, { origin: [0.5, 0, 0.5] })));
       this.mao.add(mm); this.ferramentas[n] = mm;
@@ -5659,7 +5823,8 @@ const modeloMoletom = altura => ({ corpo: () => vPorco(0, 0, false, 'moletom'), 
 const MODELO_HUD = { corpo: () => vPorco(COR.ed, COR.edBolso), braco: vBraco, pe: vPe, ombro: [15.5, 28.5, 1], quadril: [7, 9], mao: [-16, 1.5], altura: 0.7 };
 const MODELO_SACI = { corpo: vSaci, braco: vBracoSaci, pe: vPernaSaci, ombro: [12.5, 31, 1], quadril: [4, 14], mao: [-16, 1], altura: 1.45 };
 const MODELO_PATRINHO = { corpo: () => vPorco(0, 0, false, 'sueter'), braco: vBracoSueter, pe: vPe, ombro: [15.5, 28.5, 1], quadril: [7, 9], mao: [-16, 1.5], altura: 1.32 };
-// Maurinho (Mauro Lúcio): igual ao Patrinho, com o suéter branco de ursinho marrom; arquiteto e muito inteligente
+// Maurinho (Mauro Lúcio): igual ao Patrinho, com o suéter branco de ursinho marrom; arquiteto e muito inteligente.
+// Ele põe os óculos redondos só para cuidar das obras (MODELO_MAURINHO_OCULOS, com a prancheta na mão)
 const MODELO_MAURINHO = Object.assign({}, MODELO_PATRINHO, { corpo: () => vPorco(0, 0, false, 'sueterBranco'), braco: () => vBracoSueter(SUETER_BRANCO) });
 const MODELO_MAURINHO_OCULOS = Object.assign({}, MODELO_MAURINHO, { corpo: () => vPorco(0, 0, false, 'sueterBranco', true) });
 const CAMINHAO_MARKET = [false, [['JOLI', 1, '#2f6fb3'], ['MARKET', 0.62, '#e0408a']], '#fdf8ef'], CAMINHAO_CAFE = [true, [['JOLI', 1, '#7a4a2a'], ['COFFEE', 0.62, '#e0408a']], '#fdf3e6'];
@@ -10861,7 +11026,11 @@ function catalogoModelos(){
   const usados = new Set();
   const uso = k => { usados.add(k); return k; };
   const grupos = [
-    { nome: 'Personagens', itens: [porco('Ed', COR.ed, COR.edBolso, 'ed'), porco('Beto', COR.beto, COR.betoBolso, 'beto'), porco('Hud', COR.ed, COR.edBolso, 'hud', MODELO_HUD), porco('Pelúcio', 0, 0, 'pelucio', modeloMoletom(1.32)), porco('Milton', 0, 0, 'milton', modeloMoletom(0.7)), porco('Jaca', 0, 0, 'jaca', MODELO_JACA), porco('Patrinho', 0, 0, 'patrinho', MODELO_PATRINHO), porco('Maurinho', 0, 0, 'maurinho', MODELO_MAURINHO), porco('Maurinho de óculos (ideia)', 0, 0, 'maurinhoOculos', MODELO_MAURINHO_OCULOS), luma('Luma'), um('Lúcia', vLucia), varios('Nano do hostel', [0, 1, 2, 3, 4].map(k => [`Nano ${k + 1}`, () => vNano(k)])), um('Carolina', vCarolina), um('Lucas', vLucas), varios('Visitante da trilha', [0, 1, 2, 3, 4, 5].map(k => ['Visitante ' + (k + 1), () => vVisitante(k)])), { nome: 'Saci Pererê', variantes: [{ nome: '', cria: () => {
+    { nome: 'Personagens', itens: [porco('Ed', COR.ed, COR.edBolso, 'ed'), porco('Beto', COR.beto, COR.betoBolso, 'beto'), porco('Hud', COR.ed, COR.edBolso, 'hud', MODELO_HUD), porco('Pelúcio', 0, 0, 'pelucio', modeloMoletom(1.32)), porco('Milton', 0, 0, 'milton', modeloMoletom(0.7)), porco('Jaca', 0, 0, 'jaca', MODELO_JACA), porco('Patrinho', 0, 0, 'patrinho', MODELO_PATRINHO), porco('Maurinho', 0, 0, 'maurinho', MODELO_MAURINHO), { nome: 'Maurinho nas obras', variantes: [['Parado', false], ['Andando', true]].map(([n, anda]) => ({ nome: n, cria: () => {
+      const p = new Porco(0, 0, 'maurinhoObra', MODELO_MAURINHO_OCULOS); p.ferramenta('prancheta');
+      p.g.userData.anima = (dt, t) => { if (anda){ p.estado = 'andando'; p.pontos = [[1e6, 0]]; } p.update(dt, t); p.pos.set(0, 0); p.g.position.set(0, 0, 0); p.g.rotation.y = 0; };
+      p.g.userData.anima(0, 0); return p.g;
+    } })) }, luma('Luma'), um('Lúcia', vLucia), varios('Nano do hostel', [0, 1, 2, 3, 4].map(k => [`Nano ${k + 1}`, () => vNano(k)])), um('Carolina', vCarolina), um('Lucas', vLucas), varios('Visitante da trilha', [0, 1, 2, 3, 4, 5].map(k => ['Visitante ' + (k + 1), () => vVisitante(k)])), { nome: 'Saci Pererê', variantes: [{ nome: '', cria: () => {
       const p = new Porco(0, 0, 'saci', MODELO_SACI);
       p.pE.visible = false;
       p.g.userData.anima = (dt, t) => { p.update(dt, t); p.pos.set(0, 0); p.g.position.set(0, 0, 0); p.g.rotation.y = 0; };
@@ -10873,6 +11042,10 @@ function catalogoModelos(){
     { nome: 'Pomar', itens: Object.keys(FRUTIFERAS).map(k => { uso(k); return varios(FRUTIFERAS[k].nome, [['Com fruta', () => vFrutifera(k, true)], ['Sem fruta', () => vFrutifera(k, false)], ...produto(uso(FRUTIFERAS[k].fruta))]); }) },
     { nome: 'Floresta', itens: [varios('Matagal', [['Capim alto', () => vMatagal(0)], ['Moita', () => vMatagal(1)], ['Capim e pedra', () => vMatagal(2)], ['Tronco caído', () => vMatagal(3)]]), ...Object.keys(NATIVAS).map(k => { uso(k); return varios(NATIVAS[k].nome, [['Com fruto', () => vNativa(k, true)], ['Sem fruto', () => vNativa(k, false)], ...produto(uso(NATIVAS[k].produto))]); }), varios('Mata', [[ 'Copa redonda', () => vCopa(0)], ['Copa alta', () => vCopa(1)], ['Copa larga', () => vCopa(2)]])] },
     { nome: 'Construções', itens: [um('Casa', vCasa), um('Celeiro', vCeleiro), um('Galinheiro', vGalinheiro), um('Curral', vAbrigo), um('Poço', vPoco), um('Moinho', VI.moinho), um('Queijaria', vQueijaria), um('Padaria', vPadaria), um('Cozinha de doces', vCozinha), varios('Terreiro de café', [['Cheio', () => vTerreiro(true)], ['Vazio', () => vTerreiro(false)]]), um('Torrador', vTorrador), um('Composteira', () => vComposteira(false)), um('Hangar', vHangar), um('Obra', vObra)] },
+    { nome: 'Reformas do Maurinho', itens: [
+      ...[['casa', 'Casa'], ['celeiro', 'Celeiro'], ['poco', 'Poço'], ['galinheiro', 'Galinheiro'], ['curral', 'Curral'], ['moinho', 'Moinho'], ['queijaria', 'Queijaria'], ['padaria', 'Padaria'], ['cozinha', 'Cozinha de doces'], ['terreiro', 'Terreiro de café'], ['torrador', 'Torrador'], ['chocolateria', 'Chocolateria'], ['oficina', 'Oficina de borracha']]
+        .map(([id, nome]) => varios('Reforma: ' + nome, [['Original', () => id === 'moinho' ? vMoinhoCompleto(0) : vReforma(id, 0)], ['Em obra', () => vEmObra(id)], ['1ª reforma', () => id === 'moinho' ? vMoinhoCompleto(1) : vReforma(id, 1)]], 2)),
+      um('Prancheta', vPrancheta)] },
     { nome: 'Automação', itens: [varios('Alimentador', [['Galinheiro', () => vAlimentador(false)], ['Curral', () => vAlimentador(true)]]), varios('Coletor', [['Ovos', () => vColetor(false)], ['Ordenhadeira', () => vColetor(true)]]), um('Esteira', vEsteira), varios('Irrigador', [['Base', vIrrigadorBase], ['Cabeça', vIrrigadorCabeca]]), um('Colmeia', vColmeia)] },
     { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Tratorzinho', vTrator), varios('Bicicleta', CICLISTAS.map((c, i) => [['Vermelha', 'Azul', 'Amarela'][i], () => vBicicleta(c[0])])), um('Teco-teco', vTecoTeco), um('Hélice', vHelice), um('Biruta', vBiruta), { nome: 'Disco voador', variantes: [['Voando', false], ['Com o raio', true]].map(([n, r]) => ({ nome: n, cria: () => { const D = montarDisco(r); D.g.userData.anima = (dt, t) => animarDisco(D, t); D.g.userData.anima(0, 0); return D.g; } })) }] },
     { nome: 'Cenário', itens: [varios('Árvore', [['Maçãs', () => vArvore(0)], ['Sem fruta', () => vArvore(1)], ['Laranjas', () => vArvore(2)]]), um('Arbusto', vArbusto), um('Redemoinho', vRedemoinho), um('Fardo de feno', vFeno), um('Flores', () => vFlores(3)), um('Capim', () => vCapim(1)), um('Cova', vCova), varios('Cerca', [['Reta', () => vCerca(3)], ['Canto', () => vCerca(5)]]), varios('Portão', [['Arco da entrada', () => vPortao(true)], ['Simples', () => vPortao(false)]]), um('Placa', vPlaca), um('Correio', vCorreio)] },
