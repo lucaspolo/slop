@@ -3751,6 +3751,15 @@ function vLua(){
   v.ell(0, 9, 0, 8, 8, 3, (x, y, z) => hash(x, y, z) < 0.5 ? 0xffe59a : 0xffd970, (x, y) => Math.hypot(x - 4, y - 11) > 6.5);
   return v;
 }
+// lanterna de mão: corpo vermelho, cabeça mais larga e lente amarela na frente (+z)
+function vLanterna(){
+  const v = new Vox();
+  v.box(0, 0, 0, 2, 2, 5, (x, y, z) => hash(x, y, z) < 0.5 ? 0xd8462e : 0xc23b26);
+  v.box(1, 3, 1, 1, 3, 2, 0x3a3a3e);
+  v.box(-1, -1, 6, 3, 3, 7, 0x4a4a4e);
+  v.box(0, 0, 8, 2, 2, 8, LANTERNA.lente);
+  return v;
+}
 function vFonte(){
   const v = new Vox();
   for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++){ const d = Math.hypot(x - 7.5, z - 7.5); if (d <= 7.6){ v.box(x, 0, z, x, d >= 6.2 ? 3 : 1, z, d >= 6.2 ? 0xc9c2b4 : 0x5fb0e6); } }
@@ -7797,6 +7806,43 @@ const HALOS = [];
 const LUZES_NOITE = [];
 function criarLuzesNoite(){
   for (let i = 0; i < 4; i++){ const l = new THREE.PointLight(0xffd890, 0, 4.5, 2); scene.add(l); LUZES_NOITE.push(l); }
+  criarLanternas();
+}
+// ================= lanternas: à noite, andando pela mata, o Ed e o Hud acendem uma lanterna na mão esquerda.
+// Cada um tem uma luz de verdade (criada junto com as da noite, para a quantidade de luzes nunca mudar), um facho
+// no chão à frente e a lente acesa. Elas acendem e apagam aos poucos ao entrar e sair da mata
+const LANTERNA = { zMata: Z_MATA - 1, noite: 0.35, cor: 0xfff0c8, forca: 2.2, alcance: 5, lente: 0xfff4b0 };
+const LANTERNAS = [];
+function criarLanternas(){
+  for (const [p, tam] of [[ed, 1], [irmaoHud, 0.7]]){
+    const maoE = new THREE.Group(); maoE.position.copy(p.mao.position); p.bE.add(maoE);
+    const v = vLanterna(), modelo = malha(geo('lanterna', () => v.build(1 / 19, { origin: [1.5, 1.5, 2] })));
+    const lente = brilhoDe(v, 1 / 19, { origin: [1.5, 1.5, 2], ao: [1, 1, 1, 1] }, [LANTERNA.lente], MAT_LUZ.clone());
+    modelo.add(lente); modelo.position.set(0, -0.03, 0.04); maoE.add(modelo); modelo.visible = false;
+    const luz = new THREE.PointLight(LANTERNA.cor, 0, LANTERNA.alcance * tam, 2); scene.add(luz);
+    const comp = 2.6 * tam, larg = 1.7 * tam;
+    const mat = new THREE.MeshBasicMaterial({ map: texturaFacho(), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+    const facho = new THREE.Mesh(new THREE.PlaneGeometry(comp, larg).rotateX(-Math.PI / 2).rotateY(-Math.PI / 2).translate(0, 0.03, 0.2 + comp / 2), mat);
+    facho.renderOrder = 1; facho.visible = false; scene.add(facho);
+    LANTERNAS.push({ p, maoE, modelo, lente, luz, facho, f: 0 });
+  }
+}
+function atualizarLanternas(dt){
+  for (const L of LANTERNAS){
+    const p = L.p, quer = p.g.visible && LUZ.noite > LANTERNA.noite && p.pos.y >= LANTERNA.zMata;
+    L.f = clamp(L.f + (quer ? dt * 2.5 : -dt * 2.5), 0, 1);
+    const on = L.f > 0.02;
+    L.modelo.visible = on; L.facho.visible = on;
+    L.luz.intensity = on ? L.f * LUZ.noite * LANTERNA.forca : 0;
+    if (!on) continue;
+    // a lanterna fica apontada para a frente, um pouco para baixo, mesmo com o braço balançando
+    L.maoE.quaternion.copy(p.bE.quaternion).invert(); L.maoE.rotateX(0.35);
+    L.lente.material.opacity = L.f * 0.95;
+    const fx = Math.sin(p.ang), fz = Math.cos(p.ang), e = p.g.scale.x;
+    L.luz.position.set(p.pos.x + fx * 0.9 * e, 0.75 * e + 0.2, p.pos.y + fz * 0.9 * e);
+    L.facho.position.set(p.pos.x, 0, p.pos.y); L.facho.rotation.y = p.ang;
+    L.facho.material.opacity = L.f * Math.min(1, LUZ.noite) * 0.75;
+  }
 }
 function pontosDeLuz(){
   const pts = S.enfeites.filter(e => e.tipo === 'poste').map(e => [e.x + 0.5, 1.4, e.z + 0.5]);
@@ -8073,6 +8119,7 @@ function atualizarCiclo(dt){
   MAT_PISTA_HALO.opacity = n * 0.9; MAT_PISTA_HALO.visible = n > 0.02;
   MAT_PISTA_HALO.size = 0.3 * innerHeight / cam.vista;
   MAT_FACHO.opacity = n * 0.7; MAT_FACHO.visible = n > 0.02;
+  if (LANTERNAS.length) atualizarLanternas(dt);
   MAT_VARAL_HALO.opacity = n * 0.9; MAT_VARAL_HALO.visible = n > 0.02;
   MAT_VARAL_HALO.size = 0.5 * innerHeight / cam.vista;
   // o varal só fica de pé à noite: brota do chão no fim da tarde e volta para dentro antes de clarear, para não atrapalhar
@@ -10707,7 +10754,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha }, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, segurar: segurarFila, fator: fatorEd, escolher: escolherNanar, janelas: JANELAS_CASA, NANAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, segurar: segurarFila, fator: fatorEd, escolher: escolherNanar, janelas: JANELAS_CASA, NANAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
@@ -10747,7 +10794,7 @@ function catalogoModelos(){
     { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Tratorzinho', vTrator), varios('Bicicleta', CICLISTAS.map((c, i) => [['Vermelha', 'Azul', 'Amarela'][i], () => vBicicleta(c[0])])), um('Teco-teco', vTecoTeco), um('Hélice', vHelice), um('Biruta', vBiruta), { nome: 'Disco voador', variantes: [['Voando', false], ['Com o raio', true]].map(([n, r]) => ({ nome: n, cria: () => { const D = montarDisco(r); D.g.userData.anima = (dt, t) => animarDisco(D, t); D.g.userData.anima(0, 0); return D.g; } })) }] },
     { nome: 'Cenário', itens: [varios('Árvore', [['Maçãs', () => vArvore(0)], ['Sem fruta', () => vArvore(1)], ['Laranjas', () => vArvore(2)]]), um('Arbusto', vArbusto), um('Redemoinho', vRedemoinho), um('Fardo de feno', vFeno), um('Flores', () => vFlores(3)), um('Capim', () => vCapim(1)), um('Cova', vCova), varios('Cerca', [['Reta', () => vCerca(3)], ['Canto', () => vCerca(5)]]), varios('Portão', [['Arco da entrada', () => vPortao(true)], ['Simples', () => vPortao(false)]]), um('Placa', vPlaca), um('Correio', vCorreio)] },
     { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), { nome: 'Varal de luzes', variantes: [{ nome: '', cria: () => { const v = vVaralTrecho(), m = malha(v.build(1 / RES_VARAL)); m.userData.cubos = v.m.size; return m; } }] }, um('Chafariz', vFonte), um('Estátua do Ed', vEstatua)] },
-    { nome: 'Objetos', itens: [um('Chocolateria', vChocolateria), um('Oficina de borracha', vOficina), um('Mirante da mata', vMirante), varios('Fogo na mata', [0, 1, 2].map(f => ['Fase ' + (f + 1), () => vFogo(f)])), varios('Lixo na mata', [['Garrafa', () => vLixo(0)], ['Latinha', () => vLixo(1)], ['Saquinho', () => vLixo(2)]]), um('Galho caído', vGalho), um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Lua', vLua), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Nano Hostel', vNanoHostel), um('Nano Metrô', vNanoMetro), varios('Nano pessoa', [0, 1, 2, 3, 4, 5].map(k => ['Nano ' + (k + 1), () => vNano(k * 7, k === 2)])), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
+    { nome: 'Objetos', itens: [um('Chocolateria', vChocolateria), um('Oficina de borracha', vOficina), um('Mirante da mata', vMirante), varios('Fogo na mata', [0, 1, 2].map(f => ['Fase ' + (f + 1), () => vFogo(f)])), varios('Lixo na mata', [['Garrafa', () => vLixo(0)], ['Latinha', () => vLixo(1)], ['Saquinho', () => vLixo(2)]]), um('Galho caído', vGalho), um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Lanterna', vLanterna), um('Lua', vLua), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Nano Hostel', vNanoHostel), um('Nano Metrô', vNanoMetro), varios('Nano pessoa', [0, 1, 2, 3, 4, 5].map(k => ['Nano ' + (k + 1), () => vNano(k * 7, k === 2)])), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
   ];
   grupos.push({ nome: 'Ícones', itens: Object.keys(VI).filter(k => !usados.has(k)).sort().map(k => um((PRODUTOS[k] && PRODUTOS[k].nome) || k, VI[k])) });
   return grupos.flatMap(g => g.itens.map(it => ({ ...it, grupo: g.nome, ini: it.ini || 0, id: (g.nome + '-' + it.nome).normalize('NFD').replace(/[^\w]+/g, '-').toLowerCase() })));
