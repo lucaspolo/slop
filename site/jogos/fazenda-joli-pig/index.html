@@ -511,10 +511,12 @@ const FALAS_BOM_DIA = ['Bom dia, fazenda!', 'Uaaah! Que noite boa de sono!', 'Bo
 const FALAS_BOM_DIA_HUD = ['Bom dia, Ed! Acordei primeiro!', 'Eu acordei antes da galinha!', '(bocejo) Bom dia... já é amanhã?', 'Bora, Ed! Hoje eu ajudo em dobro!', 'Sonhei que eu era fazendeiro!', 'Bom dia! Tô cheio de energia!', 'Ed, você ronca, sabia?', 'Bom dia! Cadê o café da manhã?', 'Oba, mais um dia de trabalho!', 'Bom dia, irmão! Vamos nessa!', 'Acordei com a galinha cantando, hahaha!'];
 // o Maurinho: a cena do nível 31 (falas ditadas pelo Lucas) e as obras
 const FALAS_MAURINHO_CINE = [
-  ['maurinho', 'Maurinho', 'Oi, Ed, tudo bem? Vim ajudar a fazer upgrades nas suas construções. Quando precisar de mim, basta clicar na construção e fazer o upgrade.'],
-  ['ed', 'Ed', 'Uaaau, Maurinho! E o que esses upgrades fazem?'],
-  ['maurinho', 'Maurinho', 'Além de dar um novo visual para a construção, as fábricas vão poder produzir mais, aumentando os espaços de produção, e no curral e no galinheiro caberão mais animais de maneira confortável.'],
-  ['ed', 'Ed', 'Excelente, irmão! Vou te chamar o quanto antes!'],
+  ['maurinho', 'Maurinho', 'Ed! Passei pela fazenda e não resisti: já fiz umas plantas aqui na prancheta.'],
+  ['ed', 'Ed', 'Plantas? Eu planto é cenoura, Maurinho!'],
+  ['maurinho', 'Maurinho', 'Planta de reforma, irmão! As fábricas ganham espaço pra produzir mais, e o galinheiro e o curral ficam maiores, cabe mais bicho.'],
+  ['ed', 'Ed', 'Uaaau! E como eu te chamo?'],
+  ['maurinho', 'Maurinho', 'Toca numa construção e escolhe a reforma. Eu chego rapidinho!'],
+  ['ed', 'Ed', 'Excelente! Vou te chamar o quanto antes!'],
 ];
 const FALAS_MAURINHO_CHEGA = ['Cheguei, Ed! A planta já está prontinha.', 'Óculos no rosto, prancheta na mão. Bora reformar!', 'Medi tudo de cabeça no caminho. Vai ficar ótimo!', 'Deixa comigo, irmão! Projeto aprovado.', 'Trouxe a planta nova. Olha que beleza de traço!', 'Hora de transformar essa construção!', 'Calculei a viga, o telhado e até a sombra da tarde.', 'Primeiro a gente mede, depois a gente constrói!', 'Essa aqui vai ficar de capa de revista.', 'Pode continuar trabalhando, Ed. A obra é comigo!', 'Já sei exatamente onde vai cada tábua.'];
 const FALAS_MAURINHO_OBRA = ['Hum... um pouquinho mais pra esquerda.', 'Esquadro, nível e prumo. Tudo certo!', 'Essa viga aguenta até um trator em cima!', 'Anotado na prancheta.', 'Luz natural por aqui, ventilação por ali...', 'Quase lá, Ed! Falta só o acabamento.', 'Se a conta fechar, a obra fecha também.', 'Ficou retinho. Pode conferir!', 'Mais uma medida e pronto.', 'Arquitetura é matemática com carinho.', 'Hmm, e se a gente puser uma janelinha aqui? Brincadeira!'];
@@ -5806,6 +5808,7 @@ class Porco {
         case 'trena': { const h = Math.sin(w.t * 1.3) * 0.32; this.bD.rotation.set(-1.4 + h, 0, 0); this.bE.rotation.set(-1.4 + h, 0, 0); this.corpo.rotation.x = 0.06; break; }
         case 'martelo': this.bD.rotation.set(-2.3 + Math.max(0, Math.sin(k * 1.2)) * 1.5, 0, 0.18); this.bE.rotation.set(-1.45, 0, -0.2); this.corpo.rotation.x = 0.05; break;
         case 'prancheta': this.bD.rotation.set(-1.5, 0, 0.35); this.mao.rotation.x = -0.5; this.bE.rotation.set(-1.25 + Math.sin(k * 1.4) * 0.12, 0, -0.5); this.corpo.rotation.x = 0.1 + Math.sin(t * 1.6) * 0.03; break;
+        case 'mostrar': this.bD.rotation.set(-1.35, 0, 0.15); this.mao.rotation.x = 1.35; this.bE.rotation.set(-1.05 + Math.sin(t * 2.2) * 0.08, 0, -0.5); this.corpo.rotation.x = 0.04; break;
         case 'apontar': this.bE.rotation.set(-2.35 + Math.sin(t * 3) * 0.08, 0, -0.6); this.bD.rotation.set(-1.15, 0, 0.35); this.mao.rotation.x = -0.4; this.corpo.rotation.x = -0.08; break;
       }
       if (w.t >= w.dur){ this.estado = 'parado'; this.mao.rotation.x = 0; this.ferramenta(null); const cb = w.aoFim; this.trab = null; if (cb) cb(); }
@@ -6711,8 +6714,14 @@ const CENAS = {
       maurinho.ir([[PARADA, 16.4], PONTO_PELUCIO], () => { c.chegou = true; maurinho.olhar(...PONTO_ED); });
     },
     posicionar(){ virarNaCena(ed, ...PONTO_PELUCIO); virarNaCena(maurinho, ...PONTO_ED); },
-    fimDasFalas(c){ $('cineDialogo').hidden = true; maurinho.aceno = 1.6; c.passo = 'despedida'; c.t = 0; },
-    pular(){ maurinho.g.visible = false; maurinho.pontos = []; maurinho.aoChegar = null; maurinho.estado = 'parado'; caminhao.visible = false; },
+    // nas falas das plantas ele mostra a prancheta para o Ed (sem os óculos, que são só das obras); guarda para explicar como chamar
+    aoFalar(){
+      const M = maurinho, mostra = cine.linha <= 3;
+      if (mostra && !(M.trab && M.trab.ferr === 'mostrar')){ M.trabalhar(1e9, 'mostrar'); M.ferramenta('prancheta'); }
+      if (!mostra && M.trab) guardarPranchetaCena();
+    },
+    fimDasFalas(c){ $('cineDialogo').hidden = true; guardarPranchetaCena(); maurinho.aceno = 1.6; c.passo = 'despedida'; c.t = 0; },
+    pular(){ guardarPranchetaCena(); maurinho.g.visible = false; maurinho.pontos = []; maurinho.aoChegar = null; maurinho.estado = 'parado'; caminhao.visible = false; },
     fim(){ S.viuCineMaurinho = true; aviso('Reformas liberadas! Toque numa construção para chamar o Maurinho.', 'grande', 4.5); },
     restaurar(){ caminhaoBistro.visible = false; },
   },
@@ -7639,6 +7648,7 @@ function atualizarCine(dt){
 }
 // rosto na caixa de diálogo de quem não tem ícone próprio, e quem acena quando fala
 const ROSTO_CINE = { todos: 'festa' };
+function guardarPranchetaCena(){ const M = maurinho; M.trab = null; M.estado = 'parado'; M.mao.rotation.x = 0; M.ferramenta(null); }
 const FALANTES = { beto: () => beto, jaca: () => jaca, pelucio: () => pelucio, milton: () => milton, hud: () => irmaoHud, maurinho: () => maurinho };
 function mostrarFalaCine(i){
   const c = cine, [quem, nome, txt] = c.cena.falas[i];
