@@ -4050,6 +4050,24 @@ function vPrancheta(){
   v.box(-1, 0, 1, 1, 0, 1, 0x9aa3ab);
   return v;
 }
+// trena do Maurinho: caixa amarela na mão direita e a fita esticada até a mão esquerda (com o braço para a frente,
+// o -x da ferramenta vai de uma mão à outra)
+function vTrena(){
+  const v = new Vox();
+  v.box(0, -1, -1, 2, 1, 1, (x, y, z) => z === 0 ? 0x2a2a2e : 0xf2c230);
+  v.set(1, -1, 1, 0xd8344a);
+  for (let x = -10; x <= -1; x++) v.set(x, 0, 0, x % 2 ? 0xf7e27a : 0xe0c050);
+  v.box(-11, 0, -1, -11, 0, 0, 0x9aa3ab);
+  return v;
+}
+// martelo: cabo para cima com o braço esticado (+z da ferramenta) e a cabeça de ferro na ponta
+function vMartelo(){
+  const v = new Vox();
+  v.box(0, 0, -1, 0, 0, 6, 0x9c6a40);
+  v.box(-1, -3, 7, 1, 2, 8, (x, y) => y === 2 ? 0x6f767e : 0x9aa3ad);
+  v.box(0, 2, 6, 0, 3, 6, 0x6f767e);
+  return v;
+}
 function vCesta(){ const v = new Vox(); v.box(-3, -7, -2, 3, -3, 2, (x, y) => y % 2 ? 0xb7864e : 0xa47442); v.box(-3, -2, 0, -3, 0, 0, 0x8a5a36); v.box(3, -2, 0, 3, 0, 0, 0x8a5a36); v.box(-3, 1, 0, 3, 1, 0, 0x8a5a36); v.box(-2, -3, -1, 2, -3, 1, COR.laranja); return v; }
 // caneca de chocolate quente (na mão do Ed, na mesinha e no ícone)
 function vCaneca(){ const v = new Vox(); v.box(-2, 0, -2, 2, 4, 2, 0xf4efe6); v.box(-2, 1, -2, 2, 1, 2, 0xd8344a); v.box(-1, 4, -1, 1, 4, 1, 0x5a3320); v.box(3, 1, 0, 3, 3, 0, 0xf4efe6); v.set(0, 5, 0, 0xfdfcf8); v.set(1, 5, 0, 0xfdfcf8); return v; }
@@ -4932,9 +4950,53 @@ function pontoObra(id){
   for (const [dx, dz] of [[1, 0], [-1, 0], [1, 1], [-1, 1], [0, 1]]){ const x = px + dx, z = pz + dz; if (andavel(x, z) && rota(PARADA | 0, 15, x, z)) return [x + 0.5, z + 0.5]; }
   return [px + 0.5, pz + 0.5];
 }
-const obraVis = { estado: '', tfala: 0 };
-// olha para a obra, meio virado para a câmera, para aparecerem os óculos e a prancheta
-function maurinhoOlharObra(){ const [cx, cz] = centroPredio(PREDIO[S.obra.id]); maurinhoObra.olhar(cx, cz); maurinhoObra.angAlvo = anguloPerto(maurinhoObra.angAlvo, cam.azAlvo, 0.5); }
+const obraVis = { estado: '', tfala: 0, pontos: null, aqui: null, acao: null, espera: 0 };
+// durante a obra ele dá a volta na construção: anda até um ladrilho encostado num dos lados (sem as quinas), vira para a
+// parede mais perto e trabalha ali um pouco (OBRA_ACOES, segundos de cada ação)
+const OBRA_ACOES = { trena: [4, 6.5], martelo: [3, 5], prancheta: [3, 4.5], apontar: [2, 3] };
+function pontosObra(id){
+  const p = PREDIO[id], out = [];
+  for (let x = p.x0 - 1; x <= p.x1 + 1; x++) for (let z = p.z0 - 1; z <= p.z1 + 1; z++){
+    if ((x >= p.x0 && x <= p.x1) === (z >= p.z0 && z <= p.z1)) continue; // dentro da construção ou numa quina
+    if (andavel(x, z) && rota(PARADA | 0, 15, x, z)) out.push([x + 0.5, z + 0.5]);
+  }
+  return out.length ? out : [pontoObra(id)];
+}
+// um ponto da volta, de preferência do lado que a câmera vê e longe de onde ele está
+function sortearPontoObra(){
+  const V = obraVis, id = S.obra.id;
+  if (!V.pontos) V.pontos = pontosObra(id);
+  const [cx, cz] = centroPredio(PREDIO[id]), dx = Math.sin(cam.azAlvo), dz = Math.cos(cam.azAlvo);
+  // a partir de onde ele está, só os pontos que dá para alcançar sem desviar muito (senão ele some de vista dando a volta)
+  const M = maurinhoObra, mx = Math.floor(M.pos.x), mz = Math.floor(M.pos.y);
+  const perto = q => { const r = rota(mx, mz, Math.floor(q[0]), Math.floor(q[1])); return r && r.length <= Math.abs(Math.floor(q[0]) - mx) + Math.abs(Math.floor(q[1]) - mz) + 2; };
+  const outros = V.pontos.filter(q => !V.aqui || (Math.hypot(q[0] - V.aqui[0], q[1] - V.aqui[1]) > 0.9 && perto(q)));
+  const vistos = outros.filter(q => (q[0] - cx) * dx + (q[1] - cz) * dz > -0.3);
+  return sorteia(vistos.length && Math.random() < 0.8 ? vistos : outros.length ? outros : V.aqui ? [V.aqui] : V.pontos);
+}
+// vira para o ponto da parede mais perto dele: é para lá que ele olha enquanto trabalha
+function olharParedeObra(){ const p = PREDIO[S.obra.id], M = maurinhoObra; M.olhar(clamp(M.pos.x, p.x0, p.x1 + 1), clamp(M.pos.y, p.z0, p.z1 + 1)); }
+function acaoObra(a){
+  const M = maurinhoObra, V = obraVis;
+  if (!S.obra) return;
+  olharParedeObra();
+  V.acao = a || sorteia(Object.keys(OBRA_ACOES).filter(k => k !== V.acao));
+  M.trabalhar(rnd(...OBRA_ACOES[V.acao]), V.acao, () => { M.ferramenta('prancheta'); V.espera = rnd(0.4, 1.2); });
+  if (V.acao === 'apontar') M.ferramenta('prancheta');
+}
+function proximaAcaoObra(){
+  const M = maurinhoObra, V = obraVis;
+  if (V.aqui && Math.random() < 0.45){ acaoObra(); return; }
+  const q = sortearPontoObra();
+  V.indo = true;
+  andarAte(M, q[0], q[1], () => { V.indo = false; V.aqui = q; acaoObra(); });
+}
+// para o que estiver fazendo (cena, fim da obra) e guarda a trena ou o martelo
+function pararMaurinhoObra(){
+  const M = maurinhoObra;
+  M.pontos = []; M.aoChegar = null; M.trab = null; M.estado = 'parado'; M.mao.rotation.x = 0; M.ferramenta('prancheta');
+  Object.assign(obraVis, { indo: false, aqui: null, espera: 0 });
+}
 function reformar(id){
   const n = nivelReforma(id) + 1;
   if (S.obra || n > REFORMA.max) return;
@@ -4945,10 +5007,12 @@ function reformar(id){
   S.obra = { id, n, fim: Date.now() + REFORMA.minutos[n - 1] * 60000 };
   montarAndaime();
   // o Maurinho entra pela porteira e vai até a obra
-  const M = maurinhoObra, [ox, oz] = pontoObra(id);
-  M.g.visible = true; M.colocar(PARADA, 16.85); M.ang = M.angAlvo = Math.PI; M.estado = 'parado'; M.pontos = [];
-  obraVis.estado = 'chegando'; obraVis.tfala = rnd(20, 35);
-  M.ir([[PARADA, 15.6]], () => andarAte(M, ox, oz, () => { obraVis.estado = 'trabalhando'; maurinhoOlharObra(); falar(M, variar(FALAS_MAURINHO_CHEGA), 3); }));
+  const M = maurinhoObra;
+  pararMaurinhoObra();
+  Object.assign(obraVis, { estado: 'chegando', tfala: rnd(20, 35), pontos: null, acao: null });
+  const q = sortearPontoObra();
+  M.g.visible = true; M.colocar(PARADA, 16.85); M.ang = M.angAlvo = Math.PI;
+  M.ir([[PARADA, 15.6]], () => andarAte(M, q[0], q[1], () => { obraVis.estado = 'trabalhando'; obraVis.aqui = q; acaoObra('prancheta'); falar(M, variar(FALAS_MAURINHO_CHEGA), 3); }));
   aviso(`O Maurinho já vem reformar ${artigoPredio(id)} ${nomePredio(id)}! A obra leva ${REFORMA.minutos[n - 1]} minutos.`, 'grande', 4);
   hud(); salvar();
 }
@@ -4964,6 +5028,7 @@ function terminarObra(){
   if (ed.g.visible && !cine) setTimeout(() => { if (!cine) falar(ed, variar(FALAS_ED_REFORMA), 2.6); }, 1400);
   const M = maurinhoObra;
   if (M.g.visible){
+    pararMaurinhoObra(); obraVis.pontos = null;
     falar(M, variar(FALAS_MAURINHO_PRONTO), 3); obraVis.estado = 'saindo';
     const vai = () => obraVis.estado === 'saindo';
     setTimeout(() => { if (vai()) andarAte(M, PARADA, 15.6, () => { if (vai()) M.ir([[PARADA, 16.85]], () => { if (vai()){ M.g.visible = false; obraVis.estado = ''; } }); }); }, 3200);
@@ -4974,16 +5039,20 @@ function atualizarObra(dt, t){
   const M = maurinhoObra;
   if (!S || !M) return;
   // numa cena ele sai de vista; depois volta direto para a obra
-  if (cine){ if (M.g.visible && obraVis.estado !== 'saindo'){ M.g.visible = false; M.pontos = []; M.aoChegar = null; M.estado = 'parado'; } return; }
+  if (cine){ if (M.g.visible && obraVis.estado !== 'saindo'){ M.g.visible = false; pararMaurinhoObra(); } return; }
   if (S.obra && !M.g.visible){
-    const [x, z] = pontoObra(S.obra.id);
-    M.g.visible = true; M.colocar(x, z); M.pontos = []; M.estado = 'parado'; maurinhoOlharObra(); obraVis.estado = 'trabalhando'; obraVis.tfala = rnd(15, 30);
+    pararMaurinhoObra();
+    const q = sortearPontoObra();
+    M.g.visible = true; M.colocar(...q); obraVis.aqui = q; olharParedeObra(); M.ang = M.angAlvo;
+    obraVis.estado = 'trabalhando'; obraVis.tfala = rnd(15, 30); obraVis.espera = 0.5;
   }
   if (M.g.visible) M.update(dt, t);
   if (!S.obra) return;
-  if (obraVis.estado === 'trabalhando' && M.estado === 'parado'){
+  if (obraVis.estado === 'trabalhando'){
+    if (M.estado === 'parado' && !obraVis.indo){ obraVis.espera -= dt; if (obraVis.espera <= 0) proximaAcaoObra(); }
+    // fala de vez em quando, sem parar o que está fazendo
     obraVis.tfala -= dt;
-    if (obraVis.tfala <= 0){ obraVis.tfala = rnd(25, 45); maurinhoOlharObra(); falar(M, variar(FALAS_MAURINHO_OBRA), 3); M.pulo = 0.45; }
+    if (obraVis.tfala <= 0){ obraVis.tfala = rnd(25, 45); falar(M, variar(FALAS_MAURINHO_OBRA), 3); }
   }
   if (Date.now() >= S.obra.fim) terminarObra();
 }
@@ -5671,7 +5740,7 @@ class Porco {
     for (const k in this.ferramentas) this.ferramentas[k].visible = false;
     if (!n) return;
     if (!this.ferramentas[n]){
-      const fn = { enxada: vEnxada, regador: vRegador, cesta: vCesta, saco: vSaco, caneca: vCaneca, maca: VI.maca, prancheta: vPrancheta }[n];
+      const fn = { enxada: vEnxada, regador: vRegador, cesta: vCesta, saco: vSaco, caneca: vCaneca, maca: VI.maca, prancheta: vPrancheta, trena: vTrena, martelo: vMartelo }[n];
       if (!fn) return; // 'comer' e afins: só o gesto, sem ferramenta
       const mm = malha(geo('ferr' + n, () => fn().build(1 / 19, { origin: [0.5, 0, 0.5] })));
       this.mao.add(mm); this.ferramentas[n] = mm;
@@ -5712,6 +5781,11 @@ class Porco {
         case 'caneca': this.bD.rotation.set(-2.5, 0, 0.3); this.mao.rotation.x = 1.8; this.corpo.rotation.x = -0.05; break;
         case 'comer': case 'maca': this.bD.rotation.set(-2.4 + Math.sin(k * 0.6) * 0.1, 0, 0.3); this.corpo.rotation.x = -0.04; break;
         case 'saco': this.bD.rotation.set(-1.2 + Math.sin(k * 0.8) * 0.5, 0, 0.3); this.bE.rotation.set(-0.9, 0, -0.4); break;
+        // o Maurinho na obra: mede a parede de cima a baixo com a trena, martela, lê a planta e aponta para cima
+        case 'trena': { const h = Math.sin(w.t * 1.3) * 0.32; this.bD.rotation.set(-1.4 + h, 0, 0); this.bE.rotation.set(-1.4 + h, 0, 0); this.corpo.rotation.x = 0.06; break; }
+        case 'martelo': this.bD.rotation.set(-2.3 + Math.max(0, Math.sin(k * 1.2)) * 1.5, 0, 0.18); this.bE.rotation.set(-1.45, 0, -0.2); this.corpo.rotation.x = 0.05; break;
+        case 'prancheta': this.bD.rotation.set(-1.5, 0, 0.35); this.mao.rotation.x = -0.5; this.bE.rotation.set(-1.25 + Math.sin(k * 1.4) * 0.12, 0, -0.5); this.corpo.rotation.x = 0.1 + Math.sin(t * 1.6) * 0.03; break;
+        case 'apontar': this.bE.rotation.set(-2.35 + Math.sin(t * 3) * 0.08, 0, -0.6); this.bD.rotation.set(-1.15, 0, 0.35); this.mao.rotation.x = -0.4; this.corpo.rotation.x = -0.08; break;
       }
       if (w.t >= w.dur){ this.estado = 'parado'; this.mao.rotation.x = 0; this.ferramenta(null); const cb = w.aoFim; this.trab = null; if (cb) cb(); }
     } else this.mao.rotation.x = 0;
@@ -11173,7 +11247,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, segurar: segurarFila, fator: fatorEd, escolher: escolherNanar, janelas: JANELAS_CASA, NANAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA }, plantio: { todos: plantarTodosVazios, vazios: vaziosParaPlantar, modo: () => modo, ligar: k => ligarModo({ tipo: 'plantar', param: k }, { icone: k }) }, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, segurar: segurarFila, fator: fatorEd, escolher: escolherNanar, janelas: JANELAS_CASA, NANAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel }, plantio: { todos: plantarTodosVazios, vazios: vaziosParaPlantar, modo: () => modo, ligar: k => ligarModo({ tipo: 'plantar', param: k }, { icone: k }) }, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
@@ -11197,8 +11271,10 @@ function catalogoModelos(){
   const usados = new Set();
   const uso = k => { usados.add(k); return k; };
   const grupos = [
-    { nome: 'Personagens', itens: [porco('Ed', COR.ed, COR.edBolso, 'ed'), porco('Beto', COR.beto, COR.betoBolso, 'beto'), porco('Hud', COR.ed, COR.edBolso, 'hud', MODELO_HUD), porco('Pelúcio', 0, 0, 'pelucio', modeloMoletom(1.32)), porco('Milton', 0, 0, 'milton', modeloMoletom(0.7)), porco('Jaca', 0, 0, 'jaca', MODELO_JACA), porco('Patrinho', 0, 0, 'patrinho', MODELO_PATRINHO), porco('Maurinho', 0, 0, 'maurinho', MODELO_MAURINHO), { nome: 'Maurinho nas obras', variantes: [['Parado', false], ['Andando', true]].map(([n, anda]) => ({ nome: n, cria: () => {
+    { nome: 'Personagens', itens: [porco('Ed', COR.ed, COR.edBolso, 'ed'), porco('Beto', COR.beto, COR.betoBolso, 'beto'), porco('Hud', COR.ed, COR.edBolso, 'hud', MODELO_HUD), porco('Pelúcio', 0, 0, 'pelucio', modeloMoletom(1.32)), porco('Milton', 0, 0, 'milton', modeloMoletom(0.7)), porco('Jaca', 0, 0, 'jaca', MODELO_JACA), porco('Patrinho', 0, 0, 'patrinho', MODELO_PATRINHO), porco('Maurinho', 0, 0, 'maurinho', MODELO_MAURINHO), { nome: 'Maurinho nas obras', variantes: [['Parado', null], ['Andando', 'andar'], ['Medindo', 'trena'], ['Martelando', 'martelo'], ['Lendo a planta', 'prancheta'], ['Apontando', 'apontar']].map(([n, acao]) => ({ nome: n, cria: () => {
       const p = new Porco(0, 0, 'maurinhoObra', MODELO_MAURINHO_OCULOS); p.ferramenta('prancheta');
+      const anda = acao === 'andar';
+      if (acao && !anda){ p.trabalhar(1e9, acao); if (acao === 'apontar') p.ferramenta('prancheta'); }
       p.g.userData.anima = (dt, t) => { if (anda){ p.estado = 'andando'; p.pontos = [[1e6, 0]]; } p.update(dt, t); p.pos.set(0, 0); p.g.position.set(0, 0, 0); p.g.rotation.y = 0; };
       p.g.userData.anima(0, 0); return p.g;
     } })) }, luma('Luma'), um('Lúcia', vLucia), varios('Nano do hostel', [0, 1, 2, 3, 4].map(k => [`Nano ${k + 1}`, () => vNano(k)])), um('Carolina', vCarolina), um('Lucas', vLucas), varios('Visitante da trilha', [0, 1, 2, 3, 4, 5].map(k => ['Visitante ' + (k + 1), () => vVisitante(k)])), { nome: 'Saci Pererê', variantes: [{ nome: '', cria: () => {
@@ -11216,7 +11292,7 @@ function catalogoModelos(){
     { nome: 'Reformas do Maurinho', itens: [
       ...[['casa', 'Casa'], ['celeiro', 'Celeiro'], ['poco', 'Poço'], ['galinheiro', 'Galinheiro'], ['curral', 'Curral'], ['moinho', 'Moinho'], ['queijaria', 'Queijaria'], ['padaria', 'Padaria'], ['cozinha', 'Cozinha de doces'], ['terreiro', 'Terreiro de café'], ['torrador', 'Torrador'], ['chocolateria', 'Chocolateria'], ['oficina', 'Oficina de borracha']]
         .map(([id, nome]) => varios('Reforma: ' + nome, [['Original', () => id === 'moinho' ? vMoinhoCompleto(0) : vReforma(id, 0)], ['Em obra', () => vEmObra(id)], ['1ª reforma', () => id === 'moinho' ? vMoinhoCompleto(1) : vReforma(id, 1)]], 2)),
-      um('Prancheta', vPrancheta)] },
+      um('Prancheta', vPrancheta), um('Trena', vTrena), um('Martelo', vMartelo)] },
     { nome: 'Automação', itens: [varios('Alimentador', [['Galinheiro', () => vAlimentador(false)], ['Curral', () => vAlimentador(true)]]), varios('Coletor', [['Ovos', () => vColetor(false)], ['Ordenhadeira', () => vColetor(true)]]), um('Esteira', vEsteira), varios('Irrigador', [['Base', vIrrigadorBase], ['Cabeça', vIrrigadorCabeca]]), um('Colmeia', vColmeia)] },
     { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Tratorzinho', vTrator), varios('Bicicleta', CICLISTAS.map((c, i) => [['Vermelha', 'Azul', 'Amarela'][i], () => vBicicleta(c[0])])), um('Teco-teco', vTecoTeco), um('Hélice', vHelice), um('Biruta', vBiruta), { nome: 'Disco voador', variantes: [['Voando', false], ['Com o raio', true]].map(([n, r]) => ({ nome: n, cria: () => { const D = montarDisco(r); D.g.userData.anima = (dt, t) => animarDisco(D, t); D.g.userData.anima(0, 0); return D.g; } })) }] },
     { nome: 'Cenário', itens: [varios('Árvore', [['Maçãs', () => vArvore(0)], ['Sem fruta', () => vArvore(1)], ['Laranjas', () => vArvore(2)]]), um('Arbusto', vArbusto), um('Redemoinho', vRedemoinho), um('Fardo de feno', vFeno), um('Flores', () => vFlores(3)), um('Capim', () => vCapim(1)), um('Cova', vCova), varios('Cerca', [['Reta', () => vCerca(3)], ['Canto', () => vCerca(5)]]), varios('Portão', [['Arco da entrada', () => vPortao(true)], ['Simples', () => vPortao(false)]]), um('Placa', vPlaca), um('Correio', vCorreio)] },
