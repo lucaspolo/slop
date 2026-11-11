@@ -24,6 +24,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 | Milton | Irmão, metade do tamanho do Pelúcio. Pilota o PIG-MTP. Bordão: "Milton na área!" |
 | Minhoquinhas | Sócias do Ed. Moram na composteira e fazem adubo |
 | Lúcia | Nano arteira, dona do Nano Hostel. Cabelo preto com chiquinhas, vestido amarelo até o joelho. Chama o Ed de "tomada" e paga aluguel |
+| Maurinho (Mauro Lúcio) | Irmão, arquiteto e muito inteligente. Igual ao Patrinho, com o suéter branco de ursinho marrom (`MODELO_MAURINHO`). Por enquanto só no visualizador, com uma variante de óculos redondos como ideia |
 | Luma | Irmã chihuahua, meiga e brincalhona. Sai pela portinha da casa, brinca com a bolinha roxa e às vezes morde o rabicó do Ed |
 
 ## Cenas (cinematics)

@@ -982,12 +982,15 @@ function corpoMoletom(v, frenteZ){
 }
 // o suéter do Patrinho: tricô marrom, barra e gola mais escuras e um ursinho branco bordado no peito; abaixo da barra, sem calça
 const SUETER = { claro: 0x9a6a42, base: 0x8a5a36, escuro: 0x6b4426, urso: 0xfdf8ef, sombra: 0xd9d2c4, tinta: 0x3b2a20 };
-const panoSueter = (x, y) => ((x + 40) % 4 < 2) === ((y + 40) % 4 < 2) ? SUETER.base : SUETER.claro;
-function corpoSueter(v, frenteZ){
+// o suéter do Maurinho: o mesmo do Patrinho, branco com o ursinho marrom
+const SUETER_BRANCO = { claro: 0xfdfbf6, base: 0xf0ebe1, escuro: 0xd6cfc2, urso: 0x8a5a36, sombra: 0x6b4426, tinta: 0x2a1c14 };
+const panoSueter = (x, y, P = SUETER) => ((x + 40) % 4 < 2) === ((y + 40) % 4 < 2) ? P.base : P.claro;
+function corpoSueter(v, frenteZ, SUETER_ = SUETER){
+  const SUETER = SUETER_, pano = (x, y) => panoSueter(x, y, SUETER);
   for (const lx of [-7, 7]) for (let y = 2; y <= 8; y++) for (let x = lx - 5; x <= lx + 5; x++) for (let z = -5; z <= 5; z++)
     if ((x - lx) ** 2 + z * z <= 27) v.set(x, y, z, COR.pele);
-  v.ell(0, 15, 0, 17, 14.4, 14.3, (x, y) => y <= 9 ? COR.pele : y <= 11 ? SUETER.escuro : panoSueter(x, y), (x, y) => y >= 5);
-  v.ell(0, 26, 0, 15.8, 8.6, 13.4, (x, y) => y >= 31 ? SUETER.escuro : panoSueter(x, y));
+  v.ell(0, 15, 0, 17, 14.4, 14.3, (x, y) => y <= 9 ? COR.pele : y <= 11 ? SUETER.escuro : pano(x, y), (x, y) => y >= 5);
+  v.ell(0, 26, 0, 15.8, 8.6, 13.4, (x, y) => y >= 31 ? SUETER.escuro : pano(x, y));
   const dentro = (x, y) => (x * x / 30 + (y - 20) ** 2 / 25 <= 1) || ((x / 5.6) ** 2 + (y - 12.5) ** 2 / 9 <= 1) || ((Math.abs(x) - 5) ** 2 + (y - 25) ** 2 <= 5) || ((Math.abs(x) - 6) ** 2 + (y - 13.5) ** 2 / 2.5 <= 2.2);
   for (let x = -9; x <= 9; x++) for (let y = 9; y <= 28; y++){
     if (!dentro(x, y)) continue;
@@ -1007,13 +1010,14 @@ function vBracoMoletom(){
   for (let y = -19; y <= -15; y++) for (let z = -5; z <= 5; z++) v.set(0, y, z, null);
   return v;
 }
-function vPorco(cor, bolso, soCabeca, roupa){
+function vPorco(cor, bolso, soCabeca, roupa, oculos){
   const v = new Vox();
   const tom = (c, k) => new THREE.Color(c).multiplyScalar(k).getHex();
   const costura = tom(cor, 0.84), barra = tom(cor, 0.9), botao = 0xfff3cf, borda = tom(bolso, 0.9);
   const frenteZ = (x, y) => { for (let z = 80; z >= -80; z--) if (v.has(x, y, z)) return z; return null; };
   if (!soCabeca && roupa === 'moletom') corpoMoletom(v, frenteZ);
   else if (!soCabeca && roupa === 'sueter') corpoSueter(v, frenteZ);
+  else if (!soCabeca && roupa === 'sueterBranco') corpoSueter(v, frenteZ, SUETER_BRANCO);
   else if (!soCabeca){
     for (const lx of [-7, 7]) for (let y = 2; y <= 8; y++) for (let x = lx - 5; x <= lx + 5; x++) for (let z = -5; z <= 5; z++)
       if ((x - lx) ** 2 + z * z <= 27) v.set(x, y, z, y <= 3 ? barra : cor);
@@ -1057,6 +1061,21 @@ function vPorco(cor, bolso, soCabeca, roupa){
       const z = frenteZ(ex + dx, oy + dy); v.set(ex + dx, oy + dy, z + 1, COR.olho);
     }
     const hz = frenteZ(ex + 1, oy + 1); v.set(ex + 1, oy + 1, hz, 0xffffff);
+  }
+  // óculos redondos (ideia para o Maurinho): aro em volta de cada olho, ponte no meio e as hastes indo para os lados
+  if (oculos){
+    const aro = 0x3b2a20;
+    for (const lado of [-1, 1]){
+      const ex = lado * 8;
+      for (let dx = -5; dx <= 5; dx++) for (let dy = -5; dy <= 5; dy++){
+        const d = Math.sqrt(dx * dx / 13 + dy * dy / 15);
+        if (Math.abs(d - 1) > 0.2) continue;
+        // só na cabeça: onde o focinho fica na frente (z alto), o aro não entra, senão sobra pontinho solto no focinho
+        const z = frenteZ(ex + dx, oy + dy); if (z != null && z < 19) v.set(ex + dx, oy + dy, z + 1, aro);
+      }
+      for (let x = 12; x <= 14; x++){ const z = frenteZ(lado * x, oy + 1); if (z != null) v.set(lado * x, oy + 1, z + 1, aro); }
+    }
+    for (let x = -4; x <= 4; x++){ const z = frenteZ(x, oy + 1); if (z != null) v.set(x, oy + 1, z + 1, aro); }
   }
   // sorriso de ponta a ponta
   let ya = null;
@@ -1177,9 +1196,9 @@ function vPernaSaci(){
   v.ell(0, -13, 3, 4.2, 2.4, 6.4, SACI.pele, (x, y) => y >= -14);
   return v;
 }
-function vBracoSueter(){
+function vBracoSueter(P = SUETER){
   const v = new Vox();
-  v.ell(0, -7, 0, 5.2, 8.6, 5.2, (x, y) => y <= -13 ? SUETER.escuro : panoSueter(x, y));
+  v.ell(0, -7, 0, 5.2, 8.6, 5.2, (x, y) => y <= -13 ? P.escuro : panoSueter(x, y, P));
   v.ell(0, -16, 0.8, 3.6, 3, 3.6, COR.focinho, (x, y) => y <= -14);
   for (let y = -19; y <= -15; y++) for (let z = -5; z <= 5; z++) v.set(0, y, z, null);
   return v;
@@ -5640,6 +5659,9 @@ const modeloMoletom = altura => ({ corpo: () => vPorco(0, 0, false, 'moletom'), 
 const MODELO_HUD = { corpo: () => vPorco(COR.ed, COR.edBolso), braco: vBraco, pe: vPe, ombro: [15.5, 28.5, 1], quadril: [7, 9], mao: [-16, 1.5], altura: 0.7 };
 const MODELO_SACI = { corpo: vSaci, braco: vBracoSaci, pe: vPernaSaci, ombro: [12.5, 31, 1], quadril: [4, 14], mao: [-16, 1], altura: 1.45 };
 const MODELO_PATRINHO = { corpo: () => vPorco(0, 0, false, 'sueter'), braco: vBracoSueter, pe: vPe, ombro: [15.5, 28.5, 1], quadril: [7, 9], mao: [-16, 1.5], altura: 1.32 };
+// Maurinho (Mauro Lúcio): igual ao Patrinho, com o suéter branco de ursinho marrom; arquiteto e muito inteligente
+const MODELO_MAURINHO = Object.assign({}, MODELO_PATRINHO, { corpo: () => vPorco(0, 0, false, 'sueterBranco'), braco: () => vBracoSueter(SUETER_BRANCO) });
+const MODELO_MAURINHO_OCULOS = Object.assign({}, MODELO_MAURINHO, { corpo: () => vPorco(0, 0, false, 'sueterBranco', true) });
 const CAMINHAO_MARKET = [false, [['JOLI', 1, '#2f6fb3'], ['MARKET', 0.62, '#e0408a']], '#fdf8ef'], CAMINHAO_CAFE = [true, [['JOLI', 1, '#7a4a2a'], ['COFFEE', 0.62, '#e0408a']], '#fdf3e6'];
 function construirPersonagens(){
   ed = new Porco(COR.ed, COR.edBolso, 'ed'); ed.colocar(6.5, 5.5); ed.ang = ed.angAlvo = 0.6; scene.add(ed.g);
@@ -10839,7 +10861,7 @@ function catalogoModelos(){
   const usados = new Set();
   const uso = k => { usados.add(k); return k; };
   const grupos = [
-    { nome: 'Personagens', itens: [porco('Ed', COR.ed, COR.edBolso, 'ed'), porco('Beto', COR.beto, COR.betoBolso, 'beto'), porco('Hud', COR.ed, COR.edBolso, 'hud', MODELO_HUD), porco('Pelúcio', 0, 0, 'pelucio', modeloMoletom(1.32)), porco('Milton', 0, 0, 'milton', modeloMoletom(0.7)), porco('Jaca', 0, 0, 'jaca', MODELO_JACA), porco('Patrinho', 0, 0, 'patrinho', MODELO_PATRINHO), luma('Luma'), um('Lúcia', vLucia), varios('Nano do hostel', [0, 1, 2, 3, 4].map(k => [`Nano ${k + 1}`, () => vNano(k)])), um('Carolina', vCarolina), um('Lucas', vLucas), varios('Visitante da trilha', [0, 1, 2, 3, 4, 5].map(k => ['Visitante ' + (k + 1), () => vVisitante(k)])), { nome: 'Saci Pererê', variantes: [{ nome: '', cria: () => {
+    { nome: 'Personagens', itens: [porco('Ed', COR.ed, COR.edBolso, 'ed'), porco('Beto', COR.beto, COR.betoBolso, 'beto'), porco('Hud', COR.ed, COR.edBolso, 'hud', MODELO_HUD), porco('Pelúcio', 0, 0, 'pelucio', modeloMoletom(1.32)), porco('Milton', 0, 0, 'milton', modeloMoletom(0.7)), porco('Jaca', 0, 0, 'jaca', MODELO_JACA), porco('Patrinho', 0, 0, 'patrinho', MODELO_PATRINHO), porco('Maurinho', 0, 0, 'maurinho', MODELO_MAURINHO), porco('Maurinho de óculos (ideia)', 0, 0, 'maurinhoOculos', MODELO_MAURINHO_OCULOS), luma('Luma'), um('Lúcia', vLucia), varios('Nano do hostel', [0, 1, 2, 3, 4].map(k => [`Nano ${k + 1}`, () => vNano(k)])), um('Carolina', vCarolina), um('Lucas', vLucas), varios('Visitante da trilha', [0, 1, 2, 3, 4, 5].map(k => ['Visitante ' + (k + 1), () => vVisitante(k)])), { nome: 'Saci Pererê', variantes: [{ nome: '', cria: () => {
       const p = new Porco(0, 0, 'saci', MODELO_SACI);
       p.pE.visible = false;
       p.g.userData.anima = (dt, t) => { p.update(dt, t); p.pos.set(0, 0); p.g.position.set(0, 0, 0); p.g.rotation.y = 0; };
