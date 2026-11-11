@@ -98,6 +98,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - Eventos de enfeite (Luma, disco voador, bichos da mata, nanos do Nano Hostel, visitantes da trilha) não mexem no save. Os tempos ficam só na memória e recomeçam ao abrir o jogo.
 - Eles não começam com cena ou janela aberta, e somem quando uma cena começa.
 - A abdução é a exceção: ela tira uma vaca do save, e o jogador compra outra.
+- Frequência dos eventos de surpresa (em tempo de jogo aberto): o disco voador passa a cada 6 a 12 min (o primeiro entre 3 e 6 min) e, com vaca no curral, tenta a abdução em 60% das passagens (`DISCO_JOGO`); o redemoinho do Saci vem entre 4 e 9 min depois de abrir e depois a cada 8 a 16 min (`REDEMOINHO`); o cafezinho, a cada 6 a 12 min (`sorteioCafezinho`). Como são cenas, a abdução e o cafezinho só acontecem se o Ed estiver parado, sem tarefa, naquela hora.
 - Saves antigos precisam continuar abrindo. Flag nova de cena começa indefinida e a cena aparece na próxima vez que o jogador abrir o jogo.
 
 ## Modelos
