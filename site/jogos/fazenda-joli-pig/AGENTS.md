@@ -47,12 +47,13 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 | Sócias da terra | nível 16 |
 | Amigos da mata | nível 20 |
 | Festa na fazenda | nível 25 |
+| Hora de nanar | toda noite, na metade da noite (com o Hud se ele estiver ajudando, senão com a Luma) |
 | Férias no espaço | às vezes, quando o disco voador passa e tem vaca no curral; sempre disponível na janela Cenas |
 | Um cafezinho | de vez em quando a partir do nível 3, ou pela opção "Tomar um lanchinho" da casa |
 
 ## Música
 
-- Cada cena tem um tema em `TEMAS`, tocado pelo objeto `Musica`. A cena declara `musica: '<tema>'`. Momentos especiais tocam uma vinheta curta de `VINHETAS`, ou trocam de tema no meio, como a mata, que vira batucada quando os bichos chegam.
+- Cada cena tem um tema em `TEMAS`, tocado pelo objeto `Musica`. A cena declara `musica: '<tema>'`. Momentos especiais tocam uma vinheta curta de `VINHETAS`, ou trocam de tema no meio, como a mata, que vira batucada quando os bichos chegam. A hora de nanar toca uma canção de ninar (`ninar`) e, de manhã, a vinheta `bomdia` depois do canto da galinha (`Som.galo`).
 - As melodias são originais, em estilo midi (osciladores). Não reproduza música de terceiros, nem "uma versão" dela.
 - Cada tema tem `ganho` para ficar com o mesmo volume médio dos outros, abaixo dos efeitos sonoros. Ao criar um tema, meça o volume e ajuste.
 - A música baixa com a caixa de fala aberta, some aos poucos ao terminar ou pular e respeita o botão de som dos Ajustes.
@@ -61,17 +62,23 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 
 - Toda situação que se repete (visitas, cafezinho, Ed tocado, saudação na estrada, Saci, disco, trufa...) tem uma lista com as falas originais primeiro e pelo menos mais 10 variações no mesmo tom e intenção.
 - Sorteie com `variar(lista)`, que não repete a última fala da mesma lista. Para listas montadas na hora, passe uma chave fixa: `variar(D.conversa(of), D.conversa)`.
-- Fala que o Lucas ditou fica na lista, como "AOOOA! Um etzinho!" e "Eita, a vaquinha foi passar férias no espaço!".
+- Fala que o Lucas ditou fica na lista, como "AOOOA! Um etzinho!" e "Eita, a vaquinha foi passar férias no espaço!" e "Já está noite, hora de ir nanar!" (que é sempre a fala da primeira noite).
 
 ## Dia, tarde e noite
 
-- O jogo tem um relógio próprio, `S.relogio`, de 0 a 1, que dá uma volta a cada 30 minutos de jogo aberto e fica no save. Ele não anda com o jogo fechado.
+- O jogo tem um relógio próprio, `S.relogio`, de 0 a 1, que dá uma volta a cada 30 minutos de jogo aberto e fica no save. Ele não anda com o jogo fechado. `S.dia` conta as voltas.
+- O relógio não anda igual o tempo todo: a tarde anda a 2/3 (`NANAR.tarde`), e o resto da noite passa acelerado no sono. Fica dia 12 min, tarde 13,5 min e noite 4,5 min até a hora de nanar.
 - Períodos em `PERIODOS`: dia de 0 a 0,4 (com o amanhecer no começo), tarde de 0,4 a 0,7 (com o pôr do sol no fim) e noite de 0,7 a 1. Use `periodo()` para saber em qual está, inclusive para os eventos de cada período.
 - A luz segue os quadros-chave de `LUZ_CICLO`: força e cor do sol e do céu, degradê do fundo (no dia, o céu da estação) e o quanto as luzes da noite acendem. A chuva só escurece a partir dessa luz.
 - À noite acendem as janelas da casa e do Nano Hostel, as lâmpadas dos postes (com halo) e aparecem estrelas no fundo. Brilho novo de janela ou lâmpada usa `brilhoDe(vox, escala, opções, [cores])`, que monta só os voxels daquela cor com o material `MAT_LUZ`.
 - As luzes de verdade da noite são sempre 4 (`LUZES_NOITE`), postas nos postes mais perto da câmera e na porta de casa. Não crie luz nova por objeto: mudar a quantidade de luzes faz o three.js recompilar os materiais.
 - A saudação na estrada segue o período do jogo, não a hora do aparelho.
-- O chip da hora mostra o período, uma barra que enche conforme ele passa e quanto falta para o próximo (em minutos, e em segundos no último minuto).
+- Hora de nanar (`NANAR`): na metade da noite (0,85) o Ed termina a tarefa que está fazendo, a fila fica guardada (`segurarFila`) e começa a cena. O Ed vai até a frente da casa com o Hud (se ele estiver ajudando) ou com a Luma, que sai pela portinha. Na última fala da noite aparecem os botões "Ir nanar" e "Só mais um pouquinho".
+  - Ir nanar: entram em casa, as janelas apagam uma por uma (`JANELAS_CASA`, uma malha por janela), saem Zzz e a noite corre em 12 s até o amanhecer (0,03). A galinha canta e eles saem para o bom dia. O Ed acorda descansado (`S.descansado`): anda e trabalha 20% mais rápido até a tarde. A mesada do Hud, os pedidos e a maçã não contam o tempo do sono (`pausarRelogios`).
+  - Só mais um pouquinho: o Ed fica com sono (`S.sonolento`) até dormir: 15% mais lento e bocejando. Ele vai dormir sozinho, sem escolha, quando fica 6 s parado sem nada para fazer ou perto do fim da noite (0,97), e não acorda descansado.
+  - Pular a cena vale como dormir. Rever na janela Cenas não muda relógio, dia nem descanso.
+  - Durante o sono, por ser cena, não chegam visitas e os prazos da mata não correm. A cena só começa 20 s depois de abrir o jogo.
+- O chip da hora mostra o período, uma barra que enche conforme ele passa e quanto falta para o próximo (em minutos, e em segundos no último minuto). À noite a conta vai até a hora de nanar, e no sono aparece Zzz.
 - Poste aceso não faz sombra da lua (`castShadow` desliga com a noite acima de 0,5): a sombra da cabeça caía dentro da luz do próprio poste.
 - O varal de luzes (`VARAL`, nível 8) é uma compra única da loja, na aba Enfeites, e fica em `S.varalLuzes`. Ele não se coloca por ladrilho: os mourões ficam em lugares fixos na beira dos caminhos (`VARAL.linhas`: a rua de terra e o caminho até a porteira). O modelo tem o dobro da resolução (`RES_VARAL`, 32 voxels por ladrilho) para o mourão e o fio ficarem finos. À noite as lâmpadas acendem (`MAT_LUZ_COR`, que mantém a cor de cada voxel) e os halos são uma malha de pontos só. A luz que ele espalha não usa as `LUZES_NOITE`: vem de um mapa de luz (`MAPA_LUZ`, uma textura vista de cima) que o `MAT` lê no shader (`onBeforeCompile`), então chão, construções, bichos e enfeites por perto ficam iluminados, mais fraco no alto e embaixo das coisas. Objeto que não usa o `MAT` não recebe essa luz. Caminho novo que deva ficar iluminado entra em `VARAL.linhas`. O varal só fica de pé à noite, para não atrapalhar o jogador: ao anoitecer ele brota do chão (cresce em altura conforme `LUZ.noite` sobe até 0,3) e ao amanhecer se recolhe; de dia fica escondido.
 - O mapa de luz (`montarMapaLuz`) junta as fontes da pista (`fontesPista`, sempre) e do varal (`fontesVaral`, depois da compra), cada uma com cor, raio e peso. Ele cobre a fazenda e a pista (de `Z_PISTA` até `H`). Luz fixa nova entra como mais uma lista de fontes.
