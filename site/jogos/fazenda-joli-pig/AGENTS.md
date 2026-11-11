@@ -80,7 +80,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
   - Só mais um pouquinho: o Ed fica com sono (`S.sonolento`) até dormir: 15% mais lento e bocejando. Ele vai dormir sozinho, sem escolha, quando fica 6 s parado sem nada para fazer ou perto do fim da noite (0,97), e não acorda descansado.
   - Pular a cena vale como dormir. Rever na janela Cenas não muda relógio, dia nem descanso.
   - Durante o sono, por ser cena, não chegam visitas e os prazos da mata não correm. A cena só começa 20 s depois de abrir o jogo.
-- O chip da hora mostra o período, uma barra que enche conforme ele passa e quanto falta para o próximo (em minutos, e em segundos no último minuto). À noite a conta vai até a hora de nanar, e no sono aparece Zzz.
+- Na barra de cima, a hora é um anel com o ícone do período que enche conforme ele passa, com a estação de selo e ao lado quanto falta para o próximo (em minutos, e em segundos no último minuto). À tarde e à noite o pedaço ganha a cor do período, e com chuva aparece uma gotinha. À noite a conta vai até a hora de nanar, e no sono aparece Zzz. Tocar nele abre a janela da estação.
 - Poste aceso não faz sombra da lua (`castShadow` desliga com a noite acima de 0,5): a sombra da cabeça caía dentro da luz do próprio poste.
 - O varal de luzes (`VARAL`, nível 8) é uma compra única da loja, na aba Enfeites, e fica em `S.varalLuzes`. Ele não se coloca por ladrilho: os mourões ficam em lugares fixos na beira dos caminhos (`VARAL.linhas`: a rua de terra e o caminho até a porteira). O modelo tem o dobro da resolução (`RES_VARAL`, 32 voxels por ladrilho) para o mourão e o fio ficarem finos. À noite as lâmpadas acendem (`MAT_LUZ_COR`, que mantém a cor de cada voxel) e os halos são uma malha de pontos só. A luz que ele espalha não usa as `LUZES_NOITE`: vem de um mapa de luz (`MAPA_LUZ`, uma textura vista de cima) que o `MAT` lê no shader (`onBeforeCompile`), então chão, construções, bichos e enfeites por perto ficam iluminados, mais fraco no alto e embaixo das coisas. Objeto que não usa o `MAT` não recebe essa luz. Caminho novo que deva ficar iluminado entra em `VARAL.linhas`. O varal só fica de pé à noite, para não atrapalhar o jogador: ele brota do chão no fim da tarde (0,63 a 0,7) e se recolhe no fim da noite (0,97 a 1), antes de o Ed acordar; de dia fica escondido. A altura segue o relógio, não `LUZ.noite`, que ainda tem um restinho de noite quando o Ed acorda.
 - O mapa de luz (`montarMapaLuz`) junta as fontes da pista (`fontesPista`, sempre) e do varal (`fontesVaral`, depois da compra), cada uma com cor, raio e peso. Ele cobre a fazenda e a pista (de `Z_PISTA` até `H`). Luz fixa nova entra como mais uma lista de fontes.
@@ -110,6 +110,12 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - O Nano Hostel fica atrás do celeiro, encostado na parede de trás (z 0,625). Ele só pode aparecer quando o mapa é girado, nunca na câmera de sempre.
 - Os créditos (Ajustes, Créditos) têm os retratos em voxel da Carolina Torrigo e do Lucas Polo, feitos a partir de fotos.
 
+## Interface
+
+- O HUD de cima é uma barra só (`.hud-topo`): nível com a barrinha de xp, dinheiro (sem o "R$", a moeda já diz), ração, adubo (só quando há algum) e a hora com a estação. Cada pedaço é um `.seg`, separados por `.sep`, e `chipPulsa` anima o pedaço.
+- No celular a barra ocupa a largura toda. Quando os números não cabem, `ajustarBarra` aperta em dois passos: `aperto1` tira as réguas e troca a barrinha de xp por um anel no selo do nível; `aperto2` diminui letras e ícones. Confira em 390, 360 e 320 px com números grandes.
+- Os botões da câmera ficam num bloco 2×2 (girar em cima, zoom embaixo). No celular o bloco fica logo abaixo da barra, no canto direito; na tela larga, no meio da borda direita.
+
 ## Controles
 
 - Depois de uma ação num canteiro ou bicho (plantar, arar, regar, tirar o mato, colher, alimentar), a barra amarela liga a ação repetida por 20 s: tocar em outro repete. Arrastar com ela ligada aplica a ação em cada canteiro ou bicho por onde o dedo passa (`pintarAte`); sem ela, arrastar move a câmera. Dois dedos dão zoom e também movem a câmera.
@@ -129,7 +135,6 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 
 - Ração: pacotes de 5, 20 e 50 desde o começo, e de 200, 500 e 1000 nos níveis 8, 12 e 16, com desconto crescente até 40%. A compra confere o pacote e o nível na lista `PACOTES_RACAO`, não no botão.
 - Aluguel do Nano Hostel: depois da cena da Lúcia, a cada 20 a 35 minutos de jogo aberto ela sai do hostel e deixa um envelope de R$ 300 na porta da casa. O relógio fica em `S.aluguelEspera` e o envelope em `S.aluguel`; o Ed pega tocando no envelope.
-- Ração e adubo ficam num chip só (`#chipEstoque`), cada um no seu pedaço; o adubo só aparece quando há algum. Os botões da câmera também ficam em pares: girar num botão dividido ao meio e zoom em outro.
 - O contador de ração fica amarelo quando o estoque dá para menos de 10 minutos e vermelho quando não dá para alimentar nem um bicho. Tocar nele abre a loja na ração.
 
 ## Produtos da mata
