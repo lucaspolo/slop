@@ -144,4 +144,5 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 
 - Teste localmente antes de publicar: sirva `site/` (`python3 -m http.server`) e rode o jogo num navegador sem tela (puppeteer), carregando o three.js local. Pela janela `window.__fazenda` dá para forçar cenas e eventos.
 - Confira o visual renderizando e olhando as capturas, não só os números.
+- Valide o deslocamento dos personagens: sempre que alguém anda até um lugar ou fica parado nele (cena, obra, visita, tarefa), confira nas capturas que ele chega e fica olhando para o ponto de interesse. Quem fala olha para quem ouve, quem trabalha olha para o que está fazendo (o Maurinho para a obra, o Ed para o canteiro). `ir` vira o personagem para onde ele anda; ao chegar, chame `olhar(x, z)` no retorno, e numa cena use `virarNaCena` para ele ficar meio de frente para a câmera. Personagem parado de costas para o que importa, ou olhando para o nada, é erro.
 - Depois de verificado, faça commit e push direto na `main`; o GitHub Pages publica sozinho. O cache das páginas dura até 10 minutos, e um `?v=<commit>` no endereço mostra a versão nova na hora.
