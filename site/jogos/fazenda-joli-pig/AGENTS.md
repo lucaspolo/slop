@@ -48,6 +48,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 | Sócias da terra | nível 16 |
 | Amigos da mata | nível 20 |
 | Festa na fazenda | nível 25 |
+| O arquiteto da família | nível 31: o Maurinho chega na garupa da lambreta do Patrinho e conta das reformas |
 | Hora de nanar | toda noite, na metade da noite (com o Hud se ele estiver ajudando, senão com a Luma) |
 | Férias no espaço | às vezes, quando o disco voador passa e tem vaca no curral; sempre disponível na janela Cenas |
 | Um cafezinho | de vez em quando a partir do nível 3, ou pela opção "Tomar um lanchinho" da casa |
@@ -114,12 +115,15 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - Depois de uma ação num canteiro ou bicho (plantar, arar, regar, tirar o mato, colher, alimentar), a barra amarela liga a ação repetida por 20 s: tocar em outro repete. Arrastar com ela ligada aplica a ação em cada canteiro ou bicho por onde o dedo passa (`pintarAte`); sem ela, arrastar move a câmera. Dois dedos dão zoom e também movem a câmera.
 - Plantando, a barra tem "Plantar nos N vazios · R$ X" (`plantarTodosVazios`): enche os canteiros arados e livres dos terrenos do Ed com a mesma semente, usando primeiro as da bolsa, os mais perto primeiro e até o limite de 40 tarefas na fila (`LIMITE_FILA`).
 
-## Reformas do Maurinho (em construção)
+## Reformas do Maurinho
 
-- A partir do nível 31, tocando numa construção, o Ed chama o Maurinho para reformar. Cada uma tem duas reformas: a 1ª no nível 31 e a 2ª no nível 35. Só uma obra por vez, e a construção continua funcionando durante a obra.
+- Depois da cena do nível 31, o menu de cada construção tem "Reformar com o Maurinho" (`itensReforma`). Cada uma tem duas reformas: a 1ª no nível 31 e a 2ª no nível 35 (`REFORMA`, `PRECO_REFORMA`). Só uma obra por vez, e a construção continua funcionando durante a obra.
+- A obra dura 3 minutos na 1ª e 6 na 2ª e corre com o jogo fechado: `S.obra` guarda `{ id, n, fim }`, e a obra que terminou fora do jogo entra pronta ao abrir, com um aviso. `S.reformas` guarda o nível de cada construção.
+- Pagando, o andaime sobe (`montarAndaime`) e o Maurinho de óculos e prancheta (`maurinhoObra`) entra pela porteira e fica do lado da porta, falando de vez em quando. Tocar nele mostra quanto falta. No fim: confete, o desenho novo (`montarFabrica` ou `montarPredio`), xp, o Ed comemora e o Maurinho vai embora. Numa cena ele sai de vista e depois volta para a obra.
+- As capacidades vêm de `vagasFab(id)` e `maxAnimais(tp)`; não use `VAGAS_FAB` nem `ANIMAIS[tp].max` direto.
 - Fábricas (e o terreiro) passam de 3 vagas para 4 e depois 5. O galinheiro passa de 8 galinhas para 12 e 16, e o curral de 4 vacas para 6 e 8. Casa, celeiro e poço só mudam o visual. A composteira fica de fora.
 - Preços (1ª e 2ª): moinho 9 mil e 24 mil, queijaria 15 mil e 30 mil, padaria 24 mil e 48 mil, cozinha 36 mil e 72 mil, terreiro 15 mil e 36 mil, torrador 54 mil e 108 mil, chocolateria 84 mil e 168 mil, oficina 96 mil e 192 mil, galinheiro 18 mil e 45 mil, curral 24 mil e 60 mil, casa e celeiro 30 mil e 90 mil, poço 9 mil e 24 mil.
-- A reforma é o desenho original com acréscimos (`REFORMA_1`, `vReforma(id, n)`), sem sair do lugar da construção. Durante a obra a construção ganha o andaime (`vAndaime(id)`). Os modelos estão no visualizador, no grupo "Reformas do Maurinho"; a cena, o sistema e a 2ª reforma ainda não entraram no jogo.
+- A reforma é o desenho original com acréscimos (`REFORMA_1`, `vReforma(id, n)`), sem sair do lugar da construção. Durante a obra a construção ganha o andaime (`vAndaime(id)`). Os modelos estão no visualizador, no grupo "Reformas do Maurinho". A 2ª reforma ainda não tem desenho: enquanto isso `REFORMA.max` é 1.
 
 ## Economia
 
