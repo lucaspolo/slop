@@ -103,6 +103,9 @@ button{font:inherit;color:inherit}
 .modo{display:flex;align-items:center;gap:10px;padding:6px 6px 6px 12px;background:var(--amarelo);font-weight:800;font-size:14px;pointer-events:auto;max-width:calc(100vw - 32px)}
 .modo img{width:28px;height:28px;flex:none}
 .modo span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.modo .botao{white-space:nowrap;flex:none}
+/* no celular o texto da ação fica numa linha e os botões embaixo */
+@media (max-width:560px){ .modo{flex-wrap:wrap;row-gap:6px} .modo span{flex:1 1 calc(100% - 40px);white-space:normal} .modo #modoTodos{margin-left:auto} }
 
 .fila{display:flex;align-items:center;gap:8px;padding:3px 4px 3px 8px;font-weight:800;font-size:13px;white-space:nowrap;pointer-events:auto;max-width:calc(100vw - 32px);border-radius:999px}
 .fila img{width:24px;height:24px;flex:none}
@@ -408,7 +411,7 @@ body.modelos #tela{position:absolute;top:var(--md-topo,84px);left:300px;width:ca
     <div class="fila painel" id="hudPill" hidden style="cursor:pointer" role="button" tabindex="0" title="O que o Hud faz"><img data-icone="hud" alt=""><span id="hudTexto"></span></div>
     <div class="fila painel" id="fila" hidden><img data-icone="ed" alt=""><span id="filaTexto"></span><button class="botao mini claro" id="filaLimpar" type="button">limpar</button></div>
     <div class="dica painel" id="dica" hidden><img data-icone="ed" alt=""><span id="dicaTexto"></span><button class="x" id="dicaFechar" type="button" aria-label="Esconder as dicas">✕</button></div>
-    <div class="modo painel" id="modo" hidden><img id="modoIcone" alt=""><span id="modoTexto"></span><button class="botao mini claro" id="modoSair" type="button">pronto</button></div>
+    <div class="modo painel" id="modo" hidden><img id="modoIcone" alt=""><span id="modoTexto"></span><button class="botao mini" id="modoTodos" type="button" hidden></button><button class="botao mini claro" id="modoSair" type="button">pronto</button></div>
     <nav class="acoes painel" aria-label="Ações">
       <button class="acao" id="btnLoja" type="button"><img data-icone="semente" alt="">Loja</button>
       <button class="acao" id="btnCeleiro" type="button"><img data-icone="celeiro" alt="">Celeiro</button>
@@ -9271,6 +9274,7 @@ function presentesDaOficina(){
 function hud(){
   if (!S) return;
   presentesDaOficina();
+  if (modo) atualizarModoTodos();
   $('dinheiro').textContent = reais(S.dinheiro);
   $('racao').textContent = S.racao;
   avisarRacao();
@@ -9659,12 +9663,59 @@ function fecharMenu(){ $('menu').hidden = true; menuAberto = null; marcaSel.visi
 function ligarModo(m, it){
   modo = m;
   const nome = m.tipo === 'plantar' ? `Plantando ${CULTURAS[m.param].nome.toLowerCase()}` : { arar: 'Arando', regar: 'Regando', capinar: 'Tirando mato', colher: 'Colhendo', alimentar: 'Alimentando', coletar: 'Coletando' }[m.tipo];
-  $('modoTexto').textContent = `${nome}: toque em outros para repetir`;
+  $('modoTexto').textContent = `${nome}: toque ou arraste em outros`;
   renovarModo();
   $('modoIcone').src = icone(it.icone);
   $('modo').hidden = false;
+  atualizarModoTodos();
 }
-function desligarModo(){ modo = null; $('modo').hidden = true; clearTimeout(modoTimer); }
+function desligarModo(){ modo = null; $('modo').hidden = true; clearTimeout(modoTimer); $('modoTodos').hidden = true; }
+// plantando: a barra ganha "Plantar nos N vazios", que enche todos os canteiros arados e livres com a mesma semente
+// (primeiro as da bolsa, depois comprando), os mais perto do Ed primeiro e até o limite da fila
+const LIMITE_FILA = 40;
+function vaziosParaPlantar(){
+  const l = [];
+  for (const k in S.campo){ if (S.campo[k].e !== 'arado') continue; const [x, z] = k.split(',').map(Number); if (S.lotes[loteDe(x, z)] && !reservado({ k: 'tile', x, z })) l.push([x, z]); }
+  return l;
+}
+function atualizarModoTodos(){
+  const b = $('modoTodos');
+  if (!modo || modo.tipo !== 'plantar'){ if (!b.hidden) b.hidden = true; return; }
+  const n = Math.min(vaziosParaPlantar().length, Math.max(0, LIMITE_FILA - fila.length));
+  if (!n){ if (!b.hidden) b.hidden = true; return; }
+  const c = CULTURAS[modo.param], tem = S.bolsa[modo.param] || 0, custo = Math.max(0, n - tem) * c.semente;
+  const txt = (n === 1 ? 'Plantar no outro vazio' : `Plantar nos ${n} vazios`) + (custo ? ` · ${reais(custo)}` : '');
+  if (b.textContent !== txt) b.textContent = txt;
+  b.hidden = false; b.disabled = !tem && S.dinheiro < c.semente;
+}
+function plantarTodosVazios(){
+  if (!modo || modo.tipo !== 'plantar') return;
+  const k = modo.param, lista = vaziosParaPlantar(), antes = fila.length;
+  emLote('plantar', lista, k);
+  const n = fila.length - antes;
+  if (n < lista.length) aviso(fila.length >= LIMITE_FILA ? `O Ed pode ter até ${LIMITE_FILA} tarefas na fila: plantou em ${n} e o resto fica para depois.` : `Deu para plantar em ${n}: faltou dinheiro para o resto.`, 'ruim', 3.5);
+  desligarModo();
+}
+// arrastar com uma ação repetida ligada: cada canteiro (ou bicho) por onde o dedo passa recebe a mesma ação.
+// Os pontos do caminho são ligados de 10 em 10 px, para um arrasto rápido não pular canteiro
+let pintura = null;
+function pintarAte(cx, cy){
+  if (!pintura) return;
+  const [x0, y0] = pintura.ult, passos = Math.max(1, Math.ceil(Math.hypot(cx - x0, cy - y0) / 10));
+  for (let i = 1; i <= passos; i++){
+    const px = x0 + (cx - x0) * i / passos, py = y0 + (cy - y0) * i / passos, alvo = alvoNaTela(px, py);
+    if (!alvo || (alvo.k !== 'tile' && alvo.k !== 'animal')) continue;
+    const chave = alvo.k === 'tile' ? alvo.x + ',' + alvo.z : alvo.a;
+    if (pintura.feitos.has(chave)) continue;
+    pintura.feitos.add(chave);
+    if (!reservado(alvo) && checar(modo.tipo, alvo, modo.param).ok && enfileirar(modo.tipo, alvo, modo.param, true)){
+      pintura.n++; renovarModo(); if (alvo.k === 'tile') marcar(marcaHover, alvo.x, alvo.z);
+      if (pintura.n % 2 === 1) Som.clique();
+    }
+  }
+  pintura.ult = [cx, cy];
+  atualizarModoTodos();
+}
 // a ação repetida (ex.: plantar cenoura em vários canteiros) desliga sozinha depois de 20 s sem uso
 let modoTimer = 0;
 const renovarModo = () => { clearTimeout(modoTimer); modoTimer = setTimeout(desligarModo, 20000); };
@@ -10469,7 +10520,7 @@ function tocou(cx, cy){
   }
   if (modo){
     if ((alvo.k === 'tile' || alvo.k === 'animal') && !reservado(alvo)){
-      if (checar(modo.tipo, alvo, modo.param).ok){ if (enfileirar(modo.tipo, alvo, modo.param)){ renovarModo(); if (alvo.k === 'tile') { marcar(marcaHover, alvo.x, alvo.z); } return; } }
+      if (checar(modo.tipo, alvo, modo.param).ok){ if (enfileirar(modo.tipo, alvo, modo.param)){ renovarModo(); atualizarModoTodos(); if (alvo.k === 'tile') { marcar(marcaHover, alvo.x, alvo.z); } return; } }
     }
     desligarModo();
   }
@@ -10485,8 +10536,8 @@ function eventos(){
   canvas.addEventListener('pointerdown', e => {
     canvas.setPointerCapture(e.pointerId);
     ponteiros.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (ponteiros.size === 1){ arrastou = false; inicio = { x: e.clientX, y: e.clientY }; }
-    if (ponteiros.size === 2){ const [a, b] = [...ponteiros.values()]; pinca = Math.hypot(a.x - b.x, a.y - b.y); arrastou = true; }
+    if (ponteiros.size === 1){ arrastou = false; inicio = { x: e.clientX, y: e.clientY }; pintura = null; }
+    if (ponteiros.size === 2){ const [a, b] = [...ponteiros.values()]; pinca = Math.hypot(a.x - b.x, a.y - b.y); arrastou = true; pintura = null; }
     if (e.pointerType !== 'mouse') marcaHover.visible = false;
   });
   canvas.addEventListener('pointermove', e => {
@@ -10500,9 +10551,18 @@ function eventos(){
     }
     if (ponteiros.size === 1){
       const dx = e.clientX - p.x, dy = e.clientY - p.y;
-      if (!arrastou && Math.hypot(e.clientX - inicio.x, e.clientY - inicio.y) > 7) arrastou = true;
-      if (arrastou && !cine){ arrastar(dx, dy); marcaHover.visible = false; }
+      if (!arrastou && Math.hypot(e.clientX - inicio.x, e.clientY - inicio.y) > 7){
+        arrastou = true;
+        // com uma ação repetida ligada (plantar, regar...), arrastar aplica a ação em vez de mover a câmera
+        if (modo && modo.tipo !== 'enfeite' && !cine && !menuAberto){ pintura = { ult: [inicio.x, inicio.y], feitos: new Set(), n: 0 }; pintarAte(inicio.x + 0.01, inicio.y); }
+      }
+      if (arrastou && !cine){
+        if (pintura && modo) pintarAte(e.clientX, e.clientY);
+        else { arrastar(dx, dy); marcaHover.visible = false; }
+      }
     } else if (ponteiros.size === 2){
+      // dois dedos: a pinça dá zoom e o meio deles move a câmera
+      if (!cine) arrastar((e.clientX - p.x) / 2, (e.clientY - p.y) / 2);
       p.x = e.clientX; p.y = e.clientY;
       const [a, b] = [...ponteiros.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
@@ -10515,7 +10575,7 @@ function eventos(){
     if (!ponteiros.has(e.pointerId)) return;
     ponteiros.delete(e.pointerId);
     if (e.type === 'pointerup' && !arrastou && ponteiros.size === 0) tocou(e.clientX, e.clientY);
-    if (ponteiros.size === 0) pinca = 0;
+    if (ponteiros.size === 0){ pinca = 0; pintura = null; }
   };
   canvas.addEventListener('pointerup', solta);
   canvas.addEventListener('pointercancel', solta);
@@ -10543,6 +10603,7 @@ function eventos(){
   $('btnAjustes').addEventListener('click', () => { Som.ligar(); Som.clique(); abrirAjustes(); });
   $('btnCaderno').addEventListener('click', () => { Som.ligar(); Som.clique(); abrirCaderno(); });
   $('modoSair').addEventListener('click', desligarModo);
+  $('modoTodos').addEventListener('click', plantarTodosVazios);
   $('filaLimpar').addEventListener('click', () => { limparFila(); Som.clique(); });
   $('dicaFechar').addEventListener('click', () => { S.dicas = false; atualizarDica(); salvar(); });
   $('modal').addEventListener('pointerdown', e => { if (e.target === $('modal')) fecharJanela(); });
@@ -10754,7 +10815,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, segurar: segurarFila, fator: fatorEd, escolher: escolherNanar, janelas: JANELAS_CASA, NANAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+  window.__fazenda = { lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, segurar: segurarFila, fator: fatorEd, escolher: escolherNanar, janelas: JANELAS_CASA, NANAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, plantio: { todos: plantarTodosVazios, vazios: vaziosParaPlantar, modo: () => modo, ligar: k => ligarModo({ tipo: 'plantar', param: k }, { icone: k }) }, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
