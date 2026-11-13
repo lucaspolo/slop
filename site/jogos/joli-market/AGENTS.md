@@ -35,27 +35,43 @@ Jogo de mercadinho em voxels, num arquivo só (`index.html`, three.js r128 pelo 
 - Cada móvel comprado tem uma plaquinha em cima (`texPlaca`, um sprite que sempre fica de frente para a câmera) com o ícone, o nome e o preço do produto. Fica vermelha com "acabou!" quando o móvel esvazia, e pede para escolher o produto quando ele ainda não tem nenhum. A altura de cada tipo está em `ALTURA_PLACA`.
 - Móvel novo precisa mostrar os produtos de frente para a câmera de sempre (de +x, +z). Por isso as vitrines olham para +z, e a geladeira é um expositor aberto em degraus, sem portas.
 
-## Como o jogo anda
+## O dia
 
-- Encomenda: "Ligar pro Ed" abre a janela de pedido, com caixotes de cada produto liberado (até 8 no caminhão, 14 com a melhoria). Os produtos aparecem agrupados pela situação (`situacao(p)`): está acabando, pouco no depósito, com estoque e sem lugar na loja, com quanto tem na loja e no depósito. Em cima, o Ed sugere um pedido com o que falta (`sugestaoPedido`). O Ed cobra o mesmo preço da fazenda (`custo`, por unidade); o preço na prateleira é o dobro (`preco(p)`). O pedido fica em `S.pedido` com a hora da chegada e quantos caixotes já foram descarregados, e continua de onde parou se o jogo fechar no meio.
+O jogo anda em dias (`S.dia`: número, fase, tempo na fase e o resumo do dia). As fases, em `atualizarDia`:
+
+| Fase | O que acontece | Relógio |
+|---|---|---|
+| chegada | O Beto e o Jaca chegam pela calçada, com o mercado fechado, e o pedido de amanhã vira a entrega de hoje: o Ed vem com o caminhão | 6:30 |
+| preparo | Começa quando o caminhão estaciona (ou logo, sem entrega). Dois minutos para repor antes de abrir; a faixa embaixo tem "Abrir agora" | 7:00 às 8:00 |
+| aberto | 20 minutos de jogo com fregueses (`DIA.aberto`) | 8:00 às 18:00 |
+| fechando | Não entra mais ninguém; quem está dentro termina e sai | 18:00 |
+| balanco | Janela com vendas, gastos, saldo, fregueses, estrelas, mais vendidos, o que faltou e o pedido de amanhã. "Começar o dia" escurece a tela e recomeça na chegada | 18:00 |
+
+- A luz e o fundo acompanham a hora (`atualizarLuz`): manhã dourada, meio-dia branco, fim de tarde alaranjado.
+- Uma placa sobre a porta diz ABERTO ou FECHADO. Fregueses só chegam na fase aberto.
+- O jogo reabre na fase em que estava (`retomarDia`): na chegada recomeça a chegada, no fechamento vai direto ao balanço.
+- O resumo do dia (`R()`) soma vendas, pedidos ao Ed, compras de móveis e melhorias, atendidos, desistências e o que faltou na prateleira.
+
+
+- Encomenda: "Ligar pro Ed" abre a janela de pedido. O normal é o pedido de amanhã (`S.pedidoAmanha`, até 24 caixotes, 36 com a melhoria), pago na hora e entregue na chegada do dia seguinte; dá para mudar ou cancelar até começar o próximo dia, e o Ed devolve ou cobra a diferença. Com o mercado em funcionamento também dá para pedir urgente (`encomendar`, até 8 caixotes, 14 com a melhoria), que chega no mesmo dia com 25% de frete. O que ficar de uma entrega sem descarregar quando o dia acaba vai direto para o depósito. Os produtos aparecem agrupados pela situação (`situacao(p)`): está acabando, pouco no depósito, com estoque e sem lugar na loja, com quanto tem na loja e no depósito. Em cima, o Ed sugere um pedido (`sugestaoPedido`): para amanhã, umas três prateleiras de cada produto à venda menos o que deve sobrar de hoje; urgente, o que está acabando. O Ed cobra o mesmo preço da fazenda (`custo`, por unidade); o preço na prateleira é o dobro (`preco(p)`). O pedido fica em `S.pedido` com a hora da chegada e quantos caixotes já foram descarregados, e continua de onde parou se o jogo fechar no meio.
 - Depósito: `S.estoque` guarda as unidades; as estantes mostram um caixote para cada `caixa` unidades, com o produto em cima.
 - Escolher o produto de um móvel: a lista mostra primeiro o que ainda não está na loja (em verde) e diz em quantos outros móveis cada produto já está.
 - Reposição: tocar num móvel com produto, que não está cheio e tem estoque, já põe a tarefa na fila do Beto (sem menu). O Beto vai à estante mais perto, pega o caixote e arruma uma unidade de cada vez. Cada móvel mostra até 6 unidades (`CAP`).
 - Caixa: quem atende fica em `CAIXA.atendente`; o freguês, em `CAIXA.cliente`, e a fila sobe pelo corredor (`FILA`). Sem tarefa, o Beto vai sozinho para o caixa quando tem gente na fila. Tocar no caixa com ninguém lá chama o Beto na hora.
 - Fregueses: chegam pela calçada, entram pela porta, pegam o que está na lista (`montarLista`) e vão para a fila. A paciência é de uns 60 s na fila (90 s com a musiquinha), 30% a mais até o nível 3. Quem desiste devolve as compras para o depósito.
-- Começo mais calmo: até o nível 3 os fregueses chegam mais espaçados (`atualizarFregueses`), cabem `2 + nível` na loja ao mesmo tempo, e pedir algo que o mercado nem vende não tira estrela. O mercado abre com R$ 250, 3 estrelas e meia e um presente de 12 caixotes do Ed. Antes de mexer nesses números, rode a simulação (`__market.simular`) por uns 10 minutos de jogo e compare.
+- Começo mais calmo: até o nível 3 os fregueses chegam mais espaçados (`atualizarFregueses`), cabem `2 + nível` na loja ao mesmo tempo, e pedir algo que o mercado nem vende não tira estrela. O mercado abre com R$ 250, 3 estrelas e meia e um presente de 14 caixotes do Ed, que vai como a entrega do primeiro dia. Antes de mexer nesses números, rode a simulação (`__market.simular`) por uns 10 minutos de jogo e compare.
 - Estrelas: `S.rep` vai de 0 a 100 (1 a 5 estrelas). Sobe com freguês atendido, desce quando falta produto na prateleira (mais) ou quando o mercado nem vende o que a pessoa queria (menos), e quando alguém desiste da fila. Mais estrelas, mais fregueses.
 - Socorro: se o mercado fica sem nada para vender, sem estoque e sem dinheiro para um caixote, o Ed manda umas caixas por conta dele (`verificarSocorro`), para o jogo nunca travar.
 - O que acontece "daqui a pouco" na lógica usa `depois(seg, fn)`, que conta o tempo de jogo, não `setTimeout`. Assim os testes podem rodar o jogo mais rápido.
 
 ## Cenas
 
-- "Abrindo as portas" (`CENA_ABERTURA`), no começo, e "Presente do maninho" (`CENA_ED`), na primeira entrega, que é de graça. Pular vale como assistir: roda o que cada fala faria. A abertura pode ser revista nos Ajustes.
+- "Abrindo as portas" (`CENA_ABERTURA`), no começo, com o Beto e o Jaca na calçada do mercado ainda fechado, e "Presente do maninho" (`CENA_ED`), na primeira entrega, que é de graça. Pular vale como assistir: roda o que cada fala faria. A abertura pode ser revista nos Ajustes.
 - A câmera vai até onde a cena acontece e volta para onde estava no fim.
 
 ## Save
 
-- `localStorage`, chave `joliMarket.v1`. Fregueses e tarefas não ficam no save; o estoque, os móveis com o que tem em cada um, o pedido, as melhorias e a função do Jaca, sim.
+- `localStorage`, chave `joliMarket.v1`. Fregueses e tarefas não ficam no save; o estoque, os móveis com o que tem em cada um, o dia, os pedidos, as melhorias e a função do Jaca, sim.
 - Campo novo entra em `estadoNovo()`; `carregar()` completa os saves antigos com os valores dele.
 
 ## Testes e publicação
