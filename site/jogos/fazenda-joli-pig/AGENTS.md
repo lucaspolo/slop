@@ -32,7 +32,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - Toda cena entra em `CENAS` e em `ORDEM_CENAS`, e aparece na janela **Cenas** para rever. Rever não muda nada no save. Se a cena mexe no save, a reprise usa um dublê, como a vaca de mentira da abdução.
 - Pular a cena tem o mesmo efeito que assistir até o fim. Por exemplo, a vaca abduzida vai embora mesmo se a cena for pulada.
 - Toda cena tem uma música própria, no tema dela (veja abaixo).
-- Eventos que não são cena, mas o jogador gosta de ver, ganham um cartão na janela Cenas com um botão para chamar na hora: "Chamar a Luma", "Chamar o disco", "Chamar o redemoinho", "Chamar visitantes".
+- Eventos que não são cena, mas o jogador gosta de ver, ganham um cartão na janela Cenas com um botão para chamar na hora: "Chamar a Luma", "Chamar o disco", "Chamar o galo fujão", "Chamar o redemoinho", "Chamar visitantes".
 - Uma cena só começa sem janela aberta, com o Ed parado e sem tarefa. Cenas que se repetem usam `repete: true`.
 - Na câmera isométrica, um objeto largo e baixo em cima de alguém esconde quem está embaixo. Confira o enquadramento renderizando, e gire a câmera na cena quando precisar, como na cena da mata.
 
@@ -49,7 +49,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 | Amigos da mata | nível 20 |
 | Festa na fazenda | nível 25 |
 | O arquiteto da família | nível 31: o Maurinho chega na garupa da lambreta do Patrinho e conta das reformas |
-| Hora de nanar | toda noite, na metade da noite (com o Hud se ele estiver ajudando, senão com a Luma) |
+| Hora de nanar | toda noite, na metade da noite (com o Hud se ele estiver ajudando, senão com a Luma); de manhã a câmera vai ao galo, que acorda a fazenda |
 | Férias no espaço | às vezes, quando o disco voador passa e tem vaca no curral; sempre disponível na janela Cenas |
 | Um cafezinho | de vez em quando a partir do nível 3, ou pela opção "Tomar um lanchinho" da casa |
 
@@ -98,19 +98,33 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 
 ## Eventos e save
 
-- Eventos de enfeite (Luma, disco voador, bichos da mata, nanos do Nano Hostel, visitantes da trilha) não mexem no save. Os tempos ficam só na memória e recomeçam ao abrir o jogo.
+- Eventos de enfeite (Luma, disco voador, galo, bichos da mata, nanos do Nano Hostel, visitantes da trilha) não mexem no save. Os tempos ficam só na memória e recomeçam ao abrir o jogo.
 - Eles não começam com cena ou janela aberta, e somem quando uma cena começa.
 - A abdução é a exceção: ela tira uma vaca do save, e o jogador compra outra.
-- Frequência dos eventos de surpresa (em tempo de jogo aberto): o disco voador passa a cada 6 a 12 min (o primeiro entre 3 e 6 min) e, com vaca no curral, tenta a abdução em 60% das passagens (`DISCO_JOGO`); o redemoinho do Saci vem entre 4 e 9 min depois de abrir e depois a cada 8 a 16 min (`REDEMOINHO`); o cafezinho, a cada 6 a 12 min (`sorteioCafezinho`). Como são cenas, a abdução e o cafezinho só acontecem se o Ed estiver parado, sem tarefa, naquela hora.
+- Frequência dos eventos de surpresa (em tempo de jogo aberto): o disco voador passa a cada 6 a 12 min (o primeiro entre 3 e 6 min) e, com vaca no curral, tenta a abdução em 60% das passagens (`DISCO_JOGO`); o redemoinho do Saci vem entre 4 e 9 min depois de abrir e depois a cada 8 a 16 min (`REDEMOINHO`); o cafezinho, a cada 6 a 12 min (`sorteioCafezinho`); o galo fujão, a cada 8 a 15 min (o primeiro entre 5 e 10, `GALO_JOGO`). Como são cenas, a abdução e o cafezinho só acontecem se o Ed estiver parado, sem tarefa, naquela hora.
 - Saves antigos precisam continuar abrindo. Flag nova de cena começa indefinida e a cena aparece na próxima vez que o jogador abrir o jogo.
 
 ## Modelos
 
 - Modelo novo entra primeiro no visualizador (`?modelos`, em `catalogoModelos`) para o Lucas ver. Ele só vai para o jogo quando ele pedir.
-- O galo (`vGalo`, na escala da galinha) fica em cima de um mourão de cada galinheiro (`POUSO_GALO`; o do galinheiro novo aparece quando ele é comprado) e de vez em quando vira a cabeça até ±0,6 (`atualizarGalos`). Os mourões foram escolhidos para ele não encostar no galinheiro reformado, no andaime, no coletor, no curral nem na porteira, mesmo virado; acima das vacas e das galinhas. Por enquanto ele só fica ali, sem toque nem som.
+- O galo e o pintinho (`vGalo`, `vPintinho`) estão na escala da galinha. O galo é montado em partes para mexer (`vGalo('corpo' | 'cabeca' | 'asaE' | 'asaD')`, com os pivôs em `GALO_PIVO`); sem parte, vem inteiro, como no visualizador. Veja a seção Galo.
 - `Vox.set` só aceita coordenadas inteiras: arredonde antes.
 - O Nano Hostel fica atrás do celeiro, encostado na parede de trás (z 0,625). Ele só pode aparecer quando o mapa é girado, nunca na câmera de sempre.
 - Os créditos (Ajustes, Créditos) têm os retratos em voxel da Carolina Torrigo e do Lucas Polo, feitos a partir de fotos.
+
+## Galo
+
+- Cada galinheiro tem um galo em cima de um mourão da cerca (`POUSO_GALO`: o mourão, para onde ele olha, o ladrilho de dentro do cercado e o de fora). O do galinheiro novo aparece quando ele é comprado. Os mourões foram escolhidos para ele não encostar no galinheiro reformado, no andaime, no coletor, no curral nem na porteira, mesmo virado (até ±0,6), e ficar acima das vacas e das galinhas: o do antigo fica na cerca de baixo, que o galinheiro divide com o curral. No mourão ele vira o corpo e a cabeça de vez em quando.
+- Ele não vai para o save: ao abrir o jogo está no mourão, e quando uma cena começa volta para lá na hora (`galoNoMourao`).
+- Estados (`G.estado`): `poleiro`, `voando` (pulo em arco batendo as asas, `voarGalo`), `chao` (com `modo` `ciume`, `fujao` ou `volta`) e `colo`. No chão ele anda pela `rota` dos ladrilhos (`galoIr`). Poses em `atualizarGalo`: `cantar` (bate as asas e estica o pescoço para trás), `alarme` (asas, pulinhos e cabeça para todo lado), `bicar` e `feliz`.
+- Cocoricó: na hora de nanar, de manhã, a câmera vai ao galo do galinheiro, ele canta e, com o galinheiro novo, o outro responde com outra voz (`Som.galo(f)`); depois a câmera volta para a casa, as janelas acendem e o Ed sai. Rever a cena mostra o mesmo.
+- Alarme (`galoAlarme`): uns 5 s antes do disco voador passar, da chuva começar e do teco-teco do Milton chegar (`GALO_JOGO.alarme`), com um aviso do que vem (`AVISO_ALARME`), e quando o caminhão do Beto vem (sem aviso, que a ligação já avisa). Não acontece em cena.
+- Tocar no galo do mourão: ele canta e o Ed vai fazer carinho (tarefa `carinhoGalo`): para no ladrilho de dentro, encostado na cerca (`lugarDoEdNoGalo`), olha para ele, alisa as penas (pose `carinho`) e fala. Só visual, sem xp.
+- Ciúme (`galoCiumento`): em 20% das vezes que o Ed recolhe um ovo, no máximo uma vez a cada minuto e meio, o galo daquele galinheiro desce para dentro do cercado, corre atrás do Ed sem sair do pasto (`pontoNoPasto`), bica o pé dele e volta para o mourão. O Ed pula, reclama e sai apressado: anda 50% mais rápido por 3 s (`ed.pressa`). Com o coletor, o Ed não recolhe ovo e o ciúme não acontece.
+- Fujão (`fugirGalo`): a cada 8 a 15 min de jogo aberto (o primeiro entre 5 e 10), um galo do mourão pula para o ladrilho de fora e passeia pela grama e pelos caminhos em volta (`chaoLuma`). A Luma, se estiver em casa, sai sem a bolinha e corre latindo atrás dele (`lumaAtrasDoGalo`, ação `galo`); ele corre dela quando ela chega perto. Tocando no galo, o Ed vai buscar (`pegarGalo`); quando o Ed chega perto, ele corre uma vez e o Ed vai de novo. Pego, ele vai no colo do Ed (`ed.colo`, braços na frente) e a tarefa `soltarGalo` entra na frente da fila: o Ed para encostado na cerca, solta, ele voa para o mourão e canta, e o Ed ganha `GALO_JOGO.xpFujao`. Cancelada a tarefa, ele volta sozinho. Sem ninguém buscar, depois de 3 min ele volta sozinho.
+- Pintinhos (`PINTINHO`): com galo no galinheiro (o antigo sempre tem; o novo, depois de comprado), cada ovo tem 3% de chance de chocar, se houver lugar no cercado e nenhum outro pintinho crescendo ali. Nasce um pintinho em vez do ovo (`nascerPintinho`), com `d.pinto` (quando nasceu), `d.mae` e `e: 'pinto'`. Ele anda atrás da mãe, não come nem dá ovo, conta como galinha no cercado (não na caixa do coletor) e vira galinha em 10 min pelo relógio, também com o jogo fechado (`crescerPintinho`, `trocarModelo`).
+- Falas: `FALAS_GALO_CANTA`, `FALAS_GALO_ALARME`, `FALAS_GALO_CARINHO`, `FALAS_GALO_CIUME`, `FALAS_GALO_PEGOU`, `FALAS_GALO_DEVOLVEU` e `FALAS_LUMA_GALO`.
+- Para testar: `__fazenda.galo` (`obj`, `cantar`, `alarme`, `fugir`, `tocar`, `forcarCiume`, `forcarPintinho`, `proxFujao`, `lugar`, `bicho`, `simular`).
 
 ## Interface
 
