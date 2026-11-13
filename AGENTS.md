@@ -72,6 +72,10 @@ Alguns projetos nasceram como artefato no claude.ai e vieram para cá como pági
 
 As decisões e regras do jogo (cenas, música, falas, eventos, economia, testes) ficam em `site/jogos/fazenda-joli-pig/AGENTS.md`. Leia antes de mexer no jogo.
 
+### Joli Market
+
+O mercadinho do Beto e do Jaca, irmão da Fazenda Joli Pig, com o mesmo motor e os mesmos desenhos. As decisões do jogo ficam em `site/jogos/joli-market/AGENTS.md`.
+
 ### Visualizador de modelos da Fazenda Joli Pig
 
 Os desenhos ficam dentro do script do jogo, então o visualizador é um modo da própria página: `jogos/fazenda-joli-pig/?modelos`, e `jogos/fazenda-joli-pig/modelos/` só encaminha para lá. Nesse modo o jogo não carrega nem grava o save. Modelo novo entra em `catalogoModelos`; o que estiver em `VI` e não for usado no catálogo aparece sozinho no grupo Ícones.
