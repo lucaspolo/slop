@@ -22,7 +22,7 @@ Jogo de mercadinho em voxels, num arquivo só (`index.html`, three.js r128 pelo 
 | Quem | Como é |
 |---|---|
 | Beto | Dono do Joli Market. Pelúcia de porquinho creme de macacão azul. É quem o jogador comanda: repõe e atende no caixa. Chama o Ed de "maninho" |
-| Jaca | Jacaré filhote, gerente e melhor amigo do Beto, de lenço azul do Joli Market. Tem uma função escolhida pelo jogador: recepção (nível 1), caixa (nível 3) ou reposição (nível 5) |
+| Jaca | Jacaré filhote, gerente e melhor amigo do Beto, de lenço azul do Joli Market. Tem uma função escolhida pelo jogador: recepção (nível 1), caixa (nível 2) ou reposição (nível 4) |
 | Ed | Irmão do Beto, fazendeiro. Chega no caminhão amarelo com a encomenda e leva os caixotes pelo beco até o depósito |
 | Família | Pelúcio, Patrinho, Maurinho, Milton e Hud aparecem às vezes como fregueses, a partir do nível 2 (8% das vezes) |
 
@@ -37,11 +37,13 @@ Jogo de mercadinho em voxels, num arquivo só (`index.html`, three.js r128 pelo 
 
 ## Como o jogo anda
 
-- Encomenda: "Ligar pro Ed" abre a janela de pedido, com caixotes de cada produto liberado (até 8 no caminhão, 14 com a melhoria). O Ed cobra o mesmo preço da fazenda (`custo`, por unidade); o preço na prateleira é o dobro (`preco(p)`). O pedido fica em `S.pedido` com a hora da chegada e quantos caixotes já foram descarregados, e continua de onde parou se o jogo fechar no meio.
+- Encomenda: "Ligar pro Ed" abre a janela de pedido, com caixotes de cada produto liberado (até 8 no caminhão, 14 com a melhoria). Os produtos aparecem agrupados pela situação (`situacao(p)`): está acabando, pouco no depósito, com estoque e sem lugar na loja, com quanto tem na loja e no depósito. Em cima, o Ed sugere um pedido com o que falta (`sugestaoPedido`). O Ed cobra o mesmo preço da fazenda (`custo`, por unidade); o preço na prateleira é o dobro (`preco(p)`). O pedido fica em `S.pedido` com a hora da chegada e quantos caixotes já foram descarregados, e continua de onde parou se o jogo fechar no meio.
 - Depósito: `S.estoque` guarda as unidades; as estantes mostram um caixote para cada `caixa` unidades, com o produto em cima.
+- Escolher o produto de um móvel: a lista mostra primeiro o que ainda não está na loja (em verde) e diz em quantos outros móveis cada produto já está.
 - Reposição: tocar num móvel com produto, que não está cheio e tem estoque, já põe a tarefa na fila do Beto (sem menu). O Beto vai à estante mais perto, pega o caixote e arruma uma unidade de cada vez. Cada móvel mostra até 6 unidades (`CAP`).
 - Caixa: quem atende fica em `CAIXA.atendente`; o freguês, em `CAIXA.cliente`, e a fila sobe pelo corredor (`FILA`). Sem tarefa, o Beto vai sozinho para o caixa quando tem gente na fila. Tocar no caixa com ninguém lá chama o Beto na hora.
-- Fregueses: chegam pela calçada, entram pela porta, pegam o que está na lista (`montarLista`) e vão para a fila. A paciência é de uns 48 s na fila (70 s com a musiquinha). Quem desiste devolve as compras para o depósito.
+- Fregueses: chegam pela calçada, entram pela porta, pegam o que está na lista (`montarLista`) e vão para a fila. A paciência é de uns 60 s na fila (90 s com a musiquinha), 30% a mais até o nível 3. Quem desiste devolve as compras para o depósito.
+- Começo mais calmo: até o nível 3 os fregueses chegam mais espaçados (`atualizarFregueses`), cabem `2 + nível` na loja ao mesmo tempo, e pedir algo que o mercado nem vende não tira estrela. O mercado abre com R$ 250, 3 estrelas e meia e um presente de 12 caixotes do Ed. Antes de mexer nesses números, rode a simulação (`__market.simular`) por uns 10 minutos de jogo e compare.
 - Estrelas: `S.rep` vai de 0 a 100 (1 a 5 estrelas). Sobe com freguês atendido, desce quando falta produto na prateleira (mais) ou quando o mercado nem vende o que a pessoa queria (menos), e quando alguém desiste da fila. Mais estrelas, mais fregueses.
 - Socorro: se o mercado fica sem nada para vender, sem estoque e sem dinheiro para um caixote, o Ed manda umas caixas por conta dele (`verificarSocorro`), para o jogo nunca travar.
 - O que acontece "daqui a pouco" na lógica usa `depois(seg, fn)`, que conta o tempo de jogo, não `setTimeout`. Assim os testes podem rodar o jogo mais rápido.
