@@ -32,6 +32,7 @@ Jogo de mercadinho em voxels, num arquivo só (`index.html`, three.js r128 pelo 
 - As paredes são arestas entre ladrilhos (`PAREDE`), e os móveis ocupam ladrilhos (`OCUPADO`). Quem anda usa `caminho(de, para)`: A* em 8 direções, depois `alisar` corta os cantos quando dá para ir reto sem raspar em móvel nem atravessar parede.
 - Cada lugar de móvel está em `SLOTS`, com a frente para `z`, `-z` ou `-x` (`f`). Quem usa o móvel fica em `frenteDe(slot)` e olha para `centroDe(slot)`. Os que vêm com o mercado têm `dono: true`; os outros se compram tocando na moedinha, a partir do nível do lugar.
 - A câmera é isométrica e gira de 90 em 90 graus. As duas paredes que ficam entre a câmera e a loja abaixam (`atualizarParedes`), e os letreiros pintados nelas somem junto.
+- Cada móvel comprado tem uma plaquinha em cima (`texPlaca`, um sprite que sempre fica de frente para a câmera) com o ícone, o nome e o preço do produto. Fica vermelha com "acabou!" quando o móvel esvazia, e pede para escolher o produto quando ele ainda não tem nenhum. A altura de cada tipo está em `ALTURA_PLACA`.
 - Móvel novo precisa mostrar os produtos de frente para a câmera de sempre (de +x, +z). Por isso as vitrines olham para +z, e a geladeira é um expositor aberto em degraus, sem portas.
 
 ## Como o jogo anda

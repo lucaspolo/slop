@@ -1639,6 +1639,40 @@ const POS_ITENS = {
   geladeira: [[4.5, 3, 11.5], [11.5, 3, 11.5], [4.5, 9, 8.5], [11.5, 9, 8.5], [4.5, 15, 6], [11.5, 15, 6]],
   vitrine: [[3, 9, 11], [8, 9, 11], [13, 9, 11], [3, 13, 5.5], [8, 13, 5.5], [13, 13, 5.5]],
 };
+// plaquinhas dos móveis: ícone, nome e preço do produto; vermelha quando acabou; sem produto, pede para escolher
+const ALTURA_PLACA = { banca: 1.06, gondola: 1.76, geladeira: 1.82, vitrine: 1.62 };
+const TEX_PLACA = {};
+function texPlaca(p, vazio){
+  const chave = (p || '-') + (vazio ? '!' : '');
+  if (TEX_PLACA[chave]) return TEX_PLACA[chave];
+  const W = 320, H = 140, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const caixa = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r); g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h); g.lineTo(x + r, y + h); g.quadraticCurveTo(x, y + h, x, y + h - r); g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y); g.closePath(); };
+  caixa(5, 5, W - 10, H - 10, 22);
+  g.fillStyle = !p ? '#efe6d2' : vazio ? '#f8d2c9' : '#fffdf6'; g.fill();
+  g.lineWidth = 7; g.strokeStyle = vazio ? '#c8303a' : '#3b2a20'; g.stroke();
+  const fonte = (px, peso = 800) => `${peso} ${px}px "Rubik", "Arial Black", sans-serif`;
+  const larg = (t, px) => { g.font = fonte(px); return g.measureText(t).width; };
+  g.textBaseline = 'middle'; g.fillStyle = '#3b2a20';
+  if (!p){ g.textAlign = 'center'; g.font = fonte(34, 700); g.fillStyle = '#7a6352'; g.fillText('escolha', W / 2, H / 2 - 20); g.fillText('o produto', W / 2, H / 2 + 20); }
+  else {
+    // o ícone grande à esquerda é o que se reconhece de longe; o nome cabe em uma ou duas linhas
+    if (ICONE[p]) g.drawImage(ICONE[p].canvas, 10, 12, 116, 116);
+    g.textAlign = 'left';
+    const x0 = 128, max = W - x0 - 16, nome = PROD[p].nome, rot = vazio ? 'acabou!' : reais(preco(p));
+    let linhas = [nome], px = 40;
+    if (larg(nome, px) > max){
+      const pal = nome.split(' ');
+      if (pal.length > 1){ const k = Math.ceil(pal.length / 2); linhas = [pal.slice(0, k).join(' '), pal.slice(k).join(' ')]; }
+      px = 34; while (px > 18 && linhas.some(l => larg(l, px) > max)) px -= 2;
+    }
+    g.font = fonte(px);
+    const pp = 32, alt = linhas.length * px * 1.05 + pp, y0 = (H - alt) / 2;
+    linhas.forEach((l, i) => g.fillText(l, x0, y0 + px * 1.05 * i + px / 2));
+    g.font = fonte(pp); g.fillStyle = vazio ? '#c8303a' : '#e0408a'; g.fillText(rot, x0, y0 + linhas.length * px * 1.05 + pp / 2 + 2);
+  }
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 4; TEX_PLACA[chave] = t; return t;
+}
 const rotDe = f => f === 'z' ? 0 : f === '-z' ? Math.PI : -Math.PI / 2;
 const marcaMat = new THREE.MeshBasicMaterial({ map: null, transparent: true, depthWrite: false, opacity: 0.85 });
 function montarMovel(s){
@@ -1653,6 +1687,9 @@ function montarMovel(s){
     if (s.tipo === 'geladeira') mv.castShadow = false;
     g.add(mv);
     for (let i = 0; i < CAP; i++){ const it = new THREE.Group(); const [x, y, z] = POS_ITENS[s.tipo][i]; it.position.set((x - 8) / 16, y / 16, (z - 8) / 16); g.add(it); M.itens.push(it); }
+    // a plaquinha com o que o móvel vende, sempre virada para a câmera, um pouco acima dele
+    M.placa = new THREE.Sprite(new THREE.SpriteMaterial({ map: texPlaca(null), transparent: true }));
+    M.placa.scale.set(0.94, 0.41, 1); M.placa.position.set(0, ALTURA_PLACA[s.tipo], 0); M.placa.renderOrder = 5; g.add(M.placa);
   } else {
     if (!marcaMat.map) marcaMat.map = texMarca('#ffffff');
     const pl = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 0.92), marcaMat); pl.rotation.x = -Math.PI / 2; pl.position.y = 0.012; g.add(pl);
@@ -1669,6 +1706,8 @@ function atualizarMovel(id){
   const M = MOVEIS[id], m = S.modulos[id], s = SLOT[id];
   if (!M) return;
   if (m){
+    const tx = texPlaca(m.p, m.p && m.n === 0);
+    if (M.placa.material.map !== tx){ M.placa.material.map = tx; M.placa.material.needsUpdate = true; }
     M.itens.forEach((it, i) => {
       const quer = m.p && i < m.n;
       if (quer && (!it.children.length || it.userData.p !== m.p)){ it.clear(); const mm = malha(geoItem(m.p), false); if (s.tipo === 'geladeira') mm.receiveShadow = false; mm.rotation.y = hash(i, 3, id.length) * 0.8 - 0.4; it.add(mm); it.userData.p = m.p; }
