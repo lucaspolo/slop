@@ -107,6 +107,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 ## Modelos
 
 - Modelo novo entra primeiro no visualizador (`?modelos`, em `catalogoModelos`) para o Lucas ver. Ele só vai para o jogo quando ele pedir.
+- Estão só no visualizador, esperando o Lucas pedir: o galo (`vGalo`, no grupo Bichos, na escala e de frente como a galinha).
 - `Vox.set` só aceita coordenadas inteiras: arredonde antes.
 - O Nano Hostel fica atrás do celeiro, encostado na parede de trás (z 0,625). Ele só pode aparecer quando o mapa é girado, nunca na câmera de sempre.
 - Os créditos (Ajustes, Créditos) têm os retratos em voxel da Carolina Torrigo e do Lucas Polo, feitos a partir de fotos.
