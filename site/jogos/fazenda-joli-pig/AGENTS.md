@@ -157,6 +157,13 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - Preços (1ª e 2ª): moinho 9 mil e 24 mil, queijaria 15 mil e 30 mil, padaria 24 mil e 48 mil, cozinha 36 mil e 72 mil, terreiro 15 mil e 36 mil, torrador 54 mil e 108 mil, chocolateria 84 mil e 168 mil, oficina 96 mil e 192 mil, galinheiro 18 mil e 45 mil, curral 24 mil e 60 mil, galinheiro dos patos 24 mil (1ª no nível 36, `NIVEL_REFORMA`), casa e celeiro 30 mil e 90 mil, poço 9 mil e 24 mil.
 - A reforma é o desenho original com acréscimos (`REFORMA_1`, `vReforma(id, n)`), sem sair do lugar da construção. Durante a obra a construção ganha o andaime (`vAndaime(id)`). Os modelos estão no visualizador, no grupo "Reformas do Maurinho". A 2ª reforma ainda não tem desenho: enquanto isso `REFORMA.max` é 1.
 
+## Fábricas novas
+
+- Mais uma queijaria (nível 38, R$ 30.000), padaria (40, R$ 45.000) e cozinha de doces (42, R$ 60.000) no gramado depois da cozinha, na mesma fileira e no mesmo ritmo: x 37 a 38, 41 a 42 e 45 a 46, com a porta em z 4 (`FAB_NOVAS`, que entram em `FABRICAS` com o id `queijaria2`, `padaria2` e `cozinha2`, e `PREDIOS` com `nova: true`).
+- Fazem as mesmas receitas da original (`base`), com fila, esteira e repetidor próprios em `S.fabricas[id]`, então cada uma pode repetir uma receita diferente. Precisam da original construída e não têm reforma (sem `PRECO_REFORMA`), como o galinheiro e o curral novos.
+- O lote só vira construção (ladrilhos `predio`, a obra e a placa com o nível) um nível antes de liberar (`fabNovaVisivel`, `abrirLoteFabrica`, chamado ao abrir o jogo e em `subiuNivel`). Antes disso o lugar é gramado e aceita enfeite; o enfeite que estiver no lote ou na porta volta para a loja com aviso.
+- Desenho: o da 1ª reforma da original com outras cores (`vFabNova`, `CORES_FAB_NOVA`): a queijaria amarelinha de telhado verde-água, a padaria caiada de telhado verde, a cozinha verde-menta de telhado coral. Estão no visualizador em Construções.
+
 ## Mapa
 
 - O mapa tem 52 × 51 ladrilhos (`W`, `H`), o dobro da área do primeiro (36 × 37). Ele cresceu em duas etapas: entraram colunas e linhas entre as zonas, para as construções não ficarem amontoadas, e o sul ganhou linhas a mais. A terra que sobra é para construções futuras: a fileira das fábricas tem lugar livre entre a cozinha de doces e a composteira, a floresta tem lugar para mais parcelas ao sul das quatro de hoje (z 43 a 50) e o canto Sul tem uma área grande livre abaixo das faixas de lotes.
