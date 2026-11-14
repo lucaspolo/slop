@@ -247,3 +247,11 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - Os dois aviões saem do chão antes da biruta e do hangar (o jatinho em `JATO_VOO.sobe`, o teco-teco em x 38). Ao mudar uma trajetória, confira cubinho por cubinho que o avião não entra na biruta, no hangar, nas árvores da beira nem abaixo do chão; `__fazenda.jato.passo(dt)` anda a pista um quadro, para testar sem esperar.
 - Som: o teco-teco ronca (hélice) e o jatinho assobia (turbina com sopro), os dois em `motor`.
 
+## PWA (instalar e jogar offline)
+
+- O jogo é um PWA: `manifest.webmanifest` (nome "Fazenda Joli Pig", na tela "Joli Pig", tela cheia sem a barra do navegador), os ícones em `icones/` e o service worker `sw.js`. O ícone é o Ed do jogo (renderizado do visualizador) num morrinho com céu e sol; o `icone-mascara-512.png` tem o Ed menor, dentro da área segura dos ícones redondos, e o `apple-touch-icon.png` sai dele.
+- `sw.js` guarda o jogo para abrir sem internet. A página vem sempre da rede quando há internet (sem o cache do navegador; se a rede demorar mais de 4 s, abre a cópia guardada e atualiza por trás), e a cópia vale para qualquer endereço do jogo (`?modelos`, `?v=`). O three.js e as fontes (só as letras latinas) ficam num cache à parte, baixados uma vez.
+- Versão: `VERSAO_JOGO` no `index.html` e `VERSAO` no `sw.js` são o marcador `__VERSAO__`, que o `pages.yml` troca pelo resumo dos arquivos do jogo a cada publicação. Mudou o jogo, muda o `sw.js`: o navegador instala o novo (confere ao abrir, ao voltar para o jogo e a cada 20 min), e o service worker novo avisa o jogo aberto, que mostra "Tem novidade na fazenda!" com o botão "atualizar" (salva e recarrega). Não troque o marcador à mão.
+- Arquivo novo que o jogo precise para abrir entra em `LOCAIS` no `sw.js`; recurso de fora (CDN) entra como o three.js.
+- Testes no navegador sem tela: o service worker fica de fora (`page.setBypassServiceWorker(true)`), senão ele busca o three.js no CDN. Para testar o PWA, sirva uma cópia de `site/` com o marcador trocado e um CDN de mentira em HTTPS (`--host-resolver-rules` e `--ignore-certificate-errors`), e desligue os dois servidores para ver o jogo abrir offline.
+

@@ -91,4 +91,5 @@ Os desenhos ficam dentro do script do jogo, então o visualizador é um modo da 
 
 - ⚠️ O domínio customizado é configurado no repositório (**Settings → Pages**), não por arquivo `CNAME`. Com publicação via Actions, o GitHub ignora o `CNAME` do artefato; adicionar um não muda nada e só confunde quem lê.
 - ⚠️ Não teste o easter egg com `google-chrome --headless --virtual-time-budget`: o relógio virtual não avança as animações do `easter-egg.js`, então o balão não aparece. Também não role a página nesse modo, porque a captura põe os elementos fixos fora do lugar. Teste num navegador de verdade: sirva `site/` (`python3 -m http.server`) e chame `appear()` no console para o personagem surgir na hora.
+- ⚠️ A Fazenda Joli Pig é um PWA, com service worker: o passo "Marcar a versão da Fazenda Joli Pig" do `pages.yml` troca o marcador `__VERSAO__` do jogo e do `sw.js` pelo resumo dos arquivos do jogo. Sem ele, o celular não percebe versão nova. Detalhes no `AGENTS.md` do jogo.
 - ⚠️ Só o conteúdo de `site/` vai para o ar. Arquivo fora dessa pasta não é publicado, então não adianta referenciá-lo do HTML.

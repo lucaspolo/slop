@@ -6,6 +6,14 @@
 <title>Fazenda Joli Pig · slop</title>
 <meta name="description" content="Jogo de fazenda em voxel com mapa isométrico: o porquinho Ed planta, cuida das galinhas e das vacas e chama o irmão Beto para vender tudo no Joli Market.">
 <link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="icon" href="icones/icone-32.png" type="image/png" sizes="32x32">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#9fd8f2">
+<link rel="apple-touch-icon" href="icones/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Joli Pig">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Gochi+Hand&family=Rubik:wght@500;700;800&display=swap">
@@ -455,6 +463,7 @@ body.modelos #tela{position:absolute;top:var(--md-topo,84px);left:300px;width:ca
   </div>
 
   <div class="hud-base">
+    <div class="fila painel" id="novaVersao" hidden><img data-icone="ed" alt=""><span>Tem novidade na fazenda!</span><button class="botao mini" id="novaVersaoBotao" type="button">atualizar</button></div>
     <div class="andamento solto" id="andamento">
       <div class="andamento-lista" id="andamentoLista">
         <div class="fila painel" id="macaPill" hidden><img data-icone="maca" alt=""><span id="macaTexto"></span><span class="tp" id="macaTempo"></span></div>
@@ -13660,7 +13669,24 @@ function iniciarModelos(){
 // o Safari do iPhone ignora o user-scalable do viewport: sem isso a pinça amplia a página e as janelas saem da tela
 for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
 document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
-if (new URLSearchParams(location.search).has('modelos')) iniciarModelos(); else iniciar();
+// ================= PWA: o jogo instala na tela do celular e abre sem internet (sw.js guarda o jogo, o three.js e as fontes).
+// VERSAO_JOGO e a VERSAO do sw.js são o mesmo marcador, que o deploy troca pelo resumo dos arquivos do jogo. Com o jogo
+// aberto, o navegador confere o sw.js ao voltar para o jogo e a cada 20 min; quando um service worker de outra versão assume,
+// ele avisa e o jogo oferece atualizar (salva e recarrega)
+const VERSAO_JOGO = '__VERSAO__';
+function iniciarPwa(){
+  if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data && e.data.tipo === 'versao' && e.data.versao !== VERSAO_JOGO) $('novaVersao').hidden = false;
+  });
+  $('novaVersaoBotao').addEventListener('click', () => { Som.clique(); salvar(); location.reload(); });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+    const conferir = () => { if (navigator.onLine) reg.update().catch(() => {}); };
+    setInterval(conferir, 20 * 60000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) conferir(); });
+  }).catch(() => {});
+}
+if (new URLSearchParams(location.search).has('modelos')) iniciarModelos(); else { iniciar(); iniciarPwa(); }
 })();
 </script>
 </body>
