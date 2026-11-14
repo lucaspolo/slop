@@ -8,7 +8,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 
 - Tudo em português do Brasil, num tom carinhoso e bem-humorado de desenho animado.
 - Nunca use travessão nem meia-risca (os traços longos), nem no jogo, nem nos comentários, nem nos commits. Use vírgula, dois-pontos ou ponto.
-- O helicóptero do Milton se chama PIG-MTP.
+- O helicóptero do Milton se chama PIG-MTP. Na fazenda, o avião dele também: o teco-teco e, depois do nível 29, o jatinho.
 - Fala em balão dura o tempo de `tempoDeLeitura(texto)`, para dar tempo de ler. Não use duração fixa curta para frase longa.
 
 ## Personagens
@@ -22,7 +22,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 | Patrinho | Irmão, chef do Joli Bistrô. Compra trufas, anda de lambreta. Chama o Ed de "irmãozinho" |
 | Hud (Hudson) | Irmão pequenino, metade do tamanho do Ed. Ajudante em troca de mesada. Não é o caçula: o caçula é o Dani |
 | Dani (Daniel Lucio) | Irmão caçula da família, e o maior de todos: a mesma jardineira amarela do Ed e do Hud, com 1,25 vez o tamanho do Ed (`ESCALA_DANI`, `MODELO_DANI`). Chega no nível 30 e mora na casa com o Ed. Ajudante em troca de mesada, como o Hud |
-| Milton | Irmão, metade do tamanho do Pelúcio. Pilota o PIG-MTP. Bordão: "Milton na área!" |
+| Milton | Irmão, metade do tamanho do Pelúcio. Pilota o PIG-MTP (na fazenda, um teco-teco até o nível 29 e depois um jatinho). Bordão: "Milton na área!" |
 | Minhoquinhas | Sócias do Ed. Moram na composteira e fazem adubo |
 | Lúcia | Nano arteira, dona do Nano Hostel. Cabelo preto com chiquinhas, vestido amarelo até o joelho. Chama o Ed de "tomada" e paga aluguel |
 | Maurinho (Mauro Lúcio) | Irmão, arquiteto e muito inteligente. Igual ao Patrinho, com o suéter branco de ursinho marrom (`MODELO_MAURINHO`). Põe os óculos redondos só nas obras, com a prancheta na mão (`MODELO_MAURINHO_OCULOS`, `vPrancheta`). Chega no nível 31 na garupa da lambreta do Patrinho e mostra ao Ed as plantas na prancheta, ainda sem os óculos |
@@ -51,6 +51,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 | Amigos da mata | nível 20 |
 | Festa na fazenda | nível 25 |
 | O guardião da mata | nível 28, depois da cena da mata: o Ed vai à beira da floresta, o Curupira surge num redemoinho de folhas, agradece o cuidado com os bichos e a mata e some deixando pegadas ao contrário. A câmera vira para a floresta (az de `MATA_CINE`), como na cena da mata |
+| Milton a jato | nível 29, no lugar da próxima visita do Milton (o relógio dela fica em no máximo 1,5 min, `jatoPendente`): o galo avisa de um barulho estranho, o Ed vai à beira de cima da fazenda, o jatinho passa rasante por cima dele, pousa e abre a escadinha; o Milton desce, contorna o nariz e conta do upgrade. No fim, presente e taxa nova, e ele decola. Câmera do lado da pista, como na primeira cena do Milton; o Milton para na diagonal do Ed (`JATO_CENA.milton`) para os dois conversarem quase de perfil |
 | O caçula grandão | nível 30, uns 15 s depois de o Ed tirar a cerca do terreno novo (`cantoLimpoEm`): o Ed e o Hud acham a fazenda grande demais, o Hud chama o Dani, que chega pela estradinha de cima e combina a ajuda. Não espera o Hud: se ele está ajudando, larga o trabalho, vem de onde está, o tempo dele fica parado durante a cena e no fim só o Dani entra em casa (`daniCenaHud`, `soltarCenaDani`), como no cafezinho. Os três ficam numa fileira de lado na tela com o Ed um pouco atrás, para os três rostos aparecerem (`DANI_CENA`) |
 | O arquiteto da família | nível 31: o Maurinho chega na garupa da lambreta do Patrinho e conta das reformas |
 | Hora de nanar | toda noite, na metade da noite (com o Hud se ele estiver ajudando, senão com a Luma); de manhã a câmera vai ao galo, que acorda a fazenda. O Dani que estava ajudando entra em casa antes e volta pela porta depois, se a mesada ainda vale |
@@ -63,6 +64,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - As melodias são originais, em estilo midi (osciladores). Não reproduza música de terceiros, nem "uma versão" dela.
 - Cada tema tem `ganho` para ficar com o mesmo volume médio dos outros, abaixo dos efeitos sonoros. Ao criar um tema, meça o volume e ajuste.
 - A música baixa com a caixa de fala aberta, some aos poucos ao terminar ou pular e respeita o botão de som dos Ajustes.
+- Milton a jato: `TEMAS.jato`, a fanfarra do Milton (`TEMAS.milton`) um tom acima e mais rápida, com baixo pulsando.
 
 ## Falas que se repetem
 
@@ -115,6 +117,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - `Vox.set` só aceita coordenadas inteiras: arredonde antes.
 - A ponte do lago do canto Sul (`vPonte`) está no visualizador, no grupo Objetos.
 - O Dani está em Personagens, e "Ed, Hud e Dani juntos" mostra os três no tamanho do jogo.
+- O jatinho do Milton (`vJatinho`, montado com a porta-escada por `montarJatinho`) está em Veículos, fechado e com a escada, ao lado do teco-teco; o ícone é `VI.jato`.
 - O pato (`vPato`, escala da galinha, de frente para +z) está em Bichos; a casinha dos patos (`vCasaPatos`) em Construções; a rampa (`vRampaPatos`) em Objetos; o ovo de pata é ícone (`VI.ovopata`).
 - O Nano Hostel fica atrás do celeiro, encostado na parede de trás (z 0,625). Ele só pode aparecer quando o mapa é girado, nunca na câmera de sempre.
 - Os créditos (Ajustes, Créditos) têm os retratos em voxel da Carolina Torrigo e do Lucas Polo, feitos a partir de fotos.
@@ -125,7 +128,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - Ele não vai para o save: ao abrir o jogo está no mourão, e quando uma cena começa volta para lá na hora (`galoNoMourao`).
 - Estados (`G.estado`): `poleiro`, `voando` (pulo em arco batendo as asas, `voarGalo`), `chao` (com `modo` `ciume`, `fujao` ou `volta`) e `colo`. No chão ele anda pela `rota` dos ladrilhos (`galoIr`). Poses em `atualizarGalo`: `cantar` (bate as asas e estica o pescoço para trás), `alarme` (asas, pulinhos e cabeça para todo lado), `bicar` e `feliz`.
 - Cocoricó: na hora de nanar, de manhã, a câmera vai ao galo do galinheiro, ele canta e, com o galinheiro novo, o outro responde com outra voz (`Som.galo(f)`); depois a câmera volta para a casa, as janelas acendem e o Ed sai. Rever a cena mostra o mesmo.
-- Alarme (`galoAlarme`): uns 5 s antes do disco voador passar, da chuva começar e do teco-teco do Milton chegar (`GALO_JOGO.alarme`), com um aviso do que vem (`AVISO_ALARME`), e quando o caminhão do Beto vem (sem aviso, que a ligação já avisa). Não acontece em cena.
+- Alarme (`galoAlarme`): uns 5 s antes do disco voador passar, da chuva começar e do avião do Milton chegar (`GALO_JOGO.alarme`), com um aviso do que vem (`AVISO_ALARME`: o teco-teco, o jatinho ou, antes da cena do jatinho, um barulho estranho no céu), e quando o caminhão do Beto vem (sem aviso, que a ligação já avisa). Não acontece em cena.
 - Tocar no galo do mourão: ele canta e o Ed vai fazer carinho (tarefa `carinhoGalo`): para no ladrilho de dentro, encostado na cerca (`lugarDoEdNoGalo`), olha para ele, alisa as penas (pose `carinho`) e fala. Só visual, sem xp.
 - Ciúme (`galoCiumento`): em 20% das vezes que o Ed recolhe um ovo, no máximo uma vez a cada minuto e meio, o galo daquele galinheiro desce para dentro do cercado, corre atrás do Ed sem sair do pasto (`pontoNoPasto`), bica o pé dele e volta para o mourão. O Ed pula, reclama e sai apressado: anda 50% mais rápido por 3 s (`ed.pressa`). Com o coletor, o Ed não recolhe ovo e o ciúme não acontece.
 - Fujão (`fugirGalo`): a cada 8 a 15 min de jogo aberto (o primeiro entre 5 e 10), um galo do mourão pula para o ladrilho de fora e passeia pela grama e pelos caminhos em volta (`chaoLuma`). A Luma, se estiver em casa, sai sem a bolinha e corre latindo atrás dele (`lumaAtrasDoGalo`, ação `galo`) e para ao lado dele na tela, a `LUMA_JOGO.galo` (1,5), do lado em que já está (`ladoDoGalo`), para não ficar escondida atrás dele nem pôr o balão em cima dele; ele corre dela quando ela chega a menos de 1,65. Tocando no galo, o Ed vai buscar (`pegarGalo`); quando o Ed chega perto, ele corre uma vez e o Ed vai de novo. Pego, ele vai no colo do Ed (`ed.colo`, braços na frente) e a tarefa `soltarGalo` entra na frente da fila: o Ed para encostado na cerca, solta, ele voa para o mourão e canta, e o Ed ganha `GALO_JOGO.xpFujao`. Cancelada a tarefa, ele volta sozinho. Sem ninguém buscar, depois de 3 min ele volta sozinho.
@@ -227,4 +230,12 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - Os dois trabalham do mesmo jeito (`AJUDA`, `atualizarAjudante`): regam, tiram o mato e colhem os canteiros, colhem o pomar, coletam na mata e pegam o mel. Nos terrenos destinados também aram e plantam (ver Destino dos terrenos de canteiros). Vão ao que está mais perto e respeitam o que está reservado pelo Ed e pelo outro (`setReserva`). Com os dois na rua, cada um evita a região onde o outro está trabalhando (até `AJUDA_LONGE`, 8 ladrilhos do último alvo dele, o custo cresce), para não parecerem trabalhar sempre juntos: num teste com os 8 terrenos cheios, ficaram a uns 10 ladrilhos um do outro, contra 2 antes. Cada um tem a tarefa dele (`tarefaHud`, `tarefaDani`).
 - Hud: nível 9, R$ 500 por 15 min (`HUD`, `S.hudAte`). Dani: depois da cena dele, R$ 1.500 por 15 min (`DANI`, `S.daniAte`), com passo mais largo (`DANI.vel`) e trabalho no ritmo do Ed (o Hud leva 1,2 vez o tempo).
 - Os dois saem e entram pela porta da casa (`HUD_PORTA`). Cada um tem a pílula embaixo, o menu ao tocar nele, o item na casa e o botão no caderno. O tempo deles para com o jogo fechado, no sono e no cafezinho (`pausarRelogios`, `limparCafe`).
+
+## Pista do Milton e o jatinho
+
+- O Milton pousa de tempos em tempos com o jogo aberto, traz sementes ou ração e paga a taxa da pista (`taxaPista`). O primeiro pouso é a cena "Milton na área", depois da primeira venda.
+- Até a cena "Milton a jato" (`S.viuCineJato`, nível 29) o PIG-MTP é o teco-teco; depois, o jatinho, que paga 50% a mais de taxa e vem a cada 4 a 9 min em vez de 6 a 12 (`JATO_VOO`, `intervaloMilton`). `voo.modelo` diz qual dos dois aparece. As cenas antigas (o primeiro pouso e a festa) usam sempre o teco-teco, também ao rever. As falas de chegada do jatinho são `FALAS_MILTON_CHEGA_JATO`.
+- O jatinho (escala própria, `JATO.escala`, um pouco maior que o teco-teco) toca a pista mais longe, roda freando com poeira e para em `PISTA.para`. A porta fica do lado da pista (-z) e abre como escadinha (`JATO.aberta`). O Milton aparece na porta, acena, desce devagar (`alturaNaEscada`) e contorna o nariz (`voltaDoNariz`) antes de virar para a fazenda, para não passar embaixo da asa. Na volta ele faz o caminho ao contrário, a porta fecha e o jato decola deixando rastro branco (`soltarRastro`).
+- Os dois aviões saem do chão antes da biruta e do hangar (o jatinho em `JATO_VOO.sobe`, o teco-teco em x 38). Ao mudar uma trajetória, confira cubinho por cubinho que o avião não entra na biruta, no hangar, nas árvores da beira nem abaixo do chão; `__fazenda.jato.passo(dt)` anda a pista um quadro, para testar sem esperar.
+- Som: o teco-teco ronca (hélice) e o jatinho assobia (turbina com sopro), os dois em `motor`.
 
