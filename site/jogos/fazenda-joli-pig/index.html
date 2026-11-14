@@ -832,6 +832,8 @@ const VAGAS_FAB = 3;
 const REFORMA = { nivel: [31, 35], minutos: [3, 6], xp: [40, 80], max: 1 };
 const PRECO_REFORMA = { moinho: [9000, 24000], queijaria: [15000, 30000], padaria: [24000, 48000], cozinha: [36000, 72000], terreiro: [15000, 36000], torrador: [54000, 108000], chocolateria: [84000, 168000], oficina: [96000, 192000], galinheiro: [18000, 45000], curral: [24000, 60000], patos: [24000, 60000], casa: [30000, 90000], celeiro: [30000, 90000], poco: [9000, 24000] };
 const nivelReforma = id => (S && S.reformas && S.reformas[id]) || 0;
+// as construções novas reformam pelo mesmo preço das originais
+Object.assign(PRECO_REFORMA, { galinheiro2: PRECO_REFORMA.galinheiro, curral2: PRECO_REFORMA.curral, queijaria2: PRECO_REFORMA.queijaria, padaria2: PRECO_REFORMA.padaria, cozinha2: PRECO_REFORMA.cozinha });
 // o galinheiro dos patos chega depois (nível 32), então a reforma dele libera no 36, o primeiro nível livre depois da 2ª reforma
 const NIVEL_REFORMA = { patos: [36, 40] };
 const nivelDaReforma = (id, n) => (NIVEL_REFORMA[id] || REFORMA.nivel)[n];
@@ -851,7 +853,7 @@ const cercadoFeito = id => !!(S && S.cercados && S.cercados[id]);
 // o lote de um cercado do canto só aparece com o terreno novo limpo
 const cercadoAberto = id => !CERCADOS[id].canto || (S && S.canto === 2);
 // os patos só têm o galinheiro deles, e só depois de comprado
-const capCercado = (tp, c) => tp === 'pato' ? (c || !cercadoFeito('patos') ? 0 : ANIMAIS.pato.max * [1, 1.5, 2][nivelReforma('patos')]) : c ? (cercadoFeito(CERCADO_DE[tp]) ? ANIMAIS[tp].max : 0) : ANIMAIS[tp].max * [1, 1.5, 2][nivelReforma(ANIMAIS[tp].lugar)];
+const capCercado = (tp, c) => tp === 'pato' ? (c || !cercadoFeito('patos') ? 0 : ANIMAIS.pato.max * [1, 1.5, 2][nivelReforma('patos')]) : c ? (cercadoFeito(CERCADO_DE[tp]) ? ANIMAIS[tp].max * [1, 1.5, 2][nivelReforma(CERCADO_DE[tp])] : 0) : ANIMAIS[tp].max * [1, 1.5, 2][nivelReforma(ANIMAIS[tp].lugar)];
 const maxAnimais = tp => capCercado(tp, 0) + capCercado(tp, 1);
 const PRECO_RACAO = 3;
 // melhorias do Ed: cada uma tem degraus comprados em ordem; o tempo do Ed é o recurso que mais limita a fazenda
@@ -4275,23 +4277,30 @@ const CORES_FAB_NOVA = {
   padaria: { 0xb5603c: 0xe6dfcf, 0xc8734c: 0xf3eee3, 0xa04e30: 0xd6cdbb, 0xb8433a: 0x3f7f4a, 0xd0503f: 0x4f9a5a },
   cozinha: { 0xf7c9d9: 0xcfeedc, 0x8f5bbf: 0xe0663f, 0xa35ccf: 0xf0805a },
 };
-function vFabNova(base){ const v = MODELO_BASE[base](); REFORMA_1[base](v); recolorir(v, CORES_FAB_NOVA[base]); return v; }
+function vFabNova(base, n = 0){ return vReforma(base + '2', n); }
 // o galinheiro e o curral do canto Sul: o desenho dos primeiros com outras cores, para não confundir com eles.
 // O galinheiro é caiado, de telhado azul e com um cata-vento de galo dourado na cumeeira; o curral tem esteios brancos e telhado verde
-function vGalinheiroNovo(){
-  const v = vGalinheiro(), ouro = 0xe0b040, ouro2 = 0xb8862a;
-  recolorir(v, { 0xb8433a: 0x3d6fa8, 0xd0503f: 0x4d82bd, 0xd9a96a: 0xf1ead8, 0xc99858: 0xe0d6bf });
-  v.box(7, 21, 7, 8, 23, 8, 0x5a5550);
-  v.box(4, 24, 7, 11, 24, 8, ouro2); v.box(11, 25, 7, 11, 25, 8, ouro2); v.box(11, 23, 7, 11, 23, 8, ouro2);
-  v.box(6, 25, 7, 9, 27, 8, ouro); v.box(4, 27, 7, 5, 29, 8, ouro); v.box(9, 28, 7, 10, 29, 8, ouro);
-  v.box(11, 28, 7, 11, 28, 8, 0xe8903a); v.box(9, 30, 7, 10, 30, 8, 0xc8303a);
-  return v;
-}
-function vCurralNovo(){
-  const v = vAbrigo();
-  recolorir(v, { 0x9c5a3c: 0x3f7f4a, 0xb06a48: 0x4f9358, 0x7a5232: 0xece4d2 });
-  return v;
-}
+function vGalinheiroNovo(n = 0){ return vReforma('galinheiro2', n); }
+function vCurralNovo(n = 0){ return vReforma('curral2', n); }
+// as construções novas (o galinheiro e o curral novos, as fábricas novas) usam o desenho da original, com a reforma dela
+// quando reformadas, e depois vestem as cores e os detalhes próprios (vReforma)
+const COPIAS = {
+  galinheiro2: { base: 'galinheiro', vestir(v){
+    const ouro = 0xe0b040, ouro2 = 0xb8862a;
+    recolorir(v, { 0xb8433a: 0x3d6fa8, 0xd0503f: 0x4d82bd, 0xd9a96a: 0xf1ead8, 0xc99858: 0xe0d6bf });
+    // o galo dourado da cumeeira (cobre o cata-vento da reforma do galinheiro)
+    v.box(7, 21, 7, 8, 23, 8, 0x5a5550);
+    v.box(4, 24, 7, 11, 24, 8, ouro2); v.box(11, 25, 7, 11, 25, 8, ouro2); v.box(11, 23, 7, 11, 23, 8, ouro2);
+    v.box(6, 25, 7, 9, 27, 8, ouro); v.box(4, 27, 7, 5, 29, 8, ouro); v.box(9, 28, 7, 10, 29, 8, ouro);
+    v.box(11, 28, 7, 11, 28, 8, 0xe8903a); v.box(9, 30, 7, 10, 30, 8, 0xc8303a);
+    v.set(10, 25, 7, ouro2);
+  } },
+  // o curral novo: esteios brancos e telhado verde, também o telhado de telha da reforma
+  curral2: { base: 'curral', vestir: v => recolorir(v, { 0x9c5a3c: 0x3f7f4a, 0xb06a48: 0x4f9358, 0x7a5232: 0xece4d2, 0xb8433a: 0x3f7f4a, 0xd0503f: 0x4f9358, 0xa03a32: 0x356b3e }) },
+  queijaria2: { base: 'queijaria', vestir: v => recolorir(v, CORES_FAB_NOVA.queijaria) },
+  padaria2: { base: 'padaria', vestir: v => recolorir(v, CORES_FAB_NOVA.padaria) },
+  cozinha2: { base: 'cozinha', vestir: v => recolorir(v, CORES_FAB_NOVA.cozinha) },
+};
 const vasinho = (v, x, z, flor) => { v.box(x, 0, z, x + 1, 1, z + 1, 0xb5603c); v.box(x, 2, z, x + 1, 2, z + 1, (X, Y, Z) => (X + Z) % 2 ? flor : 0x4f9a3d); v.set(x + (z % 2), 3, z, flor); };
 const toldo = (v, x0, x1, y, z, cor) => {
   for (let x = x0; x <= x1; x++){
@@ -4417,8 +4426,9 @@ const REFORMA_1 = {
   },
 };
 function vReforma(id, n){
-  const v = MODELO_BASE[id]();
-  if (n >= 1) REFORMA_1[id](v);
+  const C = COPIAS[id], b = C ? C.base : id, v = MODELO_BASE[b]();
+  if (n >= 1) REFORMA_1[b](v);
+  if (C) C.vestir(v);
   return v;
 }
 // moinho com as pás (para o visualizador e o ícone)
@@ -4432,7 +4442,7 @@ const ANDAIME = { casa: [2, 29, 4, 29, 26], celeiro: [4, 35, 5, 34, 30], poco: [
   moinho: [1, 14, 1, 14, 28], terreiro: [0, 23, 0, 15, 6] };
 const ANDAIME_FAB = [1, 14, 2, 13, 15];
 function vAndaime(id){
-  const [x0, x1, z0, z1, alto] = ANDAIME[id] || ANDAIME_FAB, v = new Vox(), tubo = 0x9aa3ab, tabua = 0xc99a66, p = PREDIO[id];
+  const [x0, x1, z0, z1, alto] = ANDAIME[id] || ANDAIME[(COPIAS[id] || {}).base] || ANDAIME_FAB, v = new Vox(), tubo = 0x9aa3ab, tabua = 0xc99a66, p = PREDIO[id];
   // dois cubinhos de folga em volta da construção, mas sem passar mais de um do terreno (ali o Ed para e o Maurinho anda)
   const W8 = (p.x1 - p.x0 + 1) * 8, D8 = (p.z1 - p.z0 + 1) * 8;
   const X0 = Math.max(x0 - 2, -1), X1 = Math.min(x1 + 2, W8), Z0 = Math.max(z0 - 2, -1), Z1 = Math.min(z1 + 2, D8 - 1);
@@ -6037,10 +6047,10 @@ function montarAndaime(){
 const artigoPredio = id => (id === 'casa' || (FABRICAS[id] && FABRICAS[id].fem)) ? 'a' : 'o';
 const nomePredio = id => id === 'casa' ? 'casa' : (FABRICAS[id] ? FABRICAS[id].nome : PREDIO[id].nome).toLowerCase();
 const efeitoReforma = (id, n) => FABRICAS[id] ? `fica com ${VAGAS_FAB + n} vagas de produção e visual novo`
-  : id === 'galinheiro' ? `cabem ${ANIMAIS.galinha.max * [1, 1.5, 2][n]} galinhas e visual novo` : id === 'curral' ? `cabem ${ANIMAIS.vaca.max * [1, 1.5, 2][n]} vacas e visual novo`
+  : /^galinheiro/.test(id) ? `cabem ${ANIMAIS.galinha.max * [1, 1.5, 2][n]} galinhas e visual novo` : /^curral/.test(id) ? `cabem ${ANIMAIS.vaca.max * [1, 1.5, 2][n]} vacas e visual novo`
   : id === 'patos' ? `cabem ${ANIMAIS.pato.max * [1, 1.5, 2][n]} patos e visual novo` : 'visual novo';
 function itensReforma(id, r){
-  if (!S.viuCineMaurinho || !PRECO_REFORMA[id] || (FABRICAS[id] && !estFab(id).feita)) return;
+  if (!S.viuCineMaurinho || !PRECO_REFORMA[id] || (FABRICAS[id] && !estFab(id).feita) || (CERCADOS[id] && !cercadoFeito(id))) return;
   const n = nivelReforma(id);
   if (S.obra && S.obra.id === id){ r.estado = (r.estado ? r.estado + ' ' : '') + `Em obra com o Maurinho: falta ${tempo(Math.max(0, (S.obra.fim - Date.now()) / 1000))}.`; return; }
   if (n >= REFORMA.max) return;
@@ -12898,7 +12908,7 @@ function mostrarAjuda(intro, aba){
   if (abaAjuda === 'producao') corpo = `
     <ul class="passos">
       <li><b>Construções:</b> moinho${nv(FABRICAS.moinho.nivel)}, queijaria${nv(FABRICAS.queijaria.nivel)}, padaria${nv(FABRICAS.padaria.nivel)}, cozinha de doces${nv(FABRICAS.cozinha.nivel)} e torrador${nv(FABRICAS.torrador.nivel)} ficam na área à direita. Toque numa delas, escolha a receita e o Ed leva os ingredientes. Cada uma faz até ${VAGAS_FAB} receitas em fila e continua com o jogo fechado; depois o Ed recolhe o que ficou pronto. Os produtos valem mais que os ingredientes.</li>
-      <li><b>Fábricas novas</b>${nv(FAB_NOVAS.queijaria2.nivel)}: no gramado depois da cozinha de doces cabem mais uma queijaria (nível ${FAB_NOVAS.queijaria2.nivel}, ${reais(FAB_NOVAS.queijaria2.preco)}), mais uma padaria (nível ${FAB_NOVAS.padaria2.nivel}, ${reais(FAB_NOVAS.padaria2.preco)}) e mais uma cozinha de doces (nível ${FAB_NOVAS.cozinha2.nivel}, ${reais(FAB_NOVAS.cozinha2.preco)}). Fazem as mesmas receitas da primeira, com fila, esteira e repetidor próprios: dá para cada uma repetir uma receita diferente. O lote aparece um nível antes.</li>
+      <li><b>Fábricas novas</b>${nv(FAB_NOVAS.queijaria2.nivel)}: no gramado depois da cozinha de doces cabem mais uma queijaria (nível ${FAB_NOVAS.queijaria2.nivel}, ${reais(FAB_NOVAS.queijaria2.preco)}), mais uma padaria (nível ${FAB_NOVAS.padaria2.nivel}, ${reais(FAB_NOVAS.padaria2.preco)}) e mais uma cozinha de doces (nível ${FAB_NOVAS.cozinha2.nivel}, ${reais(FAB_NOVAS.cozinha2.preco)}). Fazem as mesmas receitas da primeira, com fila, esteira e repetidor próprios: dá para cada uma repetir uma receita diferente. O lote aparece um nível antes, e o Maurinho reforma as novas como as outras.</li>
       <li><b>Pomar:</b> ${(l => l.slice(0, -1).join(', ') + ' e ' + l[l.length - 1])(Object.values(FRUTIFERAS).map(F => F.nome.toLowerCase() + nv(F.nivel)))} dão frutas de novo e de novo, sem replantar nem regar. Nos níveis ${POMAR_BLOCOS[1].nivel} e ${POMAR_BLOCOS[2].nivel} dá para comprar terrenos de pomar com mais seis covas cada, mais dois no terreno novo depois de arrendado, e uma árvore pode ser cortada para dar lugar a outra.</li>
       <li><b>Colmeias</b>${nv(COLMEIA.nivel)}: dão mel, e cada colmeia deixa o pomar do mesmo lado da fazenda ${Math.round(COLMEIA.ajuda * 100)}% mais rápido.</li>
       <li><b>Café</b>${nv(CULTURAS.cafe.nivel)}: sai do pé em cereja e seca no terreiro. Só o Pelúcio, da Joli Coffee, compra o café seco, e o torrado, feito no torrador, vale ${reais(PRODUTOS.torrado.venda)}.</li>
@@ -12921,7 +12931,7 @@ function mostrarAjuda(intro, aba){
       ${S.viuCineLucia ? `<li><b>Aluguel do Nano Hostel:</b> de vez em quando a Lúcia, dona do hostel, deixa ${reais(ALUGUEL.valor)} num envelope na porta da casa. Toque nele para o Ed pegar.</li>` : ''}
       <li><b>Terreno abandonado</b>${nv(ARRENDAMENTO.nivel)}: ao lado da estrada, por ${reais(ARRENDAMENTO.preco)} em pagamento único. Toque na placa para arrendar; depois o Ed tira a cerca e o terreno vira parte da fazenda.</li>
       <li><b>Lotes do terreno novo</b>${nv(ARRENDAMENTO.nivel)}: com a cerca tirada, o terreno tem um lago com uma ponte e, atrás das fábricas da mata, faixas de lotes à venda: dois terrenos de canteiros, por ${reais(LOTES[6].preco)} e ${reais(LOTES[7].preco)}, dois terrenos de pomar, por ${reais(POMAR_BLOCOS[3].preco)} e ${reais(POMAR_BLOCOS[4].preco)}, com seis covas cada, e uma fileira de ${COLMEIA_SLOTS.length - COLMEIA_CANTO} lugares para colmeia. As colmeias de lá ajudam o pomar de lá.</li>
-      <li><b>Galinheiro e curral novos</b>${nv(CERCADOS.galinheiro2.nivel)}: ao lado do galinheiro e do curral, um galinheiro por ${reais(CERCADOS.galinheiro2.preco)} (mais ${ANIMAIS.galinha.max} galinhas) e um curral por ${reais(CERCADOS.curral2.preco)} (mais ${ANIMAIS.vaca.max} vacas). Ficam prontos na hora, com cerca e pasto; o coletor e o alimentador do meio atendem os dois.</li>
+      <li><b>Galinheiro e curral novos</b>${nv(CERCADOS.galinheiro2.nivel)}: ao lado do galinheiro e do curral, um galinheiro por ${reais(CERCADOS.galinheiro2.preco)} (mais ${ANIMAIS.galinha.max} galinhas) e um curral por ${reais(CERCADOS.curral2.preco)} (mais ${ANIMAIS.vaca.max} vacas). Ficam prontos na hora, com cerca e pasto; o coletor e o alimentador do meio atendem os dois. O Maurinho reforma os novos também, e cada um passa a caber mais bichos.</li>
       <li><b>Galinheiro dos patos</b>${nv(CERCADOS.patos.nivel)}: com o terreno novo limpo, a ponta leste do lago tem um lote por ${reais(CERCADOS.patos.preco)} para até ${ANIMAIS.pato.max} patos (${reais(ANIMAIS.pato.preco)} cada). Eles comem ração e botam ovos de pata, que valem ${reais(PRODUTOS.ovopata.venda)} e aparecem nos pedidos. Enquanto o ovo não fica pronto, descem a rampa e nadam no lago; de noite ficam no pasto. Depois vêm o alimentador dos patos${nv(ALIMENTADOR.pato.nivel)} (${reais(ALIMENTADOR.pato.preco)}), o coletor de ovos de pata${nv(COLETOR.pato.nivel)} (${reais(COLETOR.pato.preco)}), os dois do lado de fora da cerca de cima, e a reforma do Maurinho${nv(NIVEL_REFORMA.patos[0])} (${reais(PRECO_REFORMA.patos[0])}), que faz caber ${ANIMAIS.pato.max * 1.5} patos.</li>
       <li><b>Produtos da mata:</b> a cozinha de doces faz polpa de açaí, doce de cupuaçu e paçoca de castanha; o torrador faz guaraná em pó; a chocolateria${nv(FABRICAS.chocolateria.nivel)} faz chocolate, bombom de cupuaçu e chocolate com castanha, e com ela a padaria assa bolo de chocolate; a oficina de borracha${nv(FABRICAS.oficina.nivel)} faz bolas e botas de chuva (a primeira bola fica com a Luma e o primeiro par de botas com o Ed, que anda mais rápido na chuva). O Pelúcio paga 25% a mais por cacau e chocolate e às vezes pede para o mocha; o Patrinho, por castanha e chocolate com castanha; a Lúcia leva doce de cupuaçu e polpa de açaí para os nanos junto com o aluguel; e o Milton leva guaraná em pó e traz o dobro do presente.</li>
       <li><b>Guardião da mata:</b> com uma parcela comprada, de vez em quando a mata precisa do Ed: um foco de fogo, lixo deixado por trilheiros ou um galho caído fechando a trilha. Toque no problema para o Ed resolver. Resolvido, a saúde da mata sobe; esquecido, ela cai. Com a mata exuberante (80% ou mais), as nativas dão uma unidade a mais e os bichos aparecem mais; maltratada (menos de 45%), dão uma a menos.</li>
@@ -13478,7 +13488,7 @@ function catalogoModelos(){
     { nome: 'Floresta', itens: [varios('Matagal', [['Capim alto', () => vMatagal(0)], ['Moita', () => vMatagal(1)], ['Capim e pedra', () => vMatagal(2)], ['Tronco caído', () => vMatagal(3)]]), ...Object.keys(NATIVAS).map(k => { uso(k); return varios(NATIVAS[k].nome, [['Com fruto', () => vNativa(k, true)], ['Sem fruto', () => vNativa(k, false)], ...produto(uso(NATIVAS[k].produto))]); }), varios('Mata', [[ 'Copa redonda', () => vCopa(0)], ['Copa alta', () => vCopa(1)], ['Copa larga', () => vCopa(2)]])] },
     { nome: 'Construções', itens: [um('Casa', vCasa), um('Celeiro', vCeleiro), um('Galinheiro', vGalinheiro), um('Curral', vAbrigo), um('Galinheiro novo', vGalinheiroNovo), um('Curral novo', vCurralNovo), um('Galinheiro dos patos', vCasaPatos), um('Queijaria nova', () => vFabNova('queijaria')), um('Padaria nova', () => vFabNova('padaria')), um('Cozinha de doces nova', () => vFabNova('cozinha')), um('Poço', vPoco), um('Moinho', VI.moinho), um('Queijaria', vQueijaria), um('Padaria', vPadaria), um('Cozinha de doces', vCozinha), varios('Terreiro de café', [['Cheio', () => vTerreiro(true)], ['Vazio', () => vTerreiro(false)]]), um('Torrador', vTorrador), um('Composteira', () => vComposteira(false)), um('Hangar', vHangar), um('Obra', vObra)] },
     { nome: 'Reformas do Maurinho', itens: [
-      ...[['casa', 'Casa'], ['celeiro', 'Celeiro'], ['poco', 'Poço'], ['galinheiro', 'Galinheiro'], ['curral', 'Curral'], ['patos', 'Galinheiro dos patos'], ['moinho', 'Moinho'], ['queijaria', 'Queijaria'], ['padaria', 'Padaria'], ['cozinha', 'Cozinha de doces'], ['terreiro', 'Terreiro de café'], ['torrador', 'Torrador'], ['chocolateria', 'Chocolateria'], ['oficina', 'Oficina de borracha']]
+      ...[['casa', 'Casa'], ['celeiro', 'Celeiro'], ['poco', 'Poço'], ['galinheiro', 'Galinheiro'], ['curral', 'Curral'], ['patos', 'Galinheiro dos patos'], ['galinheiro2', 'Galinheiro novo'], ['curral2', 'Curral novo'], ['moinho', 'Moinho'], ['queijaria', 'Queijaria'], ['padaria', 'Padaria'], ['cozinha', 'Cozinha de doces'], ['terreiro', 'Terreiro de café'], ['torrador', 'Torrador'], ['chocolateria', 'Chocolateria'], ['oficina', 'Oficina de borracha'], ['queijaria2', 'Queijaria nova'], ['padaria2', 'Padaria nova'], ['cozinha2', 'Cozinha de doces nova']]
         .map(([id, nome]) => varios('Reforma: ' + nome, [['Original', () => id === 'moinho' ? vMoinhoCompleto(0) : vReforma(id, 0)], ['Em obra', () => vEmObra(id)], ['1ª reforma', () => id === 'moinho' ? vMoinhoCompleto(1) : vReforma(id, 1)]], 2)),
       um('Prancheta', vPrancheta), um('Trena', vTrena), um('Martelo', vMartelo)] },
     { nome: 'Automação', itens: [varios('Alimentador', [['Galinheiro', () => vAlimentador(false)], ['Curral', () => vAlimentador(true)]]), varios('Coletor', [['Ovos', () => vColetor(false)], ['Ordenhadeira', () => vColetor(true)]]), um('Esteira', vEsteira), varios('Irrigador', [['Base', vIrrigadorBase], ['Cabeça', vIrrigadorCabeca]]), um('Colmeia', vColmeia)] },
