@@ -2133,7 +2133,7 @@ function animarLuma(L, modo, t){
 // ================= a Luma na fazenda: de vez em quando sai pela portinha da casa e brinca com a bolinha em volta do chafariz
 // (sem chafariz, no caminho e na grama da frente da casa). Se o Ed estiver por perto e parado, larga a bolinha e vai dar
 // uma mordidinha no rabicó dele. Não mexe no save: os tempos contam só com o jogo aberto e recomeçam ao abrir.
-const LUMA_JOGO = { primeira: [60, 150], intervalo: [240, 480], fora: [70, 110], vel: 2.1, corre: 3.1, perto: 4 };
+const LUMA_JOGO = { primeira: [60, 150], intervalo: [240, 480], fora: [70, 110], vel: 2.1, corre: 3.1, perto: 4, galo: 1.5 };
 // a portinha fica embaixo da porta da casa (x 4,75 a 5,25); a Luma nasce lá dentro, escondida pela parede, e o chão da casa e o degrau ficam a 0,25
 const PORTINHA = { x: 5, y: 0.875, z: 4.6875, dentro: 4.25, fora: 5.35 };
 let luma = null, portinha = null;
@@ -2208,6 +2208,17 @@ function lumaAteBola(){
   return lumaIr(b.pos.x - dx / d * 0.3, b.pos.y - dz / d * 0.3, LUMA_JOGO.corre);
 }
 const edPertoDaLuma = () => ed.g.visible && ed.estado !== 'andando' && !ed.sentado && Math.hypot(ed.pos.x - luma.pos.x, ed.pos.y - luma.pos.y) < LUMA_JOGO.perto;
+// ao lado do galo na tela, a LUMA_JOGO.galo dele, do lado em que ela já está: nem escondida atrás dele, nem com o balão dela em cima dele
+// se o ladrilho bem ao lado não serve (prédio, cerca), tenta inclinando um pouco para a frente ou para trás
+function ladoDoGalo(G){
+  const L = luma, a0 = cam.az + Math.PI / 2, r = LUMA_JOGO.galo;
+  const s = Math.sin(a0) * (L.pos.x - G.pos.x) + Math.cos(a0) * (L.pos.y - G.pos.y) >= 0 ? 0 : Math.PI;
+  for (const lado of [s, Math.PI - s]) for (const incl of [0, 0.35, -0.35, 0.7, -0.7]){
+    const a = a0 + lado + (lado ? -incl : incl), x = G.pos.x + Math.sin(a) * r, z = G.pos.y + Math.cos(a) * r;
+    if (chaoLuma(Math.floor(x), Math.floor(z))) return [x, z];
+  }
+  return null;
+}
 // atrás do Ed, de frente para o rabicó: a boca dela alcança uns 0,35 à frente do corpo, e o rabicó fica uns 0,28 atrás do Ed
 function atrasDoEd(){ const x = ed.pos.x - Math.sin(ed.ang) * 0.62, z = ed.pos.y - Math.cos(ed.ang) * 0.62; return andavel(Math.floor(x), Math.floor(z)) ? [x, z] : null; }
 function lumaSair(){
@@ -2314,7 +2325,7 @@ function atualizarLuma(dt, t){
       break;
     case 'voltar': if (chegou){ L.acao = 'entrando'; L.pontos = [[PORTINHA.x, PORTINHA.dentro]]; L.vel = 1.3; } break;
     case 'entrando': if (chegou){ L.g.visible = false; L.estado = 'dentro'; L.acao = ''; L.prox = rnd(...LUMA_JOGO.intervalo); L.bola.m.visible = true; } break;
-    // atrás do galo fujão: chega a um passo dele e late; quando o Ed pega o galo (ou ele volta sozinho), ela vai para casa
+    // atrás do galo fujão: para ao lado dele na tela e late; quando o Ed pega o galo (ou ele volta sozinho), ela vai para casa
     case 'galo': {
       const G = L.galo;
       if (!G || G.estado !== 'chao' || G.modo !== 'fujao' || L.fora > L.limite){ L.galo = null; lumaVoltar(); break; }
@@ -2322,8 +2333,9 @@ function atualizarLuma(dt, t){
       if (L.latido <= 0 && Math.hypot(G.pos.x - L.pos.x, G.pos.y - L.pos.y) < 3){ L.latido = rnd(2.4, 3.8); Som.au(); const txt = variar(FALAS_LUMA_GALO); falar(L, txt, tempoDeLeitura(txt)); }
       if (chegou || L.ta > 0.7){
         L.ta = 0;
-        const dx = L.pos.x - G.pos.x, dz = L.pos.y - G.pos.y, d = Math.hypot(dx, dz) || 1;
-        if (d > 1.05){ if (!lumaIr(G.pos.x + dx / d * 0.85, G.pos.y + dz / d * 0.85, LUMA_JOGO.corre)) L.pontos = []; }
+        const dx = L.pos.x - G.pos.x, dz = L.pos.y - G.pos.y, d = Math.hypot(dx, dz) || 1, r = LUMA_JOGO.galo;
+        const alvo = ladoDoGalo(G) || [G.pos.x + dx / d * r, G.pos.y + dz / d * r];
+        if (Math.hypot(alvo[0] - L.pos.x, alvo[1] - L.pos.y) > 0.4){ if (!lumaIr(alvo[0], alvo[1], LUMA_JOGO.corre)) L.pontos = []; }
         else { L.pontos = []; L.angAlvo = Math.atan2(G.pos.x - L.pos.x, G.pos.y - L.pos.y); }
       }
       break;
@@ -5486,7 +5498,7 @@ function galoFujao(G, dt){
     return;
   }
   const L = luma;
-  if (L && L.acao === 'galo' && L.g.visible && Math.hypot(L.pos.x - G.pos.x, L.pos.y - G.pos.y) < 0.9 && performance.now() > G.corridaLuma){ G.corridaLuma = performance.now() + 2500; if (galoFugirDe(G, L.pos.x, L.pos.y)) return; }
+  if (L && L.acao === 'galo' && L.g.visible && Math.hypot(L.pos.x - G.pos.x, L.pos.y - G.pos.y) < LUMA_JOGO.galo + 0.15 && performance.now() > G.corridaLuma){ G.corridaLuma = performance.now() + 2500; if (galoFugirDe(G, L.pos.x, L.pos.y)) return; }
   if (performance.now() > G.ate){ galoVoltar(G); return; }
   if (!G.pontos.length){ G.espera -= dt; if (G.espera <= 0){ G.espera = rnd(1.2, 3.5); galoPasseio(G); } }
 }
