@@ -8247,9 +8247,10 @@ const CENAS = {
     flag: 'viuCineDani', nivel: () => DANI.nivel, musica: 'dani', icone: 'dani',
     titulo: 'O caçula grandão', desc: 'Com a fazenda maior, o Hud sugere chamar o Dani, o irmão mais novo e o maior de todos.',
     trancada: 'acontece no nível 30, depois que o terreno novo é aberto',
-    // o terreno novo aberto há uns segundos (os avisos dele passam antes) e o Hud e o Dani livres
-    pronta: () => nivel() >= DANI.nivel && S.canto === 2 && performance.now() - cantoLimpoEm > 15000 && !hudAtivo() && !irmaoHud.g.visible && !daniAtivo() && !irmaoDani.g.visible,
-    podeRever: () => (hudAtivo() || irmaoHud.g.visible || daniAtivo() || irmaoDani.g.visible ? 'Dá para rever quando o Hud e o Dani terminarem a ajuda.' : null),
+    // o terreno novo aberto há uns segundos (os avisos dele passam antes). Não espera o Hud: se ele está ajudando, larga o
+    // trabalho, vem de onde está e volta a trabalhar no fim, como no cafezinho (daniCenaHud)
+    pronta: () => nivel() >= DANI.nivel && S.canto === 2 && performance.now() - cantoLimpoEm > 15000 && !daniAtivo() && !irmaoDani.g.visible,
+    podeRever: () => (daniAtivo() || irmaoDani.g.visible ? 'Dá para rever quando o Dani terminar a ajuda.' : null),
     get falas(){
       return [
         ['ed', 'Ed', 'Ufa! Com o terreno novo, a fazenda ficou enorme.'],
@@ -8282,6 +8283,14 @@ const CENAS = {
       cam.azAlvo = azPerto(Math.PI / 4);
       ed.trab = null; ed.ferramenta(null);
       andarAte(ed, ...DANI_CENA.ed, () => { c.edOk = true; });
+      // o Hud: em casa (sai pela porta quando o Ed chega), ajudando (o tempo dele para e ele volta ao trabalho no fim)
+      // ou indo para casa (entra junto com o Dani no fim). Se está na rua, já vem andando de onde está
+      const Hd = irmaoHud;
+      daniCenaHud = { modo: hudAtivo() ? 'ajuda' : Hd.g.visible ? 'volta' : 'casa', t0: Date.now() };
+      if (Hd.g.visible){
+        soltarAjudante(Hd); Hd.vel = 3; c.hudSaiu = true;
+        andarAte(Hd, ...DANI_CENA.hud, () => { c.hudOk = true; });
+      }
       return 'd-indo';
     },
     // os três num círculo, de frente para o meio e um pouco para a câmera
@@ -8312,20 +8321,23 @@ const CENAS = {
           virarNaCena(ed, D.pos.x, D.pos.y); virarNaCena(Hd, D.pos.x, D.pos.y);
           if (c.chegou && D.estado === 'parado'){ c.comDani = true; D.pulo = 0.45; this.posicionar(); c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
           break;
-        // o Dani e o Hud entram em casa, e o Ed acena
-        case 'd-sai':
+        // o Dani entra em casa (e o Hud também, se não está ajudando; ajudando, ele fica e acena), e o Ed acena
+        case 'd-sai': {
+          const entram = daniCenaHud && daniCenaHud.modo === 'ajuda' ? [D] : [Hd, D];
           if (!c.ini){
             c.ini = true; c.dentro = 0; ed.aceno = 2; virarNaCena(ed, ...HUD_PORTA);
-            for (const p of [Hd, D]) p.ir([...caminhoCafe(p.pos.x, p.pos.y, ...HUD_PORTA), HUD_PORTA], () => { p.g.visible = false; fumacaDoHud(); c.dentro++; });
+            if (entram.length === 1){ Hd.aceno = 2; virarNaCena(Hd, ...HUD_PORTA); }
+            for (const p of entram) p.ir([...caminhoCafe(p.pos.x, p.pos.y, ...HUD_PORTA), HUD_PORTA], () => { p.g.visible = false; fumacaDoHud(); c.dentro++; });
           }
-          if (c.dentro >= 2 && c.t > 0.6){ c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
+          if (c.dentro >= entram.length && c.t > 0.6){ c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
           break;
+        }
       }
     },
     fimDasFalas(c){ $('cineDialogo').hidden = true; c.passo = 'd-sai'; c.t = 0; c.ini = false; },
-    pular(){ limparHud(); limparDani(); ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; },
-    fim(){ limparHud(); limparDani(); S.viuCineDani = true; },
-    restaurar(){ limparHud(); limparDani(); },
+    pular(){ ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; },
+    fim(){ soltarCenaDani(); S.viuCineDani = true; },
+    restaurar(){ soltarCenaDani(); },
   },
   lucia: {
     flag: 'viuCineLucia', nivel: () => 12, musica: 'lucia', falas: FALAS_LUCIA, icone: 'lucia',
@@ -10463,6 +10475,17 @@ function limparDani(){
   const D = irmaoDani;
   if (tarefaDani){ setReserva(tarefaDani.alvo, null); tarefaDani = null; }
   D.g.visible = false; D.pontos = []; D.aoChegar = null; D.estado = 'parado'; D.trab = null; D.ferramenta(null); D.aceno = 0; D.pulo = 0; D.vel = DANI.vel; D.saindo = false; D.sentado = 0;
+}
+// fim da cena do Dani: ele fica em casa; o Hud que estava ajudando volta ao trabalho de onde está, sem perder o tempo da
+// cena; o que não estava, fica em casa
+let daniCenaHud = null;
+function soltarCenaDani(){
+  limparDani();
+  const Hd = irmaoHud, M = daniCenaHud; daniCenaHud = null;
+  if (M && M.modo === 'ajuda' && S.hudAte){
+    S.hudAte += Date.now() - M.t0;
+    Hd.g.visible = true; Hd.pontos = []; Hd.aoChegar = null; Hd.estado = 'parado'; Hd.trab = null; Hd.ferramenta(null); Hd.aceno = 0; Hd.pulo = 0; Hd.vel = 2.5; Hd.saindo = false;
+  } else limparHud();
 }
 // solta a tarefa de quem estava trabalhando, sem esconder (para entrar numa cena)
 function soltarAjudante(P){
