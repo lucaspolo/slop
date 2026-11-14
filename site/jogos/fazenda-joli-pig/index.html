@@ -648,7 +648,7 @@ const COR = {
 };
 
 // ================= dados do jogo
-const W = 36, H = 37;
+const W = 52, H = 51;
 const CULTURAS = {
   cenoura:  { nome:'Cenoura',  plural:'cenouras',  semente:4,  tempo:40,  venda:3,   rend:4, xp:2,  nivel:1 },
   alface:   { nome:'Alface',   plural:'alfaces',   semente:6,  tempo:70,  venda:5,   rend:4, xp:3,  nivel:1 },
@@ -741,20 +741,24 @@ const FRUTIFERAS = {
   cajueiro:   { nome: 'Cajueiro', fruta: 'caju', cor: 0xe8483a, cor2: 0xf2c23a, nivel: 20, preco: 2500, tempo: 720, rend: 4, xp: 13 },
 };
 // o pomar em blocos de seis covas: o primeiro vem com o pomar; os outros são terrenos de pomar comprados a leste.
-// Os do canto Sul (canto: true) só ficam à venda depois que o Ed tira a cerca de lá
+// Os do canto Sul (canto: true), na faixa do meio atrás das fábricas da mata, só ficam à venda depois que o Ed tira a cerca de lá
 const POMAR_BLOCOS = [
-  { slots: [[24, 11], [26, 11], [28, 11], [24, 14], [26, 14], [28, 14]] },
-  { nivel: 13, preco: 3000, x0: 30, z0: 6, x1: 35, z1: 10, slots: [[31, 7], [33, 7], [35, 7], [31, 9], [33, 9], [35, 9]] },
-  { nivel: 18, preco: 6000, x0: 30, z0: 11, x1: 35, z1: 15, slots: [[31, 12], [33, 12], [35, 12], [31, 14], [33, 14], [35, 14]] },
-  { nivel: 30, preco: 12000, canto: true, x0: 31, z0: 17, x1: 35, z1: 21, slots: [[31, 18], [33, 18], [35, 18], [31, 20], [33, 20], [35, 20]] },
-  { nivel: 30, preco: 18000, canto: true, x0: 31, z0: 22, x1: 35, z1: 26, slots: [[31, 23], [33, 23], [35, 23], [31, 25], [33, 25], [35, 25]] },
+  { slots: [[39, 14], [41, 14], [43, 14], [39, 17], [41, 17], [43, 17]] },
+  { nivel: 13, preco: 3000, x0: 46, z0: 7, x1: 51, z1: 11, slots: [[47, 8], [49, 8], [51, 8], [47, 10], [49, 10], [51, 10]] },
+  { nivel: 18, preco: 6000, x0: 46, z0: 14, x1: 51, z1: 18, slots: [[47, 15], [49, 15], [51, 15], [47, 17], [49, 17], [51, 17]] },
+  { nivel: 30, preco: 12000, canto: true, x0: 30, z0: 33, x1: 34, z1: 37, slots: [[30, 34], [32, 34], [34, 34], [30, 36], [32, 36], [34, 36]] },
+  { nivel: 30, preco: 18000, canto: true, x0: 36, z0: 33, x1: 40, z1: 37, slots: [[36, 34], [38, 34], [40, 34], [36, 36], [38, 36], [40, 36]] },
 ];
 const POMAR_SLOTS = POMAR_BLOCOS.flatMap(b => b.slots);
 const blocoDoSlot = i => Math.floor(i / 6);
 const blocoComprado = b => b === 0 || !!(S.pomarBlocos || [])[b];
 const blocoAberto = b => !POMAR_BLOCOS[b].canto || (S && S.canto === 2);
 const blocoEm = (x, z) => POMAR_BLOCOS.findIndex((b, k) => k > 0 && blocoAberto(k) && x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1);
-const COLMEIA_SLOTS = [[24, 9], [26, 9], [28, 9]];
+// as três primeiras ficam na frente do pomar; as do canto Sul (a partir de COLMEIA_CANTO) numa fileira atrás do pomar de lá,
+// só depois que o Ed tira a cerca. Cada colmeia ajuda o pomar do mesmo lado da fazenda
+const COLMEIA_SLOTS = [[39, 11], [41, 11], [43, 11], [32, 39], [34, 39], [36, 39], [38, 39]];
+const COLMEIA_CANTO = 3;
+const colmeiaAberta = i => i < COLMEIA_CANTO || (S && S.canto === 2);
 const COLMEIA = { nivel: 10, preco: 800, tempo: 720, rend: 2, xp: 4, ajuda: 0.1 };
 // construções de processamento: cada uma faz uma receita por vez, com até três na fila
 const FABRICAS = {
@@ -805,11 +809,12 @@ const REFORMA = { nivel: [31, 35], minutos: [3, 6], xp: [40, 80], max: 1 };
 const PRECO_REFORMA = { moinho: [9000, 24000], queijaria: [15000, 30000], padaria: [24000, 48000], cozinha: [36000, 72000], terreiro: [15000, 36000], torrador: [54000, 108000], chocolateria: [84000, 168000], oficina: [96000, 192000], galinheiro: [18000, 45000], curral: [24000, 60000], casa: [30000, 90000], celeiro: [30000, 90000], poco: [9000, 24000] };
 const nivelReforma = id => (S && S.reformas && S.reformas[id]) || 0;
 const vagasFab = id => VAGAS_FAB + nivelReforma(id);
-// o galinheiro e o curral do canto Sul (S.cercados), à venda depois que o Ed tira a cerca de lá. Vêm prontos, com cerca,
-// porteira e pasto; ficam lado a lado e dividem a cerca do meio. Cada bicho mora num cercado (d.c: 0 o primeiro, 1 o novo)
+// o galinheiro e o curral novos (S.cercados), à venda no nível 30, cada um ao lado do primeiro, do outro lado da passagem
+// do coletor. Vêm prontos, com cerca, porteira e pasto. Cada bicho mora num cercado (d.c: 0 o primeiro, 1 o novo).
+// A cerca de baixo do curral novo é a da fazenda
 const CERCADOS = {
-  galinheiro2: { tp: 'galinha', nivel: 30, preco: 25000, cerca: [24, 17, 29, 21], portao: [29, 19] },
-  curral2:     { tp: 'vaca',    nivel: 30, preco: 32000, cerca: [24, 21, 29, 27], portao: [29, 24] },
+  galinheiro2: { tp: 'galinha', nivel: 30, preco: 25000, cerca: [29, 7, 36, 11], portao: [29, 9] },
+  curral2:     { tp: 'vaca',    nivel: 30, preco: 32000, cerca: [29, 14, 36, 21], portao: [29, 18] },
 };
 const CERCADO_DE = { galinha: 'galinheiro2', vaca: 'curral2' };
 const cercadoFeito = id => !!(S && S.cercados && S.cercados[id]);
@@ -836,14 +841,14 @@ const velEd = () => (degrau('botas') || { vel: 2.7 }).vel;
 const IRRIGADOR = { nivel: 14, preco: 2000 };
 // coletor de ovos e ordenhadeira: os bichos produzem para uma caixa; o xp e o celeiro só vêm quando o Ed esvazia a caixa
 const COLETOR = {
-  galinha: { nome: 'Coletor de ovos', nivel: 8, preco: 2500, x: 23, z: 7, lugar: 'galinheiro' },
-  vaca:    { nome: 'Ordenhadeira', nivel: 12, preco: 4000, x: 23, z: 12, lugar: 'curral' },
+  galinha: { nome: 'Coletor de ovos', nivel: 8, preco: 2500, x: 27, z: 8, lugar: 'galinheiro' },
+  vaca:    { nome: 'Ordenhadeira', nivel: 12, preco: 4000, x: 27, z: 17, lugar: 'curral' },
 };
 // automação das construções, terreiro de café incluído: esteira de saída e repetidor de receita
 const ESTEIRA = { preco: 1500 }, REPETIDOR = { preco: 3000 };
 const ALIMENTADOR = {
-  galinha: { nivel: 5, preco: 1000, x: 23, z: 9, lugar: 'galinheiro' },
-  vaca:    { nivel: 6, preco: 1000, x: 23, z: 14, lugar: 'curral' },
+  galinha: { nivel: 5, preco: 1000, x: 27, z: 10, lugar: 'galinheiro' },
+  vaca:    { nivel: 6, preco: 1000, x: 27, z: 19, lugar: 'curral' },
 };
 // quanto a ração dura: cada bicho come a sua parte a cada ciclo; com menos de RACAO_ALERTA minutos o contador fica amarelo
 // e aparece um aviso; sem ração para alimentar nem um bicho, fica vermelho
@@ -897,11 +902,16 @@ const XP_V2 = [0];
   } }
 const xpParaV2 = n => XP_V2[Math.min(n - 1, XP_V2.length - 1)] + Math.max(0, n - XP_V2.length) * 1e6;
 const nivelDe = xp => { let n = 1; while (xp >= xpPara(n + 1)) n++; return n; };
-const LOTES = [{ x:2, z:7 }, { x:6, z:7 }, { x:10, z:7 }, { x:2, z:11 }, { x:6, z:11 }, { x:10, z:11 }];
-// o n-ésimo terreno comprado: preço e nível mínimo (o primeiro já vem com a fazenda)
+// terrenos de 4 x 4 canteiros, com um caminho de grama entre eles. Os seis primeiros ficam na horta, ao lado da casa; os do
+// canto Sul (canto: true), na primeira faixa atrás das fábricas da mata, têm preço e nível próprios e só existem com a cerca de
+// lá tirada
+const LOTES = [{ x:2, z:8 }, { x:7, z:8 }, { x:12, z:8 }, { x:2, z:14 }, { x:7, z:14 }, { x:12, z:14 },
+  { x:30, z:28, canto: true, preco: 10000, nivel: 30 }, { x:35, z:28, canto: true, preco: 14000, nivel: 30 }];
+// o n-ésimo terreno da horta comprado: preço e nível mínimo (o primeiro já vem com a fazenda)
 const PRECO_LOTE = [0, 300, 800, 2000, 4000, 7000];
 const NIVEL_LOTE = [1, 2, 4, 8, 11, 15];
-const loteDe = (x, z) => (x < 2 || x > 13 || z < 7 || z > 14) ? -1 : ((z - 7) >> 2) * 3 + ((x - 2) >> 2);
+const loteAberto = i => !LOTES[i].canto || (S && S.canto === 2);
+const loteDe = (x, z) => LOTES.findIndex((l, i) => x >= l.x && x < l.x + 4 && z >= l.z && z < l.z + 4 && loteAberto(i));
 
 // ================= mapa
 const TIPO = new Array(W * H).fill('grama');
@@ -911,88 +921,105 @@ const tipo = (x, z) => (x < 0 || z < 0 || x >= W || z >= H) ? null : TIPO[iT(x, 
 const setT = (x, z, t) => { TIPO[iT(x, z)] = t; };
 const PREDIOS = [
   { id:'casa',       nome:'Casa do Ed',          x0:3,  z0:1,  x1:6,  z1:4,  porta:[5, 5] },
-  { id:'celeiro',    nome:'Celeiro',             x0:13, z0:0,  x1:17, z1:4,  porta:[15, 5] },
-  { id:'poco',       nome:'Poço',                x0:9,  z0:3,  x1:9,  z1:3,  porta:[9, 4] },
-  { id:'galinheiro', nome:'Galinheiro',          x0:20, z0:7,  x1:21, z1:8,  porta:[19, 8] },
-  { id:'curral',     nome:'Curral',              x0:20, z0:11, x1:21, z1:11, porta:[19, 12] },
-  { id:'correio',    nome:'Caixa de correio',    x0:14, z0:15, x1:14, z1:15, porta:[15, 15] },
+  { id:'celeiro',    nome:'Celeiro',             x0:15, z0:0,  x1:19, z1:4,  porta:[17, 5] },
+  { id:'poco',       nome:'Poço',                x0:10, z0:3,  x1:10, z1:3,  porta:[10, 4] },
+  { id:'galinheiro', nome:'Galinheiro',          x0:24, z0:8,  x1:25, z1:9,  porta:[23, 9] },
+  { id:'curral',     nome:'Curral',              x0:24, z0:16, x1:25, z1:16, porta:[23, 17] },
+  { id:'correio',    nome:'Caixa de correio',    x0:16, z0:20, x1:16, z1:20, porta:[17, 20] },
   // área de produção: as construções ficam de frente para a estradinha de terra (z = 5)
-  { id:'moinho',     nome:'Moinho',              x0:18, z0:2,  x1:19, z1:3,  porta:[18, 4], fab:'moinho' },
-  { id:'queijaria',  nome:'Queijaria',           x0:21, z0:2,  x1:22, z1:3,  porta:[21, 4], fab:'queijaria' },
-  { id:'padaria',    nome:'Padaria',             x0:24, z0:2,  x1:25, z1:3,  porta:[24, 4], fab:'padaria' },
-  { id:'cozinha',    nome:'Cozinha de doces',    x0:27, z0:2,  x1:28, z1:3,  porta:[27, 4], fab:'cozinha' },
-  { id:'terreiro',   nome:'Terreiro de café',    x0:24, z0:7,  x1:26, z1:8,  porta:[25, 6], fab:'terreiro' },
-  { id:'torrador',   nome:'Torrador de café',    x0:28, z0:7,  x1:29, z1:8,  porta:[29, 6], fab:'torrador', ry: Math.PI },
+  { id:'moinho',     nome:'Moinho',              x0:21, z0:2,  x1:22, z1:3,  porta:[21, 4], fab:'moinho' },
+  { id:'queijaria',  nome:'Queijaria',           x0:25, z0:2,  x1:26, z1:3,  porta:[25, 4], fab:'queijaria' },
+  { id:'padaria',    nome:'Padaria',             x0:29, z0:2,  x1:30, z1:3,  porta:[29, 4], fab:'padaria' },
+  { id:'cozinha',    nome:'Cozinha de doces',    x0:33, z0:2,  x1:34, z1:3,  porta:[33, 4], fab:'cozinha' },
+  { id:'terreiro',   nome:'Terreiro de café',    x0:38, z0:8,  x1:40, z1:9,  porta:[39, 7], fab:'terreiro' },
+  { id:'torrador',   nome:'Torrador de café',    x0:43, z0:8,  x1:44, z1:9,  porta:[44, 7], fab:'torrador', ry: Math.PI },
   // as construções da mata ficam numa clareira do outro lado da estrada, de frente para ela, perto da floresta
-  { id:'chocolateria', nome:'Chocolateria',      x0:21, z0:17, x1:22, z1:18, porta:[20, 17], fab:'chocolateria', ry: -Math.PI / 2 },
-  { id:'oficina',    nome:'Oficina de borracha', x0:21, z0:21, x1:22, z1:22, porta:[20, 21], fab:'oficina', ry: -Math.PI / 2 },
-  // os do canto Sul só existem depois de comprados (CERCADOS): ficam no fundo do cercado, longe da porteira
-  { id:'galinheiro2', nome:'Galinheiro novo',   x0:25, z0:18, x1:26, z1:19, porta:[27, 19], lote: true },
-  { id:'curral2',    nome:'Curral novo',         x0:25, z0:22, x1:26, z1:22, porta:[27, 23], lote: true },
+  { id:'chocolateria', nome:'Chocolateria',      x0:25, z0:22, x1:26, z1:23, porta:[24, 22], fab:'chocolateria', ry: -Math.PI / 2 },
+  { id:'oficina',    nome:'Oficina de borracha', x0:25, z0:27, x1:26, z1:28, porta:[24, 27], fab:'oficina', ry: -Math.PI / 2 },
+  // o galinheiro e o curral novos só existem depois de comprados (CERCADOS): ficam no fundo do cercado, longe da porteira
+  { id:'galinheiro2', nome:'Galinheiro novo',   x0:34, z0:8,  x1:35, z1:9,  porta:[33, 9], lote: true },
+  { id:'curral2',    nome:'Curral novo',         x0:34, z0:16, x1:35, z1:16, porta:[33, 17], lote: true },
 ];
 const PREDIO = {}; PREDIOS.forEach(p => { PREDIO[p.id] = p; });
-const ARVORES = [[0,1,0],[1,5,1],[0,9,2],[1,13,0],[11,1,1],[20,0,0],[23,4,1],[23,8,0],[23,13,2],[2,0,1],[8,0,0],[23,0,1],[0,15,1],[26,0,2],[29,4,1],[29,0,0]];
-const ARBUSTOS = [[7,1],[12,6],[1,10],[16,2]];
-const Z_ORLA = 18, Z_MATA = 21, X_FIM_MATA = 15, COL_CURVA = 18;
-// o canto Sul: S.canto é 1 depois de pagar e 2 depois que o Ed tira a cerca. A cerca ao sul do curral fica, senão as vacas saem
-const ARRENDAMENTO = { nivel: 30, preco: 50000, xCerca: 23, placa: [29.5, 17.7], ed: { k: 'cercaCanto', x: 29, z: 15 } };
-// a floresta à venda, da coluna 0 até o arco; cada parcela tem uma trilha reta na coluna col, e a de trás continua a da frente
+const ARVORES = [[0,1,0],[1,5,1],[0,10,2],[1,18,0],[13,1,1],[24,0,0],[28,4,1],[37,9,0],[37,18,2],[2,0,1],[9,0,0],[28,0,1],[0,20,1],[31,0,2],[35,4,1],[35,0,0],[45,13,1],[51,20,0],[16,13,2]];
+const ARBUSTOS = [[8,1],[14,7],[1,11]];
+// a cerca da fazenda (Z_CERCA), com a porteira (X_PORTEIRA); a estrada passa logo abaixo e dobra para o sul na coluna COL_CURVA.
+// A orla vai de Z_ORLA até a mata, e a mata vai de Z_MATA até o fim do mapa
+const Z_CERCA = 21, X_PORTEIRA = 17, Z_ORLA = 23, Z_MATA = 27, X_FIM_MATA = 17, COL_CURVA = 21;
+// o canto Sul: S.canto é 1 depois de pagar e 2 depois que o Ed tira a cerca. A cerca do curral novo fica, senão as vacas saem
+const ARRENDAMENTO = { nivel: 30, preco: 50000, xCerca: 27, placa: [47.5, 22.7], ed: { k: 'cercaCanto', x: 47, z: 20 } };
+// o lago do canto Sul, logo depois da cerca, e a ponte que leva da fazenda para o outro lado. LAGO: as colunas de água de cada linha
+const LAGO = { 22: [32, 43], 23: [30, 45], 24: [29, 46], 25: [30, 46], 26: [31, 44] };
+const PONTE = { x: 37, z0: 22, z1: 26 };
+// a floresta à venda, da coluna 0 até a beira da estrada; cada parcela tem uma trilha reta na coluna col, e a de trás continua a da frente
 const PARCELAS = [
-  { nivel: 20, preco: 15000, x0: 8, z0: 21, x1: 15, z1: 28, col: 12, arvores: ['cacaueiro', 'seringueira', 'seringueira', 'cacaueiro', 'cacaueiro', 'seringueira'] },
-  { nivel: 22, preco: 20000, x0: 0, z0: 21, x1: 7, z1: 28, col: 4, arvores: ['acaizeiro', 'cupuacuzeiro', 'cupuacuzeiro', 'acaizeiro', 'acaizeiro', 'cupuacuzeiro'] },
-  { nivel: 24, preco: 28000, x0: 8, z0: 29, x1: 15, z1: 36, col: 12, arvores: ['guaranazeiro', 'guaranazeiro', 'cacaueiro', 'guaranazeiro', 'guaranazeiro', 'cacaueiro'] },
-  { nivel: 26, preco: 40000, x0: 0, z0: 29, x1: 7, z1: 36, col: 4, arvores: ['castanheira', 'seringueira', 'acaizeiro', 'castanheira', 'castanheira', 'seringueira'] },
+  { nivel: 20, preco: 15000, x0: 9, z0: 27, x1: 17, z1: 34, col: 14, arvores: ['cacaueiro', 'seringueira', 'seringueira', 'cacaueiro', 'cacaueiro', 'seringueira'] },
+  { nivel: 22, preco: 20000, x0: 0, z0: 27, x1: 8, z1: 34, col: 4, arvores: ['acaizeiro', 'cupuacuzeiro', 'cupuacuzeiro', 'acaizeiro', 'acaizeiro', 'cupuacuzeiro'] },
+  { nivel: 24, preco: 28000, x0: 9, z0: 35, x1: 17, z1: 42, col: 14, arvores: ['guaranazeiro', 'guaranazeiro', 'cacaueiro', 'guaranazeiro', 'guaranazeiro', 'cacaueiro'] },
+  { nivel: 26, preco: 40000, x0: 0, z0: 35, x1: 8, z1: 42, col: 4, arvores: ['castanheira', 'seringueira', 'acaizeiro', 'castanheira', 'castanheira', 'seringueira'] },
 ];
 // duas árvores por fileira, uma de cada lado da trilha; o Ed colhe em pé na trilha
 const MATA_SLOTS = PARCELAS.flatMap((P, p) => P.arvores.map((tipo, k) => { const z = P.z0 + 1 + (k >> 1) * 2; return { x: P.col + (k % 2 ? 1 : -1), z, pe: [P.col, z], tipo, p }; }));
 const MATA_XZ = MATA_SLOTS.map(s => [s.x, s.z]);
-const FENOS = [[12,3],[12,4]];
-const FLORES = [[7,3],[2,3],[8,6],[14,6],[1,7],[0,4],[10,15],[4,15],[16,6],[20,4],[26,4],[27,6]];
+const FENOS = [[14,3],[14,4]];
+const FLORES = [[8,3],[2,3],[9,7],[16,7],[1,8],[0,4],[12,20],[4,20],[18,7],[24,4],[31,4],[42,7]];
 const PASTO_G = [], PASTO_V = [], PASTO_CERCADO = { galinha: [], vaca: [] };
+// o galinheiro e o curral do começo: cerca, porteira para o caminho e pasto
+const CERCA_GALINHEIRO = [19, 7, 26, 11], CERCA_CURRAL = [19, 14, 26, 21];
 function montarMapa(){
   // a orla não tem árvores altas, que esconderiam a estrada e o arco na câmera inclinada
   for (let z = Z_ORLA; z < H; z++) for (let x = 0; x < W; x++) setT(x, z, z >= Z_MATA ? 'mata' : x <= X_FIM_MATA ? 'orla' : 'orlaF');
-  for (let x = 0; x < W; x++) setT(x, 16, 'cerca');
+  for (let x = 0; x < W; x++) setT(x, Z_CERCA, 'cerca');
   // a estrada dobra logo depois da porteira; a leste dela fica o terreno do canto Sul, ainda fechado
-  for (let x = 0; x < COL_CURVA; x++) setT(x, 17, 'estrada');
-  for (let z = 17; z < H; z++){ setT(COL_CURVA, z, 'estrada'); setT(COL_CURVA + 1, z, 'cerca'); for (let x = COL_CURVA + 2; x < W; x++) setT(x, z, 'canto'); }
-  setT(15, 16, 'portao');
+  for (let x = 0; x < COL_CURVA; x++) setT(x, Z_CERCA + 1, 'estrada');
+  for (let z = Z_CERCA + 1; z < H; z++){ setT(COL_CURVA, z, 'estrada'); setT(COL_CURVA + 1, z, 'cerca'); for (let x = COL_CURVA + 2; x < W; x++) setT(x, z, 'canto'); }
+  setT(X_PORTEIRA, Z_CERCA, 'portao');
   // a clareira das construções da mata, no canto do terreno abandonado, com uma passagem na cerca para cada porta
-  for (let x = COL_CURVA + 2; x <= COL_CURVA + 6; x++) for (let z = 17; z <= 23; z++) setT(x, z, 'grama');
+  for (let x = COL_CURVA + 2; x <= COL_CURVA + 7; x++) for (let z = Z_CERCA + 1; z <= Z_CERCA + 8; z++) setT(x, z, 'grama');
   for (const id of ['chocolateria', 'oficina']){ const pt = PREDIOS.find(q => q.id === id).porta; setT(COL_CURVA + 1, pt[1], 'caminho'); }
-  for (let z = 5; z <= 15; z++) setT(15, z, 'caminho');
+  for (const z in LAGO){ const [a, b] = LAGO[z]; for (let x = a; x <= b; x++) setT(x, +z, 'lago'); }
+  for (let z = PONTE.z0; z <= PONTE.z1; z++) setT(PONTE.x, z, 'ponte');
+  for (let z = 5; z < Z_CERCA; z++) setT(X_PORTEIRA, z, 'caminho');
   for (let x = 4; x <= W - 1; x++) setT(x, 5, 'caminho');
-  setT(9, 4, 'caminho'); setT(16, 8, 'caminho'); setT(16, 13, 'caminho');
+  setT(10, 4, 'caminho'); setT(18, 9, 'caminho'); setT(18, 18, 'caminho');
   // o lugar da composteira (nível 16) fica reservado desde o começo, e a porta dela é um trecho de caminho
   for (let x = COMPOSTEIRA.x0; x <= COMPOSTEIRA.x1; x++) for (let z = COMPOSTEIRA.z0; z <= COMPOSTEIRA.z1; z++) setT(x, z, 'predio');
   setT(COMPOSTEIRA.porta[0], COMPOSTEIRA.porta[1], 'caminho');
-  for (let x = 2; x <= 13; x++) for (let z = 7; z <= 14; z++) setT(x, z, 'campo');
-  for (let x = 17; x <= 22; x++){ setT(x, 6, 'cerca'); setT(x, 10, 'cerca'); }
-  for (let z = 6; z <= 16; z++){ setT(17, z, 'cerca'); setT(22, z, 'cerca'); }
-  setT(17, 8, 'portao'); setT(17, 13, 'portao');
-  for (let x = 18; x <= 21; x++){ for (let z = 7; z <= 9; z++) setT(x, z, 'pastoG'); for (let z = 11; z <= 15; z++) setT(x, z, 'pastoV'); }
+  LOTES.forEach((l, i) => { if (!l.canto) for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) setT(x, z, 'campo'); });
+  for (const [[x0, z0, x1, z1], pasto] of [[CERCA_GALINHEIRO, 'pastoG'], [CERCA_CURRAL, 'pastoV']])
+    for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) setT(x, z, x === x0 || x === x1 || z === z0 || z === z1 ? 'cerca' : pasto);
+  setT(19, 9, 'portao'); setT(19, 18, 'portao');
   for (const p of PREDIOS) if (!p.lote) for (let x = p.x0; x <= p.x1; x++) for (let z = p.z0; z <= p.z1; z++){ setT(x, z, 'predio'); PREDIO_EM[iT(x, z)] = p; }
   for (const [x, z] of ARVORES) setT(x, z, 'arvore');
   for (const [x, z] of ARBUSTOS) setT(x, z, 'arvore');
   for (const [x, z] of FENOS) setT(x, z, 'feno');
-  for (const [x, z] of [...POMAR_BLOCOS[0].slots, ...COLMEIA_SLOTS]) setT(x, z, 'feno');
-  for (let x = 18; x <= 21; x++){ for (let z = 7; z <= 9; z++) if (tipo(x, z) === 'pastoG') PASTO_G.push([x, z]); for (let z = 11; z <= 15; z++) if (tipo(x, z) === 'pastoV') PASTO_V.push([x, z]); }
+  for (const [x, z] of [...POMAR_BLOCOS[0].slots, ...COLMEIA_SLOTS.slice(0, COLMEIA_CANTO)]) setT(x, z, 'feno');
+  for (const [[x0, z0, x1, z1], t, l] of [[CERCA_GALINHEIRO, 'pastoG', PASTO_G], [CERCA_CURRAL, 'pastoV', PASTO_V]])
+    for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) if (tipo(x, z) === t) l.push([x, z]);
 }
 // beiradas: ladrilhos onde uma construção avança mais de um cubinho (ver ladrilhoDeBeirada); ninguém passa por eles
 let beiradas = null;
-const andavel = (x, z) => { const t = tipo(x, z); return !!t && t !== 'cerca' && t !== 'predio' && t !== 'arvore' && t !== 'feno' && t !== 'mata' && t !== 'orlaF' && t !== 'canto' && t !== 'mirante' && !(beiradas && beiradas.has(x + ',' + z)); };
+const andavel = (x, z) => { const t = tipo(x, z); return !!t && t !== 'cerca' && t !== 'predio' && t !== 'arvore' && t !== 'feno' && t !== 'mata' && t !== 'orlaF' && t !== 'canto' && t !== 'mirante' && t !== 'lago' && !(beiradas && beiradas.has(x + ',' + z)); };
 
+// A* em 8 direções sobre os ladrilhos, com a lista aberta num heap binário (o mapa tem uns 2.600 ladrilhos)
+const ROTA_G = new Float32Array(W * H), ROTA_DE = new Int32Array(W * H), ROTA_FECHADO = new Uint8Array(W * H);
 function rota(sx, sz, gx, gz){
   if (!andavel(gx, gz)) return null;
-  const N = W * H, g = new Float32Array(N).fill(Infinity), de = new Int32Array(N).fill(-1), fechado = new Uint8Array(N);
+  const g = ROTA_G.fill(Infinity), de = ROTA_DE.fill(-1), fechado = ROTA_FECHADO.fill(0);
   const ini = iT(sx, sz), fim = iT(gx, gz);
   g[ini] = 0;
-  const aberto = [ini];
   const h = i => { const dx = Math.abs(i % W - gx), dz = Math.abs(((i / W) | 0) - gz); return Math.max(dx, dz) + 0.414 * Math.min(dx, dz); };
-  while (aberto.length){
-    let bi = 0, bf = Infinity;
-    for (let k = 0; k < aberto.length; k++){ const f = g[aberto[k]] + h(aberto[k]); if (f < bf){ bf = f; bi = k; } }
-    const cur = aberto.splice(bi, 1)[0];
+  // heap de pares [f, i]
+  const hf = [], hi = [];
+  const por = (f, i) => { let k = hf.length; hf.push(f); hi.push(i); while (k > 0){ const p = (k - 1) >> 1; if (hf[p] <= f) break; hf[k] = hf[p]; hi[k] = hi[p]; k = p; } hf[k] = f; hi[k] = i; };
+  const tirar = () => {
+    const top = hi[0], f = hf.pop(), i = hi.pop(), n = hf.length;
+    if (n){ let k = 0; while (true){ let c = 2 * k + 1; if (c >= n) break; if (c + 1 < n && hf[c + 1] < hf[c]) c++; if (hf[c] >= f) break; hf[k] = hf[c]; hi[k] = hi[c]; k = c; } hf[k] = f; hi[k] = i; }
+    return top;
+  };
+  por(h(ini), ini);
+  while (hf.length){
+    const cur = tirar();
     if (cur === fim) break;
     if (fechado[cur]) continue;
     fechado[cur] = 1;
@@ -1003,7 +1030,7 @@ function rota(sx, sz, gx, gz){
       if (!andavel(nx, nz)) continue;
       if (dx && dz && (!andavel(cx + dx, cz) || !andavel(cx, cz + dz))) continue;
       const ni = iT(nx, nz), ng = g[cur] + (dx && dz ? 1.414 : 1);
-      if (ng < g[ni]){ g[ni] = ng; de[ni] = cur; aberto.push(ni); }
+      if (ng < g[ni]){ g[ni] = ng; de[ni] = cur; por(ng + h(ni), ni); }
     }
   }
   if (de[fim] === -1 && fim !== ini) return null;
@@ -1847,6 +1874,23 @@ function vPortao(arco){
   v.box(13, 3, 1, 13, 4, 6, folha); v.box(13, 8, 1, 13, 9, 6, folha); v.box(13, 3, 1, 13, 9, 1, folha); v.box(13, 3, 6, 13, 9, 6, folha);
   return v;
 }
+// a ponte de madeira do lago do canto Sul: um ladrilho de largura e cinco de comprimento (em z), com o tabuado na altura do
+// chão (para quem passa não afundar nem flutuar), vigas e pilares que entram na água e guarda-corpo dos dois lados
+function vPonte(){
+  const v = new Vox(), N = 5 * 16, tabua = [0xc0915c, 0xb3844f, 0xa87a48], escura = 0x6e4a2e, poste = 0x8a5a36, corrimao = 0xd8b07c;
+  for (let z = -3; z < N + 3; z++){
+    const fresta = (z + 3) % 5 === 4;
+    for (let x = 1; x <= 14; x++) v.set(x, -1, z, fresta ? escura : tabua[(Math.floor((z + 3) / 5) + (x > 7 ? 1 : 0)) % 3]);
+  }
+  for (const x of [2, 13]) v.box(x, -3, -2, x, -2, N + 1, 0x7a5232);
+  for (const z of [14, 40, 66]) for (const x of [1, 14]) v.box(x, -6, z, x, -2, z + 1, poste);
+  for (const x of [0, 15]){
+    for (let z = 0; z <= N; z += 10) v.box(x, 0, z, x, 10, Math.min(z + 1, N), poste);
+    v.box(x, 10, 0, x, 11, N, corrimao);
+    v.box(x, 5, 0, x, 5, N, corrimao);
+  }
+  return v;
+}
 function vPlaca(){ const v = new Vox(); v.box(7, 0, 7, 8, 11, 8, 0x8a5a36); v.box(1, 8, 7, 14, 14, 8, 0xf3e3c3); v.box(1, 8, 7, 14, 8, 8, 0xc99a66); v.box(1, 14, 7, 14, 14, 8, 0xc99a66); return v; }
 // a lambreta do Joli Bistrô: a frente aponta para +x, como os outros veículos na estrada
 function vLambreta(){
@@ -2144,7 +2188,7 @@ function lugaresLuma(){
     if (l.length >= 4) return { tiles: l, fonte: f };
   }
   const l = [];
-  for (let x = 2; x <= 9; x++) for (const z of [5, 6]) if (chaoLuma(x, z)) l.push([x, z]);
+  for (let x = 2; x <= 10; x++) for (const z of [5, 6, 7]) if (chaoLuma(x, z)) l.push([x, z]);
   return { tiles: l, fonte: null };
 }
 function pontoLuma(){ const [x, z] = sorteia(luma.lugares.tiles); return [x + rnd(0.25, 0.75), z + rnd(0.25, 0.75)]; }
@@ -2667,12 +2711,12 @@ function caminhoBicho(tipo){
   }
   // os que andam pelo chão da orla: escolhe uma coluna que apareça na tela e que dê para ir e voltar
   const d = Math.random() < 0.5 ? 1 : -1, xs = [];
-  for (let x = 1; x < COL_CURVA - 5; x++) if (naTelaBicho(V(x + 0.5, 0, 19.5)) && naTelaBicho(V(x + 0.5 + d * 3.5, 0, 19.5))) xs.push(x + 0.5);
+  for (let x = 1; x < COL_CURVA - 5; x++) if (naTelaBicho(V(x + 0.5, 0, Z_MATA - 1.5)) && naTelaBicho(V(x + 0.5 + d * 3.5, 0, Z_MATA - 1.5))) xs.push(x + 0.5);
   if (!xs.length) return null;
   const x = sorteia(xs);
-  if (tipo === 'jaguatirica') return [{ p: V(x, 0, Z_MATA + 0.9) }, { p: V(x + d * 0.6, 0, 19.6), dur: 2, para: rnd(1.5, 3) }, { p: V(x + d * 3, 0, 19.4), dur: 2.4, para: 0.6 }, { p: V(x + d * 3.6, 0, Z_MATA + 0.9), dur: 2 }];
+  if (tipo === 'jaguatirica') return [{ p: V(x, 0, Z_MATA + 0.9) }, { p: V(x + d * 0.6, 0, Z_MATA - 1.4), dur: 2, para: rnd(1.5, 3) }, { p: V(x + d * 3, 0, Z_MATA - 1.6), dur: 2.4, para: 0.6 }, { p: V(x + d * 3.6, 0, Z_MATA + 0.9), dur: 2 }];
   // a cobra vai até perto da estrada, onde as copas da beira não escondem
-  return [{ p: V(x, 0, Z_MATA + 0.5) }, { p: V(x + d * 1.6, 0, 18.5), dur: 5, para: 1.5 }, { p: V(x + d * 3.2, 0, Z_MATA + 0.5), dur: 5 }];
+  return [{ p: V(x, 0, Z_MATA + 0.5) }, { p: V(x + d * 1.6, 0, Z_ORLA + 0.5), dur: 5, para: 1.5 }, { p: V(x + d * 3.2, 0, Z_MATA + 0.5), dur: 5 }];
 }
 function soltarBichoMata(tipo){
   tipo = tipo || sorteia(BICHOS_MATA.tipos);
@@ -2716,7 +2760,7 @@ function atualizarBichosMata(dt, t){
 // ================= cena da mata (nível 20): o Ed sai da fazenda, vai até a beira da floresta e os bichos saem para comemorar
 // em volta dele. Os que andam saem da mata e param do lado dele pulando; o tucano e o papagaio descem das copas e voam em
 // roda da cabeça do Ed. Depois da última fala, todo mundo volta para a floresta. Nada disso fica no save.
-const MATA_CINE = { ed: [11.5, 19.4], az: Math.PI * 5 / 4, saida: Z_MATA + 0.9 };
+const MATA_CINE = { ed: [13.5, Z_MATA - 1.6], az: Math.PI * 5 / 4, saida: Z_MATA + 0.9 };
 let mataCine = null;
 function montarMataCine(){
   limparMataCine();
@@ -2813,8 +2857,8 @@ function atualizarMataCine(dt){
 // ================= easter egg: o Nano Hostel, atrás do celeiro. As nano pessoas têm 5 cm de altura; chegam e vão embora
 // pelo Nano Metrô, passeiam até o banquinho e entram e saem do hostel. Tudo fica escondido pelo celeiro na câmera de
 // sempre: só aparece girando o mapa. O hostel é feito na escala 1/40 e as nanos em 1/56, sem mexer no save.
-// a parede de trás do celeiro fica em z 0,625 (x de 13,5 a 17,5); daí para trás, tudo o que fica perto dela é escondido pelo celeiro
-const NANO = { s: 1 / 40, sNano: 1 / 56, hostel: [15.35, 0.34], porta: [15.35, 0.02], metro: [13.95, -0.32], banco: [16.5, 0.22], rua: -0.2, vel: 0.3, max: 5 };
+// a parede de trás do celeiro fica em z 0,625 (x de 15,5 a 19,5); daí para trás, tudo o que fica perto dela é escondido pelo celeiro
+const NANO = { s: 1 / 40, sNano: 1 / 56, hostel: [17.35, 0.34], porta: [17.35, 0.02], metro: [15.95, -0.32], banco: [18.5, 0.22], rua: -0.2, vel: 0.3, max: 5 };
 const CNANO = { parede: 0xf6d36b, branco: 0xfff7ee, telhado: 0x3f7fcf, telhadoE: 0x3570b8, porta: 0x7a4a2c, janela: 0xffe9a3, cortina: 0xf28fac, flor: 0xf05d7e, folha: 0x5ea341 };
 function vNanoHostel(){
   const v = new Vox(), C = CNANO;
@@ -2922,9 +2966,9 @@ function vEnvelope(){
 // depois da cena dela, de tempos em tempos (só com o jogo aberto) ela sai do hostel e deixa o aluguel na porta da casa.
 // S.aluguelEspera é o relógio da próxima visita, em segundos; S.aluguel é o valor do envelope que espera o Ed na porta
 const ALUGUEL = { valor: 300, minutos: [20, 35], vel: 0.6, porta: [5.62, 5.3] };
-const CAMINHO_ALUGUEL = [[15.35, 0.02], [15.35, -0.25], [10.9, -0.25], [10.9, 5.5], [5.2, 5.5], [5.2, 5.32]];
+const CAMINHO_ALUGUEL = [[17.35, 0.02], [17.35, -0.25], [12.9, -0.25], [12.9, 5.5], [5.2, 5.5], [5.2, 5.32]];
 // na cena ela já vem de trás do celeiro e para ao lado do Ed, no caminho de terra
-const LUCIA_CENA = [[12.4, -0.3], [10.9, -0.3], [10.9, 4.6], [11.15, 5.15]];
+const LUCIA_CENA = [[14.4, -0.3], [12.9, -0.3], [12.9, 4.6], [13.15, 5.15]];
 let lucia = null, envelope = null, bolhaEnvelope = null;
 // o balão some junto com ela
 const LUCIA_FALA = { nome: 'lucia', get g(){ return lucia ? lucia.g : { visible: false }; }, topo: () => (lucia ? lucia.g.position.clone() : new THREE.Vector3(ALUGUEL.porta[0], 0, ALUGUEL.porta[1])).add(new THREE.Vector3(0, 0.5, 0)) };
@@ -3347,7 +3391,7 @@ function itensOcorrencia(alvo){
 // ================= trilha ecológica: um mirante na beira da mata; de dia e de tarde chegam visitantes que sobem nele,
 // fazem a trilha e deixam uma contribuição na caixinha. Quanto mais saudável a mata, maior a contribuição. Os nanos do
 // Nano Hostel ganham um mirante do tamanho deles. Os visitantes não ficam no save.
-const MIRANTE = { nivel: 21, preco: 12000, x0: 13, z0: 19, x1: 14, z1: 20, taxa: 70, primeira: [40, 90], intervalo: [240, 480], vel: 0.85, escada: 0.45, sV: 1 / 44 };
+const MIRANTE = { nivel: 21, preco: 12000, x0: 15, z0: 24, x1: 16, z1: 25, taxa: 70, primeira: [40, 90], intervalo: [240, 480], vel: 0.85, escada: 0.45, sV: 1 / 44 };
 let miranteM = null, placaMirante = null, bolhaMirante = null, grupoTrilha = null, proxTrilha = null, miniMirante = null;
 const centroMirante = () => [(MIRANTE.x0 + MIRANTE.x1 + 1) / 2, (MIRANTE.z0 + MIRANTE.z1 + 1) / 2];
 function montarMirante(){
@@ -3485,7 +3529,7 @@ function montarMiniMirante(){
   const hV = geo('visitante0', () => vVisitante(0).build(MIRANTE.sV, { origin: [0.5, 0, 0.5], jitter: 0.02 })).boundingBox.max.y;
   const hN = geo('nano0', () => vNano(0, false).build(NANO.sNano, { origin: [0.5, 0, 0.5], jitter: 0.02 })).boundingBox.max.y;
   const k = hN / hV, sm = k / 16, lado = 32 * sm;
-  miniMirante = { sm, lado, deque: 36.5 * sm, x: 17.5 - lado / 2 - 0.03, z: 0.6 - lado / 2 - 0.02 };
+  miniMirante = { sm, lado, deque: 36.5 * sm, x: 19.5 - lado / 2 - 0.03, z: 0.6 - lado / 2 - 0.02 };
   const m = malha(vMirante().build(sm, { origin: [16, 0, 16], jitter: 0.02 }));
   m.position.set(miniMirante.x, 0, miniMirante.z); scene.add(m); miniMirante.m = m;
 }
@@ -4567,7 +4611,7 @@ function gerarIcones(){
 }
 const icone = n => (ICONE[n] || ICONE.semente).url;
 
-const cam = { alvo: new THREE.Vector3(12, 0, 10), az: Math.PI / 4, azAlvo: Math.PI / 4, vista: 16, el: Math.atan(1 / Math.SQRT2) };
+const cam = { alvo: new THREE.Vector3(14, 0, 12), az: Math.PI / 4, azAlvo: Math.PI / 4, vista: 16, el: Math.atan(1 / Math.SQRT2) };
 function iniciarRender(){
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -4600,6 +4644,9 @@ function posicionarCamera(){
   sol.position.set(sx + LUZ.dir.x, LUZ.dir.y, sz + LUZ.dir.z); sol.target.position.set(sx, 0, sz);
   camera.lookAt(cam.alvo);
   const a = innerWidth / innerHeight;
+  // com a câmera bem afastada, a sombra cobre mais chão (fica menos nítida)
+  const ext = Math.max(22, Math.ceil(cam.vista * Math.max(1, a) * 0.8));
+  if (sol.shadow.camera.right !== ext){ Object.assign(sol.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext }); sol.shadow.camera.updateProjectionMatrix(); }
   camera.left = -cam.vista * a / 2; camera.right = cam.vista * a / 2; camera.top = cam.vista / 2; camera.bottom = -cam.vista / 2;
   camera.updateProjectionMatrix();
 }
@@ -4669,10 +4716,10 @@ const geo = (chave, fn) => GEO[chave] || (GEO[chave] = fn());
 const CHAVE_SALVO = 'fazendaJoliPig.v1';
 let S = null;
 function estadoNovo(){
-  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedidos: [], versao: 3, feito: [], dicas: true, alimentador: {}, coletor: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], pomarBlocos: [], colmeias: [], enfeites: [], guardados: {}, parcelas: [], mata: [], trufas: [], maca: null, macaAte: 0, anotado: false, som: true, nAnimal: 0, vendeu: 0, viuCineInicio: false, salvoEm: Date.now() };
+  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedidos: [], versao: 3, mapa: 2, feito: [], dicas: true, alimentador: {}, coletor: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], pomarBlocos: [], colmeias: [], enfeites: [], guardados: {}, parcelas: [], mata: [], trufas: [], maca: null, macaAte: 0, anotado: false, som: true, nAnimal: 0, vendeu: 0, viuCineInicio: false, salvoEm: Date.now() };
   const l = LOTES[2];
   for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) s.campo[x + ',' + z] = { e: 'grama' };
-  for (const k of ['12,9', '13,9', '12,10', '13,10']) s.campo[k] = { e: 'arado' };
+  for (const [dx, dz] of [[2, 2], [3, 2], [2, 3], [3, 3]]) s.campo[(l.x + dx) + ',' + (l.z + dz)] = { e: 'arado' };
   return s;
 }
 // saves antigos usavam outras curvas de XP: mantém o nível e a fração do caminho até o próximo
@@ -4694,12 +4741,59 @@ function migrar(){
     if (Array.isArray(t.feitos)) t.feitos = t.feitos.map(r => r === 'secar' ? 'secarAntigo' : r);
   }
   S.versao = 3;
+  if (!(S.mapa >= 2)) migrarMapa();
+}
+// o mapa da primeira versão tinha 36 x 37 ladrilhos. No maior, entraram colunas e linhas entre as zonas, o galinheiro e o
+// curral se separaram e o leste ganhou espaço para os cercados novos: cada ponto anda com a sua zona (a fileira das
+// fábricas, o meio da fazenda e o sul). Os terrenos de canteiros foram redesenhados, então cada canteiro vai para o mesmo
+// lugar do seu terreno. O que não couber no lugar novo (enfeite, trufa, maçã) é conferido ao abrir (conferirMapaNovo)
+const mapaNovoZ = z => z + (z >= 6) + 4 * (z >= 11) + (z >= 21);
+const mapaNovoX = (x, z) => x + (x >= 7) + (x >= 10) + (x >= 18) + (x >= 20)
+  + (z < 6 ? (x >= 23) + (x >= 27) + 10 * (x >= 30) : z < 17 ? 10 * (x >= 23) + (x >= 27) + (x >= 30) : 0);
+let mapaMigrado = false;
+function migrarMapa(){
+  const campo = {};
+  for (const k in S.campo){
+    const [x, z] = k.split(',').map(Number);
+    if (x < 2 || x > 13 || z < 7 || z > 14) continue;
+    const l = ((z - 7) >> 2) * 3 + ((x - 2) >> 2), L = LOTES[l];
+    campo[(L.x + (x - 2) % 4) + ',' + (L.z + (z - 7) % 4)] = S.campo[k];
+  }
+  S.campo = campo;
+  const mover = o => { if (o && typeof o.x === 'number'){ const x = o.x, z = o.z; o.x = mapaNovoX(x, z); o.z = mapaNovoZ(z); } };
+  (S.enfeites || []).forEach(mover); (S.trufas || []).forEach(mover);
+  if (S.maca){ mover(S.maca); const ax = S.maca.ax, az = S.maca.az; if (typeof ax === 'number'){ S.maca.ax = mapaNovoX(ax, az); S.maca.az = mapaNovoZ(az); } }
+  // os bichos voltam para o pasto do seu cercado ao abrir (dentroDoPasto)
+  for (const d of S.animais || []){ const x = d.x, z = d.z; d.x = mapaNovoX(x, z); d.z = mapaNovoZ(z); }
+  // o canto Sul mudou: quem já tinha o terreno limpo fica sabendo dos lotes novos
+  if (S.canto === 2) S.avisoLotesCanto = false;
+  S.mapa = 2; mapaMigrado = true;
+}
+// depois de migrar o save, ao abrir: enfeite que caiu fora de um gramado livre volta para a loja, e trufa ou maçã que
+// não ficou ao lado de uma árvore some (nasce outra depois)
+function conferirMapaNovo(){
+  if (!Array.isArray(S.enfeites)) S.enfeites = [];
+  if (!S.guardados) S.guardados = {};
+  const ok = [], volta = [];
+  for (const e of S.enfeites){
+    const x = e.x, z = e.z;
+    const livre = tipo(x, z) === 'grama' && loteDe(x, z) < 0 && !campo(x, z) && blocoEm(x, z) <= 0 && !loteDeCercado(x, z) && !ok.some(o => o.x === x && o.z === z) && !ladrilhoDeBeirada(x, z);
+    (livre ? ok : volta).push(e);
+  }
+  for (const e of volta) S.guardados[e.tipo] = (S.guardados[e.tipo] || 0) + 1;
+  S.enfeites = ok;
+  const pertoDeArvore = (x, z) => tipo(x, z) === 'grama' && ARVORES.some(([ax, az]) => Math.abs(ax - x) + Math.abs(az - z) === 1);
+  if (Array.isArray(S.trufas)) S.trufas = S.trufas.filter(t => pertoDeArvore(t.x, t.z));
+  if (S.maca && !pertoDeArvore(S.maca.x, S.maca.z)) S.maca = null;
+  const txt = 'A fazenda cresceu! As construções ficaram mais espaçadas, o galinheiro e o curral novos ficam ao lado dos primeiros e sobrou espaço para o que vem por aí.'
+    + (volta.length ? ` ${volta.length > 1 ? volta.length + ' enfeites não cabiam no lugar novo e voltaram' : 'Um enfeite não cabia no lugar novo e voltou'} para a loja, em Enfeites.` : '');
+  setTimeout(() => aviso(txt, 'grande', 7), 1800);
 }
 function carregar(){
   try {
     const d = JSON.parse(localStorage.getItem(CHAVE_SALVO) || 'null');
     if (d && d.campo){
-      S = Object.assign(estadoNovo(), d); S.versao = d.versao || 1; migrar();
+      S = Object.assign(estadoNovo(), d); S.versao = d.versao || 1; S.mapa = d.mapa || 1; migrar();
       // quem já chamou o Hud viu a explicação e não vê a cena dele; os outros veem no nível 9
       if (d.viuCineHud === undefined && d.viuExplicacaoHud) S.viuCineHud = true;
       // quem já joga não vê a cena inicial sozinho (pode rever pelo menu)
@@ -4785,7 +4879,7 @@ function corChao(t, gx, gz){
       return r < 0.5 ? 0xb5926a : 0xab8960;
     }
     case 'estrada': {
-      const i = gx % 4, k = gz % 4, cx = (gx >> 2) === COL_CURVA, cz = (gz >> 2) === 17, meioI = i === 1 || i === 2, meioK = k === 1 || k === 2;
+      const i = gx % 4, k = gz % 4, cx = (gx >> 2) === COL_CURVA, cz = (gz >> 2) === Z_CERCA + 1, meioI = i === 1 || i === 2, meioK = k === 1 || k === 2;
       const sulco = cx && cz ? (meioK && i <= 2) || (meioI && k >= 1) : cx ? meioI : meioK;
       return sulco && r < 0.6 ? 0xae8a5e : (r < 0.5 ? 0xc49e6c : 0xbb9564);
     }
@@ -4793,6 +4887,13 @@ function corChao(t, gx, gz){
       if (hash(gx >> 1, 3, gz >> 1) < 0.28) return r < 0.5 ? 0xa58c5a : 0x9a8252;
       return r2 < 0.5 ? (r < 0.5 ? 0x9cbc57 : 0x95b652) : (r < 0.5 ? 0xa4c25c : 0x9dbb56);
     case 'pastoG': return r < 0.5 ? 0xd9c27d : 0xcfb56c;
+    // o lago: água com reflexos, mais clara na beirada, e umas vitórias-régias
+    case 'lago': case 'ponte': {
+      const tx = gx >> 2, tz = gz >> 2, beira = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => { const u = tipo(tx + a, tz + b); return u !== 'lago' && u !== 'ponte'; });
+      if (t === 'lago' && hash(gx >> 1, 61, gz >> 1) < 0.035) return hash(gx, 62, gz) < 0.2 ? 0xf2a3c4 : 0x4f9a3c;
+      if (hash(gx, 63, gz) < 0.06) return 0xbfe2fb;
+      return beira ? (r < 0.5 ? 0x5fb0e6 : 0x58aae2) : (r2 < 0.5 ? (r < 0.5 ? 0x3f8fd6 : 0x438fd2) : (r < 0.5 ? 0x4a97da : 0x4693d6));
+    }
     case 'pastoV': return r2 < 0.5 ? (r < 0.5 ? 0x6db24a : 0x67a945) : (r < 0.5 ? 0x75b94f : 0x6fb14b);
     case 'campo': return r2 < 0.5 ? (r < 0.5 ? 0x8fcb5f : 0x88c45a) : (r < 0.5 ? 0x94cf63 : 0x8cc85d);
     default: return r2 < 0.5 ? (r < 0.5 ? 0x7cc657 : 0x76bf52) : (r < 0.5 ? 0x84cc5d : 0x7fc458);
@@ -4808,6 +4909,8 @@ function construirChao(){
     const t = tipoChao(x, z);
     for (let i = 0; i < 4; i++) for (let k = 0; k < 4; k++){
       const gx = x * 4 + i, gz = z * 4 + k;
+      // a água fica um degrau abaixo do chão, e a beirada de terra aparece em volta
+      if (t === 'lago' || t === 'ponte'){ v.set(gx, -2, gz, corChao(t, gx, gz)); v.set(gx, -3, gz, 0x8a5c3a); continue; }
       v.set(gx, -1, gz, corChao(t, gx, gz));
       v.set(gx, -2, gz, 0x9a6a43); v.set(gx, -3, gz, 0x8a5c3a);
     }
@@ -4976,12 +5079,14 @@ function itensParcela(p){
     itens: [{ rotulo: 'Comprar a parcela', sub: motivo || `${P.arvores.length} árvores para coletar`, icone: 'moeda', preco: reais(P.preco), off: !!motivo, fn: () => comprarParcela(p) }] };
 }
 // ================= o terreno do canto Sul
-const CERCA_CANTO = [];
 let placaCanto = null, bolhaCanto = null;
 function liberarTilesDoCanto(){
-  // as construções da clareira continuam lá
-  for (let z = 17; z < H; z++) for (let x = COL_CURVA + 2; x < W; x++) if (tipo(x, z) !== 'predio') setT(x, z, 'grama');
-  for (let x = ARRENDAMENTO.xCerca; x < W; x++) setT(x, 16, 'grama');
+  // as construções da clareira, o lago e a ponte continuam lá; os terrenos de canteiros e as colmeias de lá passam a existir
+  for (let z = Z_CERCA + 1; z < H; z++) for (let x = COL_CURVA + 2; x < W; x++) if (tipo(x, z) === 'canto') setT(x, z, 'grama');
+  for (let x = ARRENDAMENTO.xCerca; x < W; x++) setT(x, Z_CERCA, 'grama');
+  LOTES.forEach(l => { if (l.canto) for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) setT(x, z, 'campo'); });
+  for (const [x, z] of COLMEIA_SLOTS.slice(COLMEIA_CANTO)) setT(x, z, 'feno');
+  // a cerca de baixo do curral novo é a da fazenda: ela fica
   for (const id in CERCADOS) if (cercadoFeito(id)) aplicarCercado(id);
 }
 function montarPlacaCanto(){
@@ -5028,10 +5133,11 @@ function arrendarCanto(){
 function executarTirarCerca(){
   if (S.canto !== 1) return;
   S.canto = 2;
+  const tinha = []; for (let x = ARRENDAMENTO.xCerca; x < W; x++) if (ehCerca(x, Z_CERCA)) tinha.push(x);
   liberarTilesDoCanto();
-  for (let x = ARRENDAMENTO.xCerca; x < W; x++){ scene.remove(CERCA_CANTO[x]); for (let k = 0; k < 4; k++) particula(x + rnd(0, 1), 0.4, 16.5 + rnd(-0.3, 0.3), [0x8a5a36, 0xb98a5a][k % 2], 1); }
-  // a última estaca que fica perdia o vizinho e continuaria com a ponta da cerca para fora
-  const x = ARRENDAMENTO.xCerca - 1; scene.remove(CERCA_CANTO[x]); CERCA_CANTO[x] = colocarCerca(x, 16);
+  for (const x of tinha) if (!ehCerca(x, Z_CERCA)) for (let k = 0; k < 4; k++) particula(x + rnd(0, 1), 0.4, Z_CERCA + 0.5 + rnd(-0.3, 0.3), [0x8a5a36, 0xb98a5a][k % 2], 1);
+  // a estaca que fica perde o vizinho e muda de desenho
+  atualizarCercas(ARRENDAMENTO.xCerca, Z_CERCA, W - 1, Z_CERCA);
   MATAGAL.splice(0).forEach(m => scene.remove(m));
   scene.remove(chao); chao.geometry.dispose(); scene.remove(tufos); tufos.geometry.dispose();
   construirChao();
@@ -5040,12 +5146,13 @@ function executarTirarCerca(){
   falar(ed, fala, tempoDeLeitura(fala)); Som.colher();
   setTimeout(() => aviso('O matagal foi embora e o terreno agora faz parte da fazenda!', 'grande', 3.5), tempoDeLeitura(fala) * 1000);
   // o terreno limpo já mostra o que dá para comprar nele
-  montarPlacasCercados(); montarPlacasPomar();
-  if (nivel() >= CERCADOS.galinheiro2.nivel){ S.avisoLotesCanto = true; setTimeout(avisoLotesCanto, tempoDeLeitura(fala) * 1000 + 4000); }
+  montarPlacasPomar(); montarLotes();
+  COLMEIA_SLOTS.forEach((_, i) => { if (i >= COLMEIA_CANTO) montarColmeia(i); });
+  S.avisoLotesCanto = true; setTimeout(avisoLotesCanto, tempoDeLeitura(fala) * 1000 + 4000);
   hud(); salvar();
 }
-// ================= o galinheiro e o curral do canto Sul
-const avisoLotesCanto = () => aviso('No terreno novo tem lotes à venda: um galinheiro, um curral e dois terrenos de pomar. Toque nas placas.', 'grande', 5);
+const avisoLotesCanto = () => aviso('No terreno novo tem lotes à venda: dois terrenos de canteiros, dois de pomar e quatro lugares para colmeia. A ponte do lago leva até lá.', 'grande', 5);
+// ================= o galinheiro e o curral novos
 const nomeTipoCercado = tp => tp === 'galinha' ? 'galinheiro' : 'curral';
 // o cercado em ladrilhos: cerca em volta, porteira, a construção no fundo e o pasto no resto
 function aplicarCercado(id){
@@ -5060,30 +5167,15 @@ function aplicarCercado(id){
 }
 const dentroDoCercado = (id, x, z) => { const [x0, z0, x1, z1] = CERCADOS[id].cerca; return x >= x0 && x <= x1 && z >= z0 && z <= z1; };
 // o ladrilho é de um lote ainda à venda, contando a cerca planejada (ali não vai enfeite)
-const loteDeCercado = (x, z) => S.canto === 2 && Object.keys(CERCADOS).some(id => !cercadoFeito(id) && dentroDoCercado(id, x, z));
+const loteDeCercado = (x, z) => Object.keys(CERCADOS).some(id => !cercadoFeito(id) && dentroDoCercado(id, x, z));
 // o lote ainda à venda que tem esse ladrilho por dentro da cerca planejada
-const cercadoEm = (x, z) => S.canto !== 2 ? null : Object.keys(CERCADOS).find(id => { const [x0, z0, x1, z1] = CERCADOS[id].cerca; return !cercadoFeito(id) && x > x0 && x < x1 && z > z0 && z < z1; }) || null;
-// as cercas dos cercados novos são refeitas juntas: a do meio é dos dois, e o desenho de cada mourão depende dos vizinhos
-const CERCA_CERCADO = [];
-function montarCercasCercados(){
-  CERCA_CERCADO.splice(0).forEach(m => scene.remove(m));
-  const feito = new Set();
-  for (const id in CERCADOS){
-    if (!cercadoFeito(id)) continue;
-    const [x0, z0, x1, z1] = CERCADOS[id].cerca;
-    for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++){
-      const k = x + ',' + z, t = tipo(x, z);
-      if (feito.has(k) || (t !== 'cerca' && t !== 'portao')) continue;
-      feito.add(k); CERCA_CERCADO.push(t === 'cerca' ? colocarCerca(x, z) : colocarPortao(x, z));
-    }
-  }
-}
+const cercadoEm = (x, z) => Object.keys(CERCADOS).find(id => { const [x0, z0, x1, z1] = CERCADOS[id].cerca; return !cercadoFeito(id) && x > x0 && x < x1 && z > z0 && z < z1; }) || null;
 const PLACA_CERCADO = {};
 function montarPlacasCercados(){
   for (const id in CERCADOS){
     const velha = PLACA_CERCADO[id];
     if (velha){ scene.remove(velha); const k = pickaveis.indexOf(velha); if (k >= 0) pickaveis.splice(k, 1); delete PLACA_CERCADO[id]; }
-    if (cercadoFeito(id) || S.canto !== 2) continue;
+    if (cercadoFeito(id)) continue;
     const C = CERCADOS[id], [x0, z0, x1, z1] = C.cerca;
     const pl = malha(geo('placa', () => vPlaca().build(1 / 16, { origin: [8, 0, 8] })));
     const tx = placaDeTexto(texturaTexto([['LOTE À VENDA', 1, '#c2365f'], [`${nomeTipoCercado(C.tp)} · nível ${C.nivel}`, 0.7, '#7a4a2a']], 256, 112, '#f3e3c3'), 13 / 16, 6 / 16);
@@ -5127,7 +5219,7 @@ function tirarDeLadrilhoFechado(P){
 }
 function comprarCercado(id){
   const C = CERCADOS[id], p = PREDIO[id];
-  if (cercadoFeito(id) || S.canto !== 2) return;
+  if (cercadoFeito(id)) return;
   const motivo = motivoCercado(id);
   if (motivo){ aviso(`Esse lote: ${motivo}`, 'ruim'); Som.erro(); return; }
   gastar(C.preco); chipPulsa('chipDinheiro');
@@ -5138,7 +5230,7 @@ function comprarCercado(id){
   aplicarCercado(id);
   scene.remove(chao); chao.geometry.dispose(); scene.remove(tufos); tufos.geometry.dispose();
   construirChao();
-  montarCercasCercados(); montarPredio(p); montarPlacasCercados(); montarGalos();
+  atualizarCercas(...C.cerca); montarPredio(p); montarPlacasCercados(); montarGalos();
   ladrilhoDeBeirada(0, 0);
   tirarDeLadrilhoFechado(ed); tirarDeLadrilhoFechado(irmaoHud);
   const [x0, z0, x1, z1] = C.cerca, [cx, cz] = centroPredio(p);
@@ -5155,8 +5247,9 @@ function itensFloresta(x, z){
 }
 
 const ehCerca = (x, z) => { const t = tipo(x, z); return t === 'cerca' || t === 'portao'; };
+const mascaraCerca = (x, z) => (ehCerca(x + 1, z) ? 1 : 0) | (ehCerca(x - 1, z) ? 2 : 0) | (ehCerca(x, z + 1) ? 4 : 0) | (ehCerca(x, z - 1) ? 8 : 0);
 function colocarCerca(x, z){
-  const m = (ehCerca(x + 1, z) ? 1 : 0) | (ehCerca(x - 1, z) ? 2 : 0) | (ehCerca(x, z + 1) ? 4 : 0) | (ehCerca(x, z - 1) ? 8 : 0);
+  const m = mascaraCerca(x, z);
   return colocar(malha(geo('cerca' + m, () => vCerca(m).build(1 / 16, { origin: [8, 0, 8] }))), x + 0.5, 0, z + 0.5);
 }
 // a porteira acompanha a cerca em que está
@@ -5164,17 +5257,42 @@ function colocarPortao(x, z, arco = false){
   const aoLongoX = ehCerca(x + 1, z) || ehCerca(x - 1, z);
   return colocar(malha(geo('portao' + arco, () => vPortao(arco).build(1 / 16, { origin: [8, 0, 8] }))), x + 0.5, 0, z + 0.5, aoLongoX ? 0 : Math.PI / 2);
 }
+// uma malha por ladrilho de cerca ou porteira. Quando um ladrilho vira cerca ou deixa de ser (o canto Sul, um cercado novo),
+// atualizarCercas refaz a região e os vizinhos, porque o desenho de cada mourão depende deles
+const CERCA_VIS = {};
+function montarCerca(x, z){
+  const k = x + ',' + z, t = tipo(x, z), arco = x === X_PORTEIRA && z === Z_CERCA;
+  const assin = t === 'cerca' ? 'c' + mascaraCerca(x, z) : t === 'portao' ? 'p' + (ehCerca(x + 1, z) || ehCerca(x - 1, z)) : '';
+  const velha = CERCA_VIS[k];
+  if (velha && velha.assin === assin) return;
+  if (velha){ scene.remove(velha.m); delete CERCA_VIS[k]; }
+  if (!assin) return;
+  const m = t === 'cerca' ? colocarCerca(x, z) : colocarPortao(x, z, arco);
+  if (arco){
+    const tex = texturaTexto([['FAZENDA', 0.62, '#7a4a2a'], ['JOLI PIG', 1, '#c2365f']], 768, 256, '#f3e3c3');
+    for (const lado of [1, -1]){
+      const pl = placaDeTexto(tex, 26 / 16, 9 / 16);
+      pl.position.set(0, 26.5 / 16, lado > 0 ? 3.06 / 16 : -3.06 / 16);
+      if (lado < 0) pl.rotation.y = Math.PI;
+      m.add(pl);
+    }
+  }
+  CERCA_VIS[k] = { m, assin };
+}
+function atualizarCercas(x0, z0, x1, z1){
+  for (let x = Math.max(0, x0 - 1); x <= Math.min(W - 1, x1 + 1); x++) for (let z = Math.max(0, z0 - 1); z <= Math.min(H - 1, z1 + 1); z++) montarCerca(x, z);
+}
 // ================= o galo
 // Um em cima de um mourão de cada galinheiro (o do novo aparece quando ele é comprado), olhando ao longo da cerca. O
 // mourão de cada um foi escolhido para ele não encostar no galinheiro reformado, no andaime, no coletor, no curral nem
-// na porteira, mesmo virado (até ±0,6), e ficar acima das vacas e das galinhas. Ao lado do mourão ficam o ladrilho em
+// na porteira, mesmo virado (até ±0,6), e ficar acima das galinhas: os dois ficam na cerca de baixo. Ao lado do mourão ficam o ladrilho em
 // que ele desce dentro do cercado (dentro) e o de fora do cercado, onde ele cai quando foge (fora).
 // Ele canta de manhã na hora de nanar, dá o alarme antes do disco, da chuva, do caminhão e do teco-teco, ganha carinho
 // do Ed quando é tocado, às vezes tem ciúme quando o Ed recolhe os ovos e às vezes foge. Nada disso vai para o save:
 // ao abrir o jogo ele está no mourão
 const POUSO_GALO = {
-  galinheiro: { mourao: [18, 10], ry: Math.PI / 2, dentro: [18, 9], fora: [16, 10] },
-  galinheiro2: { mourao: [29, 18], ry: 0, dentro: [28, 18], fora: [30, 18] },
+  galinheiro: { mourao: [20, 11], ry: Math.PI / 2, dentro: [20, 10], fora: [20, 12] },
+  galinheiro2: { mourao: [30, 11], ry: Math.PI / 2, dentro: [30, 10], fora: [30, 12] },
 };
 const ALTURA_MOURAO = 13 / 16, GIRO_GALO = 0.6, ESCALA_GALO = 1 / 19;
 // os pivôs das partes, em cubinhos: o pescoço e os ombros
@@ -5491,7 +5609,7 @@ function itensReforma(id, r){
 // onde o Maurinho fica durante a obra: do lado da porta, para não ficar no caminho do Ed
 function pontoObra(id){
   const [px, pz] = PREDIO[id].porta;
-  for (const [dx, dz] of [[1, 0], [-1, 0], [1, 1], [-1, 1], [0, 1]]){ const x = px + dx, z = pz + dz; if (andavel(x, z) && rota(PARADA | 0, 15, x, z)) return [x + 0.5, z + 0.5]; }
+  for (const [dx, dz] of [[1, 0], [-1, 0], [1, 1], [-1, 1], [0, 1]]){ const x = px + dx, z = pz + dz; if (andavel(x, z) && rota(PARADA | 0, Z_CERCA - 1, x, z)) return [x + 0.5, z + 0.5]; }
   return [px + 0.5, pz + 0.5];
 }
 const obraVis = { estado: '', tfala: 0, pontos: null, aqui: null, acao: null, espera: 0 };
@@ -5503,7 +5621,7 @@ function pontosObra(id){
   const livre = (x, z) => !baixos.some(([bx, bz]) => Math.abs(bx - x) < 0.36 && Math.abs(bz - z) < 0.36);
   for (let x = p.x0 - 1; x <= p.x1 + 1; x++) for (let z = p.z0 - 1; z <= p.z1 + 1; z++){
     if ((x >= p.x0 && x <= p.x1) === (z >= p.z0 && z <= p.z1)) continue; // dentro da construção ou numa quina
-    if (andavel(x, z) && livre(x + 0.5, z + 0.5) && rota(PARADA | 0, 15, x, z)) out.push([x + 0.5, z + 0.5]);
+    if (andavel(x, z) && livre(x + 0.5, z + 0.5) && rota(PARADA | 0, Z_CERCA - 1, x, z)) out.push([x + 0.5, z + 0.5]);
   }
   return out.length ? out : [pontoObra(id)];
 }
@@ -5567,8 +5685,8 @@ function reformar(id){
   pararMaurinhoObra();
   Object.assign(obraVis, { estado: 'chegando', tfala: rnd(20, 35), pontos: null, acao: null });
   const q = sortearPontoObra();
-  M.g.visible = true; M.colocar(PARADA, 16.85); M.ang = M.angAlvo = Math.PI;
-  M.ir([[PARADA, 15.6]], () => andarAte(M, q[0], q[1], () => { obraVis.estado = 'trabalhando'; obraVis.aqui = q; acaoObra('prancheta'); falar(M, variar(FALAS_MAURINHO_CHEGA), 3); }));
+  M.g.visible = true; M.colocar(PARADA, Z_CERCA + 0.85); M.ang = M.angAlvo = Math.PI;
+  M.ir([[PARADA, Z_CERCA - 0.4]], () => andarAte(M, q[0], q[1], () => { obraVis.estado = 'trabalhando'; obraVis.aqui = q; acaoObra('prancheta'); falar(M, variar(FALAS_MAURINHO_CHEGA), 3); }));
   aviso(`O Maurinho já vem reformar ${artigoPredio(id)} ${nomePredio(id)}! A obra leva ${REFORMA.minutos[n - 1]} minutos.`, 'grande', 4);
   hud(); salvar();
 }
@@ -5588,7 +5706,7 @@ function terminarObra(){
     pararMaurinhoObra(); obraVis.pontos = null;
     falar(M, variar(FALAS_MAURINHO_PRONTO), 3); obraVis.estado = 'saindo';
     const vai = () => obraVis.estado === 'saindo';
-    setTimeout(() => { if (vai()) andarAte(M, PARADA, 15.6, () => { if (vai()) M.ir([[PARADA, 16.85]], () => { if (vai()){ M.g.visible = false; obraVis.estado = ''; } }); }); }, 3200);
+    setTimeout(() => { if (vai()) andarAte(M, PARADA, Z_CERCA - 0.4, () => { if (vai()) M.ir([[PARADA, Z_CERCA + 0.85]], () => { if (vai()){ M.g.visible = false; obraVis.estado = ''; } }); }); }, 3200);
   }
   hud(); salvar();
 }
@@ -5613,6 +5731,11 @@ function atualizarObra(dt, t){
   }
   if (Date.now() >= S.obra.fim) terminarObra();
 }
+let ponteVis = null;
+function montarPonte(){
+  if (ponteVis) return;
+  ponteVis = colocar(malha(geo('ponte', () => vPonte().build(1 / 16, { origin: [8, 0, 0], jitter: 0.02 }))), PONTE.x + 0.5, 0, PONTE.z0);
+}
 function construirCenario(){
   for (const p of PREDIOS) if (!p.fab && (!p.lote || cercadoFeito(p.id))) montarPredio(p);
   for (const [x, z, t] of ARVORES){
@@ -5623,35 +5746,16 @@ function construirCenario(){
   for (const [x, z] of ARBUSTOS){ const m = colocar(malha(geo('arbusto', () => vArbusto().build(1 / 8, { origin: [4, 0, 4] }))), x + 0.5, 0, z + 0.5); m.userData.alvo = { k: 'arvore', x, z, arbusto: true }; pickaveis.push(m); }
   for (const [x, z] of FENOS) colocar(malha(geo('feno', () => vFeno().build(1 / 16, { origin: [8, 0, 8] }))), x + 0.5, 0, z + 0.5, Math.PI / 2 * (z % 2));
   FLORES.forEach(([x, z], i) => colocar(malha(geo('flor' + i, () => vFlores(i + 3).build(1 / 16, { origin: [8, 0, 8] })), false), x + 0.5, 0, z + 0.5));
-  // cercas
-  for (let z = 0; z < H; z++) for (let x = 0; x < W; x++){
-    const t = tipo(x, z);
-    // as dos cercados do canto Sul são de montarCercasCercados
-    if ((t === 'cerca' || t === 'portao') && Object.keys(CERCADOS).some(id => cercadoFeito(id) && dentroDoCercado(id, x, z))) continue;
-    if (t === 'cerca'){
-      const mc = colocarCerca(x, z);
-      if (z === 16 && x >= ARRENDAMENTO.xCerca - 1) CERCA_CANTO[x] = mc;
-    } else if (t === 'portao'){
-      const arco = x === 15 && z === 16;
-      const m = colocarPortao(x, z, arco);
-      if (arco){
-        const tex = texturaTexto([['FAZENDA', 0.62, '#7a4a2a'], ['JOLI PIG', 1, '#c2365f']], 768, 256, '#f3e3c3');
-        for (const lado of [1, -1]){
-          const pl = placaDeTexto(tex, 26 / 16, 9 / 16);
-          pl.position.set(0, 26.5 / 16, lado > 0 ? 3.06 / 16 : -3.06 / 16);
-          if (lado < 0) pl.rotation.y = Math.PI;
-          m.add(pl);
-        }
-      }
-    }
-  }
+  // cercas, a ponte do lago e os bichos do lago
+  atualizarCercas(0, 0, W - 1, H - 1);
+  montarPonte();
 }
 
 // ================= lotes à venda
 const CAPIM = [];
 function montarLotes(){
   LOTES.forEach((l, i) => {
-    if (S.lotes[i]) return;
+    if (S.lotes[i] || CAPIM[i] || !loteAberto(i)) return;
     const g = new THREE.Group();
     const m = malha(geo('capim' + i, () => vCapim(i).build(1 / 16, { origin: [0, 0, 0] })), false);
     g.add(m);
@@ -5665,9 +5769,17 @@ function montarLotes(){
     pl.userData.alvo = { k: 'tile', x: l.x, z: l.z + 3 }; pickaveis.push(pl);
   });
 }
+// preço e nível do terreno: os da horta pela ordem de compra, os do canto Sul pelo que está no lote
+function precoLote(i){
+  const l = LOTES[i];
+  if (l.canto) return { preco: l.preco, nivel: l.nivel };
+  const n = S.lotes.filter((v, k) => v && !LOTES[k].canto).length;
+  return { preco: PRECO_LOTE[n], nivel: NIVEL_LOTE[n] };
+}
 function comprarLote(i){
-  const n = S.lotes.filter(Boolean).length, preco = PRECO_LOTE[n];
-  if (nivel() < NIVEL_LOTE[n]){ aviso(`Precisa do nível ${NIVEL_LOTE[n]} para comprar mais terra`, 'ruim'); Som.erro(); return; }
+  if (S.lotes[i] || !loteAberto(i)) return;
+  const { preco, nivel: nv } = precoLote(i);
+  if (nivel() < nv){ aviso(`Precisa do nível ${nv} para comprar mais terra`, 'ruim'); Som.erro(); return; }
   if (S.dinheiro < preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return; }
   S.dinheiro -= preco; S.lotes[i] = true;
   const l = LOTES[i];
@@ -5909,7 +6021,9 @@ function fumaca(x, y, z){
 
 // ================= pomar e colmeias
 const POMAR_VIS = [], COLMEIA_VIS = [], ABELHAS = [];
-const tempoFruta = tipo => FRUTIFERAS[tipo].tempo * (1 - COLMEIA.ajuda * S.colmeias.filter(Boolean).length);
+// cada colmeia ajuda o pomar do mesmo lado da fazenda: as da frente do pomar, as covas de lá; as do canto Sul, as covas de lá
+const doCanto = i => blocoDoSlot(i) >= 3;
+const tempoFruta = (tipo, i) => FRUTIFERAS[tipo].tempo * (1 - COLMEIA.ajuda * S.colmeias.filter((d, k) => d && (k >= COLMEIA_CANTO) === doCanto(i)).length);
 function montarSlot(lista, vis, slots, i, modelo, chaveGeo){
   const V = vis[i] || (vis[i] = {}), [x, z] = slots[i];
   if (V.mesh){ scene.remove(V.mesh); const k = pickaveis.indexOf(V.mesh); if (k >= 0) pickaveis.splice(k, 1); }
@@ -5926,6 +6040,7 @@ function montarPomar(i){
 }
 function montarColmeia(i){
   const d = S.colmeias[i];
+  if (!colmeiaAberta(i)) return;
   if (!d) montarSlot('colmeia', COLMEIA_VIS, COLMEIA_SLOTS, i, () => vCova().build(1 / 16, { origin: [8, 0, 8] }), 'cova');
   else montarSlot('colmeia', COLMEIA_VIS, COLMEIA_SLOTS, i, () => vColmeia().build(1 / 16, { origin: [8, 0, 8] }), 'colmeia');
   bolhaSlot(COLMEIA_VIS[i], COLMEIA_SLOTS[i], d && d.pronto ? 'mel' : '', 1.35);
@@ -5947,7 +6062,7 @@ function plantarFrutifera(i, tipo){
   if (nivel() < F.nivel){ aviso(`${F.nome} libera no nível ${F.nivel}`, 'ruim'); Som.erro(); return; }
   if (S.dinheiro < F.preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return; }
   gastar(F.preco); chipPulsa('chipDinheiro');
-  S.pomar[i] = { tipo, pronto: false, fim: Date.now() + tempoFruta(tipo) * 1000 };
+  S.pomar[i] = { tipo, pronto: false, fim: Date.now() + tempoFruta(tipo, i) * 1000 };
   montarPomar(i);
   const [x, z] = POMAR_SLOTS[i];
   for (let k = 0; k < 16; k++) particula(x + 0.5, 0.4, z + 0.5, [0x6cbf52, 0x8a5c3a][k % 2], 1.2);
@@ -5987,7 +6102,7 @@ function itensPomar(i){
       const F = FRUTIFERAS[tipo], bloq = nivel() < F.nivel;
       if (F.nivel > nivel() + 2) continue;
       const f = bloq ? 0 : faltaNoPedido(F.fruta, S.pomar.filter(p => p && p.tipo === tipo).length * F.rend);
-      r.itens.push({ rotulo: F.nome, sub: bloq ? `nível ${F.nivel}` : `${F.rend} ${PRODUTOS[F.fruta].plural} a cada ${tempo(tempoFruta(tipo))}${textoFalta(f)}`, icone: tipo, encomenda: f > 0, preco: reais(F.preco), off: bloq || S.dinheiro < F.preco, fn: () => plantarFrutifera(i, tipo) });
+      r.itens.push({ rotulo: F.nome, sub: bloq ? `nível ${F.nivel}` : `${F.rend} ${PRODUTOS[F.fruta].plural} a cada ${tempo(tempoFruta(tipo, i))}${textoFalta(f)}`, icone: tipo, encomenda: f > 0, preco: reais(F.preco), off: bloq || S.dinheiro < F.preco, fn: () => plantarFrutifera(i, tipo) });
     }
     if (!r.itens.length) r.estado += ` O pomar libera no nível ${FRUTIFERAS.laranjeira.nivel}.`;
     return r;
@@ -6001,7 +6116,7 @@ function itensPomar(i){
     if (prontas > 1) r.itens.push({ rotulo: `Colher todas (${prontas})`, icone: 'cesta', leve: true, fn: () => S.pomar.forEach((p, k) => { if (p && p.pronto) enfileirar('colherFruta', { k: 'pomar', i: k }, null, true); }) });
   } else {
     r.estado = `Frutas em ${tempo((d.fim - Date.now()) / 1000)}`;
-    r.prog = 1 - (d.fim - Date.now()) / (tempoFruta(d.tipo) * 1000);
+    r.prog = 1 - (d.fim - Date.now()) / (tempoFruta(d.tipo, i) * 1000);
   }
   // para trocar de fruta: corta a árvore, devolve metade do preço e a cova fica livre
   const ocupada = !!(POMAR_VIS[i] && POMAR_VIS[i].res);
@@ -6062,7 +6177,7 @@ function itensColmeia(i){
   if (!d){
     const bloq = nivel() < COLMEIA.nivel;
     r.titulo = 'Lugar para colmeia'; r.icone = 'colmeia';
-    r.estado = `As abelhas fazem mel e cada colmeia deixa o pomar ${Math.round(COLMEIA.ajuda * 100)}% mais rápido.`;
+    r.estado = `As abelhas fazem mel e cada colmeia deixa o pomar ${i >= COLMEIA_CANTO ? 'do canto Sul' : 'da frente'} ${Math.round(COLMEIA.ajuda * 100)}% mais rápido.`;
     r.itens.push({ rotulo: 'Comprar colmeia', sub: bloq ? `nível ${COLMEIA.nivel}` : `${COLMEIA.rend} potes de mel a cada ${tempo(COLMEIA.tempo)}`, icone: 'colmeia', preco: reais(COLMEIA.preco), off: bloq || S.dinheiro < COLMEIA.preco, fn: () => comprarColmeia(i) });
     return r;
   }
@@ -6083,7 +6198,7 @@ function executarPomar(tarefa){
     if (!d.pronto) return;
     S.celeiro[F.fruta] = (S.celeiro[F.fruta] || 0) + F.rend; contar('colhido', F.fruta, F.rend);
     flutuar(pos, '+' + F.rend, '', F.fruta); ganharXP(F.xp, pos.clone().add(new THREE.Vector3(0, 0.3, 0)));
-    d.pronto = false; d.fim = Date.now() + tempoFruta(d.tipo) * 1000;
+    d.pronto = false; d.fim = Date.now() + tempoFruta(d.tipo, i) * 1000;
     montarPomar(i);
   } else {
     const d = S.colmeias[i];
@@ -6166,12 +6281,16 @@ function itensIrrigador(r, alvo){
   const bloq = nivel() < IRRIGADOR.nivel;
   r.itens.push({ rotulo: 'Irrigador automático', sub: bloq ? `nível ${IRRIGADOR.nivel}` : 'rega este terreno sozinho', icone: 'irrigador', preco: reais(IRRIGADOR.preco), leve: true, off: bloq || S.dinheiro < IRRIGADOR.preco, fn: () => comprarIrrigador(l) });
 }
-// mapinha dos seis terrenos, na mesma posição da vista inicial da câmera
+// mapinha dos terrenos do mesmo lugar (a horta ou o canto Sul), na mesma posição da vista inicial da câmera
 function mapaLotes(destaque){
-  const pt = (x, z) => `${(x - z) * 2.2 + 30.5},${(x + z - 9) * 1.15 + 1.5}`;
+  const canto = !!(LOTES[destaque] && LOTES[destaque].canto), grupo = LOTES.map((L, i) => i).filter(i => !!LOTES[i].canto === canto && loteAberto(i));
+  const iso = (x, z) => [(x - z) * 2.2, (x + z) * 1.15], cantos = grupo.flatMap(i => { const L = LOTES[i]; return [iso(L.x, L.z), iso(L.x + 4, L.z), iso(L.x + 4, L.z + 4), iso(L.x, L.z + 4)]; });
+  const mx = Math.min(...cantos.map(c => c[0])), Mx = Math.max(...cantos.map(c => c[0])), my = Math.min(...cantos.map(c => c[1])), My = Math.max(...cantos.map(c => c[1]));
+  const k = Math.min(45 / (Mx - mx), 24 / (My - my)), ox = 24 - (mx + Mx) / 2 * k, oy = 13.5 - (my + My) / 2 * k;
+  const pt = (x, z) => { const [a, b] = iso(x, z); return `${(a * k + ox).toFixed(2)},${(b * k + oy).toFixed(2)}`; };
   let h = '';
-  LOTES.forEach((L, i) => {
-    const pts = [pt(L.x, L.z), pt(L.x + 4, L.z), pt(L.x + 4, L.z + 4), pt(L.x, L.z + 4)].join(' ');
+  grupo.forEach(i => {
+    const L = LOTES[i], pts = [pt(L.x, L.z), pt(L.x + 4, L.z), pt(L.x + 4, L.z + 4), pt(L.x, L.z + 4)].join(' ');
     const cor = i === destaque ? '#f7c3d6' : S.lotes[i] ? '#9fd27a' : '#e2d7bd';
     h += `<polygon points="${pts}" fill="${cor}" stroke="${i === destaque ? '#e0408a' : '#3b2a20'}" stroke-width="${i === destaque ? 2.4 : 1.2}" stroke-linejoin="round"/>`;
     if (S.irrigador[i]){ const [cx, cy] = pt(L.x + 2, L.z + 2).split(',').map(Number); h += `<circle cx="${cx}" cy="${cy}" r="2.6" fill="#4aa6e0" stroke="#3b2a20" stroke-width="1"/>`; }
@@ -6592,7 +6711,7 @@ const VISITA = {
 const dadosVisita = () => VISITA[visita && visita === jaca ? 'jaca' : visita && visita === pelucio ? 'pelucio' : visita && visita === patrinho ? 'patrinho' : 'beto'];
 let presenteJaca = '';
 const caminhaoE = { estado: 'longe', x: -5, t: 0 };
-const PARADA = 15.5, Z_ESTRADA = 17.5, X_CURVA = COL_CURVA + 0.5, R_CURVA = 1, FIM_ESTRADA = X_CURVA + H - Z_ESTRADA + 7;
+const PARADA = X_PORTEIRA + 0.5, Z_ESTRADA = Z_CERCA + 1.5, X_CURVA = COL_CURVA + 0.5, R_CURVA = 1, FIM_ESTRADA = X_CURVA + H - Z_ESTRADA + 7;
 // d é o quanto o veículo já andou, medido como o x da parte reta, para quem chega e para na porteira nem notar a curva
 function naEstrada(obj, d, sentido = 1){
   const ini = X_CURVA - R_CURVA, arco = R_CURVA * Math.PI / 2;
@@ -6733,8 +6852,8 @@ function atualizarCaminhao(dt){
     if (c.t >= 1){
       c.estado = 'descendo'; caminhao.position.y = 0; Som.buzina();
       const v = visita, D = dadosVisita();
-      v.g.visible = true; v.colocar(PARADA, 16.85); v.ang = v.angAlvo = Math.PI;
-      v.ir([[PARADA, 16.4], [PARADA, 15.4]], () => {
+      v.g.visible = true; v.colocar(PARADA, Z_CERCA + 0.85); v.ang = v.angAlvo = Math.PI;
+      v.ir([[PARADA, Z_CERCA + 0.4], [PARADA, Z_CERCA - 0.6]], () => {
         c.estado = 'aqui'; v.angAlvo = Math.PI; v.aceno = 1.6;
         S.visitas = (S.visitas || 0) + 1;
         if (v === jaca){
@@ -6754,7 +6873,7 @@ function atualizarCaminhao(dt){
     if (c.t <= 0){
       c.estado = 'voltando';
       const v = visita;
-      v.ir([[PARADA, 16.4], [PARADA, 16.85]], () => { v.g.visible = false; caminhaoE.estado = 'saindo'; caminhaoE.t = 0; Som.buzina(); });
+      v.ir([[PARADA, Z_CERCA + 0.4], [PARADA, Z_CERCA + 0.85]], () => { v.g.visible = false; caminhaoE.estado = 'saindo'; caminhaoE.t = 0; Som.buzina(); });
     }
   } else if (c.estado === 'saindo'){
     c.t += dt / 3.5;
@@ -6863,19 +6982,19 @@ const falasFesta = () => [
   ['ed', 'Ed', 'Obrigado, família! Essa fazenda é de todos nós.'],
   ['todos', 'Todos', 'Viva a Fazenda Joli Pig!', 'festa'],
 ];
-const PONTO_ED = [16.5, 13.5], PONTO_PELUCIO = [15.5, 14.5];
+const PONTO_ED = [18.5, 18.5], PONTO_PELUCIO = [17.5, 19.5];
 // cena do Jaca: conversa no mesmo lugar da do Pelúcio; no fim ele anda até o lugar de espera das visitas
-const JACA_ESPERA = [PARADA, 15.4], JACA_CENA = PONTO_PELUCIO, JACA_ED = PONTO_ED;
+const JACA_ESPERA = [PARADA, Z_CERCA - 0.6], JACA_CENA = PONTO_PELUCIO, JACA_ED = PONTO_ED;
 // cena do Hud: a porta da casa, onde o Ed espera, onde o Hud para e o canteiro da demonstração (no primeiro terreno)
-const HUD_PORTA = [5.5, 5.6], HUD_ED = [8.5, 6.5], HUD_PARA = [7.5, 6.5];
+const HUD_PORTA = [5.5, 5.6], HUD_ED = [9.5, 6.5], HUD_PARA = [8.5, 6.5];
 // a demonstração usa o canteiro do canto do primeiro terreno; o Hud fica no gramado ao lado, entre o canteiro e a câmera
 const canteiroHud = () => { const l = LOTES[2]; return [l.x + 3, l.z + 3]; };
-const HUD_DEMO = [14.4, 10.5];
+const HUD_DEMO = [16.4, 11.5];
 // cena inicial: [Ed, Beto] logo depois da porteira e depois de entrar; ficam um de cada lado na tela, de perfil para a câmera
-const INI_PORTAO = [[16.0, 13.4], [15.2, 14.2]], INI_DENTRO = [[15.8, 12.5], [15.0, 13.3]];
+const INI_PORTAO = [[18.0, 18.4], [17.2, 19.2]], INI_DENTRO = [[17.8, 17.5], [17.0, 18.3]];
 // o passeio da câmera na fala 3: casa, celeiro, galinhas e o primeiro terreno
 // [x, z, vista, altura, vista na tela estreita]; vista = altura visível em ladrilhos
-const PASSEIO = [[4.8, 3.0, 9, 1, 12.5], [15, 2.4, 9, 1.1, 16], [19.6, 8.6, 7, 0.3, 10], [12, 9, 12, 0.3, 16.2]], PASSEIO_T = 1.5;
+const PASSEIO = [[4.8, 3.0, 9, 1, 12.5], [17, 2.4, 9, 1.1, 16], [22.6, 9.6, 7, 0.3, 10], [14, 10, 12, 0.3, 16.2]], PASSEIO_T = 1.5;
 const telaEstreita = () => innerWidth / innerHeight < 0.8;
 const centroDe = (a, b) => new THREE.Vector3((a[0] + b[0]) / 2 + 0.25, 0.35, (a[1] + b[1]) / 2 + 0.6);
 // as galinhas cacarejam e dão um pulinho
@@ -6895,7 +7014,7 @@ function limparInicio(){
   ed.g.visible = true; beto.g.visible = false; beto.pontos = []; beto.estado = 'parado'; beto.aceno = 0;
 }
 // Milton na área: o Ed espera na beira de cima da fazenda e o Milton desce na faixa entre a pista e a fazenda
-const MI_ED = [18.7, 0.6], MI_MILTON = [19.2, -0.9], MI_DESCE = [19.9, -1.7];
+const MI_ED = [21.7, 0.6], MI_MILTON = [22.2, -0.9], MI_DESCE = [22.9, -1.7];
 const portaAviao = () => [PISTA.para + 0.9, PISTA.y + 0.35];
 function aviaoFora(){ voo = { estado: 'fora', t: 0 }; aviao.visible = false; aviao.rotation.set(0, 0, 0); motor(false); }
 // o presente, a taxa e o relógio do próximo pouso valem só na primeira vez (na reprise não mexem no save)
@@ -6907,7 +7026,7 @@ function presenteMiltonCena(){
 }
 // Festa: o Ed no cruzamento em frente ao celeiro, os outros em meia-lua na frente dele
 // a lambreta para à frente do caminhão e sai primeiro, senão atravessaria os outros veículos na estrada
-const FESTA_ED = [15.5, 6.5], FESTA_VAN = PARADA - 3.4, FESTA_LAMBRETA = PARADA + 3;
+const FESTA_ED = [17.5, 6.5], FESTA_VAN = PARADA - 3.4, FESTA_LAMBRETA = PARADA + 3;
 const festaRoda = () => ({ pelucio: [-1.5, 0.3], beto: [-0.95, 1.2], jaca: [0.2, 1.5], hud: [1.15, 0.95], patrinho: [0.95, -0.15] });
 const CORES_FESTA = [0xff4d6d, 0xffd23f, 0x4dabf7, 0x69db7c, 0xf783ac, 0xffffff, 0xb197fc];
 function confete(x, y, z, n = 1, espalha = 0.8){
@@ -6927,7 +7046,7 @@ function limparFesta(){
 // Um cafezinho (nível 3+, se repete): o Ed para na frente da casa com uma mesinha, chocolate quente e bolo ou fruta, às vezes com o Milton e um convidado.
 // Não mexe em nada do save além de S.viuCafezinho; o relógio da próxima vez fica só na memória.
 // centro da mesinha: primeiro a fileira z = 4 a leste da casa (longe do milho do primeiro terreno), depois a estradinha z = 5
-const CAFE_LUGARES = [[11, 4.5], [8, 4.5], [10.5, 5], [9.5, 5]];
+const CAFE_LUGARES = [[13, 4.5], [9, 4.5], [12.5, 5], [10.5, 5]];
 // a mesa gira 45 graus, para um lado dela ficar de frente para a câmera; posições no sistema da mesa: x para a direita da tela, z para a câmera
 const CAFE_ASSENTO = { ed: [0, -0.85], hud: [-0.85, 0], conv: [0.85, 0] };
 const CAFE_BANCO = 6 / 19, CAFE_TOPO = 11 / 19, CAFE_PRATO = [-0.25, 0.15], CAFE_CANECA = [0.28, 0.15], CAFE_GIRO = Math.PI / 4;
@@ -7065,8 +7184,8 @@ function ambienteCafe(dt){
 const convCafe = q => ({ beto, jaca, pelucio, milton })[q];
 // o Milton desce da pista por uma coluna livre entre a casa e o celeiro (tenta outra quando a rota falha)
 function descidaMilton(dx, dz){
-  for (const sx of [10.5, 9.5, 11.5, 8.5]){ const ida = rota(Math.floor(sx), 0, Math.floor(dx), Math.floor(dz)); if (ida) return { sx, ida }; }
-  return { sx: 10.5, ida: [] };
+  for (const sx of [12.5, 10.5, 13.5, 9.5]){ const ida = rota(Math.floor(sx), 0, Math.floor(dx), Math.floor(dz)); if (ida) return { sx, ida }; }
+  return { sx: 12.5, ida: [] };
 }
 const caminhoCafe = (x0, z0, x1, z1) => rota(clamp(Math.floor(x0), 0, W - 1), clamp(Math.floor(z0), 0, H - 1), Math.floor(x1), Math.floor(z1)) || [];
 // tudo o que o cafezinho deixa para trás: a mesa, os convidados, o Hud e o jeito de sentado
@@ -7094,7 +7213,7 @@ const CENAS = {
     visitante: () => beto,
     foco(c){
       const p = c.passo;
-      if (p === 'chegando' || p === 'partindo') return new THREE.Vector3(15.2, 0.3, 16.2);
+      if (p === 'chegando' || p === 'partindo') return new THREE.Vector3(PARADA - 0.3, 0.3, Z_CERCA + 0.2);
       if (p === 'saindo') return new THREE.Vector3(beto.pos.x + 0.25, 0.35, beto.pos.y + 0.6);
       if (p === 'entrando') return centroDe([ed.pos.x, ed.pos.y], [beto.pos.x, beto.pos.y]);
       if (p === 'dialogo' && c.linha === 2){
@@ -7124,13 +7243,13 @@ const CENAS = {
     // o Ed desce do caminhão e o Beto desce logo atrás
     desce(c){
       c.edOk = c.betoOk = c.beto = false;
-      ed.g.visible = true; ed.colocar(PARADA, 16.85); ed.ang = ed.angAlvo = Math.PI;
-      ed.ir([[PARADA, 16.4], [PARADA, 15.4], INI_PORTAO[0]], () => { c.edOk = true; });
+      ed.g.visible = true; ed.colocar(PARADA, Z_CERCA + 0.85); ed.ang = ed.angAlvo = Math.PI;
+      ed.ir([[PARADA, Z_CERCA + 0.4], [PARADA, Z_CERCA - 0.6], INI_PORTAO[0]], () => { c.edOk = true; });
     },
     descendo(c){
       if (!c.beto && c.t > 0.9){
-        c.beto = true; beto.g.visible = true; beto.colocar(PARADA, 16.85); beto.ang = beto.angAlvo = Math.PI;
-        beto.ir([[PARADA, 16.4], [PARADA, 15.4], INI_PORTAO[1]], () => { c.betoOk = true; });
+        c.beto = true; beto.g.visible = true; beto.colocar(PARADA, Z_CERCA + 0.85); beto.ang = beto.angAlvo = Math.PI;
+        beto.ir([[PARADA, Z_CERCA + 0.4], [PARADA, Z_CERCA - 0.6], INI_PORTAO[1]], () => { c.betoOk = true; });
       }
       c.chegou = c.edOk && c.betoOk;
     },
@@ -7150,7 +7269,7 @@ const CENAS = {
     pular(){
       ed.trab = null; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado';
       limparInicio();
-      ed.colocar(15.5, 12.5); ed.ang = ed.angAlvo = 0.4;
+      ed.colocar(...INI_DENTRO[0]); ed.ang = ed.angAlvo = 0.4;
       caminhao.visible = false;
     },
     fim(){
@@ -7168,8 +7287,8 @@ const CENAS = {
     podeRever: () => (voo.estado !== 'fora' ? 'Dá para rever quando o Milton decolar.' : null),
     foco(c){
       const p = c.passo, ax = aviao.position.x;
-      if (p === 'm-rasante') return new THREE.Vector3(clamp(ax, 15.5, 23.5), 0.6, -0.1);
-      if (p === 'm-pouso' || p === 'm-decola') return new THREE.Vector3(clamp(ax, 9, 20), 0.3, -1.3);
+      if (p === 'm-rasante') return new THREE.Vector3(clamp(ax, 18.5, 26.5), 0.6, -0.1);
+      if (p === 'm-pouso' || p === 'm-decola') return new THREE.Vector3(clamp(ax, 9, 23), 0.3, -1.3);
       return new THREE.Vector3((MI_ED[0] + MI_MILTON[0]) / 2 + 0.25, 0.35, (MI_ED[1] + MI_MILTON[1]) / 2 + 0.6);
     },
     vista(c){
@@ -7244,8 +7363,8 @@ const CENAS = {
       return 'chegando';
     },
     desce(c){
-      patrinho.g.visible = true; patrinho.colocar(PARADA, 16.85); patrinho.ang = patrinho.angAlvo = Math.PI;
-      patrinho.ir([[PARADA, 16.4], PONTO_PELUCIO], () => { c.chegou = true; patrinho.olhar(...PONTO_ED); });
+      patrinho.g.visible = true; patrinho.colocar(PARADA, Z_CERCA + 0.85); patrinho.ang = patrinho.angAlvo = Math.PI;
+      patrinho.ir([[PARADA, Z_CERCA + 0.4], PONTO_PELUCIO], () => { c.chegou = true; patrinho.olhar(...PONTO_ED); });
     },
     posicionar(){ virarNaCena(ed, ...PONTO_PELUCIO); virarNaCena(patrinho, ...PONTO_ED); },
     fimDasFalas(c){
@@ -7284,8 +7403,8 @@ const CENAS = {
       return 'chegando';
     },
     desce(c){
-      maurinho.g.visible = true; maurinho.colocar(PARADA, 16.85); maurinho.ang = maurinho.angAlvo = Math.PI;
-      maurinho.ir([[PARADA, 16.4], PONTO_PELUCIO], () => { c.chegou = true; maurinho.olhar(...PONTO_ED); });
+      maurinho.g.visible = true; maurinho.colocar(PARADA, Z_CERCA + 0.85); maurinho.ang = maurinho.angAlvo = Math.PI;
+      maurinho.ir([[PARADA, Z_CERCA + 0.4], PONTO_PELUCIO], () => { c.chegou = true; maurinho.olhar(...PONTO_ED); });
     },
     posicionar(){ virarNaCena(ed, ...PONTO_PELUCIO); virarNaCena(maurinho, ...PONTO_ED); },
     // nas falas das plantas ele mostra a prancheta para o Ed (sem os óculos, que são só das obras); guarda para explicar como chamar
@@ -7314,8 +7433,8 @@ const CENAS = {
       return 'chegando';
     },
     desce(c){
-      pelucio.g.visible = true; pelucio.colocar(PARADA, 16.85); pelucio.ang = pelucio.angAlvo = Math.PI;
-      pelucio.ir([[PARADA, 16.4], PONTO_PELUCIO], () => { c.chegou = true; pelucio.olhar(...PONTO_ED); });
+      pelucio.g.visible = true; pelucio.colocar(PARADA, Z_CERCA + 0.85); pelucio.ang = pelucio.angAlvo = Math.PI;
+      pelucio.ir([[PARADA, Z_CERCA + 0.4], PONTO_PELUCIO], () => { c.chegou = true; pelucio.olhar(...PONTO_ED); });
     },
     posicionar(){ virarNaCena(ed, ...PONTO_PELUCIO); virarNaCena(pelucio, ...PONTO_ED); },
     fimDasFalas(c){
@@ -7341,7 +7460,7 @@ const CENAS = {
     pronta: () => false,
     visitante: () => jaca,
     foco(c){
-      if (c.passo === 'chegando' || c.passo === 'partindo') return new THREE.Vector3(15.2, 0.3, 16.2);
+      if (c.passo === 'chegando' || c.passo === 'partindo') return new THREE.Vector3(PARADA - 0.3, 0.3, Z_CERCA + 0.2);
       return centroDe(JACA_ED, JACA_CENA);
     },
     vista(c){
@@ -7358,8 +7477,8 @@ const CENAS = {
       return 'chegando';
     },
     desce(c){
-      jaca.g.visible = true; jaca.colocar(PARADA, 16.85); jaca.ang = jaca.angAlvo = Math.PI;
-      jaca.ir([[PARADA, 16.4], JACA_CENA], () => { c.chegou = true; Som.jaca(); });
+      jaca.g.visible = true; jaca.colocar(PARADA, Z_CERCA + 0.85); jaca.ang = jaca.angAlvo = Math.PI;
+      jaca.ir([[PARADA, Z_CERCA + 0.4], JACA_CENA], () => { c.chegou = true; Som.jaca(); });
     },
     posicionar(){ virarNaCena(ed, ...JACA_CENA); virarNaCena(jaca, ...JACA_ED); jaca.aceno = 1.4; },
     // o Jaca estica o presente e ele aparece sobre o Ed
@@ -7488,8 +7607,8 @@ const CENAS = {
     iniciar(c){
       caminhaoE.estado = 'cine';
       sumirLucia();
-      const pts = rota(clamp(Math.floor(ed.pos.x), 0, W - 1), clamp(Math.floor(ed.pos.y), 0, H - 1), 10, 5);
-      if (pts) ed.ir(pts); else ed.colocar(10.5, 5.5);
+      const pts = rota(clamp(Math.floor(ed.pos.x), 0, W - 1), clamp(Math.floor(ed.pos.y), 0, H - 1), 12, 5);
+      if (pts) ed.ir(pts); else ed.colocar(12.5, 5.5);
       luciaAnda(LUCIA_CENA, 1.1, () => { c.chegou = true; });
       return 'l-vem';
     },
@@ -7547,14 +7666,14 @@ const CENAS = {
     foco(c){
       const p = c.passo, v = (x, z) => new THREE.Vector3(x, 0.4, z);
       const dx = telaEstreita() ? -2.4 : 0; // em tela estreita a câmera abre mais para a esquerda, onde a van para
-      if (p === 'f-chega') return v(14.6 + dx, 11.3);
-      if (p === 'f-sobem'){ const zs = [beto, jaca, pelucio, patrinho].filter(q => q.g.visible).map(q => q.pos.y); return v(15.3 + dx, zs.length ? clamp(zs.reduce((a, b) => a + b) / zs.length, 8.5, 12.5) : 12); }
-      if (p === 'festa' && c.t >= 2.4) return v(14.4, 12.5);
-      return v(15.4, 7.3);
+      if (p === 'f-chega') return v(16.6 + dx, 14.5);
+      if (p === 'f-sobem'){ const zs = [beto, jaca, pelucio, patrinho].filter(q => q.g.visible).map(q => q.pos.y); return v(17.3 + dx, zs.length ? clamp(zs.reduce((a, b) => a + b) / zs.length, 8.5, 17.5) : 15); }
+      if (p === 'festa' && c.t >= 2.4) return v(16.4, 14.5);
+      return v(17.4, 7.3);
     },
     vista(c){
       const f = telaEstreita() ? 1.45 : 1, p = c.passo;
-      return p === 'f-chega' ? 13.5 * f : p === 'f-sobem' ? 10 * f * (f > 1 ? 1.15 : 1) : p === 'milton' ? 7.6 * f : p === 'festa' && c.t >= 2.4 ? 11 * f : 6 * f;
+      return p === 'f-chega' ? 17 * f : p === 'f-sobem' ? 11.5 * f * (f > 1 ? 1.15 : 1) : p === 'milton' ? 7.6 * f : p === 'festa' && c.t >= 2.4 ? 14 * f : 6 * f;
     },
     iniciar(c){
       caminhaoE.estado = 'cine';
@@ -7598,8 +7717,8 @@ const CENAS = {
             if (it.ok || c.t < atraso) continue;
             it.ok = true;
             const [lx, lz] = lugar(nome);
-            p.g.visible = true; p.colocar(x0, 16.85); p.ang = p.angAlvo = Math.PI; p.estado = 'parado'; p.pontos = [];
-            const subida = veic !== 'caminhao' ? [[x0 + (veic === 'van' ? 1.9 : -1.9), 16.85], [PARADA, 16.4], [PARADA, 15.4]] : [[x0 + (nome === 'jaca' ? 0.25 : -0.2), 16.4], [x0 + (nome === 'jaca' ? 0.25 : -0.2), 15.4]];
+            p.g.visible = true; p.colocar(x0, Z_CERCA + 0.85); p.ang = p.angAlvo = Math.PI; p.estado = 'parado'; p.pontos = [];
+            const subida = veic !== 'caminhao' ? [[x0 + (veic === 'van' ? 1.9 : -1.9), Z_CERCA + 0.85], [PARADA, Z_CERCA + 0.4], [PARADA, Z_CERCA - 0.6]] : [[x0 + (nome === 'jaca' ? 0.25 : -0.2), Z_CERCA + 0.4], [x0 + (nome === 'jaca' ? 0.25 : -0.2), Z_CERCA - 0.6]];
             p.ir([...subida, [Ex, 9.6], [lx, lz]], () => chegou(p));
           }
           if (c.n >= c.total && ed.estado === 'parado'){
@@ -7615,7 +7734,7 @@ const CENAS = {
         case 'milton': {
           if (!c.ini){ c.ini = true; c.acc = 0; voo = { estado: 'festa', t: 0, cena: true }; aviao.visible = true; motor(true); }
           const k = Math.min(1, c.t / 3.8);
-          aviao.position.set(lerp(1, 29, k), 2.3, Ez - 0.1); aviao.rotation.set(Math.sin(k * 8) * 0.08, 0, 0);
+          aviao.position.set(lerp(Ex - 15, Ex + 15, k), 2.3, Ez - 0.1); aviao.rotation.set(Math.sin(k * 8) * 0.08, 0, 0);
           c.acc += dt;
           while (c.acc > 0.05){ c.acc -= 0.05; if (k < 1) confete(aviao.position.x, 2.2, aviao.position.z, 3, 0.5); }
           if (c.t >= 4.8){ aviaoFora(); c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
@@ -7637,7 +7756,7 @@ const CENAS = {
               if (!p.g.visible) continue;
               c.vagas[veic]++;
               const xv = veic === 'van' ? FESTA_VAN : veic === 'lambreta' ? FESTA_LAMBRETA : PARADA;
-              const volta = [[Ex, 9.6], [PARADA, 15.4], [PARADA, 16.4], ...(veic !== 'caminhao' ? [[xv + (veic === 'van' ? 1.9 : -1.9), 16.85]] : []), [xv, 16.85]];
+              const volta = [[Ex, 9.6], [PARADA, Z_CERCA - 0.6], [PARADA, Z_CERCA + 0.4], ...(veic !== 'caminhao' ? [[xv + (veic === 'van' ? 1.9 : -1.9), Z_CERCA + 0.85]] : []), [xv, Z_CERCA + 0.85]];
               p.ir(volta, () => { p.g.visible = false; c.vagas[veic]--; if (!c.vagas[veic]){ c.saida[veic] = c.t; Som.buzina(); } });
             }
             const hpts = rota(clamp(Math.floor(irmaoHud.pos.x), 0, W - 1), clamp(Math.floor(irmaoHud.pos.y), 0, H - 1), 5, 5) || [];
@@ -8160,7 +8279,7 @@ function atualizarCine(dt){
       if (c.t > 1.6){
         const v = cena.visitante();
         c.passo = 'saindo'; c.t = 0;
-        v.ir([[PARADA, 15.4], [PARADA, 16.4], [PARADA, 16.85]], () => { v.g.visible = false; c.passo = 'partindo'; c.t = 0; Som.buzina(); });
+        v.ir([[PARADA, Z_CERCA - 0.6], [PARADA, Z_CERCA + 0.4], [PARADA, Z_CERCA + 0.85]], () => { v.g.visible = false; c.passo = 'partindo'; c.t = 0; Som.buzina(); });
       }
       break;
     case 'partindo': {
@@ -8220,7 +8339,7 @@ function atualizarCine(dt){
       }
       break;
     case 'l-vai':
-      if (!c.ini){ c.ini = true; ed.aceno = 2; const p = lucia.g.position; luciaAnda([[p.x, p.z], ...LUCIA_CENA.slice(0, 3).reverse(), [15.35, -0.25], [15.35, 0.02]], 0.9, sumirLucia); }
+      if (!c.ini){ c.ini = true; ed.aceno = 2; const p = lucia.g.position; luciaAnda([[p.x, p.z], ...LUCIA_CENA.slice(0, 3).reverse(), [NANO.porta[0], -0.25], [NANO.porta[0], NANO.porta[1]]], 0.9, sumirLucia); }
       if (c.t >= 2.8){ c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
       break;
     case 'voltando-camera':
@@ -8313,7 +8432,7 @@ function encerrarCine(){
 const COMPOSTEIRA = {
   nivel: 16,
   // gramado livre ao lado da estrada de terra, à direita das construções; a porta fica no caminho de cima da fazenda
-  x0: 32, z0: 2, x1: 33, z1: 3, porta: [32, 4],
+  x0: 48, z0: 2, x1: 49, z1: 3, porta: [48, 4],
   restoMax: 60, restosPorSaco: 3, xpSaco: 1,
   cerejasPorResto: 4,
   comida: ['rabanete', 'cenoura', 'alface', 'couve', 'tomate', 'batata', 'milho', 'cebola', 'laranja', 'goiaba', 'manga'], lote: 5,
@@ -8378,7 +8497,7 @@ const MINHOCAS = [];
 // lugares das Minhoquinhas dentro da caixa (desvio do centro, em ladrilhos), na ordem em que aparecem
 const REPOUSO = [[-0.45, -0.35], [0.4, -0.1], [-0.05, 0.4], [0.5, 0.45], [-0.55, 0.3], [0.1, -0.55], [0.55, -0.55]];
 // de onde elas saem da terra na cena
-const SOLO = [[31.5, 3.2], [34.5, 3.2], [34.1, 4.6]];
+const SOLO = [[47.5, 3.2], [50.5, 3.2], [50.1, 4.6]];
 const easeOutBack = x => 1 + 2.7 * Math.pow(x - 1, 3) + 1.7 * Math.pow(x - 1, 2);
 function montarComposteira(animar){
   if (COMP_VIS.mesh) return;
@@ -8914,8 +9033,8 @@ function pontosDeLuz(){
 // na beira de lá. A luz que ele espalha vem do mapa de luz (MAPA_LUZ), sem luz de verdade do three.js
 const VARAL = { nivel: 8, preco: 2000, xp: 10, alto: 64,
   linhas: [
-    { eixo: 'x', w: 5.92, pos: [4.1, 7, 10, 13, 15.08, 18, 21, 24, 27, 30, 33, 35.85] },
-    { eixo: 'z', w: 15.08, pos: [5.92, 9.3, 12.6, 15.85] },
+    { eixo: 'x', w: 5.92, pos: [4.1, 7, 10, 13.5, 17.08, 20, 23, 26, 29, 32, 35, 38, 41, 44, 47, 49.5, 51.85] },
+    { eixo: 'z', w: 17.08, pos: [5.92, 9, 12, 15, 18, 20.85] },
   ] };
 const MAT_VARAL_HALO = new THREE.PointsMaterial({ size: 10, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: false });
 // mapa de luz da noite: uma textura vista de cima com a luz que o varal espalha em volta. O material dos voxels (MAT)
@@ -9272,7 +9391,7 @@ const FIGURINHAS = [
   { id: 'ovos', nome: 'Bom dia, galinhas', desc: 'pegar 50 ovos', icone: 'ovo', xp: 15, cond: () => conta('colhido', 'ovo') >= 50 },
   { id: 'leite', nome: 'Leiteiro', desc: 'tirar 50 leites', icone: 'leite', xp: 20, cond: () => conta('colhido', 'leite') >= 50 },
   { id: 'melancia', nome: 'Melancia gigante', desc: 'colher 25 melancias', icone: 'melancia', xp: 25, cond: () => conta('colhido', 'melancia') >= 25 },
-  { id: 'terra', nome: 'Terra à vista', desc: 'ter os 6 terrenos', icone: 'lote', xp: 40, cond: () => S.lotes.every(Boolean) },
+  { id: 'terra', nome: 'Terra à vista', desc: 'ter os 6 terrenos da horta', icone: 'lote', xp: 40, cond: () => LOTES.every((l, i) => l.canto || S.lotes[i]) },
   { id: 'irrigado', nome: 'Sempre molhadinho', desc: 'irrigador em 3 terrenos', icone: 'irrigador', xp: 30, cond: () => Object.values(S.irrigador || {}).filter(Boolean).length >= 3 },
   { id: 'ferramentas', nome: 'Tudo novinho', desc: 'comprar todas as ferramentas', icone: 'carrinho', xp: 50, cond: () => Object.keys(MELHORIAS).every(id => (S.melhorias[id] || 0) >= MELHORIAS[id].degraus.length) },
   { id: 'jaca', nome: 'Amigo do Jaca', desc: 'receber a visita do Jaca', icone: 'jaca', xp: 10, cond: () => !!S.conheceuJaca },
@@ -9318,7 +9437,7 @@ function figurinhasHTML(){
 // ================= pista do Milton: só por diversão, e uma rendinha
 // de tempos em tempos o Milton pousa o teco-teco PIG-MTP, diz "Milton na área!", deixa uns suprimentos,
 // paga a taxa de manutenção da pista e decola de novo. Só acontece com o jogo aberto.
-const PISTA = { x0: 1.5, toque: 6, para: 19, y: (PISTA_Z0 + PISTA_Z1 + 1) / 2, escala: 1 / 14, intervalo: [6, 12] };
+const PISTA = { x0: 1.5, toque: 6, para: 22, y: (PISTA_Z0 + PISTA_Z1 + 1) / 2, escala: 1 / 14, intervalo: [6, 12] };
 let aviao, helice, voo = { estado: 'fora', t: 0 }, motorSom = null;
 const taxaPista = () => Math.round((20 + nivel() * 6) / 5) * 5;
 function construirPista(){
@@ -9948,10 +10067,10 @@ function montarRedemoinho(){
   rdMesh.visible = false; scene.add(rdMesh);
   rdEspera = rnd(...REDEMOINHO.espera) * 60;
 }
-const pontoDaFazenda = () => [rnd(1, 34), rnd(0.5, 15.5)];
+const pontoDaFazenda = () => [rnd(1, W - 2), rnd(0.5, Z_CERCA - 0.5)];
 function iniciarRedemoinho(){
   const portao = PARADA;
-  rd = { estado: 'vagando', x: rnd(8, X_FIM_MATA), z: rnd(Z_MATA + 1, Z_MATA + 3), caminho: [[portao, Z_ORLA + 1], [portao, 16.5], [portao, 14.5]], alvo: pontoDaFazenda(), t: 0, vagaAte: rnd(...REDEMOINHO.vaga), esc: 0, escAlvo: 1 };
+  rd = { estado: 'vagando', x: rnd(8, X_FIM_MATA), z: rnd(Z_MATA + 1, Z_MATA + 3), caminho: [[portao, Z_ORLA + 1], [portao, Z_CERCA + 0.5], [portao, Z_CERCA - 1.5]], alvo: pontoDaFazenda(), t: 0, vagaAte: rnd(...REDEMOINHO.vaga), esc: 0, escAlvo: 1 };
   rdMesh.visible = true;
   aviso('Um redemoinho de vento saiu da floresta!', '', 3);
 }
@@ -10486,10 +10605,10 @@ function itensDoAlvoBase(alvo){
   if (alvo.k === 'tile'){
     const { x, z } = alvo, t = campo(x, z), lote = loteDe(x, z);
     if (lote >= 0 && !S.lotes[lote]){
-      const n = S.lotes.filter(Boolean).length, p = PRECO_LOTE[n];
+      const { preco: p, nivel: nv } = precoLote(lote);
       r.titulo = 'Terreno à venda'; r.icone = 'lote';
-      r.estado = `Mais 16 canteiros para plantar. Precisa do nível ${NIVEL_LOTE[n]}.`;
-      r.itens.push({ rotulo: 'Comprar este terreno', icone: 'moeda', preco: reais(p), off: nivel() < NIVEL_LOTE[n] || S.dinheiro < p, fn: () => comprarLote(lote) });
+      r.estado = `Mais 16 canteiros para plantar. Precisa do nível ${nv}.`;
+      r.itens.push({ rotulo: 'Comprar este terreno', icone: 'moeda', preco: reais(p), off: nivel() < nv || S.dinheiro < p, fn: () => comprarLote(lote) });
       return r;
     }
     if (t){
@@ -10669,7 +10788,7 @@ function itensPredio(p){
   const r = { titulo: p.nome, itens: [] };
   if (p.id === 'casa'){ r.icone = 'casa'; r.estado = 'A casinha rosa do Ed.'; if (nivel() >= HUD.nivel - 1) r.itens.push(...itensHud().itens); if (S.viuCineInicio) r.itens.push(itemLanche()); r.itens.push({ rotulo: 'Como jogar', icone: 'ed', fn: mostrarAjuda }); r.itens.push({ rotulo: 'Ajustes', icone: 'casa', leve: true, fn: abrirAjustes }); }
   if (p.id === 'celeiro'){ r.icone = 'celeiro'; r.estado = 'Onde fica guardado tudo o que o Ed colhe.'; r.itens.push({ rotulo: 'Abrir o celeiro', icone: 'celeiro', fn: abrirCeleiro }); r.itens.push(itemBeto()); }
-  if (p.id === 'poco'){ r.icone = 'poco'; r.estado = 'Água fresquinha. O Ed enche o regador aqui.'; r.itens.push({ rotulo: 'Ir até o poço', icone: 'regador', leve: true, fn: () => enfileirar('andar', { k: 'tile', x: 9, z: 4 }) }); }
+  if (p.id === 'poco'){ r.icone = 'poco'; r.estado = 'Água fresquinha. O Ed enche o regador aqui.'; r.itens.push({ rotulo: 'Ir até o poço', icone: 'regador', leve: true, fn: () => enfileirar('andar', { k: 'tile', x: PREDIO.poco.porta[0], z: PREDIO.poco.porta[1] }) }); }
   if (p.id === 'correio'){ r.icone = 'caderno'; r.estado = 'O Ed anota os pedidos do Joli Market no caderno.'; r.itens.push({ rotulo: 'Abrir o caderno do Ed', icone: 'caderno', fn: abrirCaderno }); r.itens.push(itemBeto()); }
   if (p.id === 'galinheiro' || p.id === 'curral' || p.id === 'galinheiro2' || p.id === 'curral2'){
     // com dois cercados, cada menu conta e cuida só dos bichos daquele; o coletor e o alimentador do primeiro atendem os dois
@@ -11513,7 +11632,7 @@ function mostrarAjuda(intro, aba){
     <ul class="passos">
       <li><b>Construções:</b> moinho${nv(FABRICAS.moinho.nivel)}, queijaria${nv(FABRICAS.queijaria.nivel)}, padaria${nv(FABRICAS.padaria.nivel)}, cozinha de doces${nv(FABRICAS.cozinha.nivel)} e torrador${nv(FABRICAS.torrador.nivel)} ficam na área à direita. Toque numa delas, escolha a receita e o Ed leva os ingredientes. Cada uma faz até ${VAGAS_FAB} receitas em fila e continua com o jogo fechado; depois o Ed recolhe o que ficou pronto. Os produtos valem mais que os ingredientes.</li>
       <li><b>Pomar:</b> ${(l => l.slice(0, -1).join(', ') + ' e ' + l[l.length - 1])(Object.values(FRUTIFERAS).map(F => F.nome.toLowerCase() + nv(F.nivel)))} dão frutas de novo e de novo, sem replantar nem regar. Nos níveis ${POMAR_BLOCOS[1].nivel} e ${POMAR_BLOCOS[2].nivel} dá para comprar terrenos de pomar com mais seis covas cada, mais dois no terreno novo depois de arrendado, e uma árvore pode ser cortada para dar lugar a outra.</li>
-      <li><b>Colmeias</b>${nv(COLMEIA.nivel)}: dão mel, e cada colmeia deixa o pomar ${Math.round(COLMEIA.ajuda * 100)}% mais rápido.</li>
+      <li><b>Colmeias</b>${nv(COLMEIA.nivel)}: dão mel, e cada colmeia deixa o pomar do mesmo lado da fazenda ${Math.round(COLMEIA.ajuda * 100)}% mais rápido.</li>
       <li><b>Café</b>${nv(CULTURAS.cafe.nivel)}: sai do pé em cereja e seca no terreiro. Só o Pelúcio, da Joli Coffee, compra o café seco, e o torrado, feito no torrador, vale ${reais(PRODUTOS.torrado.venda)}.</li>
       <li><b>Adubo</b>${nv(ADUBO.nivel)}: vendido na loja, na aba Ração e adubo, a ${reais(ADUBO.preco)} o saco ou ${ADUBO.pacote[0]} por ${reais(ADUBO.pacote[1])}. Toque num canteiro com uma cultura longa crescendo (${ORDEM_CULTURAS.filter(k => CULTURAS[k].tempo >= ADUBO.minTempo).map(k => CULTURAS[k].nome.toLowerCase()).join(', ')}) e escolha Adubar: o tempo que falta para a colheita cai pela metade, mesmo com o jogo fechado. É uma planta por vez, e depois da colheita é preciso adubar de novo. O Hud não aduba.</li>
       <li><b>Composteira</b>${nv(COMPOSTEIRA.nivel)}: no nível ${COMPOSTEIRA.nivel} o Ed conhece as Minhoquinhas e constrói a casa delas, de graça, depois da cozinha de doces, na ponta da estradinha de terra. Elas comem restos: cada mato que o Ed ou o Hud tira vira 1 resto; cada secagem de café dá 1 resto a cada ${COMPOSTEIRA.cerejasPorResto} cerejas; as sobras da horta que você der pelo menu dão 1 resto por unidade, de ${COMPOSTEIRA.lote} em ${COMPOSTEIRA.lote} (${COMPOSTEIRA.comida.map(k => PRODUTOS[k].nome.toLowerCase()).join(', ')}). Guardam até ${COMPOSTEIRA.restoMax} restos. Cada ${COMPOSTEIRA.restosPorSaco} restos viram 1 saco de adubo a cada ${tempo(COMPOSTEIRA.base.seg)}, até a caixa encher (${COMPOSTEIRA.base.caixa} sacos), até com o jogo fechado. O Ed recolhe pelo menu e cada saco dá ${COMPOSTEIRA.xpSaco} xp.</li>
@@ -11533,7 +11652,8 @@ function mostrarAjuda(intro, aba){
       <li><b>Luma:</b> a irmã chihuahua dos porquinhos. De vez em quando ela sai pela portinha da casa para brincar com a bolinha roxa, em volta do chafariz se tiver um, e, se o Ed estiver por perto, dá uma mordidinha no rabicó dele. Para ela sair na hora, use Chamar a Luma na janela Cenas.</li>
       ${S.viuCineLucia ? `<li><b>Aluguel do Nano Hostel:</b> de vez em quando a Lúcia, dona do hostel, deixa ${reais(ALUGUEL.valor)} num envelope na porta da casa. Toque nele para o Ed pegar.</li>` : ''}
       <li><b>Terreno abandonado</b>${nv(ARRENDAMENTO.nivel)}: ao lado da estrada, por ${reais(ARRENDAMENTO.preco)} em pagamento único. Toque na placa para arrendar; depois o Ed tira a cerca e o terreno vira parte da fazenda.</li>
-      <li><b>Lotes do terreno novo</b>${nv(CERCADOS.galinheiro2.nivel)}: com a cerca tirada, o terreno tem placas de lote à venda. Um galinheiro por ${reais(CERCADOS.galinheiro2.preco)} (mais ${ANIMAIS.galinha.max} galinhas), um curral por ${reais(CERCADOS.curral2.preco)} (mais ${ANIMAIS.vaca.max} vacas) e dois terrenos de pomar, por ${reais(POMAR_BLOCOS[3].preco)} e ${reais(POMAR_BLOCOS[4].preco)}, com seis covas cada. O galinheiro e o curral ficam prontos na hora, com cerca e pasto; o coletor e o alimentador do primeiro atendem os dois.</li>
+      <li><b>Lotes do terreno novo</b>${nv(ARRENDAMENTO.nivel)}: com a cerca tirada, o terreno tem um lago com uma ponte e, atrás das fábricas da mata, faixas de lotes à venda: dois terrenos de canteiros, por ${reais(LOTES[6].preco)} e ${reais(LOTES[7].preco)}, dois terrenos de pomar, por ${reais(POMAR_BLOCOS[3].preco)} e ${reais(POMAR_BLOCOS[4].preco)}, com seis covas cada, e uma fileira de ${COLMEIA_SLOTS.length - COLMEIA_CANTO} lugares para colmeia. As colmeias de lá ajudam o pomar de lá.</li>
+      <li><b>Galinheiro e curral novos</b>${nv(CERCADOS.galinheiro2.nivel)}: ao lado do galinheiro e do curral, um galinheiro por ${reais(CERCADOS.galinheiro2.preco)} (mais ${ANIMAIS.galinha.max} galinhas) e um curral por ${reais(CERCADOS.curral2.preco)} (mais ${ANIMAIS.vaca.max} vacas). Ficam prontos na hora, com cerca e pasto; o coletor e o alimentador do meio atendem os dois.</li>
       <li><b>Produtos da mata:</b> a cozinha de doces faz polpa de açaí, doce de cupuaçu e paçoca de castanha; o torrador faz guaraná em pó; a chocolateria${nv(FABRICAS.chocolateria.nivel)} faz chocolate, bombom de cupuaçu e chocolate com castanha, e com ela a padaria assa bolo de chocolate; a oficina de borracha${nv(FABRICAS.oficina.nivel)} faz bolas e botas de chuva (a primeira bola fica com a Luma e o primeiro par de botas com o Ed, que anda mais rápido na chuva). O Pelúcio paga 25% a mais por cacau e chocolate e às vezes pede para o mocha; o Patrinho, por castanha e chocolate com castanha; a Lúcia leva doce de cupuaçu e polpa de açaí para os nanos junto com o aluguel; e o Milton leva guaraná em pó e traz o dobro do presente.</li>
       <li><b>Guardião da mata:</b> com uma parcela comprada, de vez em quando a mata precisa do Ed: um foco de fogo, lixo deixado por trilheiros ou um galho caído fechando a trilha. Toque no problema para o Ed resolver. Resolvido, a saúde da mata sobe; esquecido, ela cai. Com a mata exuberante (80% ou mais), as nativas dão uma unidade a mais e os bichos aparecem mais; maltratada (menos de 45%), dão uma a menos.</li>
       <li><b>Mirante da mata</b>${nv(MIRANTE.nivel)}: uma torre na beira da floresta, por ${reais(MIRANTE.preco)}. De dia e de tarde chegam visitantes que sobem nele, fazem a trilha e deixam uma contribuição na caixinha, maior com a mata saudável. Os nanos ganham um mirante do tamanho deles.</li>
@@ -11638,7 +11758,7 @@ function alvoNaTela(cx, cy){
       { const i = POMAR_SLOTS.findIndex(([a, b]) => a === x && b === z); if (i >= 0 && blocoComprado(blocoDoSlot(i))) return { k: 'pomar', i }; }
       { const b = blocoEm(x, z); if (b > 0 && !blocoComprado(b)) return { k: 'pomarLote', b }; }
       { const id = cercadoEm(x, z); if (id) return { k: 'cercadoLote', id }; }
-      { const i = COLMEIA_SLOTS.findIndex(([a, b]) => a === x && b === z); if (i >= 0) return { k: 'colmeia', i }; }
+      { const i = COLMEIA_SLOTS.findIndex(([a, b]) => a === x && b === z); if (i >= 0 && colmeiaAberta(i)) return { k: 'colmeia', i }; }
       return { k: 'tile', x, z };
     }
   }
@@ -11773,7 +11893,7 @@ function arrastar(dx, dy){
   cam.alvo.x = clamp(cam.alvo.x, 0, W); cam.alvo.z = clamp(cam.alvo.z, Z_PISTA, H);
   if (menuAberto) fecharMenu();
 }
-function zoom(f){ cam.vista = clamp(cam.vista * f, 5, 26); }
+function zoom(f){ cam.vista = clamp(cam.vista * f, 5, 40); }
 function girar(s){ cam.azAlvo += s * Math.PI / 2; fecharMenu(); Som.clique(); }
 
 // ================= laço principal
@@ -11883,6 +12003,8 @@ async function iniciar(){
   montarMapa();
   const codigo = codigoNoEndereco(), chegando = codigo ? await decodificarFazenda(codigo) : null;
   const novo = carregar();
+  if (!S.cercados) S.cercados = {};
+  for (const id in CERCADOS) if (cercadoFeito(id)) aplicarCercado(id);
   if (S.canto === 2) liberarTilesDoCanto();
   // reformas do Maurinho: a obra que terminou com o jogo fechado já entra pronta
   if (!S.reformas) S.reformas = {};
@@ -11896,6 +12018,7 @@ async function iniciar(){
   construirChao();
   construirCenario();
   montarMata();
+  if (mapaMigrado) conferirMapaNovo();
   if (!Array.isArray(S.parcelas)) S.parcelas = []; if (!Array.isArray(S.mata)) S.mata = [];
   PARCELAS.forEach((_, p) => { if (parcelaComprada(p)) abrirParcela(p); });
   montarPlacasMata();
@@ -11918,8 +12041,7 @@ async function iniciar(){
   if (!Array.isArray(S.pomarBlocos)) S.pomarBlocos = [];
   POMAR_BLOCOS.forEach((B, b) => { if (b > 0 && blocoComprado(b)) for (const [x, z] of B.slots) setT(x, z, 'feno'); });
   montarPlacasPomar();
-  if (!S.cercados) S.cercados = {};
-  montarCercasCercados(); montarPlacasCercados(); montarGalos();
+  montarPlacasCercados(); montarGalos();
   POMAR_SLOTS.forEach((_, i) => montarPomar(i)); COLMEIA_SLOTS.forEach((_, i) => montarColmeia(i)); criarAbelhas();
   construirPersonagens();
   ladrilhoDeBeirada(0, 0);
@@ -11945,7 +12067,7 @@ async function iniciar(){
   for (const l in S.irrigador) if (S.irrigador[l] && S.lotes[l]) montarIrrigador(+l);
   // quem estiver fora do pasto do seu cercado volta para ele (e quem era do cercado novo, se ele não existir, vai para o primeiro)
   for (const d of S.animais){ if (d.c && !PASTO_CERCADO[d.tipo].length) delete d.c; if (!dentroDoPasto(d)){ const [x, z] = sorteia(pastoDe(d.tipo, d.c)); d.x = x + 0.5; d.z = z + 0.5; } ANI.push(new Bicho(d)); }
-  if (novo){ novoAnimal('galinha', 18.6, 8.4); novoAnimal('galinha', 19.4, 7.6); }
+  if (novo){ novoAnimal('galinha', 21.6, 9.4); novoAnimal('galinha', 22.4, 8.6); }
   // saves antigos tinham um pedido só
   if (S.pedido && !(S.pedidos && S.pedidos.length)) S.pedidos = [{ ...S.pedido, quem: 'beto', prazo: Date.now() + PRAZO_PEDIDO }];
   delete S.pedido;
@@ -11962,7 +12084,7 @@ async function iniciar(){
   eventos();
   hud(); atualizarDica();
   // quem já tinha o terreno limpo antes de os lotes existirem fica sabendo deles uma vez
-  if (S.canto === 2 && !S.avisoLotesCanto && nivel() >= CERCADOS.galinheiro2.nivel){ S.avisoLotesCanto = true; setTimeout(avisoLotesCanto, 2500); }
+  if (S.canto === 2 && !S.avisoLotesCanto){ S.avisoLotesCanto = true; setTimeout(avisoLotesCanto, 2500); }
   $('carregando').hidden = true;
   ultimoReal = Date.now();
   if (chegando) receberFazenda(chegando);
@@ -11970,7 +12092,7 @@ async function iniciar(){
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
   window.__fazenda = { lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
-    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, segurar: segurarFila, fator: fatorEd, escolher: escolherNanar, janelas: JANELAS_CASA, NANAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
+    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida){ cafeForca = { conv, hud, comida }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud }), mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, segurar: segurarFila, fator: fatorEd, escolher: escolherNanar, janelas: JANELAS_CASA, NANAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
     // auditoria de colisões: o que o desenho de uma construção (n = nível da reforma, ou 'andaime') põe fora do terreno dela
     fora(id, n){
       const p = PREDIO[id], fab = !!FABRICAS[id], v = n === 'andaime' ? vAndaime(id) : vReforma(id, n), s = 1 / 8, h = s / 2;
@@ -12078,7 +12200,7 @@ function catalogoModelos(){
     { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Tratorzinho', vTrator), varios('Bicicleta', CICLISTAS.map((c, i) => [['Vermelha', 'Azul', 'Amarela'][i], () => vBicicleta(c[0])])), um('Teco-teco', vTecoTeco), um('Hélice', vHelice), um('Biruta', vBiruta), { nome: 'Disco voador', variantes: [['Voando', false], ['Com o raio', true]].map(([n, r]) => ({ nome: n, cria: () => { const D = montarDisco(r); D.g.userData.anima = (dt, t) => animarDisco(D, t); D.g.userData.anima(0, 0); return D.g; } })) }] },
     { nome: 'Cenário', itens: [varios('Árvore', [['Maçãs', () => vArvore(0)], ['Sem fruta', () => vArvore(1)], ['Laranjas', () => vArvore(2)]]), um('Arbusto', vArbusto), um('Redemoinho', vRedemoinho), um('Fardo de feno', vFeno), um('Flores', () => vFlores(3)), um('Capim', () => vCapim(1)), um('Cova', vCova), varios('Cerca', [['Reta', () => vCerca(3)], ['Canto', () => vCerca(5)]]), varios('Portão', [['Arco da entrada', () => vPortao(true)], ['Simples', () => vPortao(false)]]), um('Placa', vPlaca), um('Correio', vCorreio)] },
     { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), { nome: 'Varal de luzes', variantes: [{ nome: '', cria: () => { const v = vVaralTrecho(), m = malha(v.build(1 / RES_VARAL)); m.userData.cubos = v.m.size; return m; } }] }, um('Chafariz', vFonte), um('Estátua do Ed', vEstatua)] },
-    { nome: 'Objetos', itens: [um('Chocolateria', vChocolateria), um('Oficina de borracha', vOficina), um('Mirante da mata', vMirante), varios('Fogo na mata', [0, 1, 2].map(f => ['Fase ' + (f + 1), () => vFogo(f)])), varios('Lixo na mata', [['Garrafa', () => vLixo(0)], ['Latinha', () => vLixo(1)], ['Saquinho', () => vLixo(2)]]), um('Galho caído', vGalho), um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Lanterna', vLanterna), um('Lua', vLua), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Nano Hostel', vNanoHostel), um('Nano Metrô', vNanoMetro), varios('Nano pessoa', [0, 1, 2, 3, 4, 5].map(k => ['Nano ' + (k + 1), () => vNano(k * 7, k === 2)])), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
+    { nome: 'Objetos', itens: [um('Ponte do lago', vPonte), um('Chocolateria', vChocolateria), um('Oficina de borracha', vOficina), um('Mirante da mata', vMirante), varios('Fogo na mata', [0, 1, 2].map(f => ['Fase ' + (f + 1), () => vFogo(f)])), varios('Lixo na mata', [['Garrafa', () => vLixo(0)], ['Latinha', () => vLixo(1)], ['Saquinho', () => vLixo(2)]]), um('Galho caído', vGalho), um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Lanterna', vLanterna), um('Lua', vLua), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Nano Hostel', vNanoHostel), um('Nano Metrô', vNanoMetro), varios('Nano pessoa', [0, 1, 2, 3, 4, 5].map(k => ['Nano ' + (k + 1), () => vNano(k * 7, k === 2)])), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
   ];
   grupos.push({ nome: 'Ícones', itens: Object.keys(VI).filter(k => !usados.has(k)).sort().map(k => um((PRODUTOS[k] && PRODUTOS[k].nome) || k, VI[k])) });
   return grupos.flatMap(g => g.itens.map(it => ({ ...it, grupo: g.nome, ini: it.ini || 0, id: (g.nome + '-' + it.nome).normalize('NFD').replace(/[^\w]+/g, '-').toLowerCase() })));
