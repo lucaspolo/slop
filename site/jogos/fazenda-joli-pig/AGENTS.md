@@ -64,6 +64,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - As melodias são originais, em estilo midi (osciladores). Não reproduza música de terceiros, nem "uma versão" dela.
 - Cada tema tem `ganho` para ficar com o mesmo volume médio dos outros, abaixo dos efeitos sonoros. Ao criar um tema, meça o volume e ajuste.
 - A música baixa com a caixa de fala aberta, some aos poucos ao terminar ou pular e respeita o botão de som dos Ajustes.
+- Sons que se repetem sozinhos ficam baixinhos e sem chiado: o chuá do irrigador é um `Som.sopro` (ruído que entra e sai devagar, só graves e médios), no máximo um a cada 3 s somando todos os irrigadores, e só do que aparece na tela (`IRRIG_SOM`, `volumeNaTela`). O motor do avião do Milton baixa para um quarto fora da tela (`MOTOR_SOM`); o do jatinho é um sopro grave com assobio de triângulo e seno, sem onda serrote. Som novo que toca sem o jogador pedir segue a mesma regra.
 - Milton a jato: `TEMAS.jato`, a fanfarra do Milton (`TEMAS.milton`) um tom acima e mais rápida, com baixo pulsando.
 
 ## Falas que se repetem
