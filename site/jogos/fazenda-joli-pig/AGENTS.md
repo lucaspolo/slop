@@ -20,11 +20,13 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 | Jaca | Jacaré filhote, melhor amigo e sócio do Beto. Simpático, cuidadoso no volante, às vezes vem no lugar do Beto |
 | Pelúcio | Irmão, dono da Joli Coffee. Compra café seco. Chama o Ed de "irmão" |
 | Patrinho | Irmão, chef do Joli Bistrô. Compra trufas, anda de lambreta. Chama o Ed de "irmãozinho" |
-| Hud (Hudson) | Irmão caçula, metade do tamanho do Ed. Ajudante em troca de mesada |
+| Hud (Hudson) | Irmão pequenino, metade do tamanho do Ed. Ajudante em troca de mesada. Não é o caçula: o caçula é o Dani |
+| Dani (Daniel Lucio) | Irmão caçula da família, e o maior de todos: o pijama de pelúcia do Ed em verde (`COR.dani`), 1,25 vez o tamanho dele (`ESCALA_DANI`, `MODELO_DANI`). Chega no nível 30 e mora na casa com o Ed. Ajudante em troca de mesada, como o Hud |
 | Milton | Irmão, metade do tamanho do Pelúcio. Pilota o PIG-MTP. Bordão: "Milton na área!" |
 | Minhoquinhas | Sócias do Ed. Moram na composteira e fazem adubo |
 | Lúcia | Nano arteira, dona do Nano Hostel. Cabelo preto com chiquinhas, vestido amarelo até o joelho. Chama o Ed de "tomada" e paga aluguel |
 | Maurinho (Mauro Lúcio) | Irmão, arquiteto e muito inteligente. Igual ao Patrinho, com o suéter branco de ursinho marrom (`MODELO_MAURINHO`). Põe os óculos redondos só nas obras, com a prancheta na mão (`MODELO_MAURINHO_OCULOS`, `vPrancheta`). Chega no nível 31 na garupa da lambreta do Patrinho e mostra ao Ed as plantas na prancheta, ainda sem os óculos |
+| Curupira | Guardião da floresta, do folclore. Desenho original (`vCurupira`): menino pequeno de pele morena, cabelo de fogo vermelho, laranja e amarelo, saiote de folhas e os pés virados para trás. Aparece no nível 28 e depois passeia de vez em quando na beira da mata |
 | Luma | Irmã chihuahua, meiga e brincalhona. Sai pela portinha da casa, brinca com a bolinha roxa e às vezes morde o rabicó do Ed |
 
 ## Cenas (cinematics)
@@ -41,17 +43,19 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 | A fazenda é sua | começo do jogo |
 | Milton na área | depois da primeira venda |
 | O sócio do Beto | numa visita do Joli Market |
-| O ajudante caçula | nível 9 |
+| O ajudante pequenino | nível 9 |
 | O nariz do Patrinho | nível 10 |
 | A dona do hostel | nível 12 |
 | Café com o Pelúcio | nível 15 |
 | Sócias da terra | nível 16 |
 | Amigos da mata | nível 20 |
 | Festa na fazenda | nível 25 |
+| O guardião da mata | nível 28, depois da cena da mata: o Ed vai à beira da floresta, o Curupira surge num redemoinho de folhas, agradece o cuidado com os bichos e a mata e some deixando pegadas ao contrário. A câmera vira para a floresta (az de `MATA_CINE`), como na cena da mata |
+| O caçula grandão | nível 30, uns 15 s depois de o Ed tirar a cerca do terreno novo (`cantoLimpoEm`): o Ed e o Hud acham a fazenda grande demais, o Hud chama o Dani, que chega pela estradinha de cima e combina a ajuda. Os três ficam numa fileira de lado na tela com o Ed um pouco atrás, para os três rostos aparecerem (`DANI_CENA`) |
 | O arquiteto da família | nível 31: o Maurinho chega na garupa da lambreta do Patrinho e conta das reformas |
-| Hora de nanar | toda noite, na metade da noite (com o Hud se ele estiver ajudando, senão com a Luma); de manhã a câmera vai ao galo, que acorda a fazenda |
+| Hora de nanar | toda noite, na metade da noite (com o Hud se ele estiver ajudando, senão com a Luma); de manhã a câmera vai ao galo, que acorda a fazenda. O Dani que estava ajudando entra em casa antes e volta pela porta depois, se a mesada ainda vale |
 | Férias no espaço | às vezes, quando o disco voador passa e tem vaca no curral; sempre disponível na janela Cenas |
-| Um cafezinho | de vez em quando a partir do nível 3, ou pela opção "Tomar um lanchinho" da casa |
+| Um cafezinho | de vez em quando a partir do nível 3, ou pela opção "Tomar um lanchinho" da casa. Depois da cena do Dani, ele vem sempre que está ajudando e às vezes de casa, e senta no banquinho do convidado (nesse dia não vem convidado) |
 
 ## Música
 
@@ -110,6 +114,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - O galo e o pintinho (`vGalo`, `vPintinho`) estão na escala da galinha. O galo é montado em partes para mexer (`vGalo('corpo' | 'cabeca' | 'asaE' | 'asaD')`, com os pivôs em `GALO_PIVO`); sem parte, vem inteiro, como no visualizador. Veja a seção Galo.
 - `Vox.set` só aceita coordenadas inteiras: arredonde antes.
 - A ponte do lago do canto Sul (`vPonte`) está no visualizador, no grupo Objetos.
+- O Dani está em Personagens, e "Ed, Hud e Dani juntos" mostra os três no tamanho do jogo.
 - O pato (`vPato`, escala da galinha, de frente para +z) está em Bichos; a casinha dos patos (`vCasaPatos`) em Construções; a rampa (`vRampaPatos`) em Objetos; o ovo de pata é ícone (`VI.ovopata`).
 - O Nano Hostel fica atrás do celeiro, encostado na parede de trás (z 0,625). Ele só pode aparecer quando o mapa é girado, nunca na câmera de sempre.
 - Os créditos (Ajustes, Créditos) têm os retratos em voxel da Carolina Torrigo e do Lucas Polo, feitos a partir de fotos.
@@ -146,7 +151,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - Pagando, o andaime sobe (`montarAndaime`) e o Maurinho de óculos e prancheta (`maurinhoObra`) entra pela porteira e dá a volta na construção: anda entre os ladrilhos encostados nos lados (`pontosObra`, de preferência do lado que a câmera vê), vira para a parede mais perto e mede com a trena, martela, lê a planta ou aponta (`OBRA_ACOES`, com as poses no `update` do `Porco`), falando de vez em quando. Tocar nele mostra quanto falta. No fim: confete, o desenho novo (`montarFabrica` ou `montarPredio`), xp, o Ed comemora e o Maurinho vai embora. Numa cena ele sai de vista e depois volta para a obra.
 - As capacidades vêm de `vagasFab(id)`, `maxAnimais(tp)` e `capCercado(tp, c)`; não use `VAGAS_FAB` nem `ANIMAIS[tp].max` direto.
 - Fábricas (e o terreiro) passam de 3 vagas para 4 e depois 5. O galinheiro passa de 8 galinhas para 12 e 16, e o curral de 4 vacas para 6 e 8. Casa, celeiro e poço só mudam o visual. A composteira fica de fora.
-- Preços (1ª e 2ª): moinho 9 mil e 24 mil, queijaria 15 mil e 30 mil, padaria 24 mil e 48 mil, cozinha 36 mil e 72 mil, terreiro 15 mil e 36 mil, torrador 54 mil e 108 mil, chocolateria 84 mil e 168 mil, oficina 96 mil e 192 mil, galinheiro 18 mil e 45 mil, curral 24 mil e 60 mil, casa e celeiro 30 mil e 90 mil, poço 9 mil e 24 mil.
+- Preços (1ª e 2ª): moinho 9 mil e 24 mil, queijaria 15 mil e 30 mil, padaria 24 mil e 48 mil, cozinha 36 mil e 72 mil, terreiro 15 mil e 36 mil, torrador 54 mil e 108 mil, chocolateria 84 mil e 168 mil, oficina 96 mil e 192 mil, galinheiro 18 mil e 45 mil, curral 24 mil e 60 mil, galinheiro dos patos 24 mil (1ª no nível 36, `NIVEL_REFORMA`), casa e celeiro 30 mil e 90 mil, poço 9 mil e 24 mil.
 - A reforma é o desenho original com acréscimos (`REFORMA_1`, `vReforma(id, n)`), sem sair do lugar da construção. Durante a obra a construção ganha o andaime (`vAndaime(id)`). Os modelos estão no visualizador, no grupo "Reformas do Maurinho". A 2ª reforma ainda não tem desenho: enquanto isso `REFORMA.max` é 1.
 
 ## Mapa
@@ -176,7 +181,9 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 
 - Nível 32, R$ 30.000, só com o terreno novo limpo (`CERCADOS.patos` tem `canto: true`; `cercadoAberto(id)` esconde a placa e o lote antes disso). Fica na ponta leste do lago: cerca de x 47 a 51 e z 22 a 29, porteira em cima (49, 22), a casinha no fundo (`PREDIOS` `patos`, `vCasaPatos`: no chão, caiada, telhado verde-água, porta de arco para o pasto) e o pasto no resto (ladrilho `pastoP`).
 - A saída para a água é um vão na cerca do lado do lago (`saida`, ladrilho de pasto), com uma rampa de tábuas (`vRampaPatos`, `montarRampaPatos`) no ladrilho de lago ao lado (`RAMPA_PATOS`).
-- Pato: R$ 450, até 6, 1 ração, ovo de pata em 90 s (R$ 24, 4 xp). Sem coletor nem alimentador por enquanto. O ovo de pata (`PRODUTOS.ovopata`, com `cercado: 'patos'`) só entra nos pedidos depois que o galinheiro existe.
+- Pato: R$ 450, até 6 (9 depois da reforma), 1 ração, ovo de pata em 90 s (R$ 24, 4 xp).
+- Alimentador dos patos no nível 33 (R$ 5.000) e coletor de ovos de pata no 34 (R$ 9.000), em `ALIMENTADOR.pato` e `COLETOR.pato`: ficam do lado de fora da cerca de cima, dos dois lados da porteira, girados para o pasto (`ry`). Os textos de cada bicho no coletor e no alimentador ficam em `COMO_BICHO`. Sem o galinheiro, a loja mostra os dois travados com o motivo.
+- Reforma do Maurinho no nível 36 (`NIVEL_REFORMA.patos`, `nivelDaReforma`; R$ 24.000): alpendre sobre a porta, floreiras, tina d'água e cata-vento de pato (`REFORMA_1.patos`); cabem 9 patos. O ovo de pata (`PRODUTOS.ovopata`, com `cercado: 'patos'`) só entra nos pedidos depois que o galinheiro existe.
 - Comportamento (`Bicho.updatePato`, `PATO`): anda e bica no pasto gingando; enquanto produz, de dia e com mais de `PATO.folga` segundos até o ovo, às vezes sai pelo vão, desce a rampa e nada a leste da ponte (`pontoNaAgua`, que só aceita caminho reto por dentro d'água, `caminhoNaAgua`). Na água boia na linha d'água (`PATO.agua`), balança, mergulha de cabeça e solta ondinhas (`soltarOnda`). Volta pela rampa quando o ovo está para ficar pronto (`patoVolta` calcula o tempo do caminho), de noite ou quando o estado muda; assim ele bota no pasto, onde o Ed alcança. Pato voltando do lago não aceita tarefa (`checar`) e o menu dele diz que está voltando.
 - Ao abrir o jogo, pato que estava na água volta para o pasto (`dentroDoPasto`).
 - Num navegador lento (menos de 10 quadros por segundo) o tempo de jogo anda mais devagar que o relógio, e o ovo pode ficar pronto antes de ele chegar; ele só termina de voltar.
@@ -202,3 +209,22 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - Valide o deslocamento dos personagens: sempre que alguém anda até um lugar ou fica parado nele (cena, obra, visita, tarefa), confira nas capturas que ele chega e fica olhando para o ponto de interesse. Quem fala olha para quem ouve, quem trabalha olha para o que está fazendo (o Maurinho para a obra, o Ed para o canteiro). `ir` vira o personagem para onde ele anda; ao chegar, chame `olhar(x, z)` no retorno, e numa cena use `virarNaCena` para ele ficar meio de frente para a câmera. Personagem parado de costas para o que importa, ou olhando para o nada, é erro.
 - Valide colisões entre objetos: nada do desenho de uma construção ou de uma reforma abaixo de 1,1 de altura passa mais de um cubinho (1/8) do terreno dela, porque ali o Ed para na porta, o Maurinho anda na obra e o jogador põe enfeites. O andaime segue a mesma regra. Onde um desenho original avança mais (o torrador de cobre, as bolas da oficina), `ladrilhoDeBeirada` tira o ladrilho dos caminhos e dos enfeites. `__fazenda.reformas.colisoes(id, n)` lista o que cada desenho (n = nível da reforma ou 'andaime') encosta: porta, pontos da obra, envelope do aluguel, mourões do varal, mesa do cafezinho, caminho da Lúcia, ladrilhos de passagem e de enfeite; `planta(id)` mostra a vista de cima.
 - Depois de verificado, faça commit e push direto na `main`; o GitHub Pages publica sozinho. O cache das páginas dura até 10 minutos, e um `?v=<commit>` no endereço mostra a versão nova na hora.
+
+## Curupira
+
+- Depois da cena dele (`S.viuCineCurupira`), a cada 10 a 18 min de jogo aberto (o primeiro entre 4 e 8) ele sai da floresta para a orla, anda até perto da estrada deixando pegadas ao contrário (`pegadaCurupira`, os dedinhos apontam para onde ele veio), para, vira para a câmera, fala uma das `FALAS_CURUPIRA` e volta, sumindo num redemoinho de folhas (`folhasCurupira`). Tocando nele, ele pula e fala. Com uma cena começando, ele some. Nada disso vai para o save (`CURUPIRA`, `proxCurupira`).
+- A janela Cenas tem o cartão "O Curupira passeia" com o botão para chamar agora (`chamarCurupira`).
+- Música: `TEMAS.curupira`, flautinha em ré dórico.
+
+## Destino dos terrenos de canteiros
+
+- Nível 27 (`DESTINO.niveis`): no menu de um canteiro, "Destinar este terreno" abre a lista das culturas liberadas (`escolherDestino`). O terreno destinado (`S.destinos`: terreno → cultura) passa a ser arado e plantado pelo Hud e pelo Dani quando estão ajudando (`alvosHud` põe `arar` na grama e `plantar` nos canteiros arados; o 5º item do alvo é a cultura). A semente sai da bolsa; sem ela, o ajudante compra com o dinheiro, como o Ed.
+- Vagas: uma no 27 e mais uma em 29, 33, 35, 37, 39, 41 e 43 (os níveis com pouca coisa; o 31 fica de fora). Sem vaga, o item aparece apagado e o estado do menu diz quais terrenos estão usando as vagas e em que nível chega a próxima.
+- O terreno destinado tem uma plaquinha numa estaca no canto de fora (`montarDestinos`, `texDestino`): cartão com o desenho da cultura e um selo verde de setas, de "sozinho". O menu do canteiro diz o destino e tem "Trocar o destino" e "Tirar o destino".
+
+## Ajudantes: Hud e Dani
+
+- Os dois trabalham do mesmo jeito (`AJUDA`, `atualizarAjudante`): regam, tiram o mato e colhem os canteiros, colhem o pomar, coletam na mata e pegam o mel. Nos terrenos destinados também aram e plantam (ver Destino dos terrenos de canteiros). Vão ao que está mais perto e respeitam o que está reservado pelo Ed e pelo outro (`setReserva`). Cada um tem a tarefa dele (`tarefaHud`, `tarefaDani`).
+- Hud: nível 9, R$ 500 por 15 min (`HUD`, `S.hudAte`). Dani: depois da cena dele, R$ 1.500 por 15 min (`DANI`, `S.daniAte`), com passo mais largo (`DANI.vel`) e trabalho no ritmo do Ed (o Hud leva 1,2 vez o tempo).
+- Os dois saem e entram pela porta da casa (`HUD_PORTA`). Cada um tem a pílula embaixo, o menu ao tocar nele, o item na casa e o botão no caderno. O tempo deles para com o jogo fechado, no sono e no cafezinho (`pausarRelogios`, `limparCafe`).
+
