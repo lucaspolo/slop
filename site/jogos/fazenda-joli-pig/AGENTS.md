@@ -156,8 +156,9 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - O galinheiro e o curral não dividem cerca: entre eles passa uma faixa de grama. O galinheiro e o curral novos (`CERCADOS`) ficam ao lado de cada um, do outro lado de uma passagem com o coletor e o alimentador (`COLETOR`, `ALIMENTADOR`), que atendem os dois. A cerca de baixo do curral novo é a da fazenda.
 - Cada ladrilho de cerca ou porteira tem a sua malha (`CERCA_VIS`). Quando um ladrilho vira cerca ou deixa de ser (o canto Sul, um cercado novo), chame `atualizarCercas(x0, z0, x1, z1)`: ele refaz a região e os vizinhos, porque o desenho de cada mourão depende deles.
 - A rota (`rota`) é um A* em 8 direções com a lista aberta num heap binário.
+- O chão e os tufinhos de grama (`construirChao`, em blocos de `BLOCO_CHAO` ladrilhos) e as árvores da mata e do matagal (`instanciasMata`, em blocos de 8 × 8) são divididos em pedaços com a sua própria esfera de recorte: o que fica fora da tela não é desenhado. Quando um ladrilho muda de tipo, refaça o chão com `refazerChao`.
 - Saves do mapa antigo (sem `S.mapa`) são convertidos ao abrir (`migrarMapa`): os canteiros vão para o mesmo lugar do seu terreno, e enfeites, bichos, trufas e maçã andam com a sua zona (`mapaNovoX`, `mapaNovoZ`). Depois que o mapa está montado, `conferirMapaNovo` devolve à loja o enfeite que caiu fora de um gramado livre, tira a trufa ou a maçã que não ficou ao lado de uma árvore e mostra um aviso uma vez.
-- Para testar: `__fazenda.mapa` (`W`, `H`, `tipo`, `andavel`, `rota` e os dados dos lugares) e `__fazenda.pessoas()`.
+- Para testar: `__fazenda.mapa` (`W`, `H`, `tipo`, `andavel`, `rota` e os dados dos lugares), `__fazenda.pessoas()`, e `__fazenda.desenho()` e `malhas()` para ver quanto a cena desenha.
 
 ## Terreno do canto Sul
 
