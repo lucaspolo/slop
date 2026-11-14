@@ -120,6 +120,28 @@ button{font:inherit;color:inherit}
 .fila img{width:24px;height:24px;flex:none}
 .fila span{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .fila .botao.mini{border-radius:999px;flex:none}
+/* o que está em andamento (maçã, Hud, Dani, fila do Ed): com duas ou mais, um resumo só, que abre a lista */
+.andamento,.andamento-lista{display:grid;justify-items:center;gap:8px;pointer-events:none}
+.andamento.fechado .andamento-lista{display:none}
+.fila .tp{flex:none;margin-left:-3px;font-variant-numeric:tabular-nums}
+.fila .tp:not(:empty)::before{content:"· "}
+.andamento.aberto .andamento-lista{display:flex;flex-direction:column;gap:0;padding:2px 12px;width:min(320px,calc(100vw - 40px));background:var(--papel);border:3px solid var(--borda);border-radius:14px;box-shadow:0 4px 0 var(--sombra);pointer-events:auto;animation:sobe .2s ease-out}
+.andamento.aberto .andamento-lista .fila{width:100%;max-width:none;padding:6px 0;background:none;border:0;border-bottom:2px dashed #e7d6b5;border-radius:0;box-shadow:none;font-size:14px}
+.andamento.aberto .andamento-lista .fila.ultima{border-bottom:0}
+.andamento.aberto .andamento-lista .fila img{width:28px;height:28px}
+.andamento.aberto .andamento-lista .fila > span:nth-of-type(1){flex:1}
+.andamento.aberto .fila .tp{font-size:15px;margin-left:0}
+.andamento.aberto .fila .tp::before{content:none}
+.resumo{font:inherit;font-weight:800;color:var(--tinta);cursor:pointer;gap:8px;padding:3px 8px 3px 5px;min-height:40px}
+.resumo .pilha{display:flex;flex:none}
+.resumo .pilha img{width:24px;height:24px}
+.resumo .pilha img+img{margin-left:-9px}
+.resumo-txt{display:grid;gap:1px;line-height:1;text-align:left}
+.resumo-txt small{font-size:10px;font-weight:700;color:var(--tinta-suave)}
+.resumo-txt b{font-size:14px;font-weight:800;font-variant-numeric:tabular-nums}
+.resumo .seta{width:16px;height:16px;flex:none;transition:transform .15s}
+.andamento.aberto .resumo{background:var(--amarelo)}
+.andamento.aberto .resumo .seta{transform:rotate(180deg)}
 
 /* câmera */
 .camera-ctl{position:absolute;right:max(12px,env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);display:grid;gap:8px;justify-items:end;pointer-events:auto}
@@ -433,10 +455,15 @@ body.modelos #tela{position:absolute;top:var(--md-topo,84px);left:300px;width:ca
   </div>
 
   <div class="hud-base">
-    <div class="fila painel" id="macaPill" hidden><img data-icone="maca" alt=""><span id="macaTexto"></span></div>
-    <div class="fila painel" id="hudPill" hidden style="cursor:pointer" role="button" tabindex="0" title="O que o Hud faz"><img data-icone="hud" alt=""><span id="hudTexto"></span></div>
-    <div class="fila painel" id="daniPill" hidden style="cursor:pointer" role="button" tabindex="0" title="O que o Dani faz"><img data-icone="dani" alt=""><span id="daniTexto"></span></div>
-    <div class="fila painel" id="fila" hidden><img data-icone="ed" alt=""><span id="filaTexto"></span><button class="botao mini claro" id="filaLimpar" type="button">limpar</button></div>
+    <div class="andamento solto" id="andamento">
+      <div class="andamento-lista" id="andamentoLista">
+        <div class="fila painel" id="macaPill" hidden><img data-icone="maca" alt=""><span id="macaTexto"></span><span class="tp" id="macaTempo"></span></div>
+        <div class="fila painel" id="hudPill" hidden style="cursor:pointer" role="button" tabindex="0" title="O que o Hud faz"><img data-icone="hud" alt=""><span id="hudTexto"></span><span class="tp" id="hudTempo"></span></div>
+        <div class="fila painel" id="daniPill" hidden style="cursor:pointer" role="button" tabindex="0" title="O que o Dani faz"><img data-icone="dani" alt=""><span id="daniTexto"></span><span class="tp" id="daniTempo"></span></div>
+        <div class="fila painel" id="fila" hidden><img data-icone="ed" alt=""><span id="filaTexto"></span><button class="botao mini claro" id="filaLimpar" type="button">limpar</button></div>
+      </div>
+      <button class="fila painel resumo" id="resumo" type="button" hidden aria-expanded="false" aria-controls="andamentoLista"><span class="pilha" id="resumoPilha"></span><span class="resumo-txt"><small id="resumoQtd"></small><b id="resumoProx"></b></span><svg class="seta" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10 L8 5 L13 10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
     <div class="dica painel" id="dica" hidden><img data-icone="ed" alt=""><span id="dicaTexto"></span><button class="x" id="dicaFechar" type="button" aria-label="Esconder as dicas">✕</button></div>
     <div class="modo painel" id="modo" hidden><img id="modoIcone" alt=""><span id="modoTexto"></span><button class="botao mini" id="modoTodos" type="button" hidden></button><button class="botao mini claro" id="modoSair" type="button">pronto</button></div>
     <nav class="acoes painel" aria-label="Ações">
@@ -11547,7 +11574,7 @@ function atualizarMaca(dt, t){
   if (macaLigada && !ativa){ aviso('O efeito da maçã acabou.'); const f = variar(FALAS_FIM_MACA); falar(ed, f, tempoDeLeitura(f)); }
   macaLigada = ativa;
   $('macaPill').hidden = !ativa;
-  if (ativa) $('macaTexto').textContent = `Ed veloz · ${tempo((S.macaAte - Date.now()) / 1000)}`;
+  if (ativa){ $('macaTexto').textContent = 'Ed veloz'; $('macaTempo').textContent = tempo((S.macaAte - Date.now()) / 1000); }
   if (ed.turbo > 1 && ed.estado === 'andando' && (macaRastro -= dt) <= 0){
     macaRastro = 0.08;
     particula(ed.pos.x + rnd(-0.15, 0.15), 0.1, ed.pos.y + rnd(-0.15, 0.15), sorteia([0xffe066, 0xffffff]), 0.35);
@@ -11609,6 +11636,32 @@ function subiuNivel(n){
   if (ed) falar(ed, variar(FALAS_NIVEL), 2.2);
 }
 function gastar(v){ S.dinheiro -= v; hud(); }
+// o que está em andamento embaixo (maçã, Hud, Dani e a fila do Ed): com uma coisa só, a pílula de sempre; com duas ou
+// mais, um resumo com quantas são e a que acaba primeiro, que abre a lista (a que acaba primeiro em cima, a fila por último).
+// Tocar no resumo de novo ou no mapa fecha a lista
+let andamentoAberto = false, andamentoPilha = '';
+const ANDAMENTO = [['macaPill', 'Ed veloz', 'maca', () => S.macaAte], ['hudPill', 'Hud', 'hud', () => S.hudAte], ['daniPill', 'Dani', 'dani', () => S.daniAte], ['fila', null, 'ed', null]];
+function arrumarAndamento(){
+  const box = $('andamento'), vis = ANDAMENTO.filter(([id]) => !$(id).hidden), n = vis.length;
+  if (n < 2) andamentoAberto = false;
+  const estado = n < 2 ? 'solto' : andamentoAberto ? 'aberto' : 'fechado';
+  if (box.dataset.estado !== estado){
+    box.dataset.estado = estado; box.className = 'andamento ' + estado;
+    $('resumo').hidden = n < 2; $('resumo').setAttribute('aria-expanded', String(estado === 'aberto'));
+    if (estado === 'solto') for (const [id] of ANDAMENTO){ $(id).style.order = ''; $(id).classList.remove('ultima'); }
+  }
+  if (n < 2) return;
+  const agora = Date.now(), comTempo = vis.filter(v => v[3]).map(v => [v, v[3]() - agora]).sort((a, b) => a[1] - b[1]);
+  let ultima = null, maior = -Infinity;
+  for (const v of vis){ const c = comTempo.find(x => x[0] === v), o = c ? Math.round(c[1] / 1000) : 1e6; $(v[0]).style.order = o; if (o > maior){ maior = o; ultima = v[0]; } }
+  for (const [id] of ANDAMENTO) $(id).classList.toggle('ultima', id === ultima);
+  const pilha = vis.map(v => v[2]).join();
+  if (pilha !== andamentoPilha){ andamentoPilha = pilha; $('resumoPilha').innerHTML = vis.slice(0, 3).map(v => `<img src="${icone(v[2])}" alt="">`).join(''); }
+  $('resumoQtd').textContent = `${n} em andamento`;
+  const p = comTempo[0];
+  $('resumoProx').textContent = p ? `${p[0][1]} ${tempo(p[1] / 1000)}` : $('filaTexto').textContent;
+}
+function abrirAndamento(abrir){ andamentoAberto = abrir; arrumarAndamento(); }
 function chipPulsa(id){ const e = $(id); e.classList.remove('pulsa'); void e.offsetWidth; e.classList.add('pulsa'); }
 
 // pedidos e oferta do dia
@@ -13069,6 +13122,8 @@ function tocou(cx, cy){
 const ponteiros = new Map();
 let arrastou = false, pinca = 0, inicio = null;
 function eventos(){
+  // tocar no mapa fecha a lista do que está em andamento
+  canvas.addEventListener('pointerdown', () => { if (andamentoAberto) abrirAndamento(false); });
   canvas.addEventListener('pointerdown', e => {
     canvas.setPointerCapture(e.pointerId);
     ponteiros.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -13144,6 +13199,7 @@ function eventos(){
   $('modoSair').addEventListener('click', desligarModo);
   $('modoTodos').addEventListener('click', plantarTodosVazios);
   $('filaLimpar').addEventListener('click', () => { limparFila(); Som.clique(); });
+  $('resumo').addEventListener('click', () => { Som.clique(); abrirAndamento(!andamentoAberto); });
   $('dicaFechar').addEventListener('click', () => { S.dicas = false; atualizarDica(); salvar(); });
   $('modal').addEventListener('pointerdown', e => { if (e.target === $('modal')) fecharJanela(); });
   document.addEventListener('pointerdown', e => { if (menuAberto && !$('menu').contains(e.target) && e.target !== canvas) fecharMenu(); });
@@ -13231,11 +13287,12 @@ function quadro(agoraP){
   if (milton.g.visible) milton.update(dt, t);
   atualizarPista(dt);
   atualizarHudIrmao(dt, t);
-  if (irmaoHud.g.visible || hudAtivo()){ $('hudPill').hidden = !hudAtivo(); if (hudAtivo()) $('hudTexto').textContent = `Hud ajudando · ${tempo((S.hudAte - Date.now()) / 1000)}`; }
+  if (irmaoHud.g.visible || hudAtivo()){ $('hudPill').hidden = !hudAtivo(); if (hudAtivo()){ $('hudTexto').textContent = 'Hud ajudando'; $('hudTempo').textContent = tempo((S.hudAte - Date.now()) / 1000); } }
   else if (!$('hudPill').hidden) $('hudPill').hidden = true;
   atualizarDani(dt, t);
-  if (irmaoDani.g.visible || daniAtivo()){ $('daniPill').hidden = !daniAtivo(); if (daniAtivo()) $('daniTexto').textContent = `Dani ajudando · ${tempo((S.daniAte - Date.now()) / 1000)}`; }
+  if (irmaoDani.g.visible || daniAtivo()){ $('daniPill').hidden = !daniAtivo(); if (daniAtivo()){ $('daniTexto').textContent = 'Dani ajudando'; $('daniTempo').textContent = tempo((S.daniAte - Date.now()) / 1000); } }
   else if (!$('daniPill').hidden) $('daniPill').hidden = true;
+  arrumarAndamento();
   if (beto.g.visible) beto.update(dt, t);
   if (jaca.g.visible) jaca.update(dt, t);
   atualizarCaminhao(dt);
