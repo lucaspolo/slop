@@ -21,7 +21,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 | Pelúcio | Irmão, dono da Joli Coffee. Compra café seco. Chama o Ed de "irmão" |
 | Patrinho | Irmão, chef do Joli Bistrô. Compra trufas, anda de lambreta. Chama o Ed de "irmãozinho" |
 | Hud (Hudson) | Irmão pequenino, metade do tamanho do Ed. Ajudante em troca de mesada. Não é o caçula: o caçula é o Dani |
-| Dani (Daniel Lucio) | Irmão caçula da família, e o maior de todos: o pijama de pelúcia do Ed em verde (`COR.dani`), 1,25 vez o tamanho dele (`ESCALA_DANI`, `MODELO_DANI`). Chega no nível 30 e mora na casa com o Ed. Ajudante em troca de mesada, como o Hud |
+| Dani (Daniel Lucio) | Irmão caçula da família, e o maior de todos: a mesma jardineira amarela do Ed e do Hud, com 1,25 vez o tamanho do Ed (`ESCALA_DANI`, `MODELO_DANI`). Chega no nível 30 e mora na casa com o Ed. Ajudante em troca de mesada, como o Hud |
 | Milton | Irmão, metade do tamanho do Pelúcio. Pilota o PIG-MTP. Bordão: "Milton na área!" |
 | Minhoquinhas | Sócias do Ed. Moram na composteira e fazem adubo |
 | Lúcia | Nano arteira, dona do Nano Hostel. Cabelo preto com chiquinhas, vestido amarelo até o joelho. Chama o Ed de "tomada" e paga aluguel |
@@ -224,7 +224,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 
 ## Ajudantes: Hud e Dani
 
-- Os dois trabalham do mesmo jeito (`AJUDA`, `atualizarAjudante`): regam, tiram o mato e colhem os canteiros, colhem o pomar, coletam na mata e pegam o mel. Nos terrenos destinados também aram e plantam (ver Destino dos terrenos de canteiros). Vão ao que está mais perto e respeitam o que está reservado pelo Ed e pelo outro (`setReserva`). Cada um tem a tarefa dele (`tarefaHud`, `tarefaDani`).
+- Os dois trabalham do mesmo jeito (`AJUDA`, `atualizarAjudante`): regam, tiram o mato e colhem os canteiros, colhem o pomar, coletam na mata e pegam o mel. Nos terrenos destinados também aram e plantam (ver Destino dos terrenos de canteiros). Vão ao que está mais perto e respeitam o que está reservado pelo Ed e pelo outro (`setReserva`). Com os dois na rua, cada um evita a região onde o outro está trabalhando (até `AJUDA_LONGE`, 8 ladrilhos do último alvo dele, o custo cresce), para não parecerem trabalhar sempre juntos: num teste com os 8 terrenos cheios, ficaram a uns 10 ladrilhos um do outro, contra 2 antes. Cada um tem a tarefa dele (`tarefaHud`, `tarefaDani`).
 - Hud: nível 9, R$ 500 por 15 min (`HUD`, `S.hudAte`). Dani: depois da cena dele, R$ 1.500 por 15 min (`DANI`, `S.daniAte`), com passo mais largo (`DANI.vel`) e trabalho no ritmo do Ed (o Hud leva 1,2 vez o tempo).
 - Os dois saem e entram pela porta da casa (`HUD_PORTA`). Cada um tem a pílula embaixo, o menu ao tocar nele, o item na casa e o botão no caderno. O tempo deles para com o jogo fechado, no sono e no cafezinho (`pausarRelogios`, `limparCafe`).
 
