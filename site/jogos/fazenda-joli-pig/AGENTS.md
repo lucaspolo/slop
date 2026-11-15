@@ -58,6 +58,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 | Férias no espaço | às vezes, quando o disco voador passa e tem vaca no curral; sempre disponível na janela Cenas |
 | Aposentadoria merecida | a partir do nível 10, quando uma galinha passa de 150 ovos (no máximo uma a cada 12 a 20 min, fora da noite): ela sai do galinheiro de chapéu de palha e malinha, o Ed paga o bônus e promete a pensão, o galo canta a despedida e ela vai embora pela estrada. Sempre disponível na janela Cenas a partir do nível 10, com uma galinha dublê |
 | Um cafezinho | de vez em quando a partir do nível 3, ou pela opção "Tomar um lanchinho" da casa. Depois da cena do Dani, ele vem sempre que está ajudando e às vezes de casa, e senta no banquinho do convidado (nesse dia não vem convidado) |
+| Inauguração do resort | quando o Maurinho termina o Resort das Aposentadas (nível 40), de dia: a família na frente do arco, as aposentadas chegam pela ponte com as malinhas, o Ed corta a fita e elas entram. Na reprise as hóspedes somem durante a cena e voltam no fim |
 
 ## Música
 
@@ -67,6 +68,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - A música baixa com a caixa de fala aberta, some aos poucos ao terminar ou pular e respeita o botão de som dos Ajustes.
 - Sons que se repetem sozinhos ficam baixinhos e sem chiado: o chuá do irrigador é um `Som.sopro` (ruído que entra e sai devagar, só graves e médios), no máximo um a cada 3 s somando todos os irrigadores, e só do que aparece na tela (`IRRIG_SOM`, `volumeNaTela`). O motor do avião do Milton baixa para um quarto fora da tela (`MOTOR_SOM`); o do jatinho é um sopro grave com assobio de triângulo e seno, sem onda serrote. Som novo que toca sem o jogador pedir segue a mesma regra.
 - Milton a jato: `TEMAS.jato`, a fanfarra do Milton (`TEMAS.milton`) um tom acima e mais rápida, com baixo pulsando.
+- Inauguração do resort: `TEMAS.resort`, bossa nova de beira de piscina em dó (violão em contratempo no seno, baixo gingado no triângulo e chocalho), 112 bpm, `ganho` 0,95.
 
 ## Falas que se repetem
 
@@ -191,6 +193,26 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - Preços (1ª e 2ª): moinho 13,5 mil e 24 mil, queijaria 22,5 mil e 30 mil, padaria 36 mil e 48 mil, cozinha 54 mil e 72 mil, terreiro 22,5 mil e 36 mil, torrador 81 mil e 108 mil, chocolateria 126 mil e 168 mil, oficina 144 mil e 192 mil, galinheiro 27 mil e 45 mil, curral 36 mil e 60 mil, galinheiro dos patos 36 mil e 60 mil (1ª no nível 36, `NIVEL_REFORMA`), casa e celeiro 45 mil e 90 mil, poço 13,5 mil e 24 mil. A 1ª custa 1,5 vez o que custava antes do rebalanceamento do nível 43 (veja Economia).
 - A reforma é o desenho original com acréscimos (`REFORMA_1`, `vReforma(id, n)`), sem sair do lugar da construção. As construções novas (galinheiro e curral novos, fábricas novas) estão em `COPIAS`: `vReforma` monta a original, com a reforma dela, e depois aplica as cores e os detalhes da cópia (`vestir`); o andaime é o da original. Ao criar uma cópia de construção, ponha ela em `COPIAS` e em `PRECO_REFORMA`. Durante a obra a construção ganha o andaime (`vAndaime(id)`). Os modelos estão no visualizador, no grupo "Reformas do Maurinho". A 2ª reforma ainda não tem desenho: enquanto isso `REFORMA.max` é 1.
 
+## Obras novas do Maurinho
+
+- Construções grandes do nível 40 em diante, feitas do zero ou em cima de uma que já existe (`OBRAS`): nome, nível, `predio` (o lugar em `PREDIOS`, com `obra: <chave>`), etapas (`{ preco, minutos, xp, nome }`), `modelo(n)` (o desenho com n etapas prontas), e os ganchos `vestir` (o que vai por cima do desenho, como o letreiro), `menu` (o estado no menu da construção pronta) e `aoTerminar(n, foraDoJogo)`. `S.obrasFeitas` guarda quantas etapas de cada uma terminaram.
+- A obra em andamento usa o mesmo `S.obra` das reformas, com `obra: <chave>` (`{ id: predio, n: etapa, fim, obra }`): uma coisa de cada vez, e o Maurinho de óculos, o andaime e a obra que termina com o jogo fechado são os mesmos. A obra que termina fora do jogo dá o XP ao abrir (as reformas também, desde as obras novas).
+- O lote aparece um nível antes de liberar (`loteObraVisivel`; as do canto precisam do terreno limpo): estacas nos cantos com linha laranja e branca (`vEstacas`) e a placa "OBRA NOVA" com o nome e o nível (`montarPlacasObras`, ao abrir e em `subiuNivel`). Tocar no lote ou na placa abre `itensObraLote`; o lote não aceita enfeite (`obraLoteEm`). Quando a obra começa, o lote vira ladrilhos `predio` (`abrirLoteObra`) e os enfeites que estavam nele voltam para a loja.
+- Durante a obra o desenho sobe em oito passos (`vObraSubindo`, `passoObra`): o que é novo aparece camada por camada, de baixo para cima e de trás para a frente, na proporção do tempo; num acréscimo, o que sai some no primeiro quarto. O andaime cerca o desenho final até `andaimeAlto`. `vPredio(id)` é o desenho de agora de qualquer construção (obra subindo, obra pronta ou reforma) e é o que `montarPredio`, `cubinhosBaixos` e as beiradas usam.
+- Os desenhos ficam no visualizador, no grupo "Obras do Maurinho", com a obra pela metade.
+
+### Resort das Aposentadas
+
+- Nível 40, R$ 450 mil, 20 minutos, 6000 XP, no canto Sul: x 41 a 47, z 32 a 37, com a entrada no sul (porta em 44, 38). Desenho em `vResort` (7 × 6 ladrilhos em cubinhos de 1/8 a partir do canto, `RESORT`): o arco da entrada com o letreiro (`vestir`), o caminho de pedra entre canteiros, o chuveirinho, a piscina com boia e patinho de borracha, o deck, quatro espreguiçadeiras e dois guarda-sóis, dois chalés com telhado de palha, o quiosque de coco com banquinhos, o coqueiro e a sebe florida em volta.
+- Quando a obra termina começa a cena "Inauguração do resort" (`CENAS.resort`, música `resort`, uma bossa nova): o Maurinho, o Hud e o Dani (se não estão ajudando) e a Luma (aventura `inaugura`) estão na frente do arco, o Ed vem de onde estiver, as aposentadas (as seis mais recentes) atravessam a ponte com as malinhas e fazem fila à esquerda do Ed, ele corta a fita e elas entram. A aposentadoria seguinte espera a inauguração.
+- Depois dela as aposentadas (`S.aposentadas`, as `HOSP.max` mais recentes) são hóspedes (`vGalinhaResort`: chapéu com fita de uma cor e óculos escuros): andam pela grade do chão livre do desenho (`montarGradeResort`, `caminhoResort`), pulam para a espreguiçadeira, a piscina ou o banquinho do quiosque (`lugaresResort`), dão voltinhas no jardim e à noite entram nos chalés. Tocar numa diz quem é e o que está fazendo.
+- Com o resort aberto (`resortAberto`), a aposentada nova atravessa a ponte e entra pelo arco, com a Luma escoltando até lá; a promessa do Ed muda (`FALAS_APOSENTA_RESORT`), e os cartões-postais vêm do resort (`S.cartao.resort`: outras mensagens, a piscina no desenho, carimbo "RESORT").
+
+### Galpão do trator
+
+- Nível 42, R$ 400 mil, 15 minutos, 5000 XP, ao lado da horta: x 0 a 3, z 6 a 7, porta em 1, 8. Desenho em `vGalpao`: paredes de tábua, telhado de zinco em arco e a frente aberta para o sul, com o trator guardado dentro (`guardarTratorVis`).
+- No menu de um canteiro de terreno comprado aparecem "Arar", "Plantar" e "Colher o terreno com o trator" (`itemTrator`, quando há pelo menos dois canteiros para isso). Plantar abre a mesma lista de sementes, com o preço das que faltam para o terreno todo. É a tarefa `trator` (alvo `{ k: 'trator', lote }`, param `{ acao, semente }`, `checarTrator`): o Ed anda até o galpão, sobe no trator (`sentado`, mãos no volante), vai pela rota até o terreno, faz as quatro fileiras em zigue-zague, cuidando de cada canteiro na hora em que passa por cima (`tratorNoCanteiro`), volta e guarda o trator (`guardarTrator`). Atrás vai o arado, a plantadeira ou a carreta, que enche com a colheita (`vImplemento`, `vCargaCarreta`). Cancelar a tarefa no meio guarda o trator na hora.
+
 ## Fábricas novas
 
 - Mais uma queijaria (nível 38, R$ 90.000), padaria (40, R$ 135.000) e cozinha de doces (42, R$ 180.000) no gramado depois da cozinha, na mesma fileira e no mesmo ritmo: x 37 a 38, 41 a 42 e 45 a 46, com a porta em z 4 (`FAB_NOVAS`, que entram em `FABRICAS` com o id `queijaria2`, `padaria2` e `cozinha2`, e `PREDIOS` com `nova: true`).
@@ -289,7 +311,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 ## Ajudantes: Hud e Dani
 
 - Os dois trabalham do mesmo jeito (`AJUDA`, `atualizarAjudante`): regam, tiram o mato e colhem os canteiros, colhem o pomar, coletam na mata e pegam o mel. Nos terrenos destinados também aram e plantam (ver Destino dos terrenos de canteiros). Vão ao que está mais perto e respeitam o que está reservado pelo Ed e pelo outro (`setReserva`). Com os dois na rua, cada um evita a região onde o outro está trabalhando (até `AJUDA_LONGE`, 8 ladrilhos do último alvo dele, o custo cresce), para não parecerem trabalhar sempre juntos: num teste com os 8 terrenos cheios, ficaram a uns 10 ladrilhos um do outro, contra 2 antes. Cada um tem a tarefa dele (`tarefaHud`, `tarefaDani`).
-- Hud: nível 9, R$ 500 por 15 min (`HUD`, `S.hudAte`). Dani: depois da cena dele, R$ 1.500 por 15 min (`DANI`, `S.daniAte`). Depois do nível 30 a mesada dos dois sobe 10% por nível (`MESADA`, `precoHud`, `precoDani`; no 43, R$ 1.750 e R$ 5.200); as cenas e a linha do tempo mostram o valor de partida. com passo mais largo (`DANI.vel`) e trabalho no ritmo do Ed (o Hud leva 1,2 vez o tempo).
+- Hud: nível 9, R$ 500 por 15 min (`HUD`, `S.hudAte`). Dani: depois da cena dele, R$ 1.500 por 15 min (`DANI`, `S.daniAte`), com passo mais largo (`DANI.vel`) e trabalho no ritmo do Ed (o Hud leva 1,2 vez o tempo). Depois do nível 30 a mesada dos dois sobe 10% por nível (`MESADA`, `precoHud`, `precoDani`; no 43, R$ 1.750 e R$ 5.200); as cenas e a linha do tempo mostram o valor de partida.
 - Os dois saem e entram pela porta da casa (`HUD_PORTA`). Cada um tem a pílula embaixo, o menu ao tocar nele, o item na casa e o botão no caderno. O tempo deles para com o jogo fechado, no sono e no cafezinho (`pausarRelogios`, `limparCafe`).
 
 ## Pista do Milton e o jatinho
