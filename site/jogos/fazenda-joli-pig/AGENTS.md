@@ -56,6 +56,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 | O arquiteto da família | nível 31: o Maurinho chega na garupa da lambreta do Patrinho e conta das reformas |
 | Hora de nanar | toda noite, na metade da noite, com quem estiver ajudando (o Hud, o Dani ou os dois; sem ajudante, com a Luma); de manhã a câmera vai ao galo, que acorda a fazenda. Sem escolha: todos sempre vão dormir |
 | Férias no espaço | às vezes, quando o disco voador passa e tem vaca no curral; sempre disponível na janela Cenas |
+| Aposentadoria merecida | a partir do nível 10, quando uma galinha passa de 150 ovos (no máximo uma a cada 12 a 20 min, fora da noite): ela sai do galinheiro de chapéu de palha e malinha, o Ed paga o bônus e promete a pensão, o galo canta a despedida e ela vai embora pela estrada. Sempre disponível na janela Cenas a partir do nível 10, com uma galinha dublê |
 | Um cafezinho | de vez em quando a partir do nível 3, ou pela opção "Tomar um lanchinho" da casa. Depois da cena do Dani, ele vem sempre que está ajudando e às vezes de casa, e senta no banquinho do convidado (nesse dia não vem convidado) |
 
 ## Música
@@ -108,7 +109,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 
 - Eventos de enfeite (Luma, disco voador, galo, bichos da mata, nanos do Nano Hostel, visitantes da trilha) não mexem no save. Os tempos ficam só na memória e recomeçam ao abrir o jogo.
 - Eles não começam com cena ou janela aberta, e somem quando uma cena começa.
-- A abdução é a exceção: ela tira uma vaca do save, e o jogador compra outra.
+- A abdução é a exceção: ela tira uma vaca do save, e o jogador compra outra. A aposentadoria também: tira uma galinha do save e o dinheiro do bônus (veja a seção Aposentadoria das galinhas).
 - Frequência dos eventos de surpresa (em tempo de jogo aberto): o disco voador passa a cada 6 a 12 min (o primeiro entre 3 e 6 min) e, com vaca no curral, tenta a abdução em 60% das passagens (`DISCO_JOGO`); o redemoinho do Saci vem entre 4 e 9 min depois de abrir e depois a cada 8 a 16 min (`REDEMOINHO`); o cafezinho, a cada 6 a 12 min (`sorteioCafezinho`); o galo fujão, a cada 8 a 15 min (o primeiro entre 5 e 10, `GALO_JOGO`). Como são cenas, a abdução e o cafezinho só acontecem se o Ed estiver parado, sem tarefa, naquela hora.
 - Saves antigos precisam continuar abrindo. Flag nova de cena começa indefinida e a cena aparece na próxima vez que o jogador abrir o jogo.
 
@@ -189,6 +190,21 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - Ao abrir o jogo, o bicho que está fora do pasto do seu cercado volta para ele (`dentroDoPasto`).
 - Enfeite não entra em lote à venda (`loteDeCercado`, `blocoEm`, `loteDe`). Os que já estavam lá voltam para a loja quando o lote é comprado (`devolverEnfeites`).
 - As galinhas passam por baixo do galinheiro. Se o Ed vai cuidar de um bicho parado debaixo de uma construção, ele vai ao ladrilho do pasto mais perto e se encosta na beira dele (`encostar`, em `proximaTarefa`), sem entrar debaixo da construção.
+
+## Aposentadoria das galinhas
+
+- Ideia do Lucas para ter que repor galinhas, como as vacas abduzidas, no tom da fazenda: ninguém se machuca, a galinha se aposenta. A partir do nível 10 (`APOSENTA`).
+- Cada galinha conta os ovos que bota em `d.ovos`, em `simularAnimais`, inclusive com o jogo fechado (o ovo que vira pintinho não conta). As que já estavam no save começam do zero.
+- Passando de 150 ovos ela pode se aposentar. O relógio (`S.aposentaEspera`, em segundos de jogo aberto, guardado no save) deixa no máximo uma a cada 12 a 20 min, e só fora da noite, sem o Milton na pista e com dinheiro para o bônus. Vai a que botou mais, sem ovo esperando o Ed e sem o Ed indo até ela (`galinhaParaAposentar`).
+- A cena: a galinha de verdade sai do bando e aparece arrumada (`vGalinhaAposentada`: chapéu de palha com fita rosa e malinha de couro) num pufe de penas, anda até o lado de fora do galinheiro e o Ed vai até ela (`LUGAR_APOSENTA`: no antigo, acima da porteira, longe do mourão do galo e da cerca, que tampavam ela, e fora das flores do (18, 7); no novo, embaixo dele, porque o coletor e o alimentador ficam na saída). Os dois ficam lado a lado na tela e virados um para o outro.
+- O Ed diz o nome dela, quantos ovos botou e paga o bônus de R$ 1 por ovo (`pagarAposentadoria`: moedinhas, o valor flutuando e o dinheiro saindo nessa hora). Ela responde com um có-có-có (fala `galinha`, com o rosto de chapéu e a cor da fita) e dá um pulinho. O Ed promete uma pensão generosa por serviços prestados. A pensão é só promessa: não sai dinheiro todo mês.
+- O galo do galinheiro dela canta a despedida no mourão (se não estiver fujão). Ela vai pela rota até a porteira da fazenda e pela estrada, e o Ed acena; no galinheiro novo o primeiro passo (`sai`) leva ela pela fileira de cima do corredor entre o galinheiro e o curral, longe do Ed, que fica na de baixo. Depois da cena ela continua andando pela estrada (`aposentadaNaEstrada`) até sumir depois da curva; some antes se outra cena começar.
+- Nomes em `NOMES_APOSENTADA` (Dona Gema, Dona Cocota...). As aposentadas ficam em `S.aposentadas` (`{ nome, ovos }`).
+- Pular vale como aposentar: o bônus sai e ela vai embora, sem a caminhada. Rever na janela Cenas usa uma galinha dublê no lugar de uma de verdade do galinheiro antigo, que se esconde durante a cena; nada muda no save.
+- Música: `TEMAS.aposentadoria`, uma valsinha de despedida em fá maior, um pouco mais baixinha que os temas alegres, como a do cafezinho e a canção de ninar.
+- Falas: `FALAS_APOSENTA_ED` (com `{nome}`, `{ovos}` e `{bonus}`), `FALAS_APOSENTA_GALINHA` e `FALAS_APOSENTA_PENSAO`, 11 cada. A primeira aposentadoria usa as primeiras de cada lista.
+- Cartão-postal: depois da primeira aposentada, a cada 15 a 30 min de jogo aberto (`S.cartaoEspera`) chega um cartão de uma delas na porta da casa (`S.cartao`, `vCartaoPostal`, ao lado do envelope do aluguel), um de cada vez. Tocando nele o Ed vai ler (tarefa `lerCartao`) e abre a janela do cartão: o desenho da praia em canvas (`desenharPostal`: a aposentada de chapéu e óculos escuros na cadeira de praia, guarda-sol, coqueiro, mar, sol e um coco de canudinho) e a mensagem escrita à mão (`FALAS_CARTAO`, já assinada). Fechando, o Ed comenta (`FALAS_ED_CARTAO`). Na janela Cenas, "Chamar o cartão" manda um agora.
+- Para testar: `__fazenda.aposenta` (`candidata`, `pronta`, `obj`, `estrada`, `cartao.chegar`, `cartao.ler`, `cartao.abrir`).
 
 ## Galinheiro dos patos
 
