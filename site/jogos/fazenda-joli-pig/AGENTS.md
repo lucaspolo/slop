@@ -208,6 +208,12 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - Depois dela as aposentadas (`S.aposentadas`, as `HOSP.max` mais recentes) são hóspedes (`vGalinhaResort`: chapéu com fita de uma cor e óculos escuros): andam pela grade do chão livre do desenho (`montarGradeResort`, `caminhoResort`), pulam para a espreguiçadeira, a piscina ou o banquinho do quiosque (`lugaresResort`), dão voltinhas no jardim e à noite entram nos chalés. Tocar numa diz quem é e o que está fazendo.
 - Com o resort aberto (`resortAberto`), a aposentada nova atravessa a ponte e entra pelo arco, com a Luma escoltando até lá; a promessa do Ed muda (`FALAS_APOSENTA_RESORT`), e os cartões-postais vêm do resort (`S.cartao.resort`: outras mensagens, a piscina no desenho, carimbo "RESORT").
 
+### Casarão
+
+- Nível 45, três etapas de R$ 300 mil, 10 minutos e 3000 XP cada, pelo menu da casa (precisa da 1ª reforma dela; a casa não tem 2ª reforma). Sem lote: `OBRAS.casarao.predio` é a própria casa, e `base` é a casa reformada, de onde a 1ª etapa sobe.
+- Desenho em `vCasarao(n)` (`CASARAO`): a casa reformada sem o telhado, um segundo andar do mesmo tamanho (y 15 a 27) com o telhado e a chaminé 13 cubinhos acima (1); as janelas dos quartos com cortina (amarela a do Hud, à esquerda; lilás a do Dani), floreiras e duas águas-furtadas (2); a varanda de cima, por cima da varanda da reforma, com gradil, telhado e duas redes (3).
+- As janelas que `janelasDaCasa` acha nas duas da frente do andar de cima são marcadas com `quarto` (`hud` ou `dani`; cada janela com travessa vira dois vidros). Na hora de nanar, o quarto de quem vai dormir apaga no começo do `n-entra` e acende quando ele entra em casa; a cena espera as luzes acenderem antes de apagar tudo, e a câmera se afasta para mostrar o andar de cima.
+
 ### Galpão do trator
 
 - Nível 42, R$ 400 mil, 15 minutos, 5000 XP, ao lado da horta: x 0 a 3, z 6 a 7, porta em 1, 8. Desenho em `vGalpao`: paredes de tábua, telhado de zinco em arco e a frente aberta para o sul, com o trator guardado dentro (`guardarTratorVis`).

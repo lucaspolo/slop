@@ -910,6 +910,14 @@ const OBRAS = {
     },
     menu(r){ const n = (S.aposentadas || []).length; r.estado = n ? `${n > 1 ? n + ' galinhas aposentadas moram' : 'Uma galinha aposentada mora'} aqui, entre a piscina, o quiosque de coco e os chalés.` : 'Pronto para receber as galinhas que se aposentarem.'; },
   },
+  casarao: { nome: 'Casarão', nivel: 45, predio: 'casa', icone: 'casa', andaimeAlto: 42,
+    etapas: [{ preco: 300000, minutos: 10, xp: 3000, nome: 'o segundo andar' }, { preco: 300000, minutos: 10, xp: 3000, nome: 'os quartos do Hud e do Dani' }, { preco: 300000, minutos: 10, xp: 3000, nome: 'a varanda das redes' }],
+    desc: 'A casa do Ed ganha um segundo andar com os quartos do Hud e do Dani e uma varanda com redes. Na hora de nanar, cada um acende a luz do próprio quarto.',
+    pronto: 'Na hora de nanar, o Hud e o Dani acendem a luz do quarto deles.',
+    precisa: () => nivelReforma('casa') < 1 ? 'precisa da reforma da casa' : null,
+    base: () => vReforma('casa', 1),
+    modelo: n => vCasarao(n),
+  },
   galpao: { nome: 'Galpão do trator', nivel: 42, predio: 'galpao', icone: 'trator',
     etapas: [{ preco: 400000, minutos: 15, xp: 5000 }],
     desc: 'Um galpão de zinco com um trator verde. O Ed sobe nele e ara, planta ou colhe um terreno de canteiros inteiro de uma passada só.',
@@ -6047,6 +6055,51 @@ function vFitaResort(){
   v.box(7, -4, 0, 7, -2, 0, c); v.box(8, -4, 0, 8, -2, 0, c);
   return v;
 }
+// ================= Casarão (obra nova do nível 45, em três etapas): a casa reformada ganha um segundo andar do mesmo
+// tamanho, com o telhado subindo junto (1), as janelas dos quartos do Hud (à esquerda) e do Dani (à direita), com cortina e
+// floreira, e as águas-furtadas no telhado (2), e a varanda de cima, por cima da varanda da reforma, com duas redes (3).
+// Cubinhos de 1/8 da casa (32 × 32, a frente em z 29); o andar de cima vai do y 15 ao 27 e o telhado começa no 28
+const CASARAO = { sobe: 13, janelas: [4, 22], cortina: { hud: 0xf2c335, dani: 0xc9b2ea } };
+function vCasarao(n){
+  const v = vReforma('casa', 1), parede = 0xf6bccb, branco = 0xfff7ee, vidro = 0xbfe5f5, S2 = CASARAO.sobe;
+  for (const [k, e] of [...v.m]) if (e.y >= 15) v.m.delete(k);
+  // o andar de cima, com a faixa branca entre os andares, cantos brancos e a faixa do beiral
+  v.box(2, 15, 4, 29, 27, 29, parede); v.box(2, 15, 4, 29, 15, 29, branco); v.box(2, 28, 4, 29, 28, 29, branco);
+  for (const [x, z] of [[2, 4], [28, 4], [2, 28], [28, 28]]) v.box(x, 15, z, x + 1, 27, z + 1, branco);
+  // o telhado de antes, 13 cubinhos acima, e a chaminé mais alta
+  for (let i = 0; i <= 12; i++) v.box(2, 16 + S2 + i, 4 + i, 29, 16 + S2 + i, 29 - i, parede);
+  for (let i = 0; i <= 14; i++){ const c = i % 2 ? 0xbb4436 : 0xd2513f; v.box(0, 15 + S2 + i, 31 - i, 31, 15 + S2 + i, 31 - i, c); v.box(0, 15 + S2 + i, 2 + i, 31, 15 + S2 + i, 2 + i, c); }
+  v.box(21, 23 + S2, 10, 23, 31 + S2, 12, 0xa95b46); v.box(20, 31 + S2, 9, 24, 31 + S2, 13, 0x7a3f30);
+  // as janelas de cima: as dos quartos na frente, uma redonda no meio e uma de cada lado
+  for (const wx of CASARAO.janelas){ v.box(wx, 18, 29, wx + 5, 24, 29, branco); v.box(wx + 1, 19, 29, wx + 4, 23, 29, vidro); v.box(wx + 1, 21, 29, wx + 4, 21, 29, branco); }
+  for (let x = 13; x <= 18; x++) for (let y = 18; y <= 23; y++){ const d = Math.hypot(x - 15.5, y - 20.5); if (d <= 2.9) v.set(x, y, 29, d > 1.9 ? branco : vidro); }
+  for (const x of [2, 29]){ v.box(x, 19, 10, x, 24, 16, branco); v.box(x, 20, 11, x, 23, 15, vidro); }
+  if (n >= 2){
+    // cortina de cada quarto (amarela a do Hud, lilás a do Dani), floreira embaixo e as águas-furtadas na frente do telhado
+    for (const [wx, quem] of [[CASARAO.janelas[0], 'hud'], [CASARAO.janelas[1], 'dani']]){
+      v.box(wx + 1, 19, 29, wx + 1, 23, 29, CASARAO.cortina[quem]); v.box(wx + 4, 19, 29, wx + 4, 23, 29, CASARAO.cortina[quem]);
+      v.box(wx, 16, 30, wx + 5, 17, 31, 0x9a6038); for (let k = 0; k <= 5; k++) v.set(wx + k, 18, 31, [0xf05d7e, 0xffd34d, 0x58b6f0][k % 3]);
+    }
+    for (const dx of [7, 20]){
+      v.box(dx, 31, 22, dx + 4, 36, 26, parede); v.box(dx + 1, 32, 26, dx + 3, 35, 26, vidro); v.box(dx, 31, 26, dx + 4, 31, 26, branco);
+      for (let i = 0; i <= 3; i++){ const c = i % 2 ? 0xbb4436 : 0xd2513f; v.box(dx - 1 + i, 37 + i, 21, dx - 1 + i, 37 + i, 27, c); v.box(dx + 5 - i, 37 + i, 21, dx + 5 - i, 37 + i, 27, c); }
+      v.box(dx + 1, 37, 22, dx + 3, 39, 26, parede); v.box(dx + 2, 40, 21, dx + 2, 40, 27, 0xbb4436);
+    }
+  }
+  if (n >= 3){
+    // a varanda de cima: assoalho por cima do telhado da varanda de baixo, esteios, gradil, telhado próprio e duas redes
+    v.box(2, 15, 30, 29, 15, 33, (x) => x % 2 ? 0xb07e4a : 0x9a6a40);
+    for (const x of [2, 10, 21, 29]) v.box(x, 16, 33, x, 26, 33, branco);
+    for (let x = 3; x <= 28; x++){ v.set(x, 18, 33, branco); if (x % 2 && ![10, 21].includes(x)) v.box(x, 16, 33, x, 17, 33, branco); }
+    for (let z = 30; z <= 34; z++) v.box(1, 27 - (z > 32 ? 1 : 0), z, 30, 27 - (z > 32 ? 1 : 0), z, (x) => x % 2 ? 0xbb4436 : 0xd2513f);
+    for (const [x0, cores] of [[3, [0x4a8fd6, 0xf2c335, 0xfdf8ef]], [22, [0xc9b2ea, 0xfdf8ef, 0xa98bd8]]]){
+      v.box(x0, 23, 32, x0, 24, 32, 0x8a5a36); v.box(x0 + 6, 23, 32, x0 + 6, 24, 32, 0x8a5a36);
+      for (let x = x0 + 1; x <= x0 + 5; x++) v.set(x, Math.round(22 - 2.4 * Math.sin((x - x0) / 6 * Math.PI)), 32, cores[x % 3]);
+    }
+    for (const [x, flor] of [[13, 0xf05d7e], [17, 0xffd34d]]){ v.box(x, 16, 30, x + 1, 17, 31, 0xb5603c); v.box(x, 18, 30, x + 1, 18, 31, 0x4f9a3d); v.set(x, 19, 30, flor); }
+  }
+  return v;
+}
 // ================= Galpão do trator (obra nova do nível 42): 4 × 2 ladrilhos ao lado da horta, em cubinhos de 1/8 a partir do
 // canto de cima à esquerda. Paredes de tábua, telhado de zinco em arco ao longo do galpão e a frente toda aberta para o sul,
 // de onde se vê o trator guardado, o tambor de óleo, os fardos e as ferramentas penduradas no fundo
@@ -11029,15 +11082,17 @@ const CENAS = {
     titulo: 'Hora de nanar', desc: 'Na metade da noite o Ed vai dormir, com o Hud, o Dani ou a Luma, e acorda de manhã.', trancada: 'acontece toda noite, na metade da noite',
     pronta: () => voo.estado === 'fora' && precisaNanar(),
     podeRever: () => (voo.estado !== 'fora' ? 'Dá para rever quando o Milton decolar.' : null),
+    // no casarão, quando o primeiro entra, a câmera já se afasta para mostrar as luzes dos quartos no andar de cima
     foco(c){
-      if (c.passo === 'n-dorme') return new THREE.Vector3(4.9, 1.6, 3.6);
+      const alta = JANELAS_CASA.some(j => j.quarto);
+      if (c.passo === 'n-dorme' || (alta && c.passo === 'n-entra' && c.dentro >= 1)) return new THREE.Vector3(4.9, alta ? 2.6 : 1.6, 3.6);
       if (c.passo === 'n-acorda' && c.fase === 'galo'){ const G = GALOS.galinheiro; return new THREE.Vector3(G.pos.x, 1.15, G.pos.y); }
       const [sx, sz] = nanar.lugar.ed;
       if (c.passo === 'n-indo' && Math.hypot(ed.pos.x - sx, ed.pos.y - sz) > 3.5) return new THREE.Vector3(ed.pos.x, 0.4, ed.pos.y);
       return nanar.lugar.foco;
     },
     cameraRapida: c => c.passo === 'n-indo' || (c.passo === 'n-acorda' && (c.fase === 'galo' || c.t < 1.2)),
-    vista: c => (telaEstreita() ? 1.45 : 1) * (c.passo === 'n-dorme' ? 8 : c.passo === 'n-acorda' && c.fase === 'galo' ? 3.6 : nanar.lugar.vista),
+    vista: c => (telaEstreita() ? 1.45 : 1) * (c.passo === 'n-dorme' || (c.passo === 'n-entra' && c.dentro >= 1 && JANELAS_CASA.some(j => j.quarto)) ? 8.5 : c.passo === 'n-acorda' && c.fase === 'galo' ? 3.6 : nanar.lugar.vista),
     ambiente: dt => atualizarZzz(dt),
     iniciar(c){
       caminhaoE.estado = 'cine';
@@ -11088,16 +11143,20 @@ const CENAS = {
         // entram em casa; a Luma pela portinha
         case 'n-entra': {
           if (!c.ini){
-            c.ini = true; c.dentro = 0; c.precisa = 1;
+            c.ini = true; c.dentro = 0; c.precisa = 1; c.luzAte = 0;
+            // no casarão o quarto de quem vai dormir está apagado e acende quando ele entra em casa
+            const acende = quem => setTimeout(() => { if (nanar !== N) return; const js = JANELAS_CASA.filter(q => q.quarto === quem); for (const j of js) j.alvo = 1; if (js.length){ c.luzAte = c.t + 1.8; c.acesas++; } }, 700);
+            c.luzes = 0; c.acesas = 0;
+            for (const quem of ['hud', 'dani']) if (quem === 'hud' ? N.comHud : N.comDani){ const js = JANELAS_CASA.filter(j => j.quarto === quem); for (const j of js) j.alvo = 0; if (js.length) c.luzes++; }
             // o Dani entra por último, quando o da frente já entrou (senão os dois se encontram na porta), e abaixa a cabeça
-            const daniVai = () => nanar === N && andarAte(D, ...HUD_PORTA, () => { D.olhar(HUD_PORTA[0], HUD_PORTA[1] - 1); D.trabalhar(0.6, null, () => { D.g.visible = false; D.estado = 'parado'; fumacaDoHud(); c.dentro++; }); });
+            const daniVai = () => nanar === N && andarAte(D, ...HUD_PORTA, () => { D.olhar(HUD_PORTA[0], HUD_PORTA[1] - 1); D.trabalhar(0.6, null, () => { D.g.visible = false; D.estado = 'parado'; fumacaDoHud(); c.dentro++; acende('dani'); }); });
             if (N.comDani) c.precisa++;
             andarAte(ed, ...HUD_PORTA, () => { ed.g.visible = false; fumacaDoHud(); c.dentro++; if (N.comDani && !N.comHud) daniVai(); });
-            if (N.comHud){ c.precisa++; setTimeout(() => nanar === N && andarAte(H, ...HUD_PORTA, () => { H.g.visible = false; fumacaDoHud(); c.dentro++; if (N.comDani) daniVai(); }), 350); }
+            if (N.comHud){ c.precisa++; setTimeout(() => nanar === N && andarAte(H, ...HUD_PORTA, () => { H.g.visible = false; fumacaDoHud(); c.dentro++; acende('hud'); if (N.comDani) daniVai(); }), 350); }
             if (!N.comHud && !N.comDani){ c.precisa++; L.vel = 1.3; L.pontos = [[PORTINHA.x, PORTINHA.fora], [PORTINHA.x, PORTINHA.dentro]]; }
           }
           if (!N.comHud && !N.comDani && L.g.visible && !L.pontos.length){ L.g.visible = false; c.dentro++; }
-          if (c.dentro >= c.precisa && c.t > 1){ c.passo = 'n-dorme'; c.t = 0; c.ini = false; }
+          if (c.dentro >= c.precisa && c.acesas >= c.luzes && c.t > Math.max(1, c.luzAte)){ c.passo = 'n-dorme'; c.t = 0; c.ini = false; }
           break;
         }
         // as janelas apagam uma por uma, saem uns Zzz e a noite passa depressa até o amanhecer
@@ -12057,7 +12116,10 @@ function janelasDaCasa(v, s, opt, cor){
     const u = new Vox();
     for (const [k, e] of v.m) u.m.set(k, { x: e.x, y: e.y, z: e.z, c: e.c === cor && !gr.has(k) ? 0x9aa6ad : e.c });
     const m = brilhoDe(u, s, opt, [cor], MAT_LUZ.clone());
-    g.add(m); JANELAS_CASA.push({ m, f: 1, alvo: 1 });
+    // no casarão, as duas janelas da frente do andar de cima são os quartos do Hud (à esquerda) e do Dani
+    const es = [...gr].map(k => v.m.get(k)), xm = es.reduce((t, e) => t + e.x, 0) / es.length, ym = Math.min(...es.map(e => e.y)), zm = Math.max(...es.map(e => e.z));
+    const quarto = ym >= 18 && ym < 28 && zm >= 29 && Math.abs(xm - 15.5) > 5 ? (xm < 15.5 ? 'hud' : 'dani') : null;
+    g.add(m); JANELAS_CASA.push({ m, f: 1, alvo: 1, quarto });
   }
   return g;
 }
@@ -15256,6 +15318,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Reformas</b>${nv(REFORMA.nivel[0])}: o Maurinho, irmão arquiteto do Ed, reforma as construções. Toque numa delas e escolha "Reformar com o Maurinho". As fábricas ganham mais uma vaga de produção, o galinheiro e o curral cabem mais bichos, e a casa, o celeiro e o poço ganham visual novo. A <b>2ª reforma</b>${nv(REFORMA.nivel[1])} (todas menos a casa, que vira o casarão) dá mais uma vaga às fábricas e visual novo a todas; nos galinheiros, currais e no galinheiro dos patos ela não aumenta quantos bichos cabem, mas dá conforto, e os bichos soltam coraçõezinhos de vez em quando. Uma obra por vez, e a construção continua funcionando enquanto o andaime está de pé.</li>
       <li><b>Obras novas</b>${nv(Math.min(...Object.values(OBRAS).map(O => O.nivel)))}: construções grandes que o Maurinho faz do zero. Um nível antes de cada uma liberar aparece o lote, demarcado com estacas e a placa da obra; toque nele e chame o Maurinho. A construção vai subindo enquanto ele trabalha, inclusive com o jogo fechado, e cada obra dá bastante XP. Uma obra por vez, junto com as reformas. ${Object.values(OBRAS).map(O => `${O.nome}: nível ${O.nivel}, ${reais(O.etapas.reduce((t, E) => t + E.preco, 0))}${O.etapas.length > 1 ? ` em ${O.etapas.length} etapas` : ''}`).join('; ')}.</li>
       <li><b>Resort das Aposentadas</b>${nv(OBRAS.resort.nivel)}: no terreno novo, depois do lago. Na inauguração as aposentadas chegam pela ponte e se mudam; depois elas tomam sol, boiam na piscina e tomam água de coco, e à noite dormem nos chalés. As próximas que se aposentarem atravessam a ponte para lá, e os cartões-postais passam a vir do resort. Toque numa hóspede para saber quem é.</li>
+      <li><b>Casarão</b>${nv(OBRAS.casarao.nivel)}: depois da reforma da casa, o Maurinho faz o casarão em três etapas, pelo menu da casa: o segundo andar, os quartos do Hud e do Dani (cortina amarela e lilás, floreiras e águas-furtadas) e a varanda de cima com duas redes. Na hora de nanar, cada um acende a luz do próprio quarto.</li>
       <li><b>Galpão do trator</b>${nv(OBRAS.galpao.nivel)}: ao lado da horta. Num terreno de canteiros, escolha "Arar", "Plantar" ou "Colher o terreno com o trator": o Ed sobe no trator e faz os 16 canteiros de uma passada. Para plantar, ele usa as sementes da bolsa e compra na hora as que faltarem.</li>
     </ul>`;
   if (abaAjuda === 'progresso') corpo = `
@@ -15860,6 +15923,7 @@ function catalogoModelos(){
       varios('Resort das Aposentadas', [['Pronto', vResort], ['Obra no começo', () => vObraSubindo('resort', 0, 1)], ['Obra na metade', () => vObraSubindo('resort', 0, 4)], ['Obra quase pronta', () => vObraSubindo('resort', 0, 7)]]),
       um('Fita da inauguração', vFitaResort), um('Estacas do lote', () => vEstacas(2, 2)),
       varios('Galpão do trator', [['Pronto', vGalpao], ['Obra na metade', () => vObraSubindo('galpao', 0, 4)]]),
+      varios('Casarão', [['1ª etapa: o segundo andar', () => vCasarao(1)], ['2ª etapa: os quartos', () => vCasarao(2)], ['3ª etapa: a varanda das redes', () => vCasarao(3)], ['1ª etapa na metade', () => vObraSubindo('casarao', 0, 4)], ['3ª etapa na metade', () => vObraSubindo('casarao', 2, 4)]], 2),
       // o trator com cada implemento atrás, na escala do jogo (1/14)
       { nome: 'Trator do Ed', variantes: [['Arado', 'arar'], ['Plantadeira', 'plantar'], ['Carreta', 'colher']].map(([n, a]) => ({ nome: n, cria: () => { const g = new THREE.Group(); g.add(malha(vTrator().build(1 / 14, { origin: [10, 0, 0.5] }))); g.add(malha(vImplemento(a).build(1 / 14, { origin: [10, 0, 0.5] }))); if (a === 'colher') g.add(malha(vCargaCarreta(0xf08a2c).build(1 / 14, { origin: [10, 0, 0.5] }))); return g; } })) }] },
     { nome: 'Automação', itens: [varios('Alimentador', [['Galinheiro', () => vAlimentador(false)], ['Curral', () => vAlimentador(true)]]), varios('Coletor', [['Ovos', () => vColetor(false)], ['Ordenhadeira', () => vColetor(true)]]), um('Esteira', vEsteira), varios('Irrigador', [['Base', vIrrigadorBase], ['Cabeça', vIrrigadorCabeca]]), um('Colmeia', vColmeia)] },
