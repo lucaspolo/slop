@@ -21,7 +21,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 | Pelúcio | Irmão, dono da Joli Coffee. Compra café seco. Chama o Ed de "irmão" |
 | Patrinho | Irmão, chef do Joli Bistrô. Compra trufas, anda de lambreta. Chama o Ed de "irmãozinho" |
 | Hud (Hudson) | Irmão pequenino, metade do tamanho do Ed. Ajudante em troca de mesada. Não é o caçula: o caçula é o Dani |
-| Dani (Daniel Lucio) | Irmão caçula da família, e o maior de todos: a mesma jardineira amarela do Ed e do Hud, com 1,25 vez o tamanho do Ed (`ESCALA_DANI`, `MODELO_DANI`). Chega no nível 30 e mora na casa com o Ed. Ajudante em troca de mesada, como o Hud |
+| Dani (Daniel Lucio) | Irmão caçula da família, e o maior de todos: a mesma jardineira do Ed e do Hud, mas lilás (`COR.dani`, `COR.daniBolso`; o Lucas pediu), com 1,25 vez o tamanho do Ed (`ESCALA_DANI`, `MODELO_DANI`). Chega no nível 30 e mora na casa com o Ed. Ajudante em troca de mesada, como o Hud |
 | Milton | Irmão, metade do tamanho do Pelúcio. Pilota o PIG-MTP (na fazenda, um teco-teco até o nível 29 e depois um jatinho). Bordão: "Milton na área!" |
 | Minhoquinhas | Sócias do Ed. Moram na composteira e fazem adubo |
 | Lúcia | Nano arteira, dona do Nano Hostel. Cabelo preto com chiquinhas, vestido amarelo até o joelho. Chama o Ed de "tomada" e paga aluguel |
