@@ -58,6 +58,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 | Férias no espaço | às vezes, quando o disco voador passa e tem vaca no curral; sempre disponível na janela Cenas |
 | Aposentadoria merecida | a partir do nível 10, quando uma galinha passa de 150 ovos (no máximo uma a cada 12 a 20 min, fora da noite): ela sai do galinheiro de chapéu de palha e malinha, o Ed paga o bônus e promete a pensão, o galo canta a despedida e ela vai embora pela estrada. Sempre disponível na janela Cenas a partir do nível 10, com uma galinha dublê |
 | Um cafezinho | de vez em quando a partir do nível 3, ou pela opção "Tomar um lanchinho" da casa. Depois da cena do Dani, ele vem sempre que está ajudando e às vezes de casa, e senta no banquinho do convidado (nesse dia não vem convidado) |
+| De volta das férias | de noite, com o observatório pronto (nível 53), quando há vaca de férias no espaço e lugar no curral: o disco desce no pouso do observatório, a vaca desce no raio de óculos escuros e anteninha, o Ed recebe, a vaca e o ETzinho falam (`vaca`, `et`) e o disco vai embora. A vaca entra no curral. Câmera ao sul (`VOLTA.az`), com a vaca e o Ed lado a lado na beira do pouso. Na reprise, uma vaca de mentira faz o papel e nada muda no save |
 | Inauguração do resort | quando o Maurinho termina o Resort das Aposentadas (nível 40), de dia: a família na frente do arco, as aposentadas chegam pela ponte com as malinhas, o Ed corta a fita e elas entram. Na reprise as hóspedes somem durante a cena e voltam no fim |
 
 ## Música
@@ -68,6 +69,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - A música baixa com a caixa de fala aberta, some aos poucos ao terminar ou pular e respeita o botão de som dos Ajustes.
 - Sons que se repetem sozinhos ficam baixinhos e sem chiado: o chuá do irrigador é um `Som.sopro` (ruído que entra e sai devagar, só graves e médios), no máximo um a cada 3 s somando todos os irrigadores, e só do que aparece na tela (`IRRIG_SOM`, `volumeNaTela`). O motor do avião do Milton baixa para um quarto fora da tela (`MOTOR_SOM`); o do jatinho é um sopro grave com assobio de triângulo e seno, sem onda serrote. Som novo que toca sem o jogador pedir segue a mesma regra.
 - Milton a jato: `TEMAS.jato`, a fanfarra do Milton (`TEMAS.milton`) um tom acima e mais rápida, com baixo pulsando.
+- De volta das férias: `TEMAS.volta`, canção de ninar espacial em fá lídio (o si natural dá o ar de sonho), melodia no seno, arpejo em colcheias e baixo, 92 bpm, `ganho` 1.
 - Inauguração do resort: `TEMAS.resort`, bossa nova de beira de piscina em dó (violão em contratempo no seno, baixo gingado no triângulo e chocalho), 112 bpm, `ganho` 0,95.
 
 ## Falas que se repetem
@@ -226,6 +228,15 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - Desenho em `vHangarNovo`: telhado em arco, portão com moldura laranja e a torre de controle ao lado, com o letreiro (`vestir`). Pronto, a pista ganha asfalto (`corChao`, ladrilho `pista`).
 - Pernoite (`PERNOITE`): com o hangar pronto, quando a visita do jatinho acaba de tarde ou de noite, em `PERNOITE.chance` das vezes ele não decola (`pernoitarAgora`, `fimDaVisita`): `voo.estado` vira `pernoite` e `S.pernoite` fica no save, o Milton avisa (`FALAS_MILTON_PERNOITE`), anda até a porta do hangar e some. O jato fica parado na pista. De manhã (`cafeDoMilton`), o cafezinho é com o Milton de convidado (`FALAS_CAFE_PERNOITE`, sem o Dani) e, no fim dele, o jato decola (`partirDoPernoite`). Sem cafezinho, ele decola sozinho no fim do dia (`PERNOITE_SAI`). `aviaoLivre()` vale para "fora" e "pernoite", para o jato parado não segurar a hora de nanar, a aposentadoria e a inauguração.
 - Para testar: `__fazenda.pernoite` (`PERNOITE`, `partir`, `cafe`) e `__fazenda.hangarVelho`.
+
+### Observatório
+
+- Nível 53, R$ 1,6 milhão, 30 minutos, 12000 XP, na ponta de baixo do terreno novo, ao lado da estrada e de frente para a mata (onde a noite é mais escura): x 24 a 28, z 44 a 47, porta em 27, 48 (`PREDIOS.observatorio`, `OBSERV`). A proposta dizia "ponta sul da mata", mas abrir clareira na floresta mexeria nas instâncias das árvores; o lugar ficou do outro lado da estrada.
+- Desenho em `vObservatorio` (5 × 4 ladrilhos em cubinhos de 1/8): a torre redonda branca com a faixa azul estrelada, a porta de arco, as janelinhas, o banco, a placa (o letreiro vem em `vestir`), um poste, a luneta no tripé na frente e o pouso do disco atrás, à direita (o círculo com o ETzinho pintado e oito luzinhas). A cúpula (`vCupula`: prateada em gomos, com a fenda e a luneta grande) é uma malha à parte que `vestirObservatorio` põe em cima da torre quando a obra fica pronta (durante a obra a torre sobe sem ela); de noite ela gira devagar (`atualizarObservatorio`, `OBSERV.giro`) e a fenda, as janelas e as lâmpadas acendem. No visualizador, `vObservatorioCompleto` mostra o conjunto.
+- Olhar as estrelas: o menu do observatório tem "Olhar as estrelas", só de noite. É a tarefa `estrelas` (alvo `{ k: 'luneta' }`): o Ed vai até o ladrilho da frente da luneta (`lugarDaLuneta`), olha pela ocular (`lunetaMundo`), passam uma ou duas estrelas cadentes (`estrelaCadente`, que risca o alto da tela com faíscas) e ele comenta (`FALAS_ESTRELAS`). Dá `OBSERV.xp` uma vez por noite (`S.estrelasNoite` guarda o dia).
+- Vacas de férias no espaço: cada abdução de verdade soma uma em `S.vacasEspaco` (saves de antes contam uma, se já houve abdução: `vacasNoEspaco`). Com o observatório pronto, de noite, com vaca no espaço e lugar no curral (`podeDevolverVaca`), o disco que passa sorteia devolver em vez de abduzir (`P.querDevolver`, `VOLTA.chance`; a primeira vem na primeira noite, com o disco em no máximo 20 s). A cena é "De volta das férias" (`CENAS.volta`).
+- A vaca que volta fica com a lembrança: óculos escuros e a tiara de anteninhas (`vVaca(true)`, `d.espaco`).
+- Para testar: `__fazenda.observatorio` (`OBSERV`, `VOLTA`, `estrela`, `volta`, `podeDevolver`, `vacas`, `luneta`, `pouso`, `vis`).
 
 ## Fábricas novas
 
