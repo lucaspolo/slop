@@ -246,6 +246,9 @@ button{font:inherit;color:inherit}
 .postal-texto .selo{position:absolute;top:0;right:0;width:46px;height:54px;background:radial-gradient(circle at 50% 42%,#f6c935 0 9px,transparent 10px),linear-gradient(#7cc6ee 0 60%,#f2d58a 60%);border:4px dotted #fffdf4;outline:2px solid #e0408a;border-radius:3px}
 .postal-texto .carimbo{position:absolute;top:10px;right:54px;padding:6px 8px;border:3px double #9a7a9e;border-radius:50%;color:#9a7a9e;font-weight:800;font-size:11px;letter-spacing:1px;transform:rotate(-14deg);opacity:.8}
 .postal-botoes{display:flex;justify-content:flex-end}
+.luma-botoes{flex-wrap:wrap;gap:6px}
+.luma-presos{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.luma-presos small{display:block;line-height:1.3}
 @media (max-width:520px){.postal{flex-direction:column}.postal canvas{width:100%}.postal-texto{border-left:0;border-top:2px dashed #d9c9a4;padding:58px 0 0}}
 /* cena do Pelúcio: faixas de cinema e caixa de diálogo */
 .cine{position:absolute;inset:0;z-index:25;pointer-events:none}
@@ -1438,6 +1441,18 @@ function vGalinhaAposentada(){
   v.box(-8, 3, 0, -8, 4, 1, 0xfdf3e3); v.set(-8, 4, 0, 0x4a8fd6);
   return v;
 }
+// o osso que a Luma acha cavando (de lado, para ir atravessado na boca dela) e o biscoito do cafezinho
+function vOsso(){
+  const v = new Vox(), c = (x, y, z) => hash(x, y, z) < 0.5 ? 0xf5ecd6 : 0xe8dcc0;
+  v.box(-5, 0, -1, 5, 1, 0, c);
+  for (const x of [-6, 6]) for (const z of [-2, 1]) v.ell(x, 0.5, z, 1.3, 1.2, 1.3, c);
+  return v;
+}
+function vBiscoito(){
+  const v = new Vox();
+  for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++){ const d = x * x + z * z; if (d > 10) continue; v.box(x, 0, z, x, 1, z, hash(x, 1, z) < 0.16 ? 0x6b3b22 : d > 6 ? 0xc98a44 : 0xd9a25a); }
+  return v;
+}
 // o cartão-postal que a galinha aposentada manda da praia: deitado no chão, frente para cima, com o desenho (mar, areia e
 // sol) num lado e as linhas da mensagem e o selo no outro
 function vCartaoPostal(){
@@ -2212,7 +2227,7 @@ function vLumaPerna(frente){
   v.ell(0, -12, 0.8, 2.5, 1.6, 3, CL.creme2, (x, y) => y >= -13);
   return v;
 }
-function vLumaCabeca(){
+function vLumaCabeca(dormindo){
   const v = new Vox();
   const frenteZ = (x, y) => { for (let z = 60; z >= -60; z--) if (v.has(x, y, z)) return z; return null; };
   // cabeça de maçã, grande para o corpo, com as bochechas fofas abertas para os lados
@@ -2225,14 +2240,15 @@ function vLumaCabeca(){
   v.set(0, 9, frenteZ(0, 9), CL.narizBrilho);
   // boquinha
   for (const [x, y] of [[0, 5], [-1, 4], [1, 4]]) v.frente(x, y, CL.boca);
-  // olhos grandes e redondos, saltados, com brilho
+  // olhos grandes e redondos, saltados, com brilho; dormindo, as pálpebras de pelo com um risquinho curvo embaixo
   for (const lado of [-1, 1]){
     const ex = lado * 5, ey = 12;
     for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++){
       if (dx * dx / 3.4 + dy * dy / 4.6 > 1) continue;
-      const z = frenteZ(ex + dx, ey + dy); v.set(ex + dx, ey + dy, z + 1, CL.olho);
+      const risco = dy === (Math.abs(dx) === 2 ? 0 : -1);
+      const z = frenteZ(ex + dx, ey + dy); v.set(ex + dx, ey + dy, z + 1, !dormindo || risco ? CL.olho : CL.pelo);
     }
-    v.set(ex + 1, ey + 1, frenteZ(ex + 1, ey + 1), 0xffffff);
+    if (!dormindo) v.set(ex + 1, ey + 1, frenteZ(ex + 1, ey + 1), 0xffffff);
   }
   // coraçãozinho rosa na testa
   for (const [x, y] of [[-2, 17], [-1, 17], [1, 17], [2, 17], [-2, 16], [-1, 16], [0, 16], [1, 16], [2, 16], [-1, 15], [0, 15], [1, 15], [0, 14]]){ const z = frenteZ(x, y); v.set(x, y, z + 1, CL.coracao); }
@@ -2285,10 +2301,12 @@ function montarLuma(comBola){
   };
   const tronco = parte(vLumaTronco(), Q); tronco.position.set(-Q[0] * s, -Q[1] * s, -Q[2] * s);
   const cabeca = parte(vLumaCabeca(), LUMA.pescoco), rabo = parte(vLumaRabo(), LUMA.rabo);
+  // a cabeça de olhos fechados (para dormir), no mesmo lugar da outra
+  const olhos = cabeca.children[0], sono = malha(vLumaCabeca(true).build(s, op)); sono.visible = false; cabeca.add(sono);
   const pernas = LUMA.pernas.map(([x, z], i) => parte(vLumaPerna(i < 2), [x, Q[1], z]));
   let bola = null;
   if (comBola){ bola = malhaBolinha(); bola.position.set(...BOCA_LUMA); cabeca.add(bola); }
-  return { g, corpo, cabeca, rabo, pernas, bola };
+  return { g, corpo, cabeca, rabo, pernas, bola, olhos, sono };
 }
 // poses do catálogo: parada, andando (trote em diagonal), sentada com a cabeça de lado e brincando com a bolinha na boca
 function animarLuma(L, modo, t){
@@ -2297,6 +2315,7 @@ function animarLuma(L, modo, t){
   corpo.rotation.set(sentada ? -0.52 : 0, 0, 0);
   for (const p of pernas) p.rotation.set(0, 0, 0);
   cabeca.rotation.set(sentada ? 0.42 : 0, 0, 0); rabo.rotation.set(0, 0, 0); L.g.position.y = 0;
+  if (L.sono){ L.sono.visible = modo === 'Deitada'; L.olhos.visible = !L.sono.visible; }
   if (modo === 'Andando'){
     const f = t * 10;
     pernas.forEach((p, i) => { p.rotation.x = Math.sin(f + (i === 0 || i === 3 ? 0 : Math.PI)) * 0.55; });
@@ -2312,6 +2331,27 @@ function animarLuma(L, modo, t){
     L.g.position.y = Math.max(0, Math.sin(t * 6)) * 0.03;
     rabo.rotation.z = Math.sin(t * 16) * 0.4;
     cabeca.rotation.y = Math.sin(t * 3) * 0.3;
+  } else if (modo === 'Deitada'){
+    // deitada de barriga, as patas da frente esticadas e as de trás dobradas, o queixo nas patas e o rabo enrolado
+    corpo.position.y -= 8 * s - Math.sin(t * 1.6) * 0.002;
+    pernas[0].rotation.x = pernas[1].rotation.x = -1.45;
+    pernas[2].rotation.x = pernas[3].rotation.x = 1.45;
+    cabeca.rotation.set(0.32, 0, 0.12); rabo.rotation.z = 0.7;
+  } else if (modo === 'Cavando'){
+    // focinho para baixo, as patas da frente cavando rapidinho
+    corpo.rotation.x = 0.22; cabeca.rotation.x = 0.5;
+    pernas[0].rotation.x = Math.sin(t * 24) * 0.9 - 0.4; pernas[1].rotation.x = Math.sin(t * 24 + Math.PI) * 0.9 - 0.4;
+    rabo.rotation.z = Math.sin(t * 18) * 0.45;
+  } else if (modo === 'Sacudindo'){
+    corpo.rotation.z = Math.sin(t * 42) * 0.32; cabeca.rotation.z = Math.sin(t * 42 + 0.8) * 0.4; rabo.rotation.z = Math.sin(t * 42) * 0.6;
+  } else if (modo === 'Tonta'){
+    corpo.rotation.z = Math.sin(t * 5) * 0.14; cabeca.rotation.set(0, Math.sin(t * 3) * 0.4, Math.sin(t * 5 + 1) * 0.35);
+    rabo.rotation.z = Math.sin(t * 2) * 0.2;
+  } else if (modo === 'Espreguiçando'){
+    // patas da frente esticadas, o traseiro para cima e a cabeça para cima, bocejando
+    corpo.rotation.x = 0.3; corpo.position.y -= 2 * s;
+    pernas[0].rotation.x = pernas[1].rotation.x = -1.1;
+    cabeca.rotation.x = -0.35; rabo.rotation.z = Math.sin(t * 3) * 0.3;
   } else {
     rabo.rotation.z = Math.sin(t * 5) * 0.25;
     cabeca.rotation.y = Math.sin(t * 0.45) * 0.25;
@@ -2381,6 +2421,38 @@ function lugaresLuma(){
   return { tiles: l, fonte: null };
 }
 function pontoLuma(){ const [x, z] = sorteia(luma.lugares.tiles); return [x + rnd(0.25, 0.75), z + rnd(0.25, 0.75)]; }
+// um ponto de brincar longe dos porquinhos: nem encostada neles, nem escondida atrás deles na tela (para cavar e dormir)
+function tampaLuma(p, x, z){
+  const r = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+  const a = new THREE.Vector3(p.pos.x, 0.5, p.pos.y).project(camera), b = new THREE.Vector3(p.pos.x + r.x * 0.55, 0.5, p.pos.y + r.z * 0.55).project(camera);
+  const cima = new THREE.Vector3(p.pos.x, 1.4, p.pos.y).project(camera), q = new THREE.Vector3(x, 0.2, z).project(camera), larg = Math.abs(b.x - a.x);
+  return Math.abs(q.x - a.x) < larg && q.y < cima.y && q.y > a.y - larg * 1.4 && q.z > a.z;
+}
+// e sem plantação, construção ou enfeite no ladrilho da frente dela na tela (as plantas e os balões de colheita tampariam)
+function frenteLivreLuma(x, z){
+  const v = new THREE.Vector3(x, 0, z).project(camera), y0 = v.y, x0 = v.x, tx = Math.floor(x), tz = Math.floor(z);
+  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++){
+    if (!dx && !dz) continue;
+    const ax = tx + dx, az = tz + dz;
+    if (chaoLuma(ax, az) && !(S.enfeites || []).some(e => e.x === ax && e.z === az)) continue;
+    v.set(ax + 0.5, 0, az + 0.5).project(camera);
+    if (v.y < y0 && Math.abs(v.x - x0) < Math.abs(v.y - y0) * 1.6) return false;
+  }
+  return true;
+}
+function pontoLumaLivre(){
+  const gente = [ed, irmaoHud, irmaoDani].filter(p => p && p.g.visible);
+  let melhor = null, nota = -Infinity;
+  for (let i = 0; i < 24; i++){
+    const q = pontoLuma();
+    let n = 3;
+    for (const p of gente){ const d = Math.hypot(p.pos.x - q[0], p.pos.y - q[1]); n = Math.min(n, tampaLuma(p, q[0], q[1]) ? d - 3 : d); }
+    if (!frenteLivreLuma(q[0], q[1])) n -= 2;
+    if (n >= 1.5) return q;
+    if (n > nota){ nota = n; melhor = q; }
+  }
+  return melhor;
+}
 // anda até (x, z) pela rota dos ladrilhos, com o último trecho direto
 function lumaIr(x, z, vel){
   const L = luma, sx = Math.floor(L.pos.x), sz = Math.floor(L.pos.y), gx = Math.floor(x), gz = Math.floor(z);
@@ -2411,6 +2483,8 @@ function ladoDoGalo(G){
 // atrás do Ed, de frente para o rabicó: a boca dela alcança uns 0,35 à frente do corpo, e o rabicó fica uns 0,28 atrás do Ed
 function atrasDoEd(){ const x = ed.pos.x - Math.sin(ed.ang) * 0.62, z = ed.pos.y - Math.cos(ed.ang) * 0.62; return andavel(Math.floor(x), Math.floor(z)) ? [x, z] : null; }
 function lumaSair(){
+  const aventura = escolherSaidaLuma();
+  if (aventura && lumaSaiPara(aventura)) return;
   const L = luma, lug = lugaresLuma();
   if (!lug.tiles.length){ L.prox = rnd(...LUMA_JOGO.intervalo); return; }
   Object.assign(L, { lugares: lug, estado: 'fora', acao: 'saindo', ta: 0, fora: 0, limite: rnd(...LUMA_JOGO.fora), mordeu: false, ang: 0, angAlvo: 0, pontos: [[PORTINHA.x, PORTINHA.fora]], vel: 1.3 });
@@ -2422,7 +2496,12 @@ function lumaSair(){
 // as cenas usam a frente da casa: a Luma some na hora e volta mais tarde
 function lumaRecolher(){
   const L = luma;
-  Object.assign(L, { estado: 'dentro', acao: '', pontos: [], prox: rnd(60, 180), galo: null });
+  if (L.leva) devolverCarteira(L, true);
+  // o que ela levava não se perde: o mato vai para a composteira e o produto do canteiro para o celeiro
+  if (L.acao === 'mato' && L.passo === 3) somarRestos(1);
+  if (L.prod){ S.celeiro[L.prod] = (S.celeiro[L.prod] || 0) + 1; L.prod = null; salvar(); }
+  lumaBoca(null); limparZLuma(L);
+  Object.assign(L, { estado: 'dentro', acao: '', pontos: [], prox: rnd(60, 180), galo: null, aventura: null, passo: 0, salto: 0, voo: 0, cena: false });
   L.g.visible = false; if (!L.bola.boca) bolaNaBoca(); L.bola.m.visible = true;
 }
 // o galo fugiu: se a Luma está em casa, ela sai pela portinha e corre latindo atrás dele (sem a bolinha)
@@ -2473,6 +2552,7 @@ function atualizarLuma(dt, t){
   if (!luma) return;
   const L = luma;
   atualizarPortinha(dt);
+  gatilhosLuma(dt); atualizarZLuma(L, dt);
   if (L.estado === 'dentro'){
     if (!cine && S.viuCineInicio){ L.prox -= dt; if (L.prox <= 0) lumaSair(); }
     if (L.estado === 'dentro') return;
@@ -2513,7 +2593,7 @@ function atualizarLuma(dt, t){
       if (L.ta > 1.3){ falar(L, 'Au! Au!', 1.3); L.acao = 'buscar'; L.ta = 0; if (!lumaAteBola()) lumaVoltar(); }
       break;
     case 'voltar': if (chegou){ L.acao = 'entrando'; L.pontos = [[PORTINHA.x, PORTINHA.dentro]]; L.vel = 1.3; } break;
-    case 'entrando': if (chegou){ L.g.visible = false; L.estado = 'dentro'; L.acao = ''; L.prox = rnd(...LUMA_JOGO.intervalo); L.bola.m.visible = true; } break;
+    case 'entrando': if (chegou){ L.g.visible = false; L.estado = 'dentro'; L.acao = ''; L.prox = rnd(...LUMA_JOGO.intervalo); L.bola.m.visible = true; lumaBoca(null); limparZLuma(L); L.aventura = null; } break;
     // atrás do galo fujão: para ao lado dele na tela e late; quando o Ed pega o galo (ou ele volta sozinho), ela vai para casa
     case 'galo': {
       const G = L.galo;
@@ -2529,20 +2609,778 @@ function atualizarLuma(dt, t){
       }
       break;
     }
+    // as aventuras (AVENTURAS)
+    default: if (AVENTURAS[L.acao]) AVENTURAS[L.acao](L, dt, t, chegou);
   }
   atualizarBola(dt);
   // pose: trota quando anda, festinha com a bolinha, cabeça baixa para pegar e mordiscar
   L.ang = anguloPerto(L.ang, L.angAlvo, Math.min(1, dt * 10));
   const a = L.acao, anda = L.pontos.length > 0;
-  animarLuma(L.L, anda ? 'Andando' : a === 'festa' ? 'Com a bolinha' : 'Parada', t * (anda && L.vel > 2.5 ? 1.4 : 1));
+  const pa = anda ? null : poseAventura(L);
+  animarLuma(L.L, anda ? 'Andando' : pa || (a === 'festa' ? 'Com a bolinha' : 'Parada'), t * (anda && L.vel > 2.5 ? 1.4 : 1));
   const C = L.L.cabeca, R = L.L.rabo;
   if (a === 'olhar'){ C.rotation.set(0.1, 0, 0.18); R.rotation.z = Math.sin(t * 16) * 0.4; }
   else if (a === 'pegar' || a === 'pegarVolta') C.rotation.set(0.55, 0, 0);
   else if (a === 'mordendo'){ C.rotation.set(0.5 + Math.sin(t * 28) * 0.12, 0, 0); R.rotation.z = Math.sin(t * 18) * 0.45; }
+  // latindo para o céu (disco) ou para o raio; puxando o mato; latindo para a vaca
+  else if ((a === 'disco' || (a === 'raio' && L.passo === 2)) && !anda){ C.rotation.set(-0.5, 0, Math.sin(t * 3) * 0.15); R.rotation.z = Math.sin(t * 14) * 0.4; }
+  else if (a === 'mato' && L.passo === 2){ C.rotation.set(0.5, Math.sin(t * 22) * 0.35, 0); R.rotation.z = Math.sin(t * 16) * 0.4; }
+  else if (a === 'vaca' && L.passo === 2){ C.rotation.set(-0.12 + Math.sin(t * 14) * 0.06, 0, 0); R.rotation.z = Math.sin(t * 16) * 0.45; }
   // degrau da porta: o chão da casa e o degrau ficam a 0,25; na frente dele ela desce para a grama
   const naPorta = Math.abs(L.pos.x - PORTINHA.x) < 0.6, z = L.pos.y;
-  L.g.position.set(L.pos.x, naPorta && z < 5 ? 0.25 : naPorta && z < 5.2 ? 0.25 * (5.2 - z) / 0.2 : 0, z);
+  let y = naPorta && z < 5 ? 0.25 : naPorta && z < 5.2 ? 0.25 * (5.2 - z) / 0.2 : 0;
+  // pulinho de festa e o voo dentro do redemoinho
+  if (L.salto > 0){ L.salto = Math.max(0, L.salto - dt); y += Math.sin((1 - L.salto / 0.45) * Math.PI) * 0.16; }
+  L.g.position.set(L.pos.x, y + (L.voo || 0), z);
   L.g.rotation.y = L.ang;
+}
+// ================= as aventuras da Luma: além de brincar com a bolinha, ela ajuda na fazenda, reage aos eventos e apronta.
+// Cada aventura é uma ação dela (L.acao), com os passos em L.passo, tratada em AVENTURAS. As que ajudam (carteira, cava e
+// acha, caçadora de mato) e a cenoura mexem no save; as outras são só de ver.
+//  - saídas: quando ela sai de casa, às vezes (LUMA_SITU.missao) é para uma aventura em vez da bolinha: cavar, caçar mato,
+//    pegar cenoura de um canteiro, latir para uma vaca, latir para os patos ou tirar uma soneca no sol (de manhã);
+//  - eventos: o envelope ou o cartão esperando na porta (carteira), o disco voador passando, o redemoinho do Saci, a chuva,
+//    o caminhão do Beto ou do Jaca chegando e a galinha aposentada indo embora;
+//  - cenas: ela corre atrás do raio na abdução e pede biscoito no cafezinho (L.cena).
+// Saindo de casa para uma aventura, ela deixa a bolinha lá dentro; brincando, larga a bolinha e busca na volta
+const LUMA_SITU = {
+  missao: 0.5, pesos: { cava: 3, mato: 3, cenoura: 2, vaca: 2, patos: 1.5, soneca: 3 },
+  carteira: 40, disco: 0.7, saci: 0.7, chuva: 0.75, visita: 0.5, raio: 0.6, cafe: 0.5,
+  manha: [0.03, 0.35], soneca: [30, 45], achado: { moeda: 0.5, osso: 0.3 },
+};
+const SAIDAS_LUMA = ['cava', 'mato', 'cenoura', 'vaca', 'patos', 'soneca'];
+// onde ela espera o Beto ou o Jaca: do lado de quem desce do caminhão, na tela, dentro da porteira
+const LUMA_VISITA = [X_PORTEIRA + 1.2, Z_CERCA - 1.25];
+// no cafezinho ela senta na frente da mesa, à esquerda, olhando para o Ed (sistema da mesa, como CAFE_ASSENTO)
+const CAFE_LUMA = [-0.5, 0.8];
+const FALAS_LUMA_CARTEIRA = ['Au! (entrega a correspondência)', 'Au au! (abana o rabinho com a carta na boca)', 'Au! (larga a carta no pé do Ed)', 'Auuu! (chegou correio!)', 'Au! Au! (senta e espera um carinho)', 'Au! (entrega e pula de alegria)', 'Au au au! (correio expresso!)', 'Au! (deixa a carta e dá uma voltinha)', 'Au! (entrega toda orgulhosa)', 'Au au! (trouxe rapidinho!)', 'Au! (entrega e lambe a mão do Ed)'];
+const FALAS_ED_CARTEIRA = ['Obrigado, Luma! Carteira mais fofa do mundo!', 'Olha quem trouxe o correio! Valeu, Luma!', 'Luma, você é demais! Nem precisei ir até a porta.', 'Que entrega rápida! Obrigado, Luma!', 'Carteira oficial da fazenda! Boa, Luma!', 'Aoooa! A Luma trouxe pra mim!', 'Valeu, Luma! Toma um carinho.', 'Luma, você merece um biscoito!', 'Entrega especial da Luma! Obrigado!', 'Hehe, obrigado, Luma! Tá até babadinho.', 'Oinc! Luma, a melhor carteira do mundo!'];
+const FALAS_LUMA_CAVA = ['Au! (cava, cava, cava)', 'Au au! (cava com as patinhas da frente)', 'Rrr... (fareja e cava)', 'Au! (terra pra todo lado)', 'Snif snif... au! (achou um cheirinho)', 'Au! (cava rapidinho)', 'Au au au! (cava toda animada)', 'Snif... (cava e espia o buraco)', 'Au! (abana o rabinho cavando)', 'Rrrau! (cava com vontade)', 'Au! (focinho cheio de terra)'];
+const FALAS_LUMA_ACHOU = ['Au! Au! (mostra o que achou)', 'Au au! (toda orgulhosa)', 'Auuu! (achei um tesouro!)', 'Au! (pula de alegria)', 'Au au au! (olha, olha!)', 'Au! (abana o rabinho com o achado)', 'Au! (dá uma voltinha de festa)', 'Au au! (tesouro da Luma!)', 'Auuu! (que sorte!)', 'Au! (mostra o achado pro céu)', 'Au! Au! (quem diria!)'];
+const FALAS_ED_ACHOU = ['Olha só o que a Luma achou!', 'Luma, sua caçadora de tesouros!', 'Aoooa! A Luma achou uma coisa!', 'Que faro, hein, Luma!', 'Luma, onde você achou isso?', 'Boa, Luma! Tesouro da fazenda!', 'Hehe, a Luma cavou e achou!', 'Luma, você é uma exploradora!', 'Oinc! Olha o achado da Luma!', 'Que sorte, Luma!', 'Luma, depois tapa o buraco, hein!'];
+const FALAS_LUMA_MATO = ['Grrr! (puxa o mato com os dentes)', 'Rrrr! (arranca o mato)', 'Au! (puxa, puxa, puxa)', 'Grrr... au! (saiu!)', 'Rrr! (sacode o mato)', 'Au au! (mato não!)', 'Grrr! (luta com o mato)', 'Rrrau! (arrancou!)', 'Au! (puxa com força)', 'Grrr! (fora, mato!)', 'Rrr... (puxa de ré)'];
+const FALAS_ED_MATO = ['Valeu, Luma! Um mato a menos!', 'Olha a Luma tirando o mato!', 'Boa, Luma! Leva pra composteira!', 'Luma jardineira! Obrigado!', 'Aoooa! A Luma capinou pra mim!', 'As Minhoquinhas vão adorar, Luma!', 'Que ajudante, hein, Luma!', 'Hehe, a Luma não gosta de mato!', 'Obrigado, Luma! Menos trabalho pra mim.', 'Oinc! Luma, você é demais!', 'Isso, Luma! Fora, mato!'];
+const FALAS_LUMA_ESCOLTA = ['Au! Au! (tchau, dona galinha!)', 'Auuu! (boa viagem!)', 'Au au! (abana o rabinho na porteira)', 'Au! (manda um beijo pela cerca)', 'Auuu... (vai deixar saudade)', 'Au! Au! (manda um cartão!)', 'Au! (senta e acena com a patinha)', 'Au au au! (aproveita a praia!)', 'Auuu! (volta pra visitar!)', 'Au! (fica olhando até sumir)', 'Au au! (tchau, tchau!)'];
+const FALAS_LUMA_DISCO = ['Au! Au! Au! (late para o céu)', 'Auuu! (o que é aquilo?!)', 'Au au! (vai embora, disco!)', 'Rrrr... au! (de olho no céu)', 'Au! Au! (pula tentando alcançar)', 'Au au au! (aqui não!)', 'Auuu! (uivo de alerta)', 'Au! (corre atrás da sombra)', 'Rrr... (rosna pro disco)', 'Au! Au! (desce aqui, disco!)', 'Au au! (protege a fazenda)'];
+const FALAS_LUMA_RAIO = ['Au! Au! (corre atrás do raio)', 'Auuu! (solta a vaquinha!)', 'Au au au! (devolve!)', 'Au! (pula na cerca)', 'Rrrr... au! au! (bravinha)', 'Auuu! (volta, mimosa!)', 'Au! Au! (corre de um lado pro outro)', 'Au au! (não leva!)', 'Auuuuu! (uivo de tristeza)', 'Au! (late pro raio)', 'Au au au! (socorro!)'];
+const FALAS_LUMA_SACI = ['Au! Au! (corre atrás do redemoinho)', 'Au au! (pega, pega!)', 'Auuu! (vento maluco!)', 'Au! (pula no redemoinho)', 'Au au au! (espera!)', 'Rrr... au! (de olho no vento)', 'Au! (corre com as orelhas voando)', 'Au au! (eu te pego!)', 'Auuu! (que ventania!)', 'Au! Au! (vem cá!)', 'Au! (late pro redemoinho)'];
+const FALAS_LUMA_TONTA = ['Au...? (tonta, rodando)', 'Auuu... (o mundo tá girando)', 'Au? Au? (onde tô?)', 'Au... (anda torto)', 'Uuu... (vendo estrelinhas)', 'Au...? (cadê o chão?)', 'Au au...? (tropeça)', 'Auuu... (senta pra passar)', 'Au... (cabeça rodando)', 'Au? (balança a cabeça)', 'Uuuu... (tontinha)'];
+const FALAS_LUMA_CHUVA = ['Au! (pula na poça)', 'Au au! (splash!)', 'Auuu! (chuva boa!)', 'Au! (pula de poça em poça)', 'Au au au! (tá chovendo!)', 'Au! (toda molhadinha)', 'Au! (pega pingo com a boca)', 'Au au! (patinha na água)', 'Auuu! (banho de chuva!)', 'Au! (pula com as quatro patas)', 'Au au! (mais poça!)'];
+const FALAS_ED_SACODE = ['Ei, Luma! Tô todo molhado!', 'Aoooa! Luma, se sacudiu em mim!', 'Luma! Logo do meu lado?', 'Ai, Luma! Agora eu também tomei banho!', 'Hehe, obrigado pelo banho, Luma!', 'Luma, sua sapeca! Que água!', 'Oinc! Molhou o macacão todo!', 'Luma! Vai se secar lá dentro!', 'Que chuveirinho, hein, Luma!', 'Luma, eu já tava seco!', 'Ai ai, Luma! Respingou até no rabicó!'];
+const FALAS_LUMA_VISITA = ['Au! Au! (abana o rabinho para o visitante)', 'Au au au! (chegou visita!)', 'Auuu! (que alegria!)', 'Au! (pula de festa)', 'Au au! (corre em volta)', 'Au! (pede carinho)', 'Au! Au! (oi, oi, oi!)', 'Auuu! (senta bonitinha)', 'Au au! (dá uma voltinha)', 'Au! (lambe a mão)', 'Au au au! (festa na porteira!)'];
+const FALAS_JACA_LUMA = ['Oi, Luma! Cadê minha amiguinha?', 'Luma! Que festa é essa?', 'Oi, Luma! Trouxe um carinho pra você.', 'Luma, você cresceu? Não, continua pequenininha!', 'Olha quem veio me receber! Oi, Luma!', 'Luma, minha parceira! Tudo bem?', 'Calma, Luma, eu também tava com saudade!', 'Oi, Luma! Cuidando bem da fazenda?', 'Luma! Hoje eu não trouxe bolinha, desculpa!', 'Que recepção, Luma! Obrigado!', 'Oi, Lumazinha! Vem cá, vem!'];
+const FALAS_BETO_LUMA = ['Oi, Luma! Cuidando bem do maninho?', 'Luma! Que recepção!', 'Oi, Luma! Tá cada dia mais esperta.', 'Calma, Luma! Eu também tô feliz!', 'Luma, você que manda aqui, né?', 'Oi, Lumazinha! Cadê a bolinha?', 'Olha quem veio me receber! Oi, Luma!', 'Luma, guarda um lugar pra mim no sofá!', 'Oi, Luma! O maninho tá trabalhando muito?', 'Luma! Sempre a primeira na porteira.', 'Oi, Luma! Depois a gente brinca, tá?'];
+const FALAS_LUMA_CENOURA = ['Au! (sai correndo com {um} na boca)', 'Au au! (achou {um}!)', 'Hihi... au! (foge com {o})', 'Au! (pega {o} e corre)', 'Au au au! (não devolvo!)', 'Au! (corre em volta com {o})', 'Auuu! (tesouro do canteiro!)', 'Au! (balança {o} na boca)', 'Au au! (pega se puder!)', 'Au! (sai pulando com {o})', 'Au! Au! (é minha!)'];
+const FALAS_ED_CENOURA = ['Luma! Devolve {o}!', 'Ei, Luma! Isso é do canteiro!', 'Luma, volta aqui com {o}!', 'Aoooa! A Luma pegou {o}!', 'Luma! {O} não é brinquedo!', 'Para, Luma! Me dá {o}!', 'Luma, sua sapeca! Volta!', 'Ei! Pega a fujona! Hehe!', 'Luma! Isso é pra vender!', 'Volta aqui, Luma!', 'Luma, larga {o}!'];
+const FALAS_ED_PEGOU = ['Peguei! Essa vai pro celeiro.', 'Ufa! Peguei de volta, Luma.', 'Rá! Te peguei, Luma!', 'Pronto, Luma. Essa é do celeiro!', 'Peguei! Nada de cavar canteiro, viu?', 'Hehe, quase me escapou!', 'Luma, você corre muito!', 'Pronto! Vai pro celeiro.', 'Ufa! Que corrida, Luma!', 'Peguei! Agora vai brincar com a bolinha.', 'Rá! Essa volta comigo!'];
+const FALAS_LUMA_DEVOLVE = ['Au... (abaixa as orelhas)', 'Auuu... (devolve)', 'Au? (faz carinha de inocente)', 'Au... (larga e senta)', 'Au au... (desculpa)', 'Au! (lambe a mão do Ed)', 'Auuu... (cara de arrependida)', 'Au? (quem, eu?)', 'Au... (abana o rabinho baixinho)', 'Au au! (de novo!)', 'Au... (orelhinhas pra trás)'];
+const FALAS_LUMA_PATOS = ['Au! Au! (late para os patos)', 'Au au au! (corre, pato!)', 'Auuu! (patos à vista!)', 'Au! (late na beira)', 'Au au! (volta aqui!)', 'Rrr... au! (de olho nos patos)', 'Au! Au! (quá? au!)', 'Au! (pula na beirinha)', 'Au au! (eu sou a chefe!)', 'Auuu! (que barulho!)', 'Au! (corre atrás dos patos)'];
+const FALAS_LUMA_BEIRA = ['Auuu... (não quer molhar a pata)', 'Au... (testa a água com a patinha)', 'Au? (fria!)', 'Auuu... (eles nadam, eu não)', 'Au... (senta na beirinha)', 'Au au... (volta, patos!)', 'Au? (cadê a ponte?)', 'Auuu... (só olhando)', 'Au... (recua um passinho)', 'Au! (água não!)', 'Auuu... (orelhas pra baixo)'];
+const FALAS_LUMA_VACA = ['Au! Au! (late para a vaca)', 'Au au au! (ei, vaca!)', 'Auuu! (que bicho grande!)', 'Au! (late na cerca)', 'Rrr... au! (bravinha)', 'Au au! (eu sou a chefe!)', 'Au! Au! (sai daí!)', 'Au! (pula na cerca)', 'Au au! (tô vendo você!)', 'Rrrr... (rosna baixinho)', 'Au! (late com coragem)'];
+const FALAS_LUMA_FOGE = ['Cain! Cain! (volta correndo pra casa)', 'Cain! (sai em disparada)', 'Auuu! (socorro!)', 'Cain cain! (pernas pra que te quero)', 'Au?! (corre de orelha pra trás)', 'Cain! (foge pela portinha)', 'Auuu! (era grande demais!)', 'Cain! Cain! (nunca mais!)', 'Au! (pulo de susto)', 'Cain! (rabo entre as pernas)', 'Auuu! (mamãe!)'];
+const FALAS_ED_SONECA = ['Shhh, a Luma tá dormindo.', 'Olha a Luma tirando um cochilo no sol.', 'Que soninho bom, hein, Luma?', 'Psiu! A Luma tá sonhando.', 'Dorme, Luma. Depois a gente brinca.', 'Hehe, até ronca baixinho!', 'A Luma escolheu o melhor lugar de sol.', 'Shhh... vou passar devagarinho.', 'Bom descanso, Luma!', 'Aoooa, que fofura dormindo!', 'A Luma tá recarregando as energias.'];
+const FALAS_LUMA_ACORDA = ['Auuu... (espreguiça)', 'Au... (boceja)', 'Auuuuu... (estica as patinhas)', 'Au? (acordou)', 'Au... (boceja e se sacode)', 'Auuu... (que soninho bom)', 'Au! (pronta pra brincar)', 'Au... (estica o corpo todo)', 'Uuuau... (bocejo de chihuahua)', 'Au? (quanto tempo dormi?)', 'Auuu... (mais cinco minutinhos)'];
+const FALAS_LUMA_BISCOITO = ['Au? (inclina a cabeça)', 'Au... (olhinhos pidões)', 'Au! (senta bonitinha)', 'Auuu... (cheirinho de lanche)', 'Au? (pra mim?)', 'Au... (dá a patinha)', 'Au au? (só um pedacinho?)', 'Au! (lambe o focinho)', 'Auuu... (nunca comi na vida)', 'Au? (olha o prato)', 'Au... (pidona)'];
+const FALAS_LUMA_NHAC = ['Nhac! (pega o biscoito no ar)', 'Nhac nhac! (que delícia)', 'Au! Nhac! (pegou!)', 'Nhac! (abana o rabinho)', 'Nhac! (lambe os beiços)', 'Au! (pega no pulo)', 'Nhac nhac nhac! (mastiga feliz)', 'Nhac! (obrigada!)', 'Au au! Nhac! (mais um?)', 'Nhac! (migalhinhas pra todo lado)', 'Nhac! (dá uma voltinha de alegria)'];
+// a Luma fala e late junto
+function lumaFala(lista){ const f = variar(lista); falar(luma, f, tempoDeLeitura(f)); Som.au(); return f; }
+// quem responde espera o balão do outro acabar (os dois ficam perto, e os balões se tampariam); depois, chama depois
+function depoisDaFala(quem, fn, folga = 200){
+  const f = FALAS.find(f => f.quem === quem), espera = f ? f.fim - performance.now() + folga : 0;
+  if (espera > 0) setTimeout(() => depoisDaFala(quem, fn, folga), espera); else fn();
+}
+function edFala(lista, fmt, depois){
+  depoisDaFala(luma, () => {
+    if (!ed.g.visible){ if (depois) depois(); return; }
+    let f = variar(lista); if (fmt) f = fmt(f); falar(ed, f, tempoDeLeitura(f)); Som.oinc();
+    if (depois) depoisDaFala(ed, depois);
+  });
+}
+const edPerto = (r = 6) => ed.g.visible && Math.hypot(ed.pos.x - luma.pos.x, ed.pos.y - luma.pos.y) < r;
+// o que ela leva na boca (no lugar da bolinha): a correspondência, o mato, o osso, o biscoito ou o que tirou do canteiro
+const ITENS_LUMA = { envelope: () => vEnvelope(), cartao: () => vCartaoPostal(), osso: () => vOsso(), biscoito: () => vBiscoito() };
+function lumaBoca(nome){
+  const L = luma;
+  if (L.item){ L.L.cabeca.remove(L.item); L.item = null; L.itemNome = null; }
+  if (!nome) return;
+  const f = ITENS_LUMA[nome] || (VI[nome] ? () => VI[nome]() : null);
+  if (!f) return;
+  const plano = nome === 'envelope' || nome === 'cartao';
+  const m = malha(geo('boca-' + nome, () => f().build(plano ? 1 / 64 : 1 / 60, { origin: [0.5, 0, 0.5] })));
+  m.position.set(BOCA_LUMA[0], BOCA_LUMA[1] - (plano ? 0.05 : 0.03), BOCA_LUMA[2] + 0.02);
+  if (plano) m.rotation.set(-1.1, 0, 0);
+  L.L.cabeca.add(m); L.item = m; L.itemNome = nome;
+}
+// brincando com a bolinha (livre para uma aventura)
+const BRINCANDO_LUMA = ['saindo', 'levar', 'olhar', 'buscar', 'pegar', 'festa'];
+const lumaLivre = () => !!luma && luma.estado === 'fora' && !luma.cena && BRINCANDO_LUMA.includes(luma.acao);
+// começa uma aventura: de dentro de casa, sai pela portinha sem a bolinha; brincando, larga a bolinha onde está
+function lumaSaiPara(acao, extra, cena){
+  const L = luma;
+  if (!L || !S.viuCineInicio || (cine && !cena)) return false;
+  if (L.estado === 'dentro'){
+    Object.assign(L, { lugares: lugaresLuma(), estado: 'fora', fora: 0, mordeu: true, ang: 0, angAlvo: 0, pontos: [[PORTINHA.x, PORTINHA.fora]], vel: 1.3, galo: null });
+    L.pos.set(PORTINHA.x, PORTINHA.dentro);
+    bolaNaBoca(); L.bola.m.visible = false; L.g.visible = true;
+  } else if (lumaLivre() || cena){
+    if (L.bola.boca && L.bola.m.visible) soltarBola(0);
+    L.pontos = [];
+  } else return false;
+  lumaBoca(null);
+  Object.assign(L, { acao, ta: 0, passo: 0, tRota: 0, tPo: 0, latido: 0, salto: 0, voo: 0, cena: !!cena, aventura: acao }, extra || {});
+  return true;
+}
+// fim da aventura: vai para casa (buscando a bolinha, se largou); com manter, leva o que tem na boca
+function lumaFim(manter){
+  const L = luma;
+  if (!manter) lumaBoca(null);
+  L.passo = 0; L.salto = 0; L.voo = 0; L.cena = false;
+  if (L.leva) devolverCarteira(L, true);
+  lumaVoltar();
+}
+// um lugar do lado de (px, pz) na tela, a r dele, no chão que serve (como o ladoDoGalo)
+function ladoDe(px, pz, r, serve = andavel){
+  const L = luma, a0 = cam.az + Math.PI / 2;
+  const s = Math.sin(a0) * (L.pos.x - px) + Math.cos(a0) * (L.pos.y - pz) >= 0 ? 0 : Math.PI;
+  for (const lado of [s, Math.PI - s]) for (const incl of [0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05]){
+    const a = a0 + lado + (lado ? -incl : incl), x = px + Math.sin(a) * r, z = pz + Math.cos(a) * r;
+    if (serve(Math.floor(x), Math.floor(z))) return [x, z];
+  }
+  return null;
+}
+// o chão de grama ou caminho mais perto de (x, z), a até raio ladrilhos
+function chaoPerto(x, z, raio){
+  let melhor = null, dm = Infinity;
+  for (let dx = -raio; dx <= raio; dx++) for (let dz = -raio; dz <= raio; dz++){
+    const tx = Math.floor(x) + dx, tz = Math.floor(z) + dz;
+    if (!chaoLuma(tx, tz)) continue;
+    const d = Math.hypot(tx + 0.5 - x, tz + 0.5 - z);
+    if (d < dm){ dm = d; melhor = [tx + 0.5, tz + 0.5]; }
+  }
+  return melhor;
+}
+// os canteiros: com mato (para a caçadora) e plantados (para a travessura da cenoura), sem ninguém indo até eles
+function canteirosLuma(filtro){
+  const out = [];
+  for (const k in S.campo){
+    const t = S.campo[k];
+    if (!t || t.e !== 'plantado' || !filtro(t)) continue;
+    const [x, z] = k.split(',').map(Number);
+    if (VIS[k] && VIS[k].res) continue;
+    const b = beiraDoCanteiro(x, z);
+    if (b) out.push({ x, z, t, b, d: Math.hypot(x - 5, z - 5) });
+  }
+  return out.sort((a, b) => a.d - b.d);
+}
+// onde ela fica para mexer num canteiro: no chão do lado dele (grama ou caminho), do lado da câmera, para a plantação
+// não tampar ela; devolve [x, z] na beirada
+function beiraDoCanteiro(x, z){
+  const v = new THREE.Vector3(x + 0.5, 0, z + 0.5).project(camera), yc = v.y;
+  let melhor = null, ym = yc;
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){
+    if (!chaoLuma(x + dx, z + dz)) continue;
+    const px = x + 0.5 + dx * 0.72, pz = z + 0.5 + dz * 0.72;
+    v.set(px, 0, pz).project(camera);
+    // só a beirada da frente (mais embaixo na tela que o meio do canteiro); a de trás fica escondida pela plantação
+    if (v.y < ym){ ym = v.y; melhor = [px, pz]; }
+  }
+  return melhor;
+}
+const matoParaLuma = () => S.composto ? canteirosLuma(t => t.p === 'mato')[0] || null : null;
+function canteiroParaLuma(){
+  const l = canteirosLuma(t => t.c && t.p !== 'mato' && t.p !== 'sede');
+  const c = l.find(q => q.t.c === 'cenoura') || l[0];
+  return c ? { x: c.x, z: c.z, b: c.b, prod: CULTURAS[c.t.c].produto || c.t.c } : null;
+}
+// uma vaca e um lugar na cerca do curral: a Luma do lado de fora, e a vaca vem até o ladrilho de pasto do outro lado
+function vacaParaLuma(){
+  const cands = [];
+  for (const a of ANI){
+    if (a.d.tipo !== 'vaca' || a.res || !a.pasto) continue;
+    for (const [tx, tz] of a.pasto) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){
+      const cx = tx + dx, cz = tz + dz;
+      if (tipo(cx, cz) !== 'cerca' || !chaoLuma(cx + dx, cz + dz)) continue;
+      cands.push({ a, x: cx + dx + 0.5 - dx * 0.2, z: cz + dz + 0.5 - dz * 0.2, vx: tx + 0.5 - dx * 0.1, vz: tz + 0.5 - dz * 0.1, d: Math.hypot(tx + 0.5 - a.pos.x, tz + 0.5 - a.pos.y) });
+    }
+  }
+  cands.sort((p, q) => p.d - q.d);
+  for (const c of cands.slice(0, 6)) if (rota(PORTINHA.x | 0, 5, Math.floor(c.x), Math.floor(c.z))) return c;
+  return null;
+}
+// a beira do lago mais perto da saída dos patos, onde a Luma consegue chegar
+let beiraCache = null;
+function beiraDoLago(){
+  if (beiraCache && performance.now() - beiraCache.t < 60000) return beiraCache.p;
+  const cands = [];
+  for (const zs in LAGO){
+    const z0 = +zs, [a, b] = LAGO[zs];
+    for (let x = a - 1; x <= b + 1; x++) for (let z = z0 - 1; z <= z0 + 1; z++){
+      if (!andavel(x, z) || tipo(x, z) === 'lago' || tipo(x, z) === 'ponte') continue;
+      const ag = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dz]) => tipo(x + dx, z + dz) === 'lago');
+      if (ag) cands.push({ x, z, ax: x + ag[0] + 0.5, az: z + ag[1] + 0.5, d: Math.hypot(x - RAMPA_PATOS[0], z - RAMPA_PATOS[1]) });
+    }
+  }
+  cands.sort((a, b) => a.d - b.d);
+  let p = null;
+  for (const c of cands.slice(0, 8)) if (rota(PORTINHA.x | 0, 5, c.x, c.z)){ p = [c.x + 0.5, c.z + 0.5, c.ax, c.az]; break; }
+  beiraCache = { t: performance.now(), p };
+  return p;
+}
+const temPatos = () => ANI.some(a => a.d.tipo === 'pato');
+// os patos que estão no chão correm para o lago
+function espantarPatos(){
+  for (const a of ANI){
+    if (a.d.tipo !== 'pato' || a.res || a.nado || naAgua(a.pos.x, a.pos.y)) continue;
+    a.nado = { fase: 'ida', pts: caminhoIdaPato() }; a.alvo = a.nado.pts.shift(); a.pulo = 0.4;
+  }
+  Som.qua();
+}
+// o que dá para fazer agora, em cada saída
+function saidasLuma(){
+  const r = {};
+  if (luma.lugares && luma.lugares.tiles.length) r.cava = 1;
+  if (matoParaLuma()) r.mato = 1;
+  if (canteiroParaLuma()) r.cenoura = 1;
+  if (vacaParaLuma()) r.vaca = 1;
+  if (periodo().id !== 'noite' && temPatos() && beiraDoLago()) r.patos = 1;
+  const p = S.relogio || 0;
+  if (p >= LUMA_SITU.manha[0] && p < LUMA_SITU.manha[1] && luma.lugares && luma.lugares.tiles.length) r.soneca = 1;
+  return r;
+}
+function escolherSaidaLuma(){
+  const L = luma;
+  L.lugares = lugaresLuma();
+  if (L.forcar && SAIDAS_LUMA.includes(L.forcar)){ const f = L.forcar; L.forcar = null; return f; }
+  if (Math.random() > LUMA_SITU.missao) return null;
+  const disp = saidasLuma(), ids = Object.keys(disp);
+  if (!ids.length) return null;
+  let soma = 0; for (const k of ids) soma += LUMA_SITU.pesos[k];
+  let r = Math.random() * soma;
+  for (const k of ids){ r -= LUMA_SITU.pesos[k]; if (r <= 0) return k; }
+  return ids[ids.length - 1];
+}
+// os eventos da fazenda que chamam a Luma (fora das cenas)
+function gatilhosLuma(dt){
+  const L = luma;
+  if (L.cartaoPendente && performance.now() > (L.cartaoEm || 0) && !algumaJanela() && !menuAberto && !cine){ const C = L.cartaoPendente; L.cartaoPendente = null; abrirCartao(C); }
+  if (cine || !S.viuCineInicio) return;
+  const livre = () => L.estado === 'dentro' || lumaLivre();
+  // carteira: o envelope ou o cartão está na porta há um tempo e ninguém foi buscar
+  const porta = S.aluguel && !reservado({ k: 'aluguel' }) ? 'aluguel' : S.cartao && !reservado({ k: 'cartao' }) ? 'cartao' : null;
+  L.portaEspera = porta && !L.leva ? (L.portaEspera || 0) + dt : 0;
+  if (porta && livre() && L.portaEspera > LUMA_SITU.carteira && ed.g.visible && lumaSaiPara('carteira', { item0: porta })) L.portaEspera = 0;
+  // o disco voador começou a passar
+  const P = discoJogo, disco = !!P && P.t >= 0;
+  if (disco && !L.discoVisto){ L.discoVisto = true; const f = L.forcar === 'disco'; if (f) L.forcar = null; if (livre() && (f || Math.random() < LUMA_SITU.disco)) lumaSaiPara('disco'); }
+  if (!disco) L.discoVisto = false;
+  // o redemoinho do Saci entrou na fazenda
+  if (rd && rd.estado === 'vagando' && !rd.caminho.length && !rd.lumaViu){ rd.lumaViu = true; const f = L.forcar === 'saci'; if (f) L.forcar = null; if (livre() && (f || Math.random() < LUMA_SITU.saci)) lumaSaiPara('saci'); }
+  // começou a chover (uma vez por chuva)
+  if (chovendo() && L.chuvaVista !== S.chuvaAte){ L.chuvaVista = S.chuvaAte; if (livre() && Math.random() < LUMA_SITU.chuva) lumaSaiPara('chuva'); }
+  // o caminhão do Beto ou do Jaca está chegando
+  if (caminhaoE.estado === 'chegando' && !caminhaoE.lumaViu){ caminhaoE.lumaViu = true; if (livre() && (visita === jaca || visita === beto) && Math.random() < LUMA_SITU.visita) lumaSaiPara('visita'); }
+  if (caminhaoE.estado === 'longe') caminhaoE.lumaViu = false;
+  // a galinha aposentada está indo embora pela estrada
+  if (aposentadaNaEstrada && L.escoltou !== aposentadaNaEstrada){ L.escoltou = aposentadaNaEstrada; if (livre()) lumaSaiPara('escolta'); }
+}
+// carteira: devolve à porta (a correspondência volta para lá se ela desiste)
+function devolverCarteira(L, semVoltar){
+  const k = L.leva; L.leva = null; lumaBoca(null);
+  if (k === 'aluguel') montarEnvelope(); else if (k) montarCartao();
+  if (!semVoltar) lumaFim();
+}
+function entregarCarteira(L){
+  const k = L.leva; L.leva = null; lumaBoca(null); L.pontos = []; L.passo = 3; L.ta = 0; L.salto = 0.45;
+  if (ed.estado === 'parado' && !tarefaAtual) virarNaCena(ed, L.pos.x, L.pos.y);
+  lumaFala(FALAS_LUMA_CARTEIRA);
+  if (k === 'aluguel'){ pegarAluguel(false); setTimeout(() => edFala(FALAS_ED_CARTEIRA), 1400); }
+  else {
+    const C = S.cartao; S.cartao = null; montarCartao(); salvar();
+    if (C) L.cartaoPendente = C, L.cartaoEm = Infinity;
+    setTimeout(() => edFala(FALAS_ED_CARTEIRA, null, () => { if (L.cartaoPendente === C) L.cartaoEm = performance.now(); }), 300);
+  }
+}
+// o achado da Luma: moedinha (dinheiro), osso (fica com ela) ou sementes
+function achadoLuma(L){
+  const r = Math.random(), A = LUMA_SITU.achado;
+  L.achado = r < A.moeda ? 'moeda' : r < A.moeda + A.osso ? 'osso' : 'semente';
+  if (L.achado === 'moeda'){
+    const v = Math.round(rnd(10, 25) + nivel() * 0.6);
+    S.dinheiro += v; hud(); chipPulsa('chipDinheiro'); Som.moeda();
+    flutuar(L.topo(), `+${reais(v)}`, '', 'moeda'); lumaBoca('moeda');
+  } else if (L.achado === 'semente'){
+    const opc = ORDEM_CULTURAS.filter(k => CULTURAS[k].nivel <= nivel()), k = sorteia(opc), q = 3;
+    S.bolsa[k] = (S.bolsa[k] || 0) + q; flutuar(L.topo(), '+' + q, '', k); lumaBoca('semente');
+  } else lumaBoca('osso');
+  L.salto = 0.45; lumaFala(FALAS_LUMA_ACHOU);
+  if (edPerto(7)) setTimeout(() => edFala(FALAS_ED_ACHOU), 1500);
+  salvar();
+}
+// o nome do que ela tirou do canteiro, com artigo
+function artigosProduto(p){
+  const nome = (PRODUTOS[p] && PRODUTOS[p].nome || p).toLowerCase(), fem = /a$/.test(nome) || ['alface', 'couve'].includes(nome);
+  return { o: (fem ? 'a ' : 'o ') + nome, O: (fem ? 'A ' : 'O ') + nome, um: (fem ? 'uma ' : 'um ') + nome };
+}
+const preencher = (f, a) => f.replace('{um}', a.um).replace('{o}', a.o).replace('{O}', a.O);
+function deixarCenoura(L, pos){
+  const p = L.prod; lumaBoca(null);
+  if (!p) return;
+  L.prod = null;
+  S.celeiro[p] = (S.celeiro[p] || 0) + 1; flutuar(pos, '+1', '', p); Som.pop(); salvar();
+}
+// os Zzz da soneca, pequenininhos
+function zLuma(L){
+  texturaZ();
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: texZ, transparent: true, depthWrite: false }));
+  sp.position.set(L.pos.x, 0.4, L.pos.y); sp.scale.setScalar(0.16); sp.renderOrder = 4; scene.add(sp);
+  (L.zs || (L.zs = [])).push({ s: sp, t: 0, x: L.pos.x, z: L.pos.y });
+}
+function atualizarZLuma(L, dt){
+  if (!L.zs) return;
+  for (let i = L.zs.length - 1; i >= 0; i--){
+    const z = L.zs[i]; z.t += dt;
+    z.s.position.set(z.x + z.t * 0.12, 0.4 + z.t * 0.3, z.z - z.t * 0.05);
+    z.s.scale.setScalar(0.16 + z.t * 0.05); z.s.material.opacity = Math.min(1, z.t * 4) * Math.max(0, 1 - z.t / 2.2);
+    if (z.t > 2.2){ scene.remove(z.s); z.s.material.dispose(); L.zs.splice(i, 1); }
+  }
+}
+function limparZLuma(L){ if (L.zs) for (const z of L.zs){ scene.remove(z.s); z.s.material.dispose(); } L.zs = []; }
+// respingos e terra
+const terraLuma = L => particula(L.pos.x - Math.sin(L.ang) * 0.14, 0.08, L.pos.y - Math.cos(L.ang) * 0.14, [0x8a5c3a, 0xa47448, 0x6e472c][(Math.random() * 3) | 0], 0.6);
+const aguaLuma = (x, z, n = 8) => { for (let i = 0; i < n; i++) particula(x + rnd(-0.18, 0.18), 0.1, z + rnd(-0.18, 0.18), [0x6fc3f5, 0xa8dcfa, 0xffffff][i % 3], 0.7); };
+// cada aventura: (L, dt, t, chegou). O passo 0 é sempre sair pela portinha (ou parar de brincar)
+const AVENTURAS = {
+  // leva o envelope do aluguel ou o cartão-postal até o Ed, onde ele estiver
+  carteira(L, dt, t, chegou){
+    const k = L.item0;
+    if (L.passo === 0){
+      if (!chegou) return;
+      const [x, z] = k === 'aluguel' ? ALUGUEL.porta : APOSENTA.cartao;
+      if (!lumaIr(x, z + 0.22, LUMA_JOGO.vel)) return lumaFim();
+      L.passo = 1; return;
+    }
+    if (L.passo === 1){
+      if (!chegou) return;
+      if (!(k === 'aluguel' ? S.aluguel : S.cartao) || reservado({ k })) return lumaFim();
+      L.leva = k; if (k === 'aluguel') montarEnvelope(); else montarCartao();
+      lumaBoca(k === 'aluguel' ? 'envelope' : 'cartao'); Som.pop();
+      L.passo = 2; L.ta = 0; L.tRota = 0; return;
+    }
+    if (L.passo === 2){
+      const d = Math.hypot(ed.pos.x - L.pos.x, ed.pos.y - L.pos.y);
+      if (d < 0.95 && ed.g.visible) return entregarCarteira(L);
+      if ((L.tRota -= dt) <= 0){
+        L.tRota = 0.6;
+        const p = ed.g.visible ? ladoDe(ed.pos.x, ed.pos.y, 0.7) : null;
+        if ((!p || !lumaIr(p[0], p[1], LUMA_JOGO.corre)) && L.ta > 8) return devolverCarteira(L);
+      }
+      if (L.ta > 45) devolverCarteira(L);
+      return;
+    }
+    if (L.passo === 3){ L.angAlvo = Math.atan2(ed.pos.x - L.pos.x, ed.pos.y - L.pos.y); if (L.ta > 1.8) lumaFim(); }
+  },
+  // cava num canto da grama e acha uma moedinha, um osso ou sementes
+  cava(L, dt, t, chegou){
+    if (L.passo === 0){ if (!chegou) return; const [x, z] = pontoLumaLivre(); if (!lumaIr(x, z, LUMA_JOGO.vel)) return lumaFim(); L.passo = 1; return; }
+    if (L.passo === 1){ if (!chegou) return; L.passo = 2; L.ta = 0; lumaFala(FALAS_LUMA_CAVA); return; }
+    if (L.passo === 2){
+      if ((L.tPo -= dt) <= 0){ L.tPo = 0.1; terraLuma(L); }
+      if (L.ta > 2.4){ achadoLuma(L); L.passo = 3; L.ta = 0; }
+      return;
+    }
+    if (L.passo === 3 && L.ta > 2.2){ const osso = L.achado === 'osso'; if (!osso) lumaBoca(null); lumaFim(osso); }
+  },
+  // arranca o mato de um canteiro e leva para a composteira
+  mato(L, dt, t, chegou){
+    if (L.passo === 0){
+      if (!chegou) return;
+      const m = matoParaLuma(); if (!m) return lumaFim();
+      L.alvoM = m; if (!lumaIr(m.b[0], m.b[1], LUMA_JOGO.vel)) return lumaFim();
+      L.passo = 1; return;
+    }
+    if (L.passo === 1){
+      if (!chegou) return;
+      const m = L.alvoM, tt = campo(m.x, m.z);
+      if (!tt || tt.p !== 'mato' || (VIS[chave(m.x, m.z)] && VIS[chave(m.x, m.z)].res)) return lumaFim();
+      L.angAlvo = Math.atan2(m.x + 0.5 - L.pos.x, m.z + 0.5 - L.pos.y);
+      L.passo = 2; L.ta = 0; lumaFala(FALAS_LUMA_MATO); return;
+    }
+    if (L.passo === 2){
+      if ((L.tPo -= dt) <= 0){ L.tPo = 0.14; particula(L.alvoM.x + 0.5 + rnd(-0.12, 0.12), 0.14, L.alvoM.z + 0.5 + rnd(-0.12, 0.12), [0x3f7a2a, 0x5a9e3c, 0x8a5c3a][(Math.random() * 3) | 0], 0.5); }
+      if (L.ta < 1.5) return;
+      const m = L.alvoM, tt = campo(m.x, m.z);
+      if (tt && tt.p === 'mato'){ tt.p = null; tt.ev++; if (avancar(tt, 0, irrigado(m.x, m.z))) irrigadorJato(loteDe(m.x, m.z)); atualizarCampo(m.x, m.z); salvar(); }
+      lumaBoca('mato');
+      if (edPerto(8)) setTimeout(() => edFala(FALAS_ED_MATO), 600);
+      const [px, pz] = COMPOSTEIRA.porta;
+      if (!lumaIr(px + 0.5, pz + 0.5, LUMA_JOGO.vel)){ lumaBoca(null); return lumaFim(); }
+      L.passo = 3; return;
+    }
+    if (L.passo === 3){
+      if (!chegou) return;
+      const C = COMPOSTEIRA; L.angAlvo = Math.atan2((C.x0 + C.x1 + 1) / 2 - L.pos.x, (C.z0 + C.z1 + 1) / 2 - L.pos.y);
+      lumaBoca(null); somarRestos(1); Som.pop(); falar(L, 'Au!', 1.2);
+      for (let i = 0; i < 8; i++) particula(L.pos.x + rnd(-0.15, 0.15), 0.2, L.pos.y + rnd(-0.15, 0.15), [0x3f7a2a, 0x5a9e3c][i % 2], 0.6);
+      L.passo = 4; L.ta = 0; salvar(); return;
+    }
+    if (L.passo === 4 && L.ta > 1) lumaFim();
+  },
+  // vai junto com a galinha aposentada até a porteira e late de despedida
+  escolta(L, dt, t, chegou){
+    const E = aposentadaNaEstrada;
+    if (L.passo === 0){ if (!chegou) return; L.passo = 1; L.tRota = 0; return; }
+    if (L.passo === 1){
+      if (!E) return lumaFim();
+      const g = E.g.position;
+      if (g.z > Z_CERCA - 0.35){ if (!lumaIr(X_PORTEIRA + 0.5, Z_CERCA - 0.8, LUMA_JOGO.vel)) return lumaFim(); L.passo = 2; L.ta = 0; return; }
+      if ((L.tRota -= dt) <= 0){
+        L.tRota = 0.35;
+        // do lado dela, um pouco atrás; se o lado não dá (cerca), logo atrás
+        const a = E.ang, bx = g.x - Math.sin(a) * 0.3, bz = g.z - Math.cos(a) * 0.3;
+        let p = null;
+        for (const s of [1, -1]){ const x = bx + Math.cos(a) * 0.5 * s, z = bz - Math.sin(a) * 0.5 * s; if (andavel(Math.floor(x), Math.floor(z))){ p = [x, z]; break; } }
+        if (!p) p = [g.x - Math.sin(a) * 0.65, g.z - Math.cos(a) * 0.65];
+        const d = Math.hypot(p[0] - L.pos.x, p[1] - L.pos.y);
+        if (d > 0.12) lumaIr(p[0], p[1], d > 1.2 ? LUMA_JOGO.corre : APOSENTA.vel * 1.15);
+      }
+      return;
+    }
+    if (L.passo === 2){
+      if (!chegou) return;
+      L.passo = 3; L.ta = 0; lumaFala(FALAS_LUMA_ESCOLTA); return;
+    }
+    if (L.passo === 3){
+      if (E) L.angAlvo = Math.atan2(E.g.position.x - L.pos.x, E.g.position.z - L.pos.y);
+      if (L.ta > 4.5) lumaFim();
+    }
+  },
+  // corre embaixo do disco voador latindo para o céu
+  disco(L, dt, t, chegou){
+    const P = discoJogo;
+    if (L.passo === 0){ if (!chegou) return; L.passo = 1; L.latido = 0.4; return; }
+    if (!P || P.t < 0){ if (L.passo === 1){ L.passo = 2; L.ta = 0; L.pontos = []; } if (L.ta > 1.4) lumaFim(); return; }
+    if ((L.tRota -= dt) <= 0){
+      L.tRota = 0.6;
+      const p = chaoPerto(clamp(P.g.position.x, 1, W - 2), clamp(P.g.position.z, 3, Z_CERCA - 1), 4);
+      if (p && Math.hypot(p[0] - L.pos.x, p[1] - L.pos.y) > 0.8) lumaIr(p[0], p[1], LUMA_JOGO.corre);
+    }
+    if ((L.latido -= dt) <= 0){ L.latido = rnd(2.4, 3.6); lumaFala(FALAS_LUMA_DISCO); }
+    if (!L.pontos.length) L.angAlvo = Math.atan2(P.g.position.x - L.pos.x, P.g.position.z - L.pos.y);
+  },
+  // na cena da abdução: corre de um lado para o outro na cerca, latindo para o raio
+  raio(L, dt, t, chegou){
+    const A = abducao;
+    if (!A) return;
+    if (L.passo === 0){ if (!chegou) return; L.passo = 1; L.i = 0; lumaIr(...L.raioPts[0], LUMA_JOGO.corre); return; }
+    if (chegou && L.passo === 1){ L.passo = 2; L.ta = 0; lumaFala(FALAS_LUMA_RAIO); }
+    if (L.passo === 2){
+      L.angAlvo = Math.atan2(A.x - L.pos.x, A.z - L.pos.y);
+      if (L.ta > 1.6 && cine && cine.passo !== 'dialogo'){ L.i = 1 - L.i; lumaIr(...L.raioPts[L.i], LUMA_JOGO.corre); L.passo = 1; }
+    }
+  },
+  // persegue o redemoinho do Saci, rodopia dentro dele e fica tonta
+  saci(L, dt, t, chegou){
+    if (L.passo === 0){ if (!chegou) return; L.passo = 1; lumaFala(FALAS_LUMA_SACI); return; }
+    if (L.passo === 1){
+      // ainda dá para alcançar enquanto ele assusta o Ed, antes de virar Saci
+      if (!rd || (rd.estado !== 'vagando' && rd.estado !== 'susto') || L.ta > 25){ L.passo = 4; L.ta = 0; L.pontos = []; return; }
+      if (Math.hypot(rd.x - L.pos.x, rd.z - L.pos.y) < 0.55){ L.passo = 2; L.ta = 0; L.pontos = []; Som.au(); return; }
+      if ((L.tRota -= dt) <= 0){ L.tRota = 0.35; if (!lumaIr(rd.x, rd.z, 3.7)) L.pontos = []; }
+      return;
+    }
+    if (L.passo === 2){
+      L.ang += dt * 16; L.angAlvo = L.ang; L.voo = 0.12 + Math.sin(L.ta * 7) * 0.06;
+      if (rd && (rd.estado === 'vagando' || rd.estado === 'susto')){ L.pos.x += (rd.x - L.pos.x) * Math.min(1, dt * 6); L.pos.y += (rd.z - L.pos.y) * Math.min(1, dt * 6); }
+      if ((L.tPo -= dt) <= 0){ L.tPo = 0.1; particula(L.pos.x + rnd(-0.3, 0.3), rnd(0.1, 0.5), L.pos.y + rnd(-0.3, 0.3), [0xd9c9a6, 0xe9dfc7][(Math.random() * 2) | 0], 0.4); }
+      if (L.ta > 1.6){
+        L.passo = 3; L.ta = 0; L.voo = 0;
+        const cx = rd ? rd.x : L.pos.x, cz = rd ? rd.z : L.pos.y;
+        if (!andavel(Math.floor(L.pos.x), Math.floor(L.pos.y))){ const p = chaoPerto(L.pos.x, L.pos.y, 2); if (p) L.pos.set(...p); }
+        // o redemoinho cospe ela para o lado (na tela), senão o Saci aparece bem em cima dela
+        const longe = (x, z) => chaoLuma(x, z) && Math.hypot(ed.pos.x - x - 0.5, ed.pos.y - z - 0.5) > 0.9 && !(rd && rd.lugar && Math.hypot(rd.lugar[0] - x - 0.5, rd.lugar[1] - z - 0.5) < 1);
+        const p = ladoDe(cx, cz, 1.15, longe) || ladoDe(cx, cz, 1.15, chaoLuma);
+        if (p) lumaIr(p[0], p[1], 2.4);
+        lumaFala(FALAS_LUMA_TONTA);
+      }
+      return;
+    }
+    if (L.passo === 3){
+      if (!L.pontos.length && rd && rd.estado !== 'desfaz') L.angAlvo = Math.atan2(rd.x - L.pos.x, rd.z - L.pos.y);
+      if ((L.tPo -= dt) <= 0){ L.tPo = 0.28; particula(L.pos.x + rnd(-0.15, 0.15), 0.62, L.pos.y + rnd(-0.15, 0.15), [0xffe066, 0xfff4b0][(Math.random() * 2) | 0], 0.25); }
+      if (L.ta > 2.8) lumaFim();
+      return;
+    }
+    if (L.passo === 4 && L.ta > 0.8) lumaFim();
+  },
+  // pula nas poças e vai se sacudir do lado do Ed
+  chuva(L, dt, t, chegou){
+    if (L.passo === 0){ if (!chegou) return; L.pocas = 3; L.passo = 1; return; }
+    if (L.passo === 1){
+      if (!chovendo() || L.pocas <= 0){ L.passo = 3; return; }
+      const [x, z] = pontoLumaLivre(); if (!lumaIr(x, z, LUMA_JOGO.corre)){ L.passo = 3; return; }
+      L.passo = 2; L.pulou = false; return;
+    }
+    if (L.passo === 2){
+      if (!chegou) return;
+      if (!L.pulou){ L.pulou = true; L.ta = 0; L.salto = 0.45; aguaLuma(L.pos.x, L.pos.y, 10); Som.ruido(0.18, 0.08, 2600); if (L.pocas === 3) lumaFala(FALAS_LUMA_CHUVA); }
+      if (L.ta > 0.6){ L.pocas--; L.passo = 1; }
+      return;
+    }
+    if (L.passo === 3){
+      const p = ed.g.visible && Math.hypot(ed.pos.x - L.pos.x, ed.pos.y - L.pos.y) < 25 ? ladoDe(ed.pos.x, ed.pos.y, 0.75) : null;
+      if (p && lumaIr(p[0], p[1], LUMA_JOGO.corre)){ L.passo = 4; L.ta = 0; } else { L.passo = 5; L.ta = 0; L.noEd = false; L.molhou = false; }
+      return;
+    }
+    if (L.passo === 4){
+      const d = Math.hypot(ed.pos.x - L.pos.x, ed.pos.y - L.pos.y);
+      if (chegou || d < 0.75 || L.ta > 25){ L.pontos = []; L.passo = 5; L.ta = 0; L.noEd = d < 1.3; L.molhou = false; if (L.noEd) L.angAlvo = Math.atan2(ed.pos.x - L.pos.x, ed.pos.y - L.pos.y) + Math.PI / 2; return; }
+      if ((L.tRota -= dt) <= 0){ L.tRota = 0.8; const p = ladoDe(ed.pos.x, ed.pos.y, 0.75); if (p) lumaIr(p[0], p[1], LUMA_JOGO.corre); }
+      return;
+    }
+    if (L.passo === 5){
+      if ((L.tPo -= dt) <= 0){ L.tPo = 0.05; const a = rnd(0, Math.PI * 2); particula(L.pos.x + Math.sin(a) * 0.2, 0.25, L.pos.y + Math.cos(a) * 0.2, [0x6fc3f5, 0xa8dcfa, 0xffffff][(Math.random() * 3) | 0], 0.5); }
+      if (L.noEd && !L.molhou && L.ta > 0.5){
+        L.molhou = true; ed.pulo = 0.45;
+        if (ed.estado === 'parado' && !tarefaAtual) virarNaCena(ed, L.pos.x, L.pos.y);
+        edFala(FALAS_ED_SACODE);
+      }
+      if (L.ta > 1.5) lumaFim();
+    }
+  },
+  // recebe o Beto ou o Jaca na porteira
+  visita(L, dt, t, chegou){
+    const v = visita, E = caminhaoE;
+    if (L.passo === 0){ if (!chegou) return; if (!lumaIr(...LUMA_VISITA, 3.4)) return lumaFim(); L.passo = 1; return; }
+    if (L.passo === 1){
+      if (chegou) L.angAlvo = Math.atan2(PARADA - L.pos.x, Z_CERCA - L.pos.y);
+      // quem chegou desce do caminhão: ela pula e late de alegria (sem balão: quem chegou fala primeiro com o Ed)
+      if ((E.estado === 'descendo' || E.estado === 'aqui') && chegou){ L.passo = 2; L.ta = 0; L.salto = 0.45; L.pulos = 0.8; L.falou = false; L.tchau = false; Som.au(); }
+      if (E.estado === 'longe' || E.estado === 'cine' || L.ta > 60) lumaFim();
+      return;
+    }
+    if (L.passo === 2){
+      if (v && v.g.visible) L.angAlvo = Math.atan2(v.pos.x - L.pos.x, v.pos.y - L.pos.y);
+      if (!L.falou && (L.pulos -= dt) <= 0){ L.pulos = rnd(0.7, 1.1); L.salto = 0.35; if (Math.random() < 0.5) Som.au(); }
+      if (E.estado === 'despedindo' && !L.tchau){ L.tchau = true; L.salto = 0.45; falar(L, 'Au! Au!', 1.4); Som.au(); }
+      if (E.estado === 'voltando' || E.estado === 'saindo' || E.estado === 'longe' || L.ta > 300) lumaFim();
+    }
+  },
+  // travessura: cava um canteiro e sai correndo com o que tirou; o Ed, parado por perto, corre atrás
+  cenoura(L, dt, t, chegou){
+    if (L.passo === 0){
+      if (!chegou) return;
+      const c = canteiroParaLuma(); if (!c) return lumaFim();
+      L.alvoC = c; if (!lumaIr(c.b[0], c.b[1], LUMA_JOGO.vel)) return lumaFim();
+      L.passo = 1; return;
+    }
+    if (L.passo === 1){ if (!chegou) return; L.angAlvo = Math.atan2(L.alvoC.x + 0.5 - L.pos.x, L.alvoC.z + 0.5 - L.pos.y); L.passo = 2; L.ta = 0; return; }
+    if (L.passo === 2){
+      if ((L.tPo -= dt) <= 0){ L.tPo = 0.1; terraLuma(L); }
+      if (L.ta < 1.5) return;
+      L.prod = L.alvoC.prod; lumaBoca(L.prod);
+      const ar = artigosProduto(L.prod);
+      L.salto = 0.45; const f = variar(FALAS_LUMA_CENOURA); falar(L, preencher(f, ar), tempoDeLeitura(f)); Som.au();
+      L.persegue = ed.g.visible && ed.estado === 'parado' && !tarefaAtual && !fila.length && edPerto(16);
+      if (L.persegue) setTimeout(() => edFala(FALAS_ED_CENOURA, g => preencher(g, ar)), 700);
+      L.passo = 3; L.ta = 0; L.voltas = 3; L.tEd = 0.8;
+      return;
+    }
+    if (L.passo === 3){
+      if (L.persegue && (tarefaAtual || fila.length)){ L.persegue = false; }
+      if (L.persegue){
+        if ((L.tEd -= dt) <= 0){ L.tEd = 0.5; const r = rota(clamp(Math.floor(ed.pos.x), 0, W - 1), clamp(Math.floor(ed.pos.y), 0, H - 1), Math.floor(L.pos.x), Math.floor(L.pos.y)); if (r){ r.pop(); r.push([L.pos.x, L.pos.y]); ed.ir(r, null); } }
+        if (L.ta > 3 && Math.hypot(ed.pos.x - L.pos.x, ed.pos.y - L.pos.y) < 0.85){
+          ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; virarNaCena(ed, L.pos.x, L.pos.y); L.pontos = [];
+          deixarCenoura(L, ed.topo()); L.devolveu = false;
+          edFala(FALAS_ED_PEGOU, null, () => { if (luma.acao === 'cenoura' && luma.passo === 5){ lumaFala(FALAS_LUMA_DEVOLVE); luma.devolveu = true; luma.ta = 0; } });
+          const lado = ladoDe(ed.pos.x, ed.pos.y, 0.8);
+          if (lado) lumaIr(lado[0], lado[1], 1.2);
+          L.passo = 5; L.ta = 0; return;
+        }
+      }
+      if (chegou){
+        if (L.voltas-- > 0 || L.persegue){
+          // corre para o terreiro da frente da casa, longe do Ed e fora da plantação
+          const p = pontoLumaLivre();
+          // ela vai ficando cansada: depois de um tempo o Ed alcança
+          if (p) lumaIr(p[0], p[1], L.persegue ? (L.ta > 12 ? 1.2 : 2.3) : LUMA_JOGO.corre);
+        } else { if (!lumaIr(PORTINHA.x, PORTINHA.fora + 0.3, LUMA_JOGO.corre)) { deixarCenoura(L, L.topo()); return lumaFim(); } L.passo = 4; }
+      }
+      return;
+    }
+    if (L.passo === 4){ if (!chegou) return; deixarCenoura(L, L.topo()); lumaFim(); return; }
+    if (L.passo === 5){
+      if (!L.pontos.length){ L.angAlvo = Math.atan2(ed.pos.x - L.pos.x, ed.pos.y - L.pos.y); if (chegou && ed.estado === 'parado') virarNaCena(ed, L.pos.x, L.pos.y); }
+      if (L.devolveu ? L.ta > 2.2 : L.ta > 9) lumaFim();
+    }
+  },
+  // late para os patos na beira do lago; eles correm para a água e ela não tem coragem de entrar
+  patos(L, dt, t, chegou){
+    if (L.passo === 0){ if (!chegou) return; const p = beiraDoLago(); if (!p || !lumaIr(p[0], p[1], LUMA_JOGO.corre)) return lumaFim(); L.beira = p; L.passo = 1; return; }
+    if (L.passo === 1){ if (!chegou) return; L.passo = 2; L.ta = 0; L.chorou = false; lumaFala(FALAS_LUMA_PATOS); espantarPatos(); return; }
+    if (L.passo === 2){
+      // olha para o pato mais perto (no chão ou já na água); sem pato por perto, para a água
+      let alvo = [L.beira[2], L.beira[3]], dm = 6;
+      for (const a of ANI) if (a.d.tipo === 'pato'){ const d = Math.hypot(a.pos.x - L.pos.x, a.pos.y - L.pos.y); if (d < dm){ dm = d; alvo = [a.pos.x, a.pos.y]; } }
+      L.angAlvo = Math.atan2(alvo[0] - L.pos.x, alvo[1] - L.pos.y);
+      if (L.ta > 3.4 && !L.chorou){ L.chorou = true; lumaFala(FALAS_LUMA_BEIRA); }
+      if (L.ta > 7) lumaFim();
+    }
+  },
+  // late para uma vaca na cerca do curral; a vaca solta um muuu e ela volta correndo para casa
+  vaca(L, dt, t, chegou){
+    if (L.passo === 0){
+      if (!chegou) return;
+      const v = vacaParaLuma(); if (!v) return lumaFim();
+      L.vaca = v.a; L.vacaLugar = [v.vx, v.vz]; if (!lumaIr(v.x, v.z, LUMA_JOGO.vel)) return lumaFim();
+      // a vaca, curiosa, vai até a cerca ver quem vem latindo (devagar: sai junto com ela)
+      if (!v.a.res){ v.a.alvo = L.vacaLugar.slice(); v.a.espera = 6; }
+      L.passo = 1; return;
+    }
+    // chegando na cerca, a vaca espera por ela lá
+    if ((L.passo === 1 || (L.passo === 2 && !L.muu)) && L.vaca && !L.vaca.res && !L.vaca.alvo) L.vaca.espera = Math.max(L.vaca.espera, 2);
+    if (L.passo === 1){
+      if (!chegou) return;
+      L.passo = 2; L.ta = 0; L.latido = 0; L.muu = 0; lumaFala(FALAS_LUMA_VACA); return;
+    }
+    if (L.passo === 2){
+      const a = L.vaca; L.angAlvo = Math.atan2(a.pos.x - L.pos.x, a.pos.y - L.pos.y);
+      if ((L.latido -= dt) <= 0 && !L.muu){ L.latido = 0.8; Som.au(); L.salto = 0.3; }
+      const perto = Math.hypot(a.pos.x - L.vacaLugar[0], a.pos.y - L.vacaLugar[1]) < 0.2 || a.res;
+      if (!L.muu && ((perto && L.ta > 2) || L.ta > 9)){ L.muu = L.ta; if (!a.res){ a.alvo = null; a.espera = 5; } a.ang = Math.atan2(L.pos.x - a.pos.x, L.pos.y - a.pos.y); a.pulo = 0.4; Som.muu(); flutuar(new THREE.Vector3(a.pos.x, 1.55, a.pos.y), 'Muuu!'); }
+      if (L.muu && L.ta > L.muu + 0.7){ L.salto = 0.45; lumaFala(FALAS_LUMA_FOGE); if (!lumaIr(PORTINHA.x, PORTINHA.fora, 3.9)) return lumaFim(); L.passo = 3; }
+      return;
+    }
+    if (L.passo === 3 && chegou){ L.acao = 'entrando'; L.pontos = [[PORTINHA.x, PORTINHA.dentro]]; L.vel = 1.6; }
+  },
+  // de manhã, deita num lugar de sol e tira uma soneca
+  soneca(L, dt, t, chegou){
+    if (L.passo === 0){ if (!chegou) return; const [x, z] = pontoLumaLivre(); if (!lumaIr(x, z, LUMA_JOGO.vel * 0.8)) return lumaFim(); L.passo = 1; return; }
+    if (L.passo === 1){ if (!chegou) return; L.passo = 2; L.ta = 0; return; }
+    if (L.passo === 2){ L.ang += dt * 7; L.angAlvo = L.ang; if (L.ta > 1){ L.passo = 3; L.ta = 0; L.durSono = rnd(...LUMA_SITU.soneca); L.tz = 0.6; L.shhh = false; } return; }
+    if (L.passo === 3){
+      if ((L.tz -= dt) <= 0){ L.tz = 1.3; zLuma(L); }
+      if (!L.shhh && edPerto(2.6)){ L.shhh = true; edFala(FALAS_ED_SONECA); }
+      if (L.ta > L.durSono){ L.passo = 4; L.ta = 0; lumaFala(FALAS_LUMA_ACORDA); }
+      return;
+    }
+    if (L.passo === 4 && L.ta > 1.6) lumaFim();
+  },
+  // no cafezinho: senta do lado da mesa pedindo biscoito; quando o Ed come, ganha um
+  cafe(L, dt, t, chegou){
+    if (!cafe) return;
+    if (L.passo === 0){ if (!chegou) return; const [x, z] = cafeXZ(...CAFE_LUMA); if (!lumaIr(x, z, LUMA_JOGO.vel)) L.pontos = [[x, z]]; L.passo = 1; return; }
+    if (L.passo === 1){ if (!chegou) return; L.passo = 2; L.ta = 0; L.tPede = 1.2; return; }
+    if (L.passo === 2){
+      L.angAlvo = anguloPerto(Math.atan2(ed.pos.x - L.pos.x, ed.pos.y - L.pos.y), cam.azAlvo, 0.42);
+      if (cine && cine.passo === 'dialogo' && !L.biscoito && (L.tPede -= dt) <= 0){ L.tPede = rnd(6, 9); lumaFala(FALAS_LUMA_BISCOITO); }
+      if (L.biscoito > 0){ L.biscoito -= dt; if (L.biscoito <= 0){ lumaBoca(null); for (let i = 0; i < 5; i++) particula(L.pos.x, 0.25, L.pos.y, 0xd9a25a, 0.4); } }
+    }
+  },
+};
+// quem chegou de caminhão fala com a Luma, e ela responde; devolve quanto tempo isso leva (0 se ela não está lá)
+function lumaRecebeVisita(v, n = 0){
+  const L = luma;
+  // ela ainda está correndo para a porteira: espera um pouquinho (até 4 s)
+  if (L && L.acao === 'visita' && L.passo === 1 && n < 8 && caminhaoE.estado === 'aqui') return -1;
+  if (!L || L.acao !== 'visita' || L.passo !== 2 || L.falou || !v.g.visible) return 0;
+  L.falou = true;
+  const f = variar(v === jaca ? FALAS_JACA_LUMA : FALAS_BETO_LUMA), d1 = tempoDeLeitura(f);
+  v.olhar(L.pos.x, L.pos.y); v.aceno = 1.5; falar(v, f, d1);
+  const g = variar(FALAS_LUMA_VISITA), d2 = tempoDeLeitura(g);
+  setTimeout(() => { if (luma.acao === 'visita'){ luma.salto = 0.45; falar(luma, g, d2); Som.au(); } }, (d1 + 0.2) * 1000);
+  return d1 + d2 + 0.4;
+}
+// o Ed comeu no cafezinho: joga um biscoito para a Luma
+function lumaGanhaBiscoito(){
+  const L = luma;
+  if (!L || L.acao !== 'cafe' || L.passo !== 2 || L.ganhou) return;
+  L.ganhou = true;
+  setTimeout(() => {
+    if (!luma || luma.acao !== 'cafe' || !cafe) return;
+    const [px, pz] = cafeXZ(...CAFE_PRATO);
+    for (let i = 0; i < 6; i++) particula(lerp(px, L.pos.x, i / 5), CAFE_TOPO + 0.2 + Math.sin(i / 5 * Math.PI) * 0.3, lerp(pz, L.pos.y, i / 5), 0xd9a25a, 0.2);
+    lumaBoca('biscoito'); L.salto = 0.45; L.biscoito = 1.6; Som.pop();
+    lumaFala(FALAS_LUMA_NHAC);
+  }, 900);
+}
+// as cenas que levam a Luma junto: abdução e cafezinho
+function lumaNaAbducao(x, z){
+  const L = luma;
+  if (!L || !S.viuCineInicio) return;
+  const jaFora = L.estado === 'fora' && L.acao === 'disco';
+  if (!jaFora && Math.random() > LUMA_SITU.raio) return;
+  // dois lugares do lado de fora da cerca, perto da vaca, para ela correr de um para o outro, dentro do quadro da cena
+  // (a câmera da cena vai para perto da vaca, com a vista da cena, e embaixo fica a caixa de fala)
+  const vistaCine = (telaEstreita() ? 1.45 : 1) * 6.2, k = cam.vista / vistaCine, f = new THREE.Vector3(x - 0.3, 0.7, z - 0.3).project(camera);
+  const naTela = (px, pz) => { const v = new THREE.Vector3(px, 0.2, pz).project(camera), rx = (v.x - f.x) * k, ry = (v.y - f.y) * k; return Math.abs(rx) < 0.75 && ry > -0.3 && ry < 0.7; };
+  const cands = [];
+  for (let dx = -5; dx <= 5; dx++) for (let dz = -5; dz <= 5; dz++){
+    const tx = Math.floor(x) + dx, tz = Math.floor(z) + dz;
+    if (chaoLuma(tx, tz) && naTela(tx + 0.5, tz + 0.5)) cands.push([tx + 0.5, tz + 0.5, Math.hypot(tx + 0.5 - x, tz + 0.5 - z)]);
+  }
+  cands.sort((a, b) => a[2] - b[2]);
+  const p1 = cands.length ? cands[0].slice(0, 2) : chaoPerto(x, z, 4);
+  if (!p1) return;
+  let p2 = null;
+  for (const c of cands){ const d = Math.hypot(c[0] - p1[0], c[1] - p1[1]); if (d > 1 && d < 2){ p2 = c.slice(0, 2); break; } }
+  if (!p2) for (const [dx, dz] of [[1.5, 0], [-1.5, 0], [0, 1.5], [0, -1.5], [1.1, 1.1], [-1.1, -1.1], [1.1, -1.1], [-1.1, 1.1]]) if (chaoLuma(Math.floor(p1[0] + dx), Math.floor(p1[1] + dz))){ p2 = [p1[0] + dx, p1[1] + dz]; break; }
+  if (!lumaSaiPara('raio', { raioPts: [p1, p2 || p1], i: 0 }, true)) return;
+  if (jaFora){ L.passo = 1; lumaIr(...p1, LUMA_JOGO.corre); }
+}
+function lumaNoCafe(){ if (luma && luma.estado === 'dentro' || lumaLivre()) lumaSaiPara('cafe', { ganhou: false, biscoito: 0 }, true); }
+// a cena acabou: ela volta para casa
+function lumaFimCena(acao){ const L = luma; if (L && L.cena && L.acao === acao){ L.cena = false; lumaFim(); } }
+// a pose de cada aventura, parada
+function poseAventura(L){
+  const a = L.acao, p = L.passo;
+  if (a === 'cava') return p === 2 ? 'Cavando' : p === 3 ? 'Com a bolinha' : null;
+  if (a === 'cenoura') return p === 2 ? 'Cavando' : null;
+  if (a === 'soneca') return p === 3 ? 'Deitada' : p === 4 ? 'Espreguiçando' : null;
+  if (a === 'chuva') return p === 5 ? 'Sacudindo' : null;
+  if (a === 'saci') return p === 3 ? 'Tonta' : null;
+  if (a === 'visita') return p === 2 && !L.falou ? 'Com a bolinha' : 'Sentada';
+  if (a === 'escolta') return p === 3 ? 'Sentada' : null;
+  if (a === 'patos') return p === 2 && L.ta > 3.4 ? 'Sentada' : null;
+  if (a === 'cafe') return p === 2 ? 'Sentada' : null;
+  if (a === 'carteira') return p === 3 ? 'Com a bolinha' : null;
+  return null;
+}
+// quais aventuras dá para chamar agora, na janela Cenas (com o motivo de quando não dá)
+function situacoesLuma(){
+  const L = luma, fora = !L ? 'A Luma está dormindo.' : null;
+  const s = (id, nome, motivo) => ({ id, nome, motivo: fora || motivo || null });
+  const disp = L ? (L.lugares = L.lugares || lugaresLuma(), saidasLuma()) : {};
+  return [
+    s('brincar', 'Brincar', L && L.estado !== 'dentro' ? 'Ela já está lá fora.' : !lugaresLuma().tiles.length ? 'Não tem espaço livre para ela brincar.' : null),
+    s('carteira', 'Carteira', !S.aluguel && !S.cartao ? 'Quando o aluguel ou um cartão-postal está na porta.' : null),
+    s('cava', 'Cavar', !disp.cava ? 'Não tem espaço livre.' : null),
+    s('mato', 'Caçar mato', !S.composto ? 'Precisa da composteira das Minhoquinhas.' : !disp.mato ? 'Nenhum canteiro com mato agora.' : null),
+    s('cenoura', 'Roubar do canteiro', !disp.cenoura ? 'Precisa de um canteiro plantado.' : null),
+    s('vaca', 'Latir para a vaca', !disp.vaca ? 'Precisa de vaca no curral.' : null),
+    s('patos', 'Latir para os patos', !temPatos() ? 'Precisa dos patos.' : periodo().id === 'noite' ? 'De noite os patos ficam em casa.' : !disp.patos ? 'Ela não consegue chegar ao lago.' : null),
+    s('soneca', 'Soneca', !lugaresLuma().tiles.length ? 'Não tem espaço livre.' : null),
+    s('disco', 'Disco voador', !discoJogo ? 'O céu está calmo.' : discoJogo.t >= 0 ? 'O disco já está passando.' : null),
+    s('saci', 'Redemoinho', rd ? 'O redemoinho já está na fazenda.' : null),
+    s('chuva', 'Chuva', !chovendo() ? 'Só quando está chovendo.' : null),
+    s('visita', 'Visita', caminhaoE.estado !== 'chegando' && caminhaoE.estado !== 'aqui' ? 'Quando o Beto ou o Jaca chegam de caminhão.' : visita !== jaca && visita !== beto ? 'Ela recebe o Beto e o Jaca.' : null),
+    s('escolta', 'Escoltar', !aposentadaNaEstrada ? 'Quando uma galinha se aposenta.' : null),
+    s('cafe', 'Cafezinho', CENAS.cafezinho.podeRever() || (nivel() < 3 ? 'Libera no nível 3.' : null)),
+  ];
+}
+// chama uma aventura pela janela Cenas
+function lumaChamar(id){
+  const L = luma;
+  if (!L) return;
+  if (id === 'brincar'){ chamarLuma(); return; }
+  if (id === 'cafe'){ cafeForca = { luma: true }; pedirCena('cafezinho'); return; }
+  // para as outras, se ela está lá fora fazendo outra coisa, volta para dentro na hora
+  if (L.estado === 'fora' && !lumaLivre() && !L.cena) lumaRecolher();
+  if (SAIDAS_LUMA.includes(id)){ if (L.estado === 'fora') lumaRecolher(); L.forcar = id; L.prox = 0; return; }
+  if (id === 'disco'){ L.forcar = 'disco'; if (discoJogo && discoJogo.t < 0) discoJogo.prox = 0; return; }
+  if (id === 'saci'){ L.forcar = 'saci'; chamarRedemoinho(); return; }
+  if (id === 'carteira'){ const k = S.aluguel ? 'aluguel' : S.cartao ? 'cartao' : null; if (k) lumaSaiPara('carteira', { item0: k }); return; }
+  if (id === 'chuva' || id === 'visita' || id === 'escolta') lumaSaiPara(id);
 }
 // ================= disco voador: por enquanto só no catálogo de modelos (um dia ele passa pela fazenda)
 // casco prateado que gira, borda com luzes que acendem em sequência, janelinhas, domo de vidro com um ETzinho dentro
@@ -2742,6 +3580,7 @@ function raioAbducao(){
 function limparAbducao(){
   const A = abducao;
   if (!A) return;
+  lumaFimCena('raio');
   if (A.musica) A.musica.parar();
   scene.remove(A.raio);
   if (A.duble) scene.remove(A.vacaG);
@@ -3348,7 +4187,7 @@ function atualizarLucia(dt){
 function montarEnvelope(){
   if (envelope){ scene.remove(envelope); pickaveis.splice(pickaveis.indexOf(envelope), 1); envelope = null; }
   if (bolhaEnvelope){ scene.remove(bolhaEnvelope); BOLHAS.splice(BOLHAS.indexOf(bolhaEnvelope), 1); bolhaEnvelope = null; }
-  if (!S.aluguel) return;
+  if (!S.aluguel || (luma && luma.leva === 'aluguel')) return;
   const [x, z] = ALUGUEL.porta;
   envelope = colocar(malha(geo('envelope', () => vEnvelope().build(1 / 40, { origin: [0.5, 0, 0.5] }))), x, 0, z, 0.3);
   envelope.traverse(o => { o.userData.alvo = { k: 'aluguel', x: 5, z: 5 }; }); pickaveis.push(envelope);
@@ -3385,14 +4224,13 @@ function itensAluguel(){
   return { titulo: 'Aluguel do Nano Hostel', icone: 'envelope', estado: 'A Lúcia deixou o aluguel do hostel na porta da casa.',
     itens: [{ rotulo: 'Pegar o aluguel', sub: `+${reais(S.aluguel || 0)}`, icone: 'moeda', fn: () => enfileirar('pegarAluguel', { k: 'aluguel', x: 5, z: 5 }) }] };
 }
-function pegarAluguel(){
+function pegarAluguel(comFala = true){
   const v = S.aluguel;
   if (!v) return;
   S.aluguel = 0; S.dinheiro += v;
   montarEnvelope();
   flutuar(ed.topo(), `+${reais(v)}`, '', 'moeda'); chipPulsa('chipDinheiro'); Som.moeda();
-  const fala = variar(FALAS_ED_ALUGUEL);
-  falar(ed, fala, tempoDeLeitura(fala));
+  if (comFala){ const fala = variar(FALAS_ED_ALUGUEL); falar(ed, fala, tempoDeLeitura(fala)); }
   hud(); salvar();
 }
 // ================= aposentadoria das galinhas (nível 10)
@@ -3503,7 +4341,7 @@ function chegarCartao(){
 function montarCartao(){
   if (cartaoMalha){ scene.remove(cartaoMalha); const i = pickaveis.indexOf(cartaoMalha); if (i >= 0) pickaveis.splice(i, 1); cartaoMalha = null; }
   if (bolhaCartao){ scene.remove(bolhaCartao); BOLHAS.splice(BOLHAS.indexOf(bolhaCartao), 1); bolhaCartao = null; }
-  if (!S.cartao) return;
+  if (!S.cartao || (luma && luma.leva === 'cartao')) return;
   const [x, z] = APOSENTA.cartao;
   cartaoMalha = colocar(malha(geo('cartao', () => vCartaoPostal().build(1 / 40, { origin: [0.5, 0, 0.5] }))), x, 0, z, -0.25);
   cartaoMalha.traverse(o => { o.userData.alvo = { k: 'cartao', x: 5, z: 5 }; }); pickaveis.push(cartaoMalha);
@@ -7888,7 +8726,10 @@ function atualizarCaminhao(dt){
         const txt = variar(D.chegada), dur = tempoDeLeitura(txt);
         falar(v, txt, dur + 0.3);
         hud(); salvar();
-        setTimeout(() => { if (caminhaoE.estado === 'aqui' && visita === v && !algumaJanela()) abrirBeto(); }, dur * 1000);
+        // com a Luma fazendo festa na porteira, quem chegou fala com ela antes de abrir a janela de venda
+        const abrir = () => { if (caminhaoE.estado === 'aqui' && visita === v && !algumaJanela()){ v.angAlvo = Math.PI; abrirBeto(); } };
+        const tentar = n => { const d = lumaRecebeVisita(v, n); if (d < 0) setTimeout(() => tentar(n + 1), 500); else if (d) setTimeout(abrir, d * 1000); else abrir(); };
+        setTimeout(() => tentar(0), dur * 1000);
       });
     }
   } else if (c.estado === 'despedindo'){
@@ -8154,7 +8995,9 @@ function sortearCafe(){
   if (S.conheceuMilton && voo.estado === 'fora') disp.push('milton');
   const conv = dani ? null : f.conv !== undefined ? (f.conv === 'nenhum' ? null : f.conv) : Math.random() < 0.4 ? sorteia(disp) : null;
   const comida = f.comida || sorteia(['bolo', ...['laranja', 'goiaba', 'manga'].filter(k => nivel() >= PRODUTOS[k].nivel)]);
-  return { hud, hudModo, dani, daniModo, conv, comida };
+  // a Luma vem pedir biscoito às vezes (LUMA_SITU.cafe)
+  const lumaVem = f.luma !== undefined ? !!f.luma : !!luma && Math.random() < LUMA_SITU.cafe;
+  return { hud, hudModo, dani, daniModo, conv, comida, luma: lumaVem };
 }
 function falasCafe(p){
   const E = t => ['ed', 'Ed', t], F = [], cv = p.conv && FALAS_CAFE.conv[p.conv], conv = cv && [cv[0], cv[1], variar(cv[2])];
@@ -8216,6 +9059,7 @@ function goleCafe(){
 function comerCafe(){
   if (cafe.comeu) return;
   cafe.comeu = true;
+  lumaGanhaBiscoito();
   const cor = cafe.plano.comida === 'bolo' ? [0xe0a050, 0xfdf3e2, 0x6b3b22] : cafe.plano.comida === 'laranja' ? [0xf08a2c, 0xf6a23c] : cafe.plano.comida === 'goiaba' ? [0xb8d65a, 0xe0607a] : [0xf2b632, 0xe8603a];
   const mordida = n => () => {
     if (!cafe) return;
@@ -8231,6 +9075,7 @@ function comerCafe(){
 // o que roda a cada quadro da cena: a mesa cresce ou encolhe, o vapor sobe, o Ed dá goles e o que estava agendado acontece
 function ambienteCafe(dt){
   if (!cafe || !cafe.g) return;
+  if (cafe.plano.luma && cafe.mesaOn && !cafe.lumaVeio){ cafe.lumaVeio = true; lumaNoCafe(); }
   cafe.rel += dt;
   if (!cafe.mesaOn){ cafe.g.visible = false; return; }
   for (const b of BOLHAS) b.visible = false; // os balões dos canteiros não cobrem a cena
@@ -8253,6 +9098,7 @@ function descidaMilton(dx, dz){
 const caminhoCafe = (x0, z0, x1, z1) => rota(clamp(Math.floor(x0), 0, W - 1), clamp(Math.floor(z0), 0, H - 1), Math.floor(x1), Math.floor(z1)) || [];
 // tudo o que o cafezinho deixa para trás: a mesa, os convidados, o Hud e o jeito de sentado
 function limparCafe(){
+  lumaFimCena('cafe');
   const hudNaMesa = !!(cafe && cafe.plano && cafe.plano.hud), hudAjuda = hudNaMesa && cafe.plano.hudModo === 'ajuda';
   const daniNaMesa = !!(cafe && cafe.plano && cafe.plano.dani), daniAjuda = daniNaMesa && cafe.plano.daniModo === 'ajuda';
   // o tempo de ajuda do Hud e do Dani não corre durante a cena
@@ -9190,6 +10036,7 @@ const CENAS = {
       // o disco vem de onde está (na reprise, de fora da tela)
       if (P.t < 0){ P.g.position.copy(pontoCeuDisco(-1.25, 0.15)); Som.disco(); }
       P.g.visible = true; P.t = 0;
+      lumaNaAbducao(x, z);
       abducao = { a, vacaG, duble, escondida, x, z, raio: raioAbducao(), de: P.g.position.clone(), topo: V(x, ABDUCAO.altura, z), musica: null, giro: vacaG.rotation.y, fala: variar(FALAS_ABDUCAO) };
       // o Ed vai para perto do curral, se der, e para a uns passos da vaca
       ed.trab = null; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; ed.ferramenta(null);
@@ -10702,13 +11549,16 @@ function olharNanar(manha){
 }
 // os Zzz que saem da casa enquanto o Ed dorme; com o Dani, de vez em quando sai um Z grandão
 let texZ = null;
+// a textura do Z (também usada na soneca da Luma)
+function texturaZ(){
+  if (texZ) return texZ;
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+  const g = cv.getContext('2d'); g.font = '900 52px Arial Black, Impact, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineWidth = 7; g.strokeStyle = '#3b2a20'; g.strokeText('Z', 32, 34); g.fillStyle = '#fff8e9'; g.fillText('Z', 32, 34);
+  return texZ = new THREE.CanvasTexture(cv);
+}
 function soltarZ(grande){
-  if (!texZ){
-    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
-    const g = cv.getContext('2d'); g.font = '900 52px Arial Black, Impact, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.lineWidth = 7; g.strokeStyle = '#3b2a20'; g.strokeText('Z', 32, 34); g.fillStyle = '#fff8e9'; g.fillText('Z', 32, 34);
-    texZ = new THREE.CanvasTexture(cv);
-  }
+  texturaZ();
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: texZ, transparent: true, depthWrite: false }));
   const b = grande ? 0.62 : 0.4;
   sp.position.set(4.4, 2.3, 4.6); sp.scale.setScalar(b); sp.renderOrder = 4; scene.add(sp);
@@ -11774,6 +12624,8 @@ function lugarDoSaci(){
   dirs.sort((a, b) => naLinha(a) - naLinha(b));
   for (const [dx, dz] of dirs){
     const x = ed.pos.x + dx * 1.25, z = ed.pos.y + dz * 1.25;
+    // nem em cima da Luma (tonta do redemoinho)
+    if (luma && luma.estado === 'fora' && Math.hypot(luma.pos.x - x, luma.pos.y - z) < 0.8) continue;
     if (andavel(Math.floor(x), Math.floor(z))) return [x, z];
   }
   return [rd.x, rd.z];
@@ -13053,8 +13905,10 @@ function abrirCenas(){
     h += `<div class="cartao"><div class="cab"><img src="${icone(C.icone)}" alt=""><div><h4>${esc(C.titulo)}</h4></div></div><div class="info">${esc(C.desc)}${motivo ? `<br><small>${esc(motivo)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-cena="${id}" type="button"${livre && !motivo ? '' : ' disabled'}>${S[C.flag] ? 'Ver de novo' : 'Ver a cena'}</button></div></div>`;
   }
   // a Luma não é uma cena: o botão só chama ela para sair pela portinha e brincar agora
-  const motivoL = !luma ? 'A Luma está dormindo.' : luma.estado !== 'dentro' ? 'Ela já está lá fora brincando.' : !lugaresLuma().tiles.length ? 'Não tem espaço livre para ela brincar.' : null;
-  h += `<div class="cartao"><div class="cab"><img src="${icone('luma')}" alt=""><div><h4>A Luma vai brincar</h4></div></div><div class="info">A Luma sai pela portinha da casa para brincar com a bolinha.${motivoL ? `<br><small>${esc(motivoL)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-luma type="button"${motivoL ? ' disabled' : ''}>Chamar a Luma</button></div></div>`;
+  // a Luma também não é cena: um botão por aventura, que ela faz assim que a janela fechar (as que dependem de algo da
+  // fazenda ficam desligadas, com o motivo embaixo)
+  const sits = situacoesLuma(), presos = sits.filter(q => q.motivo && q.id !== 'brincar');
+  h += `<div class="cartao cartao-luma"><div class="cab"><img src="${icone('luma')}" alt=""><div><h4>A Luma</h4></div></div><div class="info">A Luma sai pela portinha da casa para brincar com a bolinha ou para uma das aventuras dela.${sits[0].motivo ? `<br><small>${esc(sits[0].motivo)}</small>` : ''}</div><div class="botoes luma-botoes">${sits.map(q => `<button class="botao mini ${q.motivo ? 'claro' : 'rosa'}" data-luma="${q.id}" type="button"${q.motivo ? ` disabled title="${esc(q.motivo)}"` : ''}>${esc(q.nome)}</button>`).join('')}</div>${presos.length ? `<div class="info luma-presos">${presos.map(q => `<small><b>${esc(q.nome)}:</b> ${esc(q.motivo)}</small>`).join('')}</div>` : ''}</div>`;
   // o disco voador também não é cena: o botão faz ele passar assim que a janela fechar
   const motivoD = !discoJogo ? 'O céu está calmo.' : discoJogo.t >= 0 ? 'Ele já está passando.' : null;
   h += `<div class="cartao"><div class="cab"><img src="${icone('disco')}" alt=""><div><h4>Disco voador</h4></div></div><div class="info">Um disquinho voador passeia pelo céu da fazenda.${motivoD ? `<br><small>${esc(motivoD)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-disco type="button"${motivoD ? ' disabled' : ''}>Chamar o disco</button></div></div>`;
@@ -13080,8 +13934,7 @@ function abrirCenas(){
   h += '</div>';
   abrirJanela(topo('claquete', 'Cenas', 'Reveja a história da fazenda', 'rosa2') + `<div class="janela-corpo">${h}</div>`);
   $('janela').querySelectorAll('[data-cena]').forEach(b => b.addEventListener('click', () => { Som.clique(); fecharJanela(); pedirCena(b.dataset.cena); }));
-  const bl = $('janela').querySelector('[data-luma]');
-  if (bl) bl.addEventListener('click', () => { Som.au(); fecharJanela(); chamarLuma(); });
+  $('janela').querySelectorAll('[data-luma]').forEach(b => b.addEventListener('click', () => { Som.au(); fecharJanela(); lumaChamar(b.dataset.luma); }));
   const bp = $('janela').querySelector('[data-postal]');
   if (bp) bp.addEventListener('click', () => { Som.clique(); fecharJanela(); chegarCartao(); });
   const br = $('janela').querySelector('[data-redemoinho]');
@@ -13397,7 +14250,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Figurinhas:</b> metas de longo prazo no caderno, que dão xp.</li>
       <li><b>Floresta</b>${nv(PARCELAS[0].nivel)}: do outro lado da estrada há uma mata nativa protegida, vendida em ${PARCELAS.length} parcelas, nos níveis ${PARCELAS.map(P => P.nivel).join(', ')}. O Ed só coleta das árvores que já estão lá, sem plantar nem cortar: ${Object.values(NATIVAS).map(N => N.nomeP.toLowerCase()).join(', ')}. Cada árvore guarda uma coleta pronta, mesmo com o jogo fechado.</li>
       <li><b>Trufas</b>${nv(CENAS.patrinho.nivel())}: depois da visita do Patrinho, de vez em quando nasce uma trufa perto de uma árvore, enquanto você joga. Siga o cheirinho que sobe do chão e toque ali para o Ed cavar. Só o Patrinho compra: use o botão Ligar e ele vem de lambreta pagar ${reais(PRODUTOS.trufa.venda)} por trufa.</li>
-      <li><b>Luma:</b> a irmã chihuahua dos porquinhos. De vez em quando ela sai pela portinha da casa para brincar com a bolinha roxa, em volta do chafariz se tiver um, e, se o Ed estiver por perto, dá uma mordidinha no rabicó dele. Para ela sair na hora, use Chamar a Luma na janela Cenas.</li>
+      <li><b>Luma:</b> a irmã chihuahua dos porquinhos. De vez em quando ela sai pela portinha da casa para brincar com a bolinha roxa, em volta do chafariz se tiver um, e, se o Ed estiver por perto, dá uma mordidinha no rabicó dele. Ela também tem as aventuras dela: leva o envelope do aluguel ou o cartão-postal até o Ed, cava e acha moedinha, osso ou sementes, arranca o mato dos canteiros e leva para a composteira, foge com uma cenoura do canteiro (o Ed corre atrás), late para as vacas e para os patos, tira soneca no sol de manhã, corre atrás do disco voador e do redemoinho, pula nas poças da chuva, recebe o Beto e o Jaca na porteira, acompanha a galinha aposentada e pede biscoito no cafezinho. Na janela Cenas, o cartão da Luma tem um botão para cada uma.</li>
       ${S.viuCineLucia ? `<li><b>Aluguel do Nano Hostel:</b> de vez em quando a Lúcia, dona do hostel, deixa ${reais(ALUGUEL.valor)} num envelope na porta da casa. Toque nele para o Ed pegar.</li>` : ''}
       <li><b>Terreno abandonado</b>${nv(ARRENDAMENTO.nivel)}: ao lado da estrada, por ${reais(ARRENDAMENTO.preco)} em pagamento único. Toque na placa para arrendar; depois o Ed tira a cerca e o terreno vira parte da fazenda.</li>
       <li><b>Lotes do terreno novo</b>${nv(ARRENDAMENTO.nivel)}: com a cerca tirada, o terreno tem um lago com uma ponte e, atrás das fábricas da mata, faixas de lotes à venda: dois terrenos de canteiros, por ${reais(LOTES[6].preco)} e ${reais(LOTES[7].preco)}, dois terrenos de pomar, por ${reais(POMAR_BLOCOS[3].preco)} e ${reais(POMAR_BLOCOS[4].preco)}, com seis covas cada, e uma fileira de ${COLMEIA_SLOTS.length - COLMEIA_CANTO} lugares para colmeia. As colmeias de lá ajudam o pomar de lá.</li>
@@ -13852,7 +14705,7 @@ async function iniciar(){
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
   window.__fazenda = { lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
-    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
+    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
     // auditoria de colisões: o que o desenho de uma construção (n = nível da reforma, ou 'andaime') põe fora do terreno dela
     fora(id, n){
       const p = PREDIO[id], fab = !!FABRICAS[id], v = n === 'andaime' ? vAndaime(id) : vReforma(id, n), s = 1 / 8, h = s / 2;
@@ -13923,7 +14776,7 @@ function catalogoModelos(){
     p.g.userData.anima(0, 0);
     return p.g;
   } })) });
-  const luma = nome => ({ nome, variantes: ['Parada', 'Andando', 'Sentada', 'Com a bolinha'].map(n => ({ nome: n, cria: () => {
+  const luma = nome => ({ nome, variantes: ['Parada', 'Andando', 'Sentada', 'Com a bolinha', 'Deitada', 'Cavando', 'Sacudindo', 'Tonta', 'Espreguiçando'].map(n => ({ nome: n, cria: () => {
     const L = montarLuma(n === 'Com a bolinha');
     L.g.userData.anima = (dt, t) => animarLuma(L, n, t);
     L.g.userData.anima(0, 0);
@@ -13967,7 +14820,7 @@ function catalogoModelos(){
     { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Tratorzinho', vTrator), varios('Bicicleta', CICLISTAS.map((c, i) => [['Vermelha', 'Azul', 'Amarela'][i], () => vBicicleta(c[0])])), um('Teco-teco', vTecoTeco), { nome: 'Jatinho', variantes: [['Fechado', 0], ['Com a escada', 1]].map(([n, a]) => ({ nome: n, cria: () => { const g = montarJatinho(1 / 16); g.userData.escada.rotation.x = a ? -JATO.aberta : 0; return g; } })) }, um('Hélice', vHelice), um('Biruta', vBiruta), { nome: 'Disco voador', variantes: [['Voando', false], ['Com o raio', true]].map(([n, r]) => ({ nome: n, cria: () => { const D = montarDisco(r); D.g.userData.anima = (dt, t) => animarDisco(D, t); D.g.userData.anima(0, 0); return D.g; } })) }] },
     { nome: 'Cenário', itens: [varios('Árvore', [['Maçãs', () => vArvore(0)], ['Sem fruta', () => vArvore(1)], ['Laranjas', () => vArvore(2)]]), um('Arbusto', vArbusto), um('Redemoinho', vRedemoinho), um('Fardo de feno', vFeno), um('Flores', () => vFlores(3)), um('Capim', () => vCapim(1)), um('Cova', vCova), varios('Cerca', [['Reta', () => vCerca(3)], ['Canto', () => vCerca(5)]]), varios('Portão', [['Arco da entrada', () => vPortao(true)], ['Simples', () => vPortao(false)]]), um('Placa', vPlaca), um('Correio', vCorreio)] },
     { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), { nome: 'Varal de luzes', variantes: [{ nome: '', cria: () => { const v = vVaralTrecho(), m = malha(v.build(1 / RES_VARAL)); m.userData.cubos = v.m.size; return m; } }] }, um('Chafariz', vFonte), um('Estátua do Ed', vEstatua)] },
-    { nome: 'Objetos', itens: [um('Cartão-postal', vCartaoPostal), um('Ponte do lago', vPonte), um('Rampa dos patos', vRampaPatos), um('Chocolateria', vChocolateria), um('Oficina de borracha', vOficina), um('Mirante da mata', vMirante), varios('Fogo na mata', [0, 1, 2].map(f => ['Fase ' + (f + 1), () => vFogo(f)])), varios('Lixo na mata', [['Garrafa', () => vLixo(0)], ['Latinha', () => vLixo(1)], ['Saquinho', () => vLixo(2)]]), um('Galho caído', vGalho), um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Lanterna', vLanterna), um('Lua', vLua), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Nano Hostel', vNanoHostel), um('Nano Metrô', vNanoMetro), varios('Nano pessoa', [0, 1, 2, 3, 4, 5].map(k => ['Nano ' + (k + 1), () => vNano(k * 7, k === 2)])), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
+    { nome: 'Objetos', itens: [um('Cartão-postal', vCartaoPostal), um('Osso da Luma', vOsso), um('Biscoito da Luma', vBiscoito), um('Ponte do lago', vPonte), um('Rampa dos patos', vRampaPatos), um('Chocolateria', vChocolateria), um('Oficina de borracha', vOficina), um('Mirante da mata', vMirante), varios('Fogo na mata', [0, 1, 2].map(f => ['Fase ' + (f + 1), () => vFogo(f)])), varios('Lixo na mata', [['Garrafa', () => vLixo(0)], ['Latinha', () => vLixo(1)], ['Saquinho', () => vLixo(2)]]), um('Galho caído', vGalho), um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Lanterna', vLanterna), um('Lua', vLua), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Nano Hostel', vNanoHostel), um('Nano Metrô', vNanoMetro), varios('Nano pessoa', [0, 1, 2, 3, 4, 5].map(k => ['Nano ' + (k + 1), () => vNano(k * 7, k === 2)])), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
   ];
   grupos.push({ nome: 'Ícones', itens: Object.keys(VI).filter(k => !usados.has(k)).sort().map(k => um((PRODUTOS[k] && PRODUTOS[k].nome) || k, VI[k])) });
   return grupos.flatMap(g => g.itens.map(it => ({ ...it, grupo: g.nome, ini: it.ini || 0, id: (g.nome + '-' + it.nome).normalize('NFD').replace(/[^\w]+/g, '-').toLowerCase() })));

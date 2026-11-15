@@ -27,14 +27,14 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 | Lúcia | Nano arteira, dona do Nano Hostel. Cabelo preto com chiquinhas, vestido amarelo até o joelho. Chama o Ed de "tomada" e paga aluguel |
 | Maurinho (Mauro Lúcio) | Irmão, arquiteto e muito inteligente. Igual ao Patrinho, com o suéter branco de ursinho marrom (`MODELO_MAURINHO`). Põe os óculos redondos só nas obras, com a prancheta na mão (`MODELO_MAURINHO_OCULOS`, `vPrancheta`). Chega no nível 31 na garupa da lambreta do Patrinho e mostra ao Ed as plantas na prancheta, ainda sem os óculos |
 | Curupira | Guardião da floresta, do folclore. Desenho original (`vCurupira`): menino pequeno de pele morena, cabelo de fogo vermelho, laranja e amarelo, saiote de folhas e os pés virados para trás. Aparece no nível 28 e depois passeia de vez em quando na beira da mata |
-| Luma | Irmã chihuahua, meiga e brincalhona. Sai pela portinha da casa, brinca com a bolinha roxa e às vezes morde o rabicó do Ed |
+| Luma | Irmã chihuahua, meiga e brincalhona. Sai pela portinha da casa, brinca com a bolinha roxa e às vezes morde o rabicó do Ed. Também ajuda, reage aos eventos e apronta pela fazenda (veja Aventuras da Luma) |
 
 ## Cenas (cinematics)
 
 - Toda cena entra em `CENAS` e em `ORDEM_CENAS`, e aparece na janela **Cenas** para rever. Rever não muda nada no save. Se a cena mexe no save, a reprise usa um dublê, como a vaca de mentira da abdução.
 - Pular a cena tem o mesmo efeito que assistir até o fim. Por exemplo, a vaca abduzida vai embora mesmo se a cena for pulada.
 - Toda cena tem uma música própria, no tema dela (veja abaixo).
-- Eventos que não são cena, mas o jogador gosta de ver, ganham um cartão na janela Cenas com um botão para chamar na hora: "Chamar a Luma", "Chamar o disco", "Chamar o galo fujão", "Chamar o redemoinho", "Chamar visitantes".
+- Eventos que não são cena, mas o jogador gosta de ver, ganham um cartão na janela Cenas com um botão para chamar na hora: "Chamar o disco", "Chamar o galo fujão", "Chamar o redemoinho", "Chamar visitantes". O da Luma tem um botão para cada aventura dela (veja Aventuras da Luma).
 - Uma cena só começa sem janela aberta, com o Ed parado e sem tarefa. Cenas que se repetem usam `repete: true`.
 - Na câmera isométrica, um objeto largo e baixo em cima de alguém esconde quem está embaixo. Confira o enquadramento renderizando, e gire a câmera na cena quando precisar, como na cena da mata.
 
@@ -107,7 +107,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 
 ## Eventos e save
 
-- Eventos de enfeite (Luma, disco voador, galo, bichos da mata, nanos do Nano Hostel, visitantes da trilha) não mexem no save. Os tempos ficam só na memória e recomeçam ao abrir o jogo.
+- Eventos de enfeite (Luma, disco voador, galo, bichos da mata, nanos do Nano Hostel, visitantes da trilha) não mexem no save. Os tempos ficam só na memória e recomeçam ao abrir o jogo. As exceções são quatro aventuras da Luma que ajudam ou aprontam de verdade: a carteira (entrega o aluguel ou o cartão), o cava e acha (moedinha ou sementes), a caçadora de mato (tira o mato e põe na composteira) e a cenoura (o que ela tira do canteiro vai para o celeiro).
 - Eles não começam com cena ou janela aberta, e somem quando uma cena começa.
 - A abdução é a exceção: ela tira uma vaca do save, e o jogador compra outra. A aposentadoria também: tira uma galinha do save e o dinheiro do bônus (veja a seção Aposentadoria das galinhas).
 - Frequência dos eventos de surpresa (em tempo de jogo aberto): o disco voador passa a cada 6 a 12 min (o primeiro entre 3 e 6 min) e, com vaca no curral, tenta a abdução em 60% das passagens (`DISCO_JOGO`); o redemoinho do Saci vem entre 4 e 9 min depois de abrir e depois a cada 8 a 16 min (`REDEMOINHO`); o cafezinho, a cada 6 a 12 min (`sorteioCafezinho`); o galo fujão, a cada 8 a 15 min (o primeiro entre 5 e 10, `GALO_JOGO`). Como são cenas, a abdução e o cafezinho só acontecem se o Ed estiver parado, sem tarefa, naquela hora.
@@ -138,6 +138,36 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - Pintinhos (`PINTINHO`): com galo no galinheiro (o antigo sempre tem; o novo, depois de comprado), cada ovo tem 3% de chance de chocar, se houver lugar no cercado e nenhum outro pintinho crescendo ali. Nasce um pintinho em vez do ovo (`nascerPintinho`), com `d.pinto` (quando nasceu), `d.mae` e `e: 'pinto'`. Ele anda atrás da mãe, não come nem dá ovo, conta como galinha no cercado (não na caixa do coletor) e vira galinha em 10 min pelo relógio, também com o jogo fechado (`crescerPintinho`, `trocarModelo`).
 - Falas: `FALAS_GALO_CANTA`, `FALAS_GALO_ALARME`, `FALAS_GALO_CARINHO`, `FALAS_GALO_CIUME`, `FALAS_GALO_PEGOU`, `FALAS_GALO_DEVOLVEU` e `FALAS_LUMA_GALO`.
 - Para testar: `__fazenda.galo` (`obj`, `cantar`, `alarme`, `fugir`, `tocar`, `forcarCiume`, `forcarPintinho`, `proxFujao`, `lugar`, `bicho`, `simular`).
+
+## Aventuras da Luma
+
+- Ideia do Lucas: mais situações para a Luma, que também ajudem na fazenda. São 13, todas em `AVENTURAS` (uma função por aventura, com `L.passo`; o passo 0 é sempre sair pela portinha ou largar a bolinha), com as chances em `LUMA_SITU`. `lumaSaiPara(acao, extra, cena)` começa uma; `lumaFim(manter)` manda ela para casa (buscando a bolinha, se largou). Saindo de casa para uma aventura, ela deixa a bolinha lá dentro.
+- Saídas (`SAIDAS_LUMA`, `escolherSaidaLuma`): quando ela sai de casa, em `LUMA_SITU.missao` das vezes é para uma aventura em vez da bolinha, sorteada pelos pesos entre as que dá para fazer agora (`saidasLuma`):
+  - cava e acha: cava num canto livre e acha uma moedinha (dinheiro), um osso (fica com ela, `vOsso`) ou 3 sementes de uma cultura liberada (`achadoLuma`);
+  - caçadora de mato: arranca o mato de um canteiro (o mesmo efeito de tirar o mato) e leva para a porta da composteira (`somarRestos(1)`), virada para ela; só com a composteira;
+  - cenoura (travessura): cava um canteiro plantado (de preferência de cenoura) e sai correndo com o produto na boca para o terreiro da frente da casa; não mexe no canteiro. Com o Ed parado por perto, ele corre atrás, ela cansa e ele alcança; ela para do lado dele na tela e, depois da bronca, faz cara de arrependida. O produto vai para o celeiro de qualquer jeito;
+  - no canteiro (mato e cenoura) ela fica na beirada da frente, na grama ou no caminho do lado da câmera (`beiraDoCanteiro`); canteiro sem beirada assim fica de fora, porque a plantação tamparia ela;
+  - vaca (travessura): vai até a cerca do curral, e a vaca, curiosa, vem até o ladrilho de pasto do outro lado (`vacaParaLuma`, sai junto com ela, porque a vaca anda devagar). Ela late, a vaca solta um muuu e ela volta correndo para casa;
+  - patos (travessura): late na beira do lago (`beiraDoLago`), os patos do chão correm para a água (`espantarPatos`) e ela fica na beirinha, sem coragem de entrar; só de dia e de tarde;
+  - soneca: de manhã (`LUMA_SITU.manha`), dá três voltinhas e deita num lugar de sol, com Zzz pequenininhos; o Ed passando perto pede silêncio; ela acorda espreguiçando.
+- Eventos (`gatilhosLuma`): estando em casa ou brincando, ela reage:
+  - carteira: o envelope do aluguel ou o cartão-postal está na porta há `LUMA_SITU.carteira` segundos sem ninguém ir buscar; ela leva na boca até o Ed, onde ele estiver. O aluguel entra como se o Ed tivesse pegado (`pegarAluguel(false)`), e o cartão abre a janela dele logo depois. Se não alcança o Ed, devolve à porta;
+  - disco voador: corre embaixo dele latindo para o céu;
+  - redemoinho do Saci: persegue, rodopia dentro dele e o redemoinho cospe ela para o lado na tela, tonta, com estrelinhas (o Saci aparece do lado do Ed, e `lugarDoSaci` não escolhe o lugar dela);
+  - chuva: pula em três poças e vai se sacudir do lado do Ed, que reclama do banho;
+  - visita do Beto ou do Jaca: corre até dentro da porteira (`LUMA_VISITA`) e pula de alegria quando ele desce do caminhão. Depois da fala de chegada, ele fala com ela (`FALAS_JACA_LUMA`, `FALAS_BETO_LUMA`), ela responde e só então abre a janela de venda (`lumaRecebeVisita`; se ela ainda está correndo para lá, ele espera até 4 s). Na despedida ela late de tchau;
+  - escolta: a galinha aposentada indo embora pela estrada; ela vai do lado até a porteira e se despede.
+- Nas cenas (`L.cena`): na abdução (`lumaNaAbducao`, em `LUMA_SITU.raio` das vezes, ou sempre se já estava latindo para o disco) corre de um lado para o outro do lado de fora do curral latindo para o raio; no cafezinho (`lumaNoCafe`, em `LUMA_SITU.cafe` das vezes) senta do lado da mesa (`CAFE_LUMA`) pedindo biscoito, e quando o Ed come ganha um (`vBiscoito`). As duas voltam para casa no fim da cena (`lumaFimCena`).
+- Fora as quatro do save (carteira, cava, mato e cenoura), nada vai para o save. Se ela é recolhida no meio (uma cena começa), o que levava não se perde: o mato vai para a composteira e o produto para o celeiro (`lumaRecolher`).
+- Para cavar, dormir, fugir com a cenoura e pular nas poças ela escolhe um ponto longe dos porquinhos, que não fique escondido atrás deles na tela (`pontoLumaLivre`, `tampaLuma`) e sem plantação, construção ou enfeite no ladrilho da frente (`frenteLivreLuma`), senão as plantas e os balões de colheita tampam ela.
+- Na abdução, os dois pontos onde ela corre são escolhidos dentro do quadro da cena (a câmera vai para perto da vaca com a vista da cena), fora da parte de baixo, onde fica a caixa de fala.
+- Conversa: quando o Ed responde a ela (`edFala`), ele espera o balão dela acabar (`depoisDaFala`), porque os dois ficam perto e os balões se tampariam. Ele vira para ela meio de frente para a câmera (`virarNaCena`).
+- Dormindo (pose Deitada), ela fecha os olhos: a cabeça tem uma segunda malha de olhos fechados (`vLumaCabeca(true)`, `L.sono`), trocada em `animarLuma`.
+- O que ela leva na boca vai no lugar da bolinha (`lumaBoca(nome)`: envelope, cartão, mato, osso, biscoito, moeda, semente ou o produto). Enquanto ela leva o envelope ou o cartão (`L.leva`), ele some da porta.
+- Poses novas em `animarLuma`: Deitada, Cavando, Sacudindo, Tonta e Espreguiçando, todas no visualizador (Personagens), junto com o osso e o biscoito (Objetos). `poseAventura` escolhe a pose de cada passo.
+- Falas: uma lista para cada momento, com 11 variações (`FALAS_LUMA_CARTEIRA`, `FALAS_ED_CARTEIRA`, `FALAS_LUMA_CAVA`, `_ACHOU`, `FALAS_ED_ACHOU`, `FALAS_LUMA_MATO`, `FALAS_ED_MATO`, `FALAS_LUMA_ESCOLTA`, `_DISCO`, `_RAIO`, `_SACI`, `_TONTA`, `_CHUVA`, `FALAS_ED_SACODE`, `FALAS_LUMA_VISITA`, `FALAS_LUMA_CENOURA`, `FALAS_ED_CENOURA`, `FALAS_ED_PEGOU`, `FALAS_LUMA_DEVOLVE`, `FALAS_LUMA_PATOS`, `_BEIRA`, `_VACA`, `_FOGE`, `FALAS_ED_SONECA`, `FALAS_LUMA_ACORDA`, `_BISCOITO`, `_NHAC`). As da cenoura usam `{um}`, `{o}` e `{O}` com o nome do produto (`artigosProduto`).
+- Na janela Cenas, o cartão da Luma tem um botão para cada aventura (`situacoesLuma`, `lumaChamar`); as que não dá para fazer agora ficam apagadas, com o motivo embaixo.
+- Para testar: `__fazenda.luma.situ` (`chamar`, `lista`, `sai`, `saidas`, `LUMA_SITU`, `AVENTURAS`, `envelope`, `vaca`, `beira`, `mato`, `canteiro`).
 
 ## Interface
 
