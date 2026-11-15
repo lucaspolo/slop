@@ -918,6 +918,15 @@ const OBRAS = {
     base: () => vReforma('casa', 1),
     modelo: n => vCasarao(n),
   },
+  hangar: { nome: 'Hangar do PIG-MTP', de: 'do', nivel: 47, predio: 'hangar', icone: 'jato', andaimeAlto: 18,
+    etapas: [{ preco: 700000, minutos: 20, xp: 7000 }],
+    desc: 'Um hangar novo com torre de controle no fim da pista, que ganha asfalto. O jatinho às vezes pernoita na fazenda, e de manhã o Milton aparece no cafezinho.',
+    pronto: 'A pista ganhou asfalto, e o jatinho às vezes pernoita aqui.',
+    modelo: () => vHangarNovo(),
+    vestir(m){ const tx = placaDeTexto(texturaTexto([['PIG-MTP', 1, '#ff5500']], 256, 64, '#fdf8ef'), 14 / 8, 2.6 / 8); tx.position.set(-0.5, 11.5 / 8, 1.012); m.add(tx); },
+    aoTerminar: () => { refazerChao(); mostrarHangarVelho(); },
+    menu(r){ r.estado = voo.estado === 'pernoite' ? 'O Milton está dormindo no hangar. Amanhã cedo ele toma café com vocês antes de decolar.' : 'O hangar novo do PIG-MTP, com torre de controle. A pista agora é de asfalto, e de vez em quando o Milton pernoita aqui.'; },
+  },
   galpao: { nome: 'Galpão do trator', nivel: 42, predio: 'galpao', icone: 'trator',
     etapas: [{ preco: 400000, minutos: 15, xp: 5000 }],
     desc: 'Um galpão de zinco com um trator verde. O Ed sobe nele e ara, planta ou colhe um terreno de canteiros inteiro de uma passada só.',
@@ -1043,10 +1052,11 @@ const XP_V2 = [0];
   } }
 const xpParaV2 = n => XP_V2[Math.min(n - 1, XP_V2.length - 1)] + Math.max(0, n - XP_V2.length) * 1e6;
 const nivelDe = xp => { let n = 1; while (xp >= xpPara(n + 1)) n++; return n; };
-// terrenos de 4 x 4 canteiros, com um caminho de grama entre eles. Os seis primeiros ficam na horta, ao lado da casa; os do
+// terrenos de 4 x 4 canteiros, com um caminho de grama entre eles. Os seis primeiros ficam na horta, ao lado da casa, com uma
+// fileira de grama até a cerca de baixo (no mapa 3 eles desceram HORTA_DESCE ladrilhos, ver migrarHorta); os do
 // canto Sul (canto: true), na primeira faixa atrás das fábricas da mata, têm preço e nível próprios e só existem com a cerca de
 // lá tirada
-const LOTES = [{ x:2, z:8 }, { x:7, z:8 }, { x:12, z:8 }, { x:2, z:14 }, { x:7, z:14 }, { x:12, z:14 },
+const LOTES = [{ x:2, z:10 }, { x:7, z:10 }, { x:12, z:10 }, { x:2, z:16 }, { x:7, z:16 }, { x:12, z:16 },
   { x:30, z:28, canto: true, preco: 30000, nivel: 30 }, { x:35, z:28, canto: true, preco: 40000, nivel: 30 }];
 // o n-ésimo terreno da horta comprado: preço e nível mínimo (o primeiro já vem com a fazenda)
 const PRECO_LOTE = [0, 300, 800, 2000, 4000, 7000];
@@ -1087,8 +1097,10 @@ const PREDIOS = [
   // a casinha dos patos, no fundo do cercado deles, com a porta para o pasto (-z)
   { id:'patos',      nome:'Galinheiro dos patos', x0:49, z0:27, x1:50, z1:28, porta:[49, 26], lote: true },
   // as obras novas do Maurinho (OBRAS): o lugar fica gramado até a obra começar
-  { id:'resort',     nome:'Resort das Aposentadas', x0:41, z0:32, x1:47, z1:37, porta:[44, 38], obra: 'resort' },
-  { id:'galpao',     nome:'Galpão do trator',    x0:0,  z0:6,  x1:3,  z1:7,  porta:[1, 8], obra: 'galpao' },
+  { id:'resort',     nome:'Resort das Aposentadas', x0:45, z0:32, x1:51, z1:37, porta:[48, 38], obra: 'resort' },
+  { id:'galpao',     nome:'Galpão do trator',    x0:0,  z0:7,  x1:3,  z1:8,  porta:[1, 9], obra: 'galpao' },
+  // fora do mapa de ladrilhos: no fim da pista, ao norte dela (fora: sem ladrilho, sem lote; o Maurinho trabalha na beira da fazenda)
+  { id:'hangar',     nome:'Hangar do PIG-MTP',   x0:47, z0:-6, x1:51, z1:-5, porta:[49, -4], obra: 'hangar', fora: true },
 ];
 const PREDIO = {}; PREDIOS.forEach(p => { PREDIO[p.id] = p; });
 const ARVORES = [[0,1,0],[1,5,1],[0,10,2],[1,18,0],[13,1,1],[24,0,0],[28,4,1],[37,9,0],[37,18,2],[2,0,1],[9,0,0],[28,0,1],[0,20,1],[31,0,2],[35,4,1],[35,0,0],[45,13,1],[51,20,0],[16,13,2]];
@@ -1112,7 +1124,7 @@ const PARCELAS = [
 const MATA_SLOTS = PARCELAS.flatMap((P, p) => P.arvores.map((tipo, k) => { const z = P.z0 + 1 + (k >> 1) * 2; return { x: P.col + (k % 2 ? 1 : -1), z, pe: [P.col, z], tipo, p }; }));
 const MATA_XZ = MATA_SLOTS.map(s => [s.x, s.z]);
 const FENOS = [[14,3],[14,4]];
-const FLORES = [[8,3],[2,3],[9,7],[16,7],[1,8],[0,4],[12,20],[4,20],[18,7],[24,4],[31,4],[42,7]];
+const FLORES = [[8,3],[2,3],[9,7],[16,7],[1,20],[0,4],[12,20],[4,20],[18,7],[24,4],[31,4],[42,7]];
 const PASTO_G = [], PASTO_V = [], PASTO_CERCADO = { galinha: [], vaca: [], pato: [] };
 // o galinheiro e o curral do começo: cerca, porteira para o caminho e pasto
 const CERCA_GALINHEIRO = [19, 7, 26, 11], CERCA_CURRAL = [19, 14, 26, 21];
@@ -4357,7 +4369,7 @@ function galinhaParaAposentar(){
 }
 const bonusAposenta = ovos => Math.round(ovos * APOSENTA.porOvo);
 function aposentadoriaPronta(){
-  if (!S || nivel() < APOSENTA.nivel || !(S.aposentaEspera <= 0) || periodo().id === 'noite' || voo.estado !== 'fora' || aposentadaNaEstrada) return false;
+  if (!S || nivel() < APOSENTA.nivel || !(S.aposentaEspera <= 0) || periodo().id === 'noite' || !aviaoLivre() || aposentadaNaEstrada) return false;
   // com o resort pronto, a próxima espera a inauguração
   if (obraConcluida('resort') && !S.viuCineResort) return false;
   const a = galinhaParaAposentar();
@@ -4581,9 +4593,9 @@ function itensHospede(h){
 // da entrada, as aposentadas chegam pela ponte com as malinhas e fazem fila do lado, o Ed corta a fita e elas entram.
 // Os lugares (mundo): todos em meia-lua de frente para o meio; as galinhas ficam à esquerda do Ed na tela, em duas
 // fileiras de três (a linha da tela, com a câmera de sempre, é a diagonal x menos, z mais)
-const RESORT_CENA = { ed: [43.55, 39.25], maurinho: [45.35, 39.35], hud: [44.15, 40.1], dani: [46.3, 38.75], luma: [44.95, 40.35], meio: [44.5, 39.45],
-  fita: [44.5, 37.94], corte: [44.3, 38.62], ponte: [37.5, 26.4], entra: 38.55,
-  fila: i => { const k = i % 3, f = Math.floor(i / 3); return [42.8 - 0.47 * k - 0.42 * f, 40.0 + 0.47 * k - 0.42 * f]; }, max: 6 };
+const RESORT_CENA = { ed: [47.55, 39.25], maurinho: [49.35, 39.35], hud: [48.15, 40.1], dani: [50.3, 38.75], luma: [48.95, 40.35], meio: [48.5, 39.45],
+  fita: [48.5, 37.94], corte: [48.3, 38.62], ponte: [37.5, 26.4], entra: 38.55,
+  fila: i => { const k = i % 3, f = Math.floor(i / 3); return [46.8 - 0.47 * k - 0.42 * f, 40.0 + 0.47 * k - 0.42 * f]; }, max: 6 };
 let inauguracao = null, fitaResort = null;
 // quem está na cena: o Ed, o Maurinho e os irmãos que vieram
 const naInauguracao = () => [ed, maurinho, ...(inauguracao && inauguracao.hud ? [irmaoHud] : []), ...(inauguracao && inauguracao.dani ? [irmaoDani] : [])];
@@ -6100,6 +6112,103 @@ function vCasarao(n){
   }
   return v;
 }
+// ================= parque de diversões: só no visualizador, guardado para usar depois em outro lugar (o Lucas tirou o Parque
+// do lago das obras e pediu para manter os modelos). 8 × 4 ladrilhos em cubinhos de 1/8 a partir do canto, com o norte (z 0)
+// para a água: a base da roda-gigante à esquerda (a roda e as gôndolas são modelos à parte, para girar), o cais dos
+// pedalinhos avançando na água, a bilheteria listrada, o carrinho de algodão-doce, bancos, postes, o arco da entrada (em
+// arcoX) e a cerquinha branca em volta
+const PARQUE = { larg: 64, fundo: 32, cubo: [18.5, 18.5, 14], raio: 13, gondolas: 8, arcoX: 44 };
+function vParque(){
+  const v = new Vox(), X1 = PARQUE.larg - 1, Z1 = PARQUE.fundo - 1, [hx, hy, hz] = PARQUE.cubo, madeira = 0xb07e4a, branco = 0xfdf8ef, vermelho = 0xd8344a;
+  v.box(0, 0, 0, X1, 0, Z1, (x, y, z) => ((x >> 1) + (z >> 1)) % 2 ? 0xe2dccd : 0xd4cdbb);
+  // canteiros de grama com flor nos cantos
+  for (const [x0, z0, x1, z1] of [[0, 22, 9, 30], [54, 22, 63, 30]]) v.box(x0, 0, z0, x1, 0, z1, (x, y, z) => hash(x, 1, z) < 0.12 ? [0xf05d7e, 0xffd34d, 0xb48be0][Math.floor(hash(x, 2, z) * 3)] : hash(x, 3, z) < 0.5 ? 0x5aa847 : 0x4f9a3d);
+  // a roda-gigante: as duas pernas em A de cada lado, o eixo e a plataforma de embarque com escadinha
+  for (const z of [hz - 3, hz + 3]) for (let t = 0; t <= 1; t += 0.02) for (const s of [-1, 1]){ const x = Math.round(hx + s * 9 * (1 - t)), y = Math.round(t * hy); v.box(x, y, z, x, y, z, 0x9aa3ab); }
+  v.box(Math.floor(hx) - 1, Math.floor(hy) - 1, hz - 3, Math.floor(hx) + 1, Math.floor(hy) + 1, hz + 3, 0x6a6e74);
+  v.box(12, 1, hz + 5, 25, 2, hz + 8, madeira); for (let i = 0; i < 2; i++) v.box(16, 1 - i, hz + 9 + i, 21, 1 - i, hz + 9 + i, madeira);
+  // o cais dos pedalinhos, avançando no lago, com as estacas e uma boia
+  v.box(36, 0, -7, 44, 1, 4, (x, y, z) => z % 2 ? 0xb07e4a : 0x9a6a40);
+  for (const [x, z] of [[36, -7], [44, -7], [36, -2], [44, -2]]) v.box(x, -3, z, x, 2, z, 0x7a5232);
+  for (let k = 0; k < 10; k++){ const a = k / 10 * Math.PI * 2; v.set(Math.round(34 + Math.cos(a) * 1.6), 2, Math.round(-4 + Math.sin(a) * 1.6), k % 2 ? 0xf05d7e : branco); }
+  // a bilheteria listrada de vermelho e branco, com o telhadinho e o guichê
+  v.box(28, 1, 20, 34, 9, 26, (x, y) => (x >> 1) % 2 ? vermelho : branco); v.box(29, 4, 26, 33, 6, 26, 0x3a3a3e); v.box(28, 3, 27, 34, 3, 27, madeira);
+  for (let y = 10; y <= 13; y++){ const k = y - 10; v.box(27 + k, y, 19 + k, 35 - k, y, 27 - k, (x) => (x >> 1) % 2 ? vermelho : 0xf2c335); }
+  // o carrinho de algodão-doce: a caixa com rodas, o guarda-sol e as nuvens cor-de-rosa
+  v.box(37, 2, 23, 41, 4, 26, 0x58b6f0); for (const x of [37, 41]) v.set(x, 1, 26, 0x2f2f33); v.box(39, 5, 24, 39, 10, 24, branco);
+  for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) if (Math.hypot(x, z) <= 3.2) v.set(39 + x, 11, 24 + z, (Math.floor(Math.atan2(z, x) * 2)) % 2 ? 0xf28fac : branco);
+  for (const [x, z] of [[38, 25], [40, 25]]) v.ell(x, 6, z, 0.9, 1, 0.9, 0xf7b6cf);
+  // bancos e postes de luz
+  for (const x0 of [46, 56]){ v.box(x0, 1, 20, x0 + 4, 1, 21, madeira); v.box(x0, 2, 21, x0 + 4, 3, 21, madeira); v.set(x0, 0, 20, 0x3a3a3e); v.set(x0 + 4, 0, 20, 0x3a3a3e); }
+  for (const [x, z] of [[11, 27], [36, 5], [61, 9]]){ v.box(x, 1, z, x, 9, z, 0x3a3a3e); v.box(x - 1, 10, z - 1, x + 1, 11, z + 1, 0xfff1a8); v.box(x - 1, 12, z - 1, x + 1, 12, z + 1, 0x3a3a3e); }
+  // cerquinha branca em volta (menos do lado do lago e na entrada) e o arco listrado da entrada
+  const AX = PARQUE.arcoX;
+  for (let x = 0; x <= X1; x++) if (x < AX - 4 || x > AX + 3) v.box(x, 1, Z1, x, x % 3 === 0 ? 3 : 2, Z1, branco);
+  for (let z = 4; z < Z1; z++) for (const x of [0, X1]) v.box(x, 1, z, x, z % 3 === 0 ? 3 : 2, z, branco);
+  for (const x0 of [AX - 6, AX + 4]) v.box(x0, 1, Z1 - 1, x0 + 1, 15, Z1, (x, y) => (y >> 1) % 2 ? vermelho : 0xf2c335);
+  v.box(AX - 7, 16, Z1 - 1, AX + 6, 17, Z1, 0x58b6f0);
+  v.box(AX - 6, 18, Z1, AX + 5, 21, Z1, (x, y) => x === AX - 6 || x === AX + 5 || y === 18 || y === 21 ? vermelho : branco);
+  // bandeirinhas do arco até os postes
+  for (let x = 2; x <= X1 - 2; x += 1) if (x < AX - 7 || x > AX + 6) v.set(x, 13 - Math.round(Math.sin(((x % 16) / 16) * Math.PI) * 2), Z1, [0xf05d7e, 0xffd34d, 0x58b6f0, 0x8fd06a][x % 4]);
+  for (const x of [2, X1 - 2]) v.box(x, 1, Z1, x, 13, Z1, madeira);
+  return v;
+}
+// a roda (gira em volta do eixo, com o centro na origem): o aro, os raios e as lâmpadas do aro, que acendem de noite
+function vRodaGigante(){
+  const v = new Vox(), R = PARQUE.raio;
+  for (let k = 0; k < 360; k++){ const a = k / 360 * Math.PI * 2; for (const z of [-2, 2]) v.set(Math.round(Math.cos(a) * R), Math.round(Math.sin(a) * R), z, k % 12 === 0 ? 0xfff1a8 : 0xd8344a); }
+  for (let i = 0; i < PARQUE.gondolas; i++){ const a = i / PARQUE.gondolas * Math.PI * 2; for (let r = 1; r < R; r++) for (const z of [-2, 2]) v.set(Math.round(Math.cos(a) * r), Math.round(Math.sin(a) * r), z, 0xfdf8ef); v.box(Math.round(Math.cos(a) * R), Math.round(Math.sin(a) * R), -2, Math.round(Math.cos(a) * R), Math.round(Math.sin(a) * R), 2, 0x6a6e74); }
+  v.box(-1, -1, -3, 1, 1, 3, 0xf2c335);
+  return v;
+}
+// a gôndola: uma cestinha com teto, pendurada pelo meio de cima (a origem fica no gancho)
+const CORES_GONDOLA = [0x58b6f0, 0xf2c335, 0x8fd06a, 0xf28fac, 0xb48be0, 0xf08a2c, 0x3fb8b0, 0xd8344a];
+function vGondola(cor){
+  const v = new Vox();
+  v.box(0, -1, 0, 0, 0, 0, 0x6a6e74);
+  v.box(-2, -2, -2, 2, -2, 2, cor); v.box(-3, -8, -2, 3, -3, 2, (x, y) => y === -3 || y === -8 || Math.abs(x) === 3 ? cor : null);
+  v.box(-3, -8, -2, 3, -8, 2, cor); v.box(-3, -7, 2, 3, -6, 2, cor); v.box(-3, -7, -2, 3, -6, -2, cor);
+  return v;
+}
+// o pedalinho de pato: casco amarelo, pescoço e cabeça com bico, banco e a cobertura listrada (frente para +x)
+function vPedalinho(cor){
+  const v = new Vox();
+  v.ell(0, 2, 0, 7, 2.6, 4.4, cor, (x, y) => y >= 0);
+  v.box(-3, 3, -3, 2, 4, 3, 0xfdf8ef); v.box(-4, 5, -3, -4, 7, 3, 0xfdf8ef);
+  v.box(5, 4, -1, 6, 9, 1, cor); v.ell(6.5, 10, 0, 2, 1.8, 1.6, cor); v.box(9, 9, 0, 10, 9, 0, 0xf08a2c); v.box(9, 9, -1, 9, 9, 1, 0xf08a2c); v.set(7, 11, -2, 0x2b2b2b); v.set(7, 11, 2, 0x2b2b2b);
+  for (const x of [-3, 3]) for (const z of [-3, 3]) v.box(x, 5, z, x, 10, z, 0xfdf8ef);
+  v.box(-4, 11, -4, 4, 11, 4, (x) => (x >> 1) % 2 ? 0xd8344a : 0xfdf8ef);
+  return v;
+}
+// o parque com a roda montada no eixo (para ver o conjunto no visualizador; as gôndolas ficam de fora, que no jogo iam menores)
+function vParqueComRoda(){
+  const v = vParque(), [hx, hy, hz] = PARQUE.cubo.map(Math.floor);
+  for (const e of vRodaGigante().m.values()) v.set(hx + e.x, hy + e.y, hz + e.z, e.c);
+  return v;
+}
+// ================= Hangar do PIG-MTP (obra nova do nível 47): 5 × 2 ladrilhos ao norte do fim da pista, em cubinhos de 1/8 a
+// partir do canto. Telhado de zinco em arco ao longo do hangar, a porta grande de moldura laranja virada para a pista (sul,
+// para a câmera), o letreiro em cima dela (vestir) e a torre de controle de vidro na ponta leste
+function vHangarNovo(){
+  const v = new Vox(), X1 = 39, Z1 = 15, laranja = 0xff5500, alto = z => 8 + Math.round(6 * Math.sqrt(Math.max(0, 1 - ((z - 7.5) / 7.8) ** 2)));
+  v.box(0, 0, 0, X1, 0, Z1, (x, y, z) => hash(x, 2, z) < 0.5 ? 0xb9b0a3 : 0xaaa294);
+  for (let x = 1; x <= 31; x++) for (let z = 1; z <= 14; z++) v.box(x, 1, z, x, alto(z), z, (X, Y, Z) => Y >= alto(Z) - 1 ? (X % 3 === 0 ? 0xaab4bd : 0xc8d0d8) : X % 4 === 0 ? 0xb7c0c8 : 0xd9dee3);
+  // a porta grande na frente, recuada, com moldura laranja, e a faixa laranja na base
+  v.box(5, 1, 14, 26, 8, 14, 0x3a3a3e); v.box(5, 1, 13, 26, 8, 13, 0x2e2e32);
+  v.box(4, 1, 15, 4, 9, 15, laranja); v.box(27, 1, 15, 27, 9, 15, laranja); v.box(4, 9, 15, 27, 9, 15, laranja);
+  for (const x of [1, 2, 3, 28, 29, 30, 31]) v.set(x, 1, 15, laranja);
+  v.box(8, 10, 15, 23, 12, 15, 0xfdf8ef);
+  for (let x = 6; x <= 25; x += 4) v.box(x, 1, 14, x, 8, 14, 0x4a4a4e);
+  // a torre de controle: base de concreto, a cabine de vidro e a luz piscando em cima
+  v.box(33, 1, 3, 38, 18, 9, (x, y) => y % 4 === 0 ? 0xc8c0b0 : 0xe0d8c8);
+  v.box(32, 19, 2, 39, 19, 10, 0xb9b0a3); v.box(32, 20, 2, 39, 23, 10, (x, y, z) => x === 32 || x === 39 || z === 2 || z === 10 ? 0x9fd6ec : 0x3a3a3e);
+  for (const [x, z] of [[32, 2], [39, 2], [32, 10], [39, 10]]) v.box(x, 20, z, x, 23, z, 0xfdf8ef);
+  v.box(31, 24, 1, 40, 24, 11, laranja); v.box(35, 25, 5, 36, 26, 6, 0x6a6e74); v.set(35, 27, 5, 0xff3b30); v.set(36, 27, 6, 0xff3b30);
+  v.box(36, 1, 10, 37, 4, 10, 0x3a3a3e);
+  // refletores nos cantos da porta
+  for (const x of [3, 28]){ v.box(x, 1, 15, x, 6, 15, 0x6a6e74); v.set(x, 7, 15, 0xfff1a8); }
+  return v;
+}
 // ================= Galpão do trator (obra nova do nível 42): 4 × 2 ladrilhos ao lado da horta, em cubinhos de 1/8 a partir do
 // canto de cima à esquerda. Paredes de tábua, telhado de zinco em arco ao longo do galpão e a frente toda aberta para o sul,
 // de onde se vê o trator guardado, o tambor de óleo, os fardos e as ferramentas penduradas no fundo
@@ -6823,7 +6932,7 @@ const geo = (chave, fn) => GEO[chave] || (GEO[chave] = fn());
 const CHAVE_SALVO = 'fazendaJoliPig.v1';
 let S = null;
 function estadoNovo(){
-  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedidos: [], versao: 3, mapa: 2, feito: [], dicas: true, alimentador: {}, coletor: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], pomarBlocos: [], colmeias: [], enfeites: [], guardados: {}, parcelas: [], mata: [], trufas: [], maca: null, macaAte: 0, anotado: false, som: true, nAnimal: 0, vendeu: 0, viuCineInicio: false, salvoEm: Date.now() };
+  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedidos: [], versao: 3, mapa: 3, feito: [], dicas: true, alimentador: {}, coletor: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], pomarBlocos: [], colmeias: [], enfeites: [], guardados: {}, parcelas: [], mata: [], trufas: [], maca: null, macaAte: 0, anotado: false, som: true, nAnimal: 0, vendeu: 0, viuCineInicio: false, salvoEm: Date.now() };
   const l = LOTES[2];
   for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) s.campo[x + ',' + z] = { e: 'grama' };
   for (const [dx, dz] of [[2, 2], [3, 2], [2, 3], [3, 3]]) s.campo[(l.x + dx) + ',' + (l.z + dz)] = { e: 'arado' };
@@ -6849,6 +6958,7 @@ function migrar(){
   }
   S.versao = 3;
   if (!(S.mapa >= 2)) migrarMapa();
+  if (!(S.mapa >= 3)) migrarHorta();
 }
 // o mapa da primeira versão tinha 36 x 37 ladrilhos. No maior, entraram colunas e linhas entre as zonas, o galinheiro e o
 // curral se separaram e o leste ganhou espaço para os cercados novos: cada ponto anda com a sua zona (a fileira das
@@ -6864,7 +6974,7 @@ function migrarMapa(){
     const [x, z] = k.split(',').map(Number);
     if (x < 2 || x > 13 || z < 7 || z > 14) continue;
     const l = ((z - 7) >> 2) * 3 + ((x - 2) >> 2), L = LOTES[l];
-    campo[(L.x + (x - 2) % 4) + ',' + (L.z + (z - 7) % 4)] = S.campo[k];
+    campo[(L.x + (x - 2) % 4) + ',' + (L.z - HORTA_DESCE + (z - 7) % 4)] = S.campo[k];
   }
   S.campo = campo;
   const mover = o => { if (o && typeof o.x === 'number'){ const x = o.x, z = o.z; o.x = mapaNovoX(x, z); o.z = mapaNovoZ(z); } };
@@ -6876,9 +6986,22 @@ function migrarMapa(){
   if (S.canto === 2) S.avisoLotesCanto = false;
   S.mapa = 2; mapaMigrado = true;
 }
+// o mapa 3 desceu os seis terrenos da horta HORTA_DESCE ladrilhos, para perto da cerca de baixo (o Lucas pediu), e o
+// galpão do trator foi junto, longe da casa. Os canteiros e os enfeites da faixa da horta descem com eles; o enfeite que
+// cair num terreno volta para a loja ao abrir (conferirHorta)
+const HORTA_DESCE = 2, HORTA_V2 = { x0: 2, x1: 15, z0: 8, z1: 17 };
+let hortaMigrada = false;
+function migrarHorta(){
+  const H2 = HORTA_V2, naHorta = (x, z) => x >= H2.x0 && x <= H2.x1 && z >= H2.z0 && z <= H2.z1, campo = {};
+  for (const k in S.campo){ const [x, z] = k.split(',').map(Number); campo[naHorta(x, z) ? chave(x, z + HORTA_DESCE) : k] = S.campo[k]; }
+  S.campo = campo;
+  for (const e of S.enfeites || []) if (e && naHorta(e.x, e.z)) e.z += HORTA_DESCE;
+  S.mapa = 3; hortaMigrada = true;
+}
 // depois de migrar o save, ao abrir: enfeite que caiu fora de um gramado livre volta para a loja, e trufa ou maçã que
 // não ficou ao lado de uma árvore some (nasce outra depois)
-function conferirMapaNovo(){
+// o enfeite que não está num gramado livre volta para a loja; devolve quantos voltaram
+function guardarEnfeitesForaDoLugar(){
   if (!Array.isArray(S.enfeites)) S.enfeites = [];
   if (!S.guardados) S.guardados = {};
   const ok = [], volta = [];
@@ -6889,11 +7012,21 @@ function conferirMapaNovo(){
   }
   for (const e of volta) S.guardados[e.tipo] = (S.guardados[e.tipo] || 0) + 1;
   S.enfeites = ok;
+  return volta.length;
+}
+const textoEnfeitesVoltaram = n => n ? ` ${n > 1 ? n + ' enfeites não cabiam no lugar novo e voltaram' : 'Um enfeite não cabia no lugar novo e voltou'} para a loja, em Enfeites.` : '';
+// a horta desceu (migrarHorta): só os enfeites, com um aviso
+function conferirHorta(){
+  const n = guardarEnfeitesForaDoLugar();
+  setTimeout(() => aviso('A horta desceu para perto da cerca, com tudo o que estava plantado, e o lugar do galpão do trator ficou mais longe da casa.' + textoEnfeitesVoltaram(n), 'grande', 7), 1800);
+}
+function conferirMapaNovo(){
+  const n = guardarEnfeitesForaDoLugar();
   const pertoDeArvore = (x, z) => tipo(x, z) === 'grama' && ARVORES.some(([ax, az]) => Math.abs(ax - x) + Math.abs(az - z) === 1);
   if (Array.isArray(S.trufas)) S.trufas = S.trufas.filter(t => pertoDeArvore(t.x, t.z));
   if (S.maca && !pertoDeArvore(S.maca.x, S.maca.z)) S.maca = null;
   const txt = 'A fazenda cresceu! As construções ficaram mais espaçadas, o galinheiro e o curral novos ficam ao lado dos primeiros e sobrou espaço para o que vem por aí.'
-    + (volta.length ? ` ${volta.length > 1 ? volta.length + ' enfeites não cabiam no lugar novo e voltaram' : 'Um enfeite não cabia no lugar novo e voltou'} para a loja, em Enfeites.` : '');
+    + textoEnfeitesVoltaram(n);
   setTimeout(() => aviso(txt, 'grande', 7), 1800);
 }
 function carregar(){
@@ -6995,8 +7128,14 @@ function corChao(t, gx, gz){
     case 'orla': case 'orlaF': return r2 < 0.5 ? (r < 0.5 ? 0x68ae4a : 0x62a646) : (r < 0.5 ? 0x70b64e : 0x6aae4a);
     case 'mata': return r2 < 0.5 ? (r < 0.5 ? 0x3f6e34 : 0x3a6630) : (r < 0.5 ? 0x4a7a3a : 0x5a7a38);
     case 'pista': {
-      // terra batida com faixa central tracejada e marcas brancas nas pontas
+      // terra batida com faixa central tracejada e marcas brancas nas pontas; com o hangar novo, asfalto com as bordas amarelas
       const meio = (PISTA_Z0 + PISTA_Z1 + 1) * 2;
+      if (S && obraConcluida('hangar')){
+        if ((gz === meio || gz === meio - 1) && ((gx >> 2) % 2 === 0) && gx > 12 && gx < W * 4 - 12) return 0xf3efe2;
+        if (gz === PISTA_Z0 * 4 || gz === PISTA_Z1 * 4 + 3) return 0xe8c13a;
+        if ((gx < 12 || gx > W * 4 - 13) && gx % 3 === 0) return 0xf3efe2;
+        return r < 0.5 ? 0x55585e : 0x4d5056;
+      }
       if ((gz === meio || gz === meio - 1) && ((gx >> 2) % 2 === 0) && gx > 12 && gx < W * 4 - 12) return 0xf3efe2;
       if ((gx < 12 || gx > W * 4 - 13) && gx % 3 === 0 && gz !== PISTA_Z0 * 4 && gz !== PISTA_Z1 * 4 + 3) return 0xf3efe2;
       return r < 0.5 ? 0xb5926a : 0xab8960;
@@ -7832,6 +7971,7 @@ const obraVis = { estado: '', tfala: 0, pontos: null, aqui: null, acao: null, es
 // parede mais perto e trabalha ali um pouco (OBRA_ACOES, segundos de cada ação)
 const OBRA_ACOES = { trena: [4, 6.5], martelo: [3, 5], prancheta: [3, 4.5], apontar: [2, 3] };
 function pontosObra(id){
+  if (PREDIO[id].fora){ const p = PREDIO[id], out = []; for (let x = p.x0 - 2; x <= p.x1; x++) if (andavel(x, 0) && rota(PARADA | 0, Z_CERCA - 1, x, 0)) out.push([x + 0.5, 0.45]); return out.length ? out : [[44.5, 0.5]]; }
   const p = PREDIO[id], out = [], baixos = cubinhosBaixos(id);
   const livre = (x, z) => !baixos.some(([bx, bz]) => Math.abs(bx - x) < 0.36 && Math.abs(bz - z) < 0.36);
   for (let x = p.x0 - 1; x <= p.x1 + 1; x++) for (let z = p.z0 - 1; z <= p.z1 + 1; z++){
@@ -7971,12 +8111,12 @@ function vEstacas(w, d){
   return v;
 }
 // o lote de uma obra nova que tem esse ladrilho (aparecendo e ainda sem obra), ou null
-const obraLoteEm = (x, z) => Object.keys(OBRAS).find(k => { const p = PREDIO[OBRAS[k].predio]; return p && p.obra && !loteObraAberto(k) && loteObraVisivel(k) && x >= p.x0 && x <= p.x1 && z >= p.z0 && z <= p.z1; }) || null;
+const obraLoteEm = (x, z) => Object.keys(OBRAS).find(k => { const p = PREDIO[OBRAS[k].predio]; return p && p.obra && !p.fora && !loteObraAberto(k) && loteObraVisivel(k) && x >= p.x0 && x <= p.x1 && z >= p.z0 && z <= p.z1; }) || null;
 const LOTE_OBRA_VIS = {};
 function montarPlacasObras(){
   for (const k in OBRAS){
     const O = OBRAS[k], p = PREDIO[O.predio];
-    if (!p || !p.obra) continue;
+    if (!p || !p.obra || p.fora) continue;
     const velho = LOTE_OBRA_VIS[k];
     if (velho){ scene.remove(velho); const i = pickaveis.indexOf(velho.userData.placa); if (i >= 0) pickaveis.splice(i, 1); delete LOTE_OBRA_VIS[k]; }
     if (loteObraAberto(k) || !loteObraVisivel(k)) continue;
@@ -7995,7 +8135,7 @@ function montarPlacasObras(){
 // o lote vira construção quando a obra começa: os enfeites que estavam nele ou na porta voltam para a loja
 function abrirLoteObra(k, devolver = true){
   const O = OBRAS[k], p = PREDIO[O.predio];
-  if (!p || !p.obra) return;
+  if (!p || !p.obra || p.fora) return;
   const dentro = (x, z) => (x >= p.x0 && x <= p.x1 && z >= p.z0 && z <= p.z1) || (x === p.porta[0] && z === p.porta[1]);
   if (devolver && Array.isArray(S.enfeites)){ if (!S.guardados) S.guardados = {}; devolverEnfeites(dentro, `${O.de || 'do'} ${O.nome.toLowerCase()}`); }
   for (let x = p.x0; x <= p.x1; x++) for (let z = p.z0; z <= p.z1; z++){ setT(x, z, 'predio'); PREDIO_EM[iT(x, z)] = p; }
@@ -8033,7 +8173,8 @@ function comecarObra(k){
   gastar(E.preco); chipPulsa('chipDinheiro'); Som.moeda();
   S.obra = { id: O.predio, n, fim: Date.now() + E.minutos * 60000, obra: k };
   const p = PREDIO[O.predio];
-  if (p.obra){
+  if (p.fora) mostrarHangarVelho();
+  else if (p.obra){
     abrirLoteObra(k); montarPlacasObras(); refazerChao(); ladrilhoDeBeirada(0, 0);
     tirarDeLadrilhoFechado(ed); tirarDeLadrilhoFechado(irmaoHud); tirarDeLadrilhoFechado(irmaoDani);
   }
@@ -9724,7 +9865,8 @@ const FALAS_CAFE = {
 // o que vai acontecer desta vez: com o Hud (sempre que ele já foi liberado e está livre), com o Dani (sempre que está
 // ajudando, e às vezes de casa) ou um convidado (40%), e o que tem no prato. O Dani senta no lugar do convidado
 function sortearCafe(){
-  const f = cafeForca || {}; cafeForca = null;
+  // na manhã depois do pernoite, o convidado é o Milton (sem o Dani, que senta no lugar do convidado)
+  const f = cafeForca || (cafeDoMilton() ? { conv: 'milton', dani: false, pernoite: true } : {}); cafeForca = null;
   const hud = f.hud !== undefined ? !!f.hud : !!S.viuCineHud;
   // o Hud vem de casa, de onde está ajudando (e depois volta ao trabalho) ou de onde está indo para casa (e entra em casa no fim)
   const hudModo = !hud ? null : hudAtivo() ? 'ajuda' : irmaoHud.g.visible ? 'volta' : 'casa';
@@ -9738,10 +9880,10 @@ function sortearCafe(){
   const comida = f.comida || sorteia(['bolo', ...['laranja', 'goiaba', 'manga'].filter(k => nivel() >= PRODUTOS[k].nivel)]);
   // a Luma vem pedir biscoito às vezes (LUMA_SITU.cafe)
   const lumaVem = f.luma !== undefined ? !!f.luma : !!luma && Math.random() < LUMA_SITU.cafe;
-  return { hud, hudModo, dani, daniModo, conv, comida, luma: lumaVem };
+  return { hud, hudModo, dani, daniModo, conv, comida, luma: lumaVem, pernoite: !!f.pernoite };
 }
 function falasCafe(p){
-  const E = t => ['ed', 'Ed', t], F = [], cv = p.conv && FALAS_CAFE.conv[p.conv], conv = cv && [cv[0], cv[1], variar(cv[2])];
+  const E = t => ['ed', 'Ed', t], F = [], cv = p.conv && FALAS_CAFE.conv[p.conv], conv = cv && [cv[0], cv[1], variar(p.pernoite ? FALAS_CAFE_PERNOITE : cv[2])];
   // o Dani chega depois do Hud (ou logo depois da primeira fala) e o Ed come depois de falar com ele
   const dani = p.dani && [['dani', 'Dani', variar(p.daniModo === 'ajuda' ? FALAS_CAFE.daniAjuda : FALAS_CAFE.daniCasa)], [...E(variar(FALAS_CAFE.edDani)), null, 'come']];
   if (!p.hud && !p.dani && conv){
@@ -10850,8 +10992,8 @@ const CENAS = {
     flag: 'viuCineResort', nivel: () => OBRAS.resort.nivel, musica: 'resort', icone: 'aposentada',
     titulo: 'Inauguração do resort', desc: 'O Maurinho entrega o Resort das Aposentadas, as aposentadas chegam pela ponte e o Ed corta a fita.',
     trancada: 'acontece quando o Maurinho termina o Resort das Aposentadas',
-    pronta: () => obraConcluida('resort') && periodo().id !== 'noite' && voo.estado === 'fora' && !aposentadaNaEstrada && !aposentando,
-    podeRever: () => (voo.estado !== 'fora' ? 'Dá para rever quando o Milton decolar.' : aposentadaNaEstrada ? 'Dá para rever quando a aposentada chegar no resort.' : null),
+    pronta: () => obraConcluida('resort') && periodo().id !== 'noite' && aviaoLivre() && !aposentadaNaEstrada && !aposentando,
+    podeRever: () => (!aviaoLivre() ? 'Dá para rever quando o Milton decolar.' : aposentadaNaEstrada ? 'Dá para rever quando a aposentada chegar no resort.' : null),
     get falas(){ return inauguracao ? inauguracao.falas : []; },
     foco(c){
       const P = RESORT_CENA, I = inauguracao;
@@ -10973,7 +11115,7 @@ const CENAS = {
     titulo: 'Aposentadoria merecida', desc: 'Depois de muitos ovos, uma galinha se aposenta: o Ed paga o bônus, promete uma pensão e ela vai embora de chapéu e malinha. Vista daqui, nenhuma galinha de verdade vai embora.',
     trancada: `a partir do nível ${APOSENTA.nivel}, quando uma galinha passa de ${APOSENTA.ovos} ovos`,
     pronta: () => aposentadoriaPronta(),
-    podeRever: () => (voo.estado !== 'fora' ? 'Dá para rever quando o Milton decolar.' : aposentadaNaEstrada ? 'Dá para rever quando a aposentada sumir na estrada.' : null),
+    podeRever: () => (!aviaoLivre() ? 'Dá para rever quando o Milton decolar.' : aposentadaNaEstrada ? 'Dá para rever quando a aposentada sumir na estrada.' : null),
     foco(c){
       const A = aposentando;
       if (!A) return cam.alvo.clone();
@@ -11080,8 +11222,8 @@ const CENAS = {
     flag: 'viuNanar', nivel: () => 1, musica: 'ninar', repete: true, icone: 'lua',
     get falas(){ return nanar ? nanar.falas : []; },
     titulo: 'Hora de nanar', desc: 'Na metade da noite o Ed vai dormir, com o Hud, o Dani ou a Luma, e acorda de manhã.', trancada: 'acontece toda noite, na metade da noite',
-    pronta: () => voo.estado === 'fora' && precisaNanar(),
-    podeRever: () => (voo.estado !== 'fora' ? 'Dá para rever quando o Milton decolar.' : null),
+    pronta: () => aviaoLivre() && precisaNanar(),
+    podeRever: () => (!aviaoLivre() ? 'Dá para rever quando o Milton decolar.' : null),
     // no casarão, quando o primeiro entra, a câmera já se afasta para mostrar as luzes dos quartos no andar de cima
     foco(c){
       const alta = JANELAS_CASA.some(j => j.quarto);
@@ -11227,8 +11369,8 @@ const CENAS = {
     get falas(){ return cafe ? cafe.falas : []; },
     titulo: 'Um cafezinho', desc: 'O Ed faz uma pausa na frente da casa.', trancada: 'acontece de vez em quando a partir do nível 3, ou toque na casa e escolha "Tomar um lanchinho"',
     // nível 3, avião fora e um cantinho livre; e então o lanchinho pedido na casa (fora do modo enfeite) ou, de vez em quando, relógio vencido com o Ed parado há 20 s sem nada para fazer
-    pronta: () => nivel() >= 3 && !!S.viuCineInicio && voo.estado === 'fora' && !!lugarCafe()
-      && (lanchePedido ? !modo : Date.now() >= proxCafezinho && !!edParadoDesde && performance.now() - edParadoDesde >= 20000),
+    pronta: () => nivel() >= 3 && !!S.viuCineInicio && (voo.estado === 'fora' || cafeDoMilton()) && !!lugarCafe()
+      && (lanchePedido ? !modo : cafeDoMilton() ? !!edParadoDesde && performance.now() - edParadoDesde >= 3000 : Date.now() >= proxCafezinho && !!edParadoDesde && performance.now() - edParadoDesde >= 20000),
     podeRever: () => (voo.estado !== 'fora' ? 'Dá para rever quando o Milton decolar.' : !lugarCafe() ? 'Falta um cantinho livre na frente da casa.' : null),
     foco: () => (cafe.mesaOn ? new THREE.Vector3(cafe.cx - 0.05, 0.5, cafe.cz - 0.1) : new THREE.Vector3(ed.pos.x, 0.4, ed.pos.y)), // até a mesa surgir, a câmera segue o Ed
     cameraRapida: c => c.passo === 'c-monta',
@@ -11353,7 +11495,7 @@ const CENAS = {
     },
     fimDasFalas(c){ $('cineDialogo').hidden = true; c.passo = 'c-desmonta'; c.t = 0; c.ini = false; },
     pular(){ ed.trab = null; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; limparCafe(); },
-    fim(){ limparCafe(); S.viuCafezinho = true; proxCafezinho = sorteioCafezinho(); },
+    fim(){ const pernoite = !!(cafe && cafe.plano && cafe.plano.pernoite); limparCafe(); S.viuCafezinho = true; proxCafezinho = sorteioCafezinho(); if (pernoite) partirDoPernoite(); },
     restaurar(){ limparCafe(); proxCafezinho = sorteioCafezinho(); }, // rever também adia o cafezinho de verdade
   },
 };
@@ -12638,7 +12780,30 @@ const JATO_VOO = (() => {
   return { nivel: 29, toque: 7, sobe: 35, taxa: 1.5, intervalo: [4, 9], nariz: 3,
     porta: ((px0 + px1 + 1) / 2 - 1.5) * e, vao: -(4 * e + 0.05), alto: py0 * e, pe: -((3.5 + (py1 - py0 + 1) * Math.sin(JATO.aberta)) * e + 0.08) };
 })();
-let aviao, helice, teco, jato, voo = { estado: 'fora', t: 0 }, motorSom = null;
+let aviao, helice, teco, jato, voo = { estado: 'fora', t: 0 }, motorSom = null, hangarVelho = null;
+// com o hangar novo, o jatinho às vezes pernoita: numa visita de tarde ou de noite o Milton dorme no hangar (voo.estado
+// 'pernoite', S.pernoite com o dia em que ele chegou), o jato fica parado na pista e na manhã seguinte ele toma o cafezinho
+// com o Ed (cafeDoMilton) e decola; sem cafezinho, decola quando começa a tarde (PERNOITE_SAI)
+const PERNOITE = { chance: 0.5, porta: [49.5, -4.25] }, PERNOITE_SAI = 0.4;
+const FALAS_MILTON_PERNOITE = ['Hoje eu durmo no hangar novo! Amanhã cedo eu tomo um café com vocês.', 'Já está tarde pra voar. Vou pernoitar no hangar!', 'O hangar novo tem até caminha. Boa noite, fazenda!', 'Vou deixar o PIG-MTP descansar. E eu também!', 'Pernoite no hangar, café da manhã com o Ed. Combinado?', 'A torre de controle diz: hora de dormir!', 'Amanhã eu decolo cedinho, depois do café.', 'Que hangar caprichado! Vou testar a cama.', 'Voo noturno? Hoje não. Hangar!', 'Boa noite, Ed! Guarda um pedaço de bolo pra mim.', 'O jatinho fica na pista e eu fico no hangar. Até amanhã!'];
+const FALAS_CAFE_PERNOITE = ['Bom dia, Ed! Dormi no hangar novo como um anjo.', 'Bom dia! Nada como um café antes de decolar.', 'Dormi feito pedra. O hangar é uma beleza!', 'Bom dia, família! O PIG-MTP já está com o tanque cheio.', 'Café da manhã na fazenda é outra coisa!', 'Bom dia! A torre de controle me acordou com o galo.', 'Antes de voar, um cafezinho com o irmão!', 'Bom dia, Ed! Que noite tranquila.', 'Pernoite aprovado! Volto mais vezes.', 'Hoje o céu está lindo pra decolar. Mas primeiro, o bolo!', 'Bom dia! Até o jatinho dormiu bem.'];
+// o avião não atrapalha a cena: fora ou pernoitando parado na pista
+const aviaoLivre = () => voo.estado === 'fora' || voo.estado === 'pernoite';
+const diaSeguinte = () => diaAtual() > (S.pernoiteDia || 0);
+const cafeDoMilton = () => voo.estado === 'pernoite' && diaSeguinte() && periodo().id === 'dia' && (S.relogio || 0) >= NANAR.acorda + 0.02;
+function pernoitarAgora(){ return obraConcluida('hangar') && voo.modelo === 'jato' && !voo.cena && !voo.reprise && periodo().id !== 'dia' && Math.random() < PERNOITE.chance; }
+// o fim da visita: decola, ou (às vezes, com o hangar novo) vai dormir no hangar
+function fimDaVisita(porta){
+  if (!pernoitarAgora()){ milton.g.visible = false; voo.estado = 'decolando'; voo.t = 0; motor(true); return; }
+  const [px, pz] = PERNOITE.porta, z = porta[1] - 0.15, nx = PISTA.para + JATO_VOO.nariz + 0.6;
+  voo.estado = 'pernoite'; S.pernoite = true; S.pernoiteDia = diaAtual(); salvar();
+  falar(milton, variar(FALAS_MILTON_PERNOITE), 3.2); milton.aceno = 1.6; Som.oinc();
+  setTimeout(() => milton.ir([[nx, z], [px, z], [px, pz]], () => { milton.g.visible = false; }), 1800);
+}
+// de manhã, sem cafezinho até a tarde, ele decola assim mesmo
+function partirDoPernoite(){ if (voo.estado !== 'pernoite') return; S.pernoite = false; milton.g.visible = false; voo.estado = 'decolando'; voo.t = 0; voo.porta = 0; motor(true); salvar(); }
+// o hangar de antes fica até começar a obra do hangar novo (OBRAS.hangar)
+function mostrarHangarVelho(){ if (hangarVelho) hangarVelho.visible = !loteObraAberto('hangar'); }
 const temJato = () => !!S.viuCineJato;
 const taxaPista = () => Math.round((20 + nivel() * 6) * (temJato() ? JATO_VOO.taxa : 1) / 5) * 5;
 const intervaloMilton = () => rnd(...(temJato() ? JATO_VOO.intervalo : PISTA.intervalo)) * 60000;
@@ -12671,8 +12836,10 @@ function construirPista(){
   milton.g.traverse(o => { o.userData.alvo = { k: 'milton' }; }); pickaveis.push(milton.g);
   const bir = colocar(malha(vBiruta().build(1 / 16, { origin: [8, 0, 8] })), W - 7.5, 0, Z_PISTA + 1.5);
   bir.traverse(o => { o.userData.alvo = { k: 'pista' }; }); pickaveis.push(bir);
-  const hg = colocar(malha(vHangar().build(1 / 16, { origin: [16, 0, 12] })), W - 3.2, 0, Z_PISTA + 1.6, Math.PI);
+  const hg = hangarVelho = colocar(malha(vHangar().build(1 / 16, { origin: [16, 0, 12] })), W - 3.2, 0, Z_PISTA + 1.6, Math.PI);
   hg.traverse(o => { o.userData.alvo = { k: 'pista' }; }); pickaveis.push(hg);
+  mostrarHangarVelho();
+  if (S.pernoite && obraConcluida('hangar')){ voo = { estado: 'pernoite', t: 0, modelo: 'jato', porta: 0 }; aviao.visible = true; } else S.pernoite = false;
   if (!S.proxMilton || S.proxMilton < Date.now()) S.proxMilton = Date.now() + rnd(2, 4) * 60000;
   montarLuzesPista();
 }
@@ -12746,6 +12913,11 @@ function atualizarPista(dt){
     return;
   }
   teco.visible = !jt; jato.visible = jt;
+  if (v.estado === 'pernoite'){
+    aviao.visible = true; aviao.position.set(PISTA.para, 0, y); aviao.rotation.set(0, 0, 0); v.porta = 0; jato.userData.escada.rotation.x = 0;
+    if (!cine && diaSeguinte() && (S.relogio || 0) >= PERNOITE_SAI) partirDoPernoite();
+    return;
+  }
   // o Milton sobe e desce a escadinha do jatinho, devagar, degrau por degrau
   milton.alt = jt && milton.g.visible ? alturaNaEscada(milton) : 0;
   milton.turbo = milton.alt > 0.005 ? 0.4 : 1;
@@ -12842,7 +13014,7 @@ function desembarcar(){
     S.conheceuMilton = true;
     setTimeout(() => milton.trabalhar(1, 'saco', () => {
       const espera = presenteMilton();
-      setTimeout(() => milton.ir([...pts.slice(0, -1).reverse(), porta], () => { milton.g.visible = false; voo.estado = 'decolando'; voo.t = 0; motor(true); }), espera * 1000);
+      setTimeout(() => milton.ir([...pts.slice(0, -1).reverse(), porta], () => fimDaVisita(porta)), espera * 1000);
     }), dur * 1000);
   }), jt ? 900 : 0);
 }
@@ -12876,11 +13048,13 @@ function presenteMilton(){
 function itensMilton(){
   const r = { titulo: 'Milton', icone: 'milton', itens: [], classe: 'bom' };
   r.estado = `Irmão do Ed, pilota o ${temJato() ? 'jatinho' : 'teco-teco'} PIG-MTP. Sempre que pousa, traz suprimentos e paga ${reais(taxaPista())} de manutenção da pista.`;
+  if (voo.estado === 'pernoite') r.estado = 'O jatinho do Milton pernoita na pista e ele dorme no hangar novo. De manhã ele toma café com o Ed e decola.';
   return r;
 }
 function itensPista(){
   const min = Math.max(1, Math.ceil((S.proxMilton - Date.now()) / 60000));
   const r = { titulo: 'Pista de pouso', icone: temJato() ? 'jato' : 'aviao', itens: [] };
+  if (!loteObraAberto('hangar')) itensDaObra('hangar', r);
   r.estado = !S.conheceuMilton ? 'Ainda ninguém pousou aqui. O Milton aparece depois da sua primeira venda ao Joli Market.' : voo.estado !== 'fora' ? 'O Milton está na fazenda agora!' : `O Milton pousa por aqui de tempos em tempos, com o jogo aberto. Próxima visita em uns ${min} min.` + (S.pistaGanho ? ` A pista já rendeu ${reais(S.pistaGanho)}.` : '');
   return r;
 }
@@ -13217,7 +13391,7 @@ let tarefaAtual = null;
 // param { acao, semente }: o Ed anda até o galpão, sobe, vai pela rota até o terreno, faz as quatro fileiras em zigue-zague
 // (cada canteiro na hora em que o trator passa em cima), volta e guarda o trator. Atrás vai o arado, a plantadeira ou a
 // carreta, que enche com a colheita
-const TRATOR = { vel: 2.6, velLote: 1.5, escala: 1 / 14, assento: [-0.43, 0.8], vaga: [2.05, 7.1], giro: 7 };
+const TRATOR = { vel: 2.6, velLote: 1.5, escala: 1 / 14, assento: [-0.43, 0.8], vaga: [2.05, 8.1], giro: 7 };
 let trator = null, tratorVis = null;
 const contarTrator = (lote, acao) => tilesDoLote(lote).filter(([x, z]) => { const t = campo(x, z); if (!t || reservado({ k: 'tile', x, z })) return false; return acao === 'arar' ? t.e === 'grama' : acao === 'plantar' ? t.e === 'arado' : CONDICAO.colher(t); }).length;
 function checarTrator(tipoA, alvo, param){
@@ -15320,6 +15494,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Resort das Aposentadas</b>${nv(OBRAS.resort.nivel)}: no terreno novo, depois do lago. Na inauguração as aposentadas chegam pela ponte e se mudam; depois elas tomam sol, boiam na piscina e tomam água de coco, e à noite dormem nos chalés. As próximas que se aposentarem atravessam a ponte para lá, e os cartões-postais passam a vir do resort. Toque numa hóspede para saber quem é.</li>
       <li><b>Casarão</b>${nv(OBRAS.casarao.nivel)}: depois da reforma da casa, o Maurinho faz o casarão em três etapas, pelo menu da casa: o segundo andar, os quartos do Hud e do Dani (cortina amarela e lilás, floreiras e águas-furtadas) e a varanda de cima com duas redes. Na hora de nanar, cada um acende a luz do próprio quarto.</li>
       <li><b>Galpão do trator</b>${nv(OBRAS.galpao.nivel)}: ao lado da horta. Num terreno de canteiros, escolha "Arar", "Plantar" ou "Colher o terreno com o trator": o Ed sobe no trator e faz os 16 canteiros de uma passada. Para plantar, ele usa as sementes da bolsa e compra na hora as que faltarem.</li>
+      <li><b>Hangar do PIG-MTP</b>${nv(OBRAS.hangar.nivel)}: pelo menu da pista. O Maurinho troca o hangar velho por um novo com torre de controle, e a pista ganha asfalto. Depois disso, quando o jatinho chega de tarde ou de noite, às vezes o Milton dorme na fazenda: o jato fica no hangar e, de manhã, ele aparece no cafezinho antes de decolar.</li>
     </ul>`;
   if (abaAjuda === 'progresso') corpo = `
     <ul class="passos">
@@ -15723,7 +15898,7 @@ async function iniciar(){
   construirChao();
   construirCenario();
   montarMata();
-  if (mapaMigrado) conferirMapaNovo();
+  if (mapaMigrado) conferirMapaNovo(); else if (hortaMigrada) conferirHorta();
   if (!Array.isArray(S.parcelas)) S.parcelas = []; if (!Array.isArray(S.mata)) S.mata = [];
   PARCELAS.forEach((_, p) => { if (parcelaComprada(p)) abrirParcela(p); });
   montarPlacasMata();
@@ -15805,6 +15980,7 @@ async function iniciar(){
   window.__fazenda = { lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
     galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(FAB_NOVAS).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
+    pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
     trator: () => trator, TRATOR, filaTipos: () => fila.map(t => t.tipo), checar: (t, a, q) => checar(t, a, q), enfileirarTrator: (lote, acao, semente) => enfileirar('trator', { k: 'trator', lote }, { acao, semente }), tratorVis: () => tratorVis,
     resort: { hospedes: () => hospedes, montar: montarHospedes, grade: () => gradeResort, lugares: () => lugaresResort, cena: () => inauguracao, aberto: resortAberto, HOSP },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
@@ -15823,8 +15999,9 @@ async function iniciar(){
     },
     // o que fica baixo (até a altura de um porco) e fora do terreno, e com o que isso bate: onde o Ed para, onde o Maurinho
     // trabalha, gramado de enfeite, outras construções, o envelope do aluguel, os mourões do varal e a mesa do cafezinho
+    // n = 'obra' confere o desenho pronto de uma obra nova (OBRAS)
     colisoes(id, n){
-      const p = PREDIO[id], fab = !!FABRICAS[id], v = n === 'andaime' ? vAndaime(id) : vReforma(id, n), s = 1 / 8, h = s / 2;
+      const p = PREDIO[id], fab = !!FABRICAS[id], k = OBRA_DO_PREDIO[id], v = n === 'andaime' ? vAndaime(id) : n === 'obra' && k ? modeloObra(k, OBRAS[k].etapas.length) : vReforma(id, n), s = 1 / 8, h = s / 2;
       const o = fab ? [(p.x1 - p.x0 + 1) * 4, 0, 8] : ORIGEM_PREDIO[id], cx = (p.x0 + p.x1 + 1) / 2, cz = (p.z0 + p.z1 + 1) / 2, ry = p.ry || 0, c = Math.cos(ry), sn = Math.sin(ry);
       const circ = []; const add = (nome, x, z, r) => circ.push([nome, x, z, r]);
       add('Ed na porta', p.porta[0] + 0.5, p.porta[1] + 0.5, 0.3);
@@ -15922,10 +16099,16 @@ function catalogoModelos(){
     { nome: 'Obras do Maurinho', itens: [
       varios('Resort das Aposentadas', [['Pronto', vResort], ['Obra no começo', () => vObraSubindo('resort', 0, 1)], ['Obra na metade', () => vObraSubindo('resort', 0, 4)], ['Obra quase pronta', () => vObraSubindo('resort', 0, 7)]]),
       um('Fita da inauguração', vFitaResort), um('Estacas do lote', () => vEstacas(2, 2)),
+      varios('Hangar do PIG-MTP', [['Pronto', vHangarNovo], ['Obra na metade', () => vObraSubindo('hangar', 0, 4)]]),
       varios('Galpão do trator', [['Pronto', vGalpao], ['Obra na metade', () => vObraSubindo('galpao', 0, 4)]]),
       varios('Casarão', [['1ª etapa: o segundo andar', () => vCasarao(1)], ['2ª etapa: os quartos', () => vCasarao(2)], ['3ª etapa: a varanda das redes', () => vCasarao(3)], ['1ª etapa na metade', () => vObraSubindo('casarao', 0, 4)], ['3ª etapa na metade', () => vObraSubindo('casarao', 2, 4)]], 2),
       // o trator com cada implemento atrás, na escala do jogo (1/14)
       { nome: 'Trator do Ed', variantes: [['Arado', 'arar'], ['Plantadeira', 'plantar'], ['Carreta', 'colher']].map(([n, a]) => ({ nome: n, cria: () => { const g = new THREE.Group(); g.add(malha(vTrator().build(1 / 14, { origin: [10, 0, 0.5] }))); g.add(malha(vImplemento(a).build(1 / 14, { origin: [10, 0, 0.5] }))); if (a === 'colher') g.add(malha(vCargaCarreta(0xf08a2c).build(1 / 14, { origin: [10, 0, 0.5] }))); return g; } })) }] },
+    // guardados para usar depois em outro lugar: os modelos do parque de diversões, que saiu das obras
+    { nome: 'Guardados para depois', itens: [
+      varios('Parque de diversões', [['Com a roda', vParqueComRoda], ['Sem a roda', vParque], ['Roda-gigante', vRodaGigante]]),
+      varios('Gôndola da roda', CORES_GONDOLA.map((c, i) => ['Cor ' + (i + 1), () => vGondola(c)])),
+      varios('Pedalinho de pato', [['Amarelo', () => vPedalinho(0xf2c335)], ['Branco', () => vPedalinho(0xfdf8ef)]])] },
     { nome: 'Automação', itens: [varios('Alimentador', [['Galinheiro', () => vAlimentador(false)], ['Curral', () => vAlimentador(true)]]), varios('Coletor', [['Ovos', () => vColetor(false)], ['Ordenhadeira', () => vColetor(true)]]), um('Esteira', vEsteira), varios('Irrigador', [['Base', vIrrigadorBase], ['Cabeça', vIrrigadorCabeca]]), um('Colmeia', vColmeia)] },
     { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Tratorzinho', vTrator), varios('Bicicleta', CICLISTAS.map((c, i) => [['Vermelha', 'Azul', 'Amarela'][i], () => vBicicleta(c[0])])), um('Teco-teco', vTecoTeco), { nome: 'Jatinho', variantes: [['Fechado', 0], ['Com a escada', 1]].map(([n, a]) => ({ nome: n, cria: () => { const g = montarJatinho(1 / 16); g.userData.escada.rotation.x = a ? -JATO.aberta : 0; return g; } })) }, um('Hélice', vHelice), um('Biruta', vBiruta), { nome: 'Disco voador', variantes: [['Voando', false], ['Com o raio', true]].map(([n, r]) => ({ nome: n, cria: () => { const D = montarDisco(r); D.g.userData.anima = (dt, t) => animarDisco(D, t); D.g.userData.anima(0, 0); return D.g; } })) }] },
     { nome: 'Cenário', itens: [varios('Árvore', [['Maçãs', () => vArvore(0)], ['Sem fruta', () => vArvore(1)], ['Laranjas', () => vArvore(2)]]), um('Arbusto', vArbusto), um('Redemoinho', vRedemoinho), um('Fardo de feno', vFeno), um('Flores', () => vFlores(3)), um('Capim', () => vCapim(1)), um('Cova', vCova), varios('Cerca', [['Reta', () => vCerca(3)], ['Canto', () => vCerca(5)]]), varios('Portão', [['Arco da entrada', () => vPortao(true)], ['Simples', () => vPortao(false)]]), um('Placa', vPlaca), um('Correio', vCorreio)] },

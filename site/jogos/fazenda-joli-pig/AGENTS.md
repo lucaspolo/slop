@@ -125,6 +125,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - O jatinho do Milton (`vJatinho`, montado com a porta-escada por `montarJatinho`) está em Veículos, fechado e com a escada, ao lado do teco-teco; o ícone é `VI.jato`.
 - O pato (`vPato`, escala da galinha, de frente para +z) está em Bichos; a casinha dos patos (`vCasaPatos`) em Construções; a rampa (`vRampaPatos`) em Objetos; o ovo de pata é ícone (`VI.ovopata`).
 - O Nano Hostel fica atrás do celeiro, encostado na parede de trás (z 0,625). Ele só pode aparecer quando o mapa é girado, nunca na câmera de sempre.
+- O grupo "Guardados para depois" tem modelos que saíram do jogo mas ficam para usar em outro lugar: o parque de diversões (`vParque`, `vParqueComRoda`, `vRodaGigante`, `vGondola`, `vPedalinho`). O Lucas tirou o Parque do lago das obras do nível 50 e pediu para manter os modelos.
 - Os créditos (Ajustes, Créditos) têm os retratos em voxel da Carolina Torrigo e do Lucas Polo, feitos a partir de fotos.
 
 ## Galo
@@ -203,7 +204,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 
 ### Resort das Aposentadas
 
-- Nível 40, R$ 450 mil, 20 minutos, 6000 XP, no canto Sul: x 41 a 47, z 32 a 37, com a entrada no sul (porta em 44, 38). Desenho em `vResort` (7 × 6 ladrilhos em cubinhos de 1/8 a partir do canto, `RESORT`): o arco da entrada com o letreiro (`vestir`), o caminho de pedra entre canteiros, o chuveirinho, a piscina com boia e patinho de borracha, o deck, quatro espreguiçadeiras e dois guarda-sóis, dois chalés com telhado de palha, o quiosque de coco com banquinhos, o coqueiro e a sebe florida em volta.
+- Nível 40, R$ 450 mil, 20 minutos, 6000 XP, no canto Sul, encostado na beira leste do mapa: x 45 a 51, z 32 a 37, com a entrada no sul (porta em 48, 38). O Lucas pediu na beira para sobrar a faixa de x 41 a 44, ao lado do pomar, para mais um terreno de canteiros. Desenho em `vResort` (7 × 6 ladrilhos em cubinhos de 1/8 a partir do canto, `RESORT`): o arco da entrada com o letreiro (`vestir`), o caminho de pedra entre canteiros, o chuveirinho, a piscina com boia e patinho de borracha, o deck, quatro espreguiçadeiras e dois guarda-sóis, dois chalés com telhado de palha, o quiosque de coco com banquinhos, o coqueiro e a sebe florida em volta.
 - Quando a obra termina começa a cena "Inauguração do resort" (`CENAS.resort`, música `resort`, uma bossa nova): o Maurinho, o Hud e o Dani (se não estão ajudando) e a Luma (aventura `inaugura`) estão na frente do arco, o Ed vem de onde estiver, as aposentadas (as seis mais recentes) atravessam a ponte com as malinhas e fazem fila à esquerda do Ed, ele corta a fita e elas entram. A aposentadoria seguinte espera a inauguração.
 - Depois dela as aposentadas (`S.aposentadas`, as `HOSP.max` mais recentes) são hóspedes (`vGalinhaResort`: chapéu com fita de uma cor e óculos escuros): andam pela grade do chão livre do desenho (`montarGradeResort`, `caminhoResort`), pulam para a espreguiçadeira, a piscina ou o banquinho do quiosque (`lugaresResort`), dão voltinhas no jardim e à noite entram nos chalés. Tocar numa diz quem é e o que está fazendo.
 - Com o resort aberto (`resortAberto`), a aposentada nova atravessa a ponte e entra pelo arco, com a Luma escoltando até lá; a promessa do Ed muda (`FALAS_APOSENTA_RESORT`), e os cartões-postais vêm do resort (`S.cartao.resort`: outras mensagens, a piscina no desenho, carimbo "RESORT").
@@ -216,8 +217,15 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 
 ### Galpão do trator
 
-- Nível 42, R$ 400 mil, 15 minutos, 5000 XP, ao lado da horta: x 0 a 3, z 6 a 7, porta em 1, 8. Desenho em `vGalpao`: paredes de tábua, telhado de zinco em arco e a frente aberta para o sul, com o trator guardado dentro (`guardarTratorVis`).
+- Nível 42, R$ 400 mil, 15 minutos, 5000 XP, ao lado da horta: x 0 a 3, z 7 a 8, porta em 1, 9, com duas fileiras de grama até a casa (antes ficava colado nela). Desenho em `vGalpao`: paredes de tábua, telhado de zinco em arco e a frente aberta para o sul, com o trator guardado dentro (`guardarTratorVis`).
 - No menu de um canteiro de terreno comprado aparecem "Arar", "Plantar" e "Colher o terreno com o trator" (`itemTrator`, quando há pelo menos dois canteiros para isso). Plantar abre a mesma lista de sementes, com o preço das que faltam para o terreno todo. É a tarefa `trator` (alvo `{ k: 'trator', lote }`, param `{ acao, semente }`, `checarTrator`): o Ed anda até o galpão, sobe no trator (`sentado`, mãos no volante), vai pela rota até o terreno, faz as quatro fileiras em zigue-zague, cuidando de cada canteiro na hora em que passa por cima (`tratorNoCanteiro`), volta e guarda o trator (`guardarTrator`). Atrás vai o arado, a plantadeira ou a carreta, que enche com a colheita (`vImplemento`, `vCargaCarreta`). Cancelar a tarefa no meio guarda o trator na hora.
+
+### Hangar do PIG-MTP
+
+- Nível 47, R$ 700 mil, 20 minutos, 7000 XP, pelo menu da pista (`itensPista` usa `itensDaObra`). É a única obra `fora: true`: o lugar (`PREDIOS.hangar`, x 47 a 51, z -6 a -5) fica fora da fazenda, no lugar do hangar velho, então não tem ladrilho, lote nem placa, e o Maurinho anda pela fileira z 0, na beira da fazenda (`pontosObra`). Quando a obra começa, o hangar velho some (`mostrarHangarVelho`).
+- Desenho em `vHangarNovo`: telhado em arco, portão com moldura laranja e a torre de controle ao lado, com o letreiro (`vestir`). Pronto, a pista ganha asfalto (`corChao`, ladrilho `pista`).
+- Pernoite (`PERNOITE`): com o hangar pronto, quando a visita do jatinho acaba de tarde ou de noite, em `PERNOITE.chance` das vezes ele não decola (`pernoitarAgora`, `fimDaVisita`): `voo.estado` vira `pernoite` e `S.pernoite` fica no save, o Milton avisa (`FALAS_MILTON_PERNOITE`), anda até a porta do hangar e some. O jato fica parado na pista. De manhã (`cafeDoMilton`), o cafezinho é com o Milton de convidado (`FALAS_CAFE_PERNOITE`, sem o Dani) e, no fim dele, o jato decola (`partirDoPernoite`). Sem cafezinho, ele decola sozinho no fim do dia (`PERNOITE_SAI`). `aviaoLivre()` vale para "fora" e "pernoite", para o jato parado não segurar a hora de nanar, a aposentadoria e a inauguração.
+- Para testar: `__fazenda.pernoite` (`PERNOITE`, `partir`, `cafe`) e `__fazenda.hangarVelho`.
 
 ## Fábricas novas
 
@@ -230,7 +238,8 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 
 - O mapa tem 52 × 51 ladrilhos (`W`, `H`), o dobro da área do primeiro (36 × 37). Ele cresceu em duas etapas: entraram colunas e linhas entre as zonas, para as construções não ficarem amontoadas, e o sul ganhou linhas a mais. A terra que sobra é para construções futuras: a fileira das fábricas tem lugar livre entre a cozinha de doces e a composteira, a floresta tem lugar para mais parcelas ao sul das quatro de hoje (z 43 a 50) e o canto Sul tem uma área grande livre abaixo das faixas de lotes.
 - Constantes das zonas: `Z_CERCA` (a cerca de baixo da fazenda), `X_PORTEIRA` (a porteira, com `PARADA` meio ladrilho depois), `COL_CURVA` (a coluna em que a estrada dobra para o sul), `Z_ORLA` e `Z_MATA`. Coordenada nova de cena ou evento perto da porteira ou da mata deve vir dessas constantes, não de número solto.
-- A horta fica ao lado da casa: seis terrenos de 4 × 4 (`LOTES`) com um caminho de grama entre eles. `loteDe(x, z)` procura o terreno de cada ladrilho.
+- A horta fica ao lado da casa: seis terrenos de 4 × 4 (`LOTES`) com um caminho de grama entre eles e uma fileira de grama até a cerca de baixo. `loteDe(x, z)` procura o terreno de cada ladrilho.
+- No mapa 3 (`S.mapa`) os terrenos da horta desceram dois ladrilhos (`HORTA_DESCE`), para perto da cerca, e o galpão do trator foi junto, longe da casa (o Lucas pediu). `migrarHorta` desce os canteiros e os enfeites da faixa da horta (`HORTA_V2`); o enfeite que cair num terreno volta para a loja ao abrir (`conferirHorta`). Um save do mapa 1 passa pelas duas migrações.
 - O galinheiro e o curral não dividem cerca: entre eles passa uma faixa de grama. O galinheiro e o curral novos (`CERCADOS`) ficam ao lado de cada um, do outro lado de uma passagem com o coletor e o alimentador (`COLETOR`, `ALIMENTADOR`), que atendem os dois. A cerca de baixo do curral novo é a da fazenda.
 - Cada ladrilho de cerca ou porteira tem a sua malha (`CERCA_VIS`). Quando um ladrilho vira cerca ou deixa de ser (o canto Sul, um cercado novo), chame `atualizarCercas(x0, z0, x1, z1)`: ele refaz a região e os vizinhos, porque o desenho de cada mourão depende deles.
 - A rota (`rota`) é um A* em 8 direções com a lista aberta num heap binário.
