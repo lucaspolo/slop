@@ -5132,14 +5132,19 @@ function itensOcorrencia(alvo){
 // fazem a trilha e deixam uma contribuição na caixinha. Quanto mais saudável a mata, maior a contribuição. Os nanos do
 // Nano Hostel ganham um mirante do tamanho deles. Os visitantes não ficam no save.
 const MIRANTE = { nivel: 21, preco: 12000, x0: 15, z0: 24, x1: 16, z1: 25, taxa: 70, primeira: [40, 90], intervalo: [240, 480], vel: 0.85, escada: 0.7, sV: 1 / 44 };
-let miranteM = null, placaMirante = null, bolhaMirante = null, grupoTrilha = null, proxTrilha = null, miniMirante = null;
+let miranteM = null, miranteTopo = null, placaMirante = null, bolhaMirante = null, grupoTrilha = null, proxTrilha = null, miniMirante = null;
 const centroMirante = () => [(MIRANTE.x0 + MIRANTE.x1 + 1) / 2, (MIRANTE.z0 + MIRANTE.z1 + 1) / 2];
 function montarMirante(){
   if (miranteM || !S.mirante) return;
   const [cx, cz] = centroMirante();
-  // a escada fica do lado direito (x maior), que a câmera de sempre enxerga
-  miranteM = colocar(malha(geo('mirante', () => vMirante().build(1 / 16, { origin: [16, 0, 16], jitter: 0.02 }))), cx, 0, cz);
+  // a escada fica do lado direito (x maior), que a câmera de sempre enxerga. A torre sai em duas malhas: a base e a parte
+  // de cima (MIRANTE_VISAO.corte), que fica translúcida quando cobre a horta (atualizarVisaoMirante)
+  const parte = cima => { const v = vMirante(), p = new Vox(); for (const e of v.m.values()) if ((e.y >= MIRANTE_VISAO.corte) === cima) p.set(e.x, e.y, e.z, e.c); return p; };
+  miranteM = colocar(malha(geo('miranteBase', () => parte(false).build(1 / 16, { origin: [16, 0, 16], jitter: 0.02 }))), cx, 0, cz);
   miranteM.rotation.y = -Math.PI / 2;
+  const topo = malha(geo('miranteTopo', () => parte(true).build(1 / 16, { origin: [16, 0, 16], jitter: 0.02 })));
+  topo.material = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 1 }); topo.material.onBeforeCompile = MAT.onBeforeCompile;
+  miranteM.add(topo); miranteTopo = topo;
   miranteM.traverse(o => { o.userData.alvo = { k: 'mirante' }; }); pickaveis.push(miranteM);
   for (let x = MIRANTE.x0; x <= MIRANTE.x1; x++) for (let z = MIRANTE.z0; z <= MIRANTE.z1; z++) setT(x, z, 'mirante');
   montarMiniMirante();
@@ -5268,6 +5273,41 @@ function atualizarMirante1P(dt){
   const css = `linear-gradient(180deg,#${LUZ.ceu1.getHexString()} 0%,#${LUZ.ceu2.getHexString()} ${hz}%,#${LUZ.ceu2.getHexString()} 100%)`;
   if (css !== M.ceu){ M.ceu = css; document.body.style.background = css; }
   for (const b of BOLHAS) if (b.visible){ b.visible = false; b.userData.fp = true; }
+}
+// o mirante alto não pode esconder a horta (o Lucas pediu): quando a parte de cima da torre cobre na tela um canteiro, um
+// bicho ou alguém da família que está atrás dela, ela fica translúcida e o toque passa por ela e chega no que está atrás.
+// A base continua sólida e é por ela que se abre o menu do mirante. Lá em cima, em primeira pessoa, a torre fica sólida
+const MIRANTE_VISAO = { corte: 36, opac: 0.22, vel: 5, cada: 0.2, folga: 0.02 };
+const visaoMirante = { t: 0, cobre: false };
+const _vM = new THREE.Vector3(), _cxM = new THREE.Box3();
+function miranteCobre(){
+  if (!miranteTopo) return false;
+  // o retângulo da parte de cima na tela e a profundidade do meio da torre
+  camera.updateMatrixWorld(); _cxM.setFromObject(miranteTopo);
+  let x0 = 2, x1 = -2, y0 = 2, y1 = -2;
+  for (let i = 0; i < 8; i++){
+    _vM.set(i & 1 ? _cxM.max.x : _cxM.min.x, i & 2 ? _cxM.max.y : _cxM.min.y, i & 4 ? _cxM.max.z : _cxM.min.z).project(camera);
+    x0 = Math.min(x0, _vM.x); x1 = Math.max(x1, _vM.x); y0 = Math.min(y0, _vM.y); y1 = Math.max(y1, _vM.y);
+  }
+  const [cx, cz] = centroMirante(), d0 = _vM.set(cx, 2, cz).project(camera).z, f = MIRANTE_VISAO.folga;
+  const atras = (x, y, z) => { _vM.set(x, y, z).project(camera); return _vM.z > d0 && _vM.x > x0 - f && _vM.x < x1 + f && _vM.y > y0 - f && _vM.y < y1 + f; };
+  // os canteiros dos terrenos (os do canto só com o terreno novo limpo), os bichos e a família
+  for (const l of LOTES){
+    if (l.canto && S.canto !== 2) continue;
+    for (let i = 0; i < 4; i++) for (let k = 0; k < 4; k++) if (atras(l.x + i + 0.5, 0.15, l.z + k + 0.5)) return true;
+  }
+  for (const a of ANI) if (a.g && a.g.visible && atras(a.pos.x, 0.3, a.pos.y)) return true;
+  for (const p of [ed, irmaoHud, irmaoDani]) if (p && p.g && p.g.visible && atras(p.pos.x, 0.5, p.pos.y)) return true;
+  return false;
+}
+function atualizarVisaoMirante(dt){
+  if (!miranteTopo) return;
+  const V = visaoMirante;
+  if ((V.t -= dt) <= 0){ V.t = MIRANTE_VISAO.cada; V.cobre = !miranteFP && miranteCobre(); }
+  const M = miranteTopo.material, alvo = V.cobre ? MIRANTE_VISAO.opac : 1;
+  if (M.opacity !== alvo) M.opacity = Math.abs(M.opacity - alvo) < 0.01 ? alvo : lerp(M.opacity, alvo, Math.min(1, dt * MIRANTE_VISAO.vel));
+  // translúcida, a parte de cima deixa o toque passar
+  miranteTopo.userData.alvo = V.cobre ? null : { k: 'mirante' };
 }
 // o caminho de um visitante: chega pela beira da estrada, sobe no mirante, olha a mata, desce, faz a trilha até o fim da
 // parte comprada, volta, deixa a contribuição na caixinha e vai embora; pontos [x, y, z] com pausa e fala opcionais
@@ -16508,6 +16548,8 @@ function alvoNaTela(cx, cy){
       if (p) return { k: 'predio', p };
       const t = tipo(x, z);
       if (t === 'mata' || t === 'orlaF') return { k: 'floresta', x, z };
+      // o chão entre as pernas do mirante também abre o menu dele (com a parte de cima translúcida, é a base que vale)
+      if (t === 'mirante') return { k: 'mirante' };
       if (t === 'canto') return { k: 'canto' };
       if (t === 'arvore') return { k: 'arvore', x, z, arbusto: ARBUSTOS.some(([a, b]) => a === x && b === z) };
       for (const tp in COLETOR) if (S.coletor[tp] && COLETOR[tp].x === x && COLETOR[tp].z === z) return { k: 'coletor', tp };
@@ -16727,7 +16769,7 @@ function quadro(agoraP){
   atualizarCurupira(dt, t);
   atualizarGuardiao(dt, t);
   atualizarUrgente();
-  atualizarMirante1P(dt);
+  atualizarMirante1P(dt); atualizarVisaoMirante(dt);
   atualizarTrilha(dt, t);
   atualizarNanos(dt, t);
   if (pelucio.g.visible) pelucio.update(dt, t);
@@ -16908,6 +16950,7 @@ async function iniciar(){
     resort: { hospedes: () => hospedes, montar: montarHospedes, grade: () => gradeResort, lugares: () => lugaresResort, cena: () => inauguracao, aberto: resortAberto, HOSP },
     arraia: { ARRAIA, obj: () => arraia, rojao, falas: FALAS_ARRAIA },
     abrirMenu: (alvo, x = 300, y = 300) => abrirMenu(alvo, x, y),
+    miranteVisao: { V: visaoMirante, cobre: () => miranteCobre(), topo: () => miranteTopo, MIRANTE_VISAO },
     mirante1p: { subir: subirMirante, descer: descerMirante, girar: girarMirante, zoom: zoomMirante, obj: () => miranteFP, cam: () => cameraFP, M1P: MIRANTE_1P },
     museu: { MUSEU, abrir: abrirMuseu, visitar: visitarMuseu, porta: portaMuseu, alvo: alvoMuseu, guardarCartao: guardarCartaoLido },
     observatorio: { OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
