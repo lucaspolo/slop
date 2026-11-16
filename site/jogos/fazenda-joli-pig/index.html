@@ -252,6 +252,7 @@ button{font:inherit;color:inherit}
 .postal-texto .selo{position:absolute;top:0;right:0;width:46px;height:54px;background:radial-gradient(circle at 50% 42%,#f6c935 0 9px,transparent 10px),linear-gradient(#7cc6ee 0 60%,#f2d58a 60%);border:4px dotted #fffdf4;outline:2px solid #e0408a;border-radius:3px}
 .postal-texto .carimbo{position:absolute;top:10px;right:54px;padding:6px 8px;border:3px double #9a7a9e;border-radius:50%;color:#9a7a9e;font-weight:800;font-size:11px;letter-spacing:1px;transform:rotate(-14deg);opacity:.8}
 .postal-botoes{display:flex;justify-content:flex-end}
+.postal-texto .selo.espaco{background:radial-gradient(circle at 50% 42%,#ffd84d 0 7px,transparent 8px),linear-gradient(#1c2350,#3a3f8a)}
 .museu-postais{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin:8px 0 6px}
 .museu-postal{all:unset;cursor:pointer;background:#fffdf4;border:3px solid var(--borda);border-radius:10px;padding:6px;box-shadow:0 3px 0 rgba(59,42,32,.25);font-weight:800;font-size:13px;text-align:center}
 .museu-postal:nth-child(odd){transform:rotate(-1.5deg)}.museu-postal:nth-child(even){transform:rotate(1.2deg)}
@@ -4683,6 +4684,36 @@ function limparInauguracao(){
   ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado';
 }
 const FALAS_HOSPEDE = ['Có-có! (acena com a asa)', 'Cóóó... (suspira, relaxada)', 'Có-có-có! (ajeita os óculos)', 'Cocó! (mostra o coco de canudinho)', 'Có... có... (cochila de novo)', 'Có-có! (manda um beijinho de bico)', 'Cóóó! (dá uma voltinha de alegria)', 'Có-có-có-có! (conta uma fofoca do chalé)', 'Có! (ajeita o chapéu de palha)', 'Có-có... (pede mais protetor solar)', 'Cocóóó! (aponta para a piscina)'];
+// ================= o cartão-postal das vaquinhas no espaço (o Lucas pediu): como o das aposentadas, a vaca que está de
+// férias no espaço manda de vez em quando um cartão (S.cartao com espaco: true), que chega na mesma porta. Cada vaca no espaço
+// tem um nome (S.nomesEspaco, dado na hora do primeiro cartão; a que volta é a primeira da lista). Um cartão por vez na porta
+const CARTAO_ESPACO = { minutos: [18, 35], primeira: [4, 9] };
+const NOMES_VACA_ESPACO = ['Mimosa', 'Estrelinha', 'Malhada', 'Cometa', 'Pintada', 'Bonina', 'Nebulosa', 'Galáxia', 'Florzinha', 'Mumu', 'Lunática', 'Pérola'];
+const FALAS_CARTAO_ESPACO = ['Muuu, Ed! Daqui de cima a fazenda parece uma colcha de retalhos. Beijos, {nome}', 'Oi, Ed! O capim da Lua é meio sem graça, mas a vista compensa. Muuu! {nome}', 'Ed, o ETzinho me ensinou a flutuar. Ainda bato a cabeça no teto do disco. {nome}', 'Saudades do curral! Aqui não tem dia nem noite, só estrela. Com carinho, {nome}', 'Ed, dei uma volta em Saturno. Os anéis são de poeira, não de queijo. Muuu! {nome}', 'Oi, Ed! Hoje o leite saiu em bolinhas flutuando. Os ETs adoraram. {nome}', 'Muuu! Aprendi a dizer bip bop. Acho que quer dizer obrigada. Beijos, {nome}', 'Ed, a gravidade aqui é levinha: pulei por cima da Lua, igual na cantiga! {nome}', 'Oi, fazenda! Os óculos escuros são de verdade: o sol aqui é forte. {nome}', 'Ed, manda um oi para as outras vacas. Conta que eu volto bronzeada de estrela. {nome}', 'Daqui eu vejo o seu chapéu de palha andando pela horta. Trabalha menos, Ed! Muuu! {nome}', 'Ed, o ETzinho prometeu me levar de volta quando tiver lugar no curral. Muuu! {nome}'];
+const FALAS_ED_CARTAO_ESPACO = ['A {nome} mandou notícias lá do espaço!', 'Que saudade da {nome}! Volta logo, vaquinha.', 'Muuu do espaço! A {nome} tá curtindo as férias.', 'Vou pendurar o cartão da {nome} do lado do das aposentadas.', 'Oinc! Um cartão vindo da Lua. Quem diria!', 'Será que o ETzinho deixa eu ir junto da próxima vez?', 'A {nome} tá de óculos escuros até no cartão!', 'Bip bop, {nome}! Acho que é assim que se fala lá.', 'Tomara que a {nome} traga uma lembrança da Lua.', 'Ainda bem que o disco devolve as vaquinhas. Né, ETzinho?', 'Vou guardar um cantinho no curral pra quando a {nome} voltar.'];
+// os nomes das vacas que estão no espaço, um para cada (os que faltam são sorteados sem repetir)
+function nomesNoEspaco(){
+  if (!Array.isArray(S.nomesEspaco)) S.nomesEspaco = [];
+  const n = vacasNoEspaco();
+  while (S.nomesEspaco.length < n){ const livres = NOMES_VACA_ESPACO.filter(x => !S.nomesEspaco.includes(x)); S.nomesEspaco.push(sorteia(livres.length ? livres : NOMES_VACA_ESPACO)); }
+  if (S.nomesEspaco.length > n) S.nomesEspaco.splice(0, S.nomesEspaco.length - n);
+  return S.nomesEspaco;
+}
+function atualizarCartaoEspaco(dt){
+  if (!S || cine || !S.viuAbducao || vacasNoEspaco() < 1 || S.cartao) return;
+  if (!(S.cartaoEspacoEspera >= 0)) S.cartaoEspacoEspera = rnd(...CARTAO_ESPACO.primeira) * 60;
+  S.cartaoEspacoEspera -= dt;
+  if (S.cartaoEspacoEspera <= 0) chegarCartaoEspaco();
+}
+function chegarCartaoEspaco(){
+  if (vacasNoEspaco() < 1) return;
+  const nome = sorteia(nomesNoEspaco());
+  S.cartao = { nome, msg: Math.floor(Math.random() * FALAS_CARTAO_ESPACO.length), espaco: true };
+  S.cartaoEspacoEspera = rnd(...CARTAO_ESPACO.minutos) * 60;
+  montarCartao(); Som.pop();
+  aviso(`Chegou um cartão-postal da vaca ${nome}, lá do espaço! Está na porta da casa.`, '', 4);
+  salvar();
+}
 // ================= o cartão-postal: chega na porta da casa, o Ed vai ler e abre a janela do cartão
 function chegarCartao(){
   const L = S.aposentadas || [];
@@ -4706,7 +4737,7 @@ function montarCartao(){
 }
 function itensCartao(){
   const C = S.cartao;
-  return { titulo: 'Cartão-postal', icone: 'cartao', estado: `Chegou um cartão-postal da ${C ? C.nome : 'aposentada'}, lá ${C && C.resort ? 'do resort' : 'da praia'}.`,
+  return { titulo: 'Cartão-postal', icone: 'cartao', estado: C && C.espaco ? `Chegou um cartão-postal da vaca ${C.nome}, lá do espaço.` : `Chegou um cartão-postal da ${C ? C.nome : 'aposentada'}, lá ${C && C.resort ? 'do resort' : 'da praia'}.`,
     itens: [{ rotulo: 'Ler o cartão-postal', sub: 'na porta da casa', icone: 'cartao', fn: () => enfileirar('lerCartao', { k: 'cartao', x: 5, z: 5 }) }] };
 }
 function lerCartao(){
@@ -4718,16 +4749,18 @@ function lerCartao(){
 // a janela do cartão: o desenho da praia de um lado e a mensagem escrita à mão do outro; fechando, o Ed comenta
 // (aoFechar troca o comentário: no museu, volta para a sala dos cartões)
 function abrirCartao(C, aoFechar){
-  const R = !!C.resort, lista = R ? FALAS_CARTAO_RESORT : FALAS_CARTAO, msg = lista[C.msg % lista.length].replace('{nome}', C.nome);
-  const desenho = R ? 'numa espreguiçadeira do resort, com guarda-sol, coqueiro, piscina e sol' : 'numa cadeira de praia, com guarda-sol, coqueiro, mar e sol';
-  abrirJanela(topo('cartao', 'Cartão-postal', `De ${C.nome}, lá ${R ? 'do Resort das Aposentadas' : 'da praia'}`, 'azul') + `<div class="janela-corpo"><div class="postal"><canvas width="560" height="380" role="img" aria-label="Desenho: ${esc(C.nome)} de chapéu de palha e óculos escuros ${desenho}"></canvas><div class="postal-texto"><div class="selo" aria-hidden="true"></div><div class="carimbo" aria-hidden="true">${R ? 'RESORT' : 'PRAIA'}</div><p>${esc(msg)}</p></div></div><div class="botoes postal-botoes"><button class="botao" data-fechar type="button">Guardar</button></div></div>`,
-    aoFechar || (() => { const f = variar(R ? FALAS_ED_CARTAO_RESORT : FALAS_ED_CARTAO).replace('{nome}', C.nome); falar(ed, f, tempoDeLeitura(f)); Som.oinc(); }));
+  const R = !!C.resort, E = !!C.espaco, lista = E ? FALAS_CARTAO_ESPACO : R ? FALAS_CARTAO_RESORT : FALAS_CARTAO, msg = lista[C.msg % lista.length].replace('{nome}', C.nome);
+  const rotulo = E ? `Desenho: a vaca ${esc(C.nome)}, de óculos escuros e anteninha, acenando em cima da Lua, com o disco voador, a Terra e as estrelas` : `Desenho: ${esc(C.nome)} de chapéu de palha e óculos escuros ${R ? 'numa espreguiçadeira do resort, com guarda-sol, coqueiro, piscina e sol' : 'numa cadeira de praia, com guarda-sol, coqueiro, mar e sol'}`;
+  const de = E ? `Da vaca ${C.nome}, lá do espaço` : `De ${C.nome}, lá ${R ? 'do Resort das Aposentadas' : 'da praia'}`;
+  abrirJanela(topo('cartao', 'Cartão-postal', de, 'azul') + `<div class="janela-corpo"><div class="postal"><canvas width="560" height="380" role="img" aria-label="${rotulo}"></canvas><div class="postal-texto"><div class="selo${E ? ' espaco' : ''}" aria-hidden="true"></div><div class="carimbo" aria-hidden="true">${E ? 'ESPAÇO' : R ? 'RESORT' : 'PRAIA'}</div><p>${esc(msg)}</p></div></div><div class="botoes postal-botoes"><button class="botao" data-fechar type="button">Guardar</button></div></div>`,
+    aoFechar || (() => { const f = variar(E ? FALAS_ED_CARTAO_ESPACO : R ? FALAS_ED_CARTAO_RESORT : FALAS_ED_CARTAO).replace('{nome}', C.nome); falar(ed, f, tempoDeLeitura(f)); Som.oinc(); }));
   desenharPostal($('janela').querySelector('.postal canvas'), C);
 }
 // o desenho do cartão, em canvas: céu, sol, mar, areia, coqueiro, guarda-sol e a aposentada na cadeira, de chapéu e óculos,
 // com um coco de canudinho. Os detalhes (gaivotas, conchas) mudam com a mensagem
 function desenharPostal(cv, C){
   if (!cv) return;
+  if (C.espaco){ desenharPostalEspaco(cv, C); return; }
   const g = cv.getContext('2d'), W2 = cv.width, H2 = cv.height, tinta = '#3b2a20', sorte = k => hash(C.msg, k, 7);
   const elipse = (x, y, rx, ry, cor, borda = true, rot = 0) => { g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2); g.fillStyle = cor; g.fill(); if (borda){ g.lineWidth = 3; g.strokeStyle = tinta; g.stroke(); } };
   const ceu = g.createLinearGradient(0, 0, 0, 200); ceu.addColorStop(0, '#7cc6ee'); ceu.addColorStop(1, '#d8f1ff');
@@ -4792,6 +4825,52 @@ function desenharPostal(cv, C){
   g.font = '30px "Bagel Fat One", "Arial Black", sans-serif'; g.textBaseline = 'top'; g.lineWidth = 6; g.strokeStyle = '#fffdf4'; g.fillStyle = '#e0408a';
   const titulo = C.resort ? 'Lembranças do resort!' : 'Lembranças da praia!';
   g.strokeText(titulo, 18, 14); g.fillText(titulo, 18, 14);
+}
+// o cartão do espaço: céu escuro com estrelas, a Terra pequenininha, o disco do ETzinho, o chão da Lua com crateras, a
+// bandeirinha da fazenda fincada e a vaca de óculos escuros e anteninha acenando. Os detalhes mudam com a mensagem
+function desenharPostalEspaco(cv, C){
+  const g = cv.getContext('2d'), W2 = cv.width, H2 = cv.height, tinta = '#3b2a20', sorte = k => hash(C.msg, k, 9);
+  const elipse = (x, y, rx, ry, cor, borda = true, rot = 0) => { g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2); g.fillStyle = cor; g.fill(); if (borda){ g.lineWidth = 3; g.strokeStyle = tinta; g.stroke(); } };
+  const ceu = g.createLinearGradient(0, 0, 0, H2); ceu.addColorStop(0, '#121838'); ceu.addColorStop(1, '#30357a');
+  g.fillStyle = ceu; g.fillRect(0, 0, W2, H2);
+  for (let i = 0; i < 80; i++){ g.fillStyle = i % 9 ? '#fffbe6' : '#ffd84d'; const t = 2 + Math.floor(hash(i, 3, C.msg) * 3); g.fillRect(hash(i, 1, C.msg) * W2, 50 + hash(i, 2, C.msg) * 200, t, t); }
+  // a Terra, com a fazenda em algum lugar dela
+  elipse(468, 84, 36, 36, '#3f8fd6');
+  g.fillStyle = '#5aa847'; for (const [x, y, rx, ry] of [[456, 72, 14, 9], [482, 96, 11, 7], [462, 102, 7, 5]]){ g.beginPath(); g.ellipse(x, y, rx, ry, 0.4, 0, Math.PI * 2); g.fill(); }
+  g.fillStyle = 'rgba(255,255,255,.7)'; g.beginPath(); g.ellipse(476, 64, 16, 4, -0.3, 0, Math.PI * 2); g.fill();
+  // o disco do ETzinho, com as luzinhas
+  const dx = 120 + sorte(1) * 40, dy = 112 + sorte(2) * 20;
+  elipse(dx, dy - 12, 30, 22, '#9fe3ff'); elipse(dx - 8, dy - 18, 6, 6, '#7ed957', false);
+  elipse(dx, dy, 72, 17, '#d6dde4');
+  ['#ffd84d', '#ff7ac8', '#6fe3ff', '#ffd84d', '#ff7ac8'].forEach((c, i) => elipse(dx - 48 + i * 24, dy + 4, 5, 4, c, false));
+  // o chão da Lua, cinza, com crateras
+  g.fillStyle = '#cdcabf'; g.strokeStyle = tinta; g.lineWidth = 3;
+  g.beginPath(); g.moveTo(0, 296); g.quadraticCurveTo(W2 / 2, 236, W2, 296); g.lineTo(W2, H2); g.lineTo(0, H2); g.closePath(); g.fill(); g.stroke();
+  for (let i = 0; i < 5; i++) elipse(40 + i * 120 + sorte(i + 3) * 40, 318 + sorte(i + 8) * 40, 22 + sorte(i + 13) * 10, 7 + sorte(i + 14) * 3, '#aeaa9e', false);
+  // a bandeirinha cor-de-rosa da fazenda
+  g.lineWidth = 4; g.beginPath(); g.moveTo(478, 300); g.lineTo(478, 214); g.stroke();
+  g.fillStyle = '#f17aa8'; g.lineWidth = 3; g.beginPath(); g.moveTo(478, 214); g.lineTo(536, 226); g.lineTo(478, 240); g.closePath(); g.fill(); g.stroke();
+  elipse(496, 227, 8, 7, '#fbd3dc', false); g.fillStyle = tinta; g.fillRect(493, 226, 2, 2); g.fillRect(498, 226, 2, 2);
+  // a vaca: corpo malhado, pernas, rabo, cabeça com focinho rosa, chifrinhos, óculos escuros e a tiara de anteninhas
+  g.lineWidth = 3; g.strokeStyle = tinta;
+  for (const x of [262, 288, 318, 344]){ g.fillStyle = '#fffdf8'; g.fillRect(x, 286, 14, 34); g.strokeRect(x, 286, 14, 34); g.fillStyle = '#3a3a3e'; g.fillRect(x, 314, 14, 8); }
+  g.beginPath(); g.moveTo(244, 262); g.quadraticCurveTo(222, 268, 226, 300); g.stroke(); elipse(226, 304, 6, 8, '#3a3a3e', false);
+  elipse(302, 270, 64, 36, '#fffdf8');
+  elipse(282, 262, 17, 12, '#2f2f34', false, 0.3); elipse(326, 280, 13, 9, '#2f2f34', false, -0.2); elipse(300, 248, 9, 6, '#2f2f34', false);
+  // o braço (a pata da frente) acenando
+  g.lineWidth = 12; g.lineCap = 'round'; g.strokeStyle = '#fffdf8'; g.beginPath(); g.moveTo(352, 262); g.lineTo(392, 216 - sorte(4) * 10); g.stroke();
+  g.lineWidth = 3; g.strokeStyle = tinta; g.beginPath(); g.moveTo(346, 256); g.lineTo(388, 208 - sorte(4) * 10); g.moveTo(358, 268); g.lineTo(398, 222 - sorte(4) * 10); g.stroke();
+  elipse(394, 214 - sorte(4) * 10, 8, 8, '#3a3a3e', false); g.lineCap = 'butt';
+  elipse(380, 238, 32, 30, '#fffdf8');
+  elipse(354, 222, 10, 6, '#fffdf8', true, -0.5); elipse(406, 222, 10, 6, '#fffdf8', true, 0.5);
+  g.fillStyle = '#f2d58a'; for (const s of [-1, 1]){ g.beginPath(); g.moveTo(380 + s * 12, 210); g.lineTo(380 + s * 18, 196); g.lineTo(380 + s * 6, 208); g.closePath(); g.fill(); g.stroke(); }
+  elipse(382, 254, 20, 13, '#f2a3b4'); g.fillStyle = '#b8586e'; g.fillRect(374, 252, 4, 4); g.fillRect(386, 252, 4, 4);
+  g.fillStyle = '#22222c'; g.fillRect(362, 228, 16, 11); g.fillRect(384, 228, 16, 11); g.fillRect(376, 231, 10, 3);
+  g.strokeStyle = '#5cb83c'; g.lineWidth = 3; g.beginPath(); g.moveTo(372, 212); g.lineTo(366, 186); g.moveTo(390, 212); g.lineTo(396, 186); g.stroke();
+  elipse(366, 184, 6, 6, '#ff7ac8'); elipse(396, 184, 6, 6, '#ff7ac8');
+  // "Lembranças do espaço!" no alto
+  g.font = '30px "Bagel Fat One", "Arial Black", sans-serif'; g.textBaseline = 'top'; g.lineWidth = 6; g.strokeStyle = '#121838'; g.fillStyle = '#ffd84d';
+  g.strokeText('Lembranças do espaço!', 18, 14); g.fillText('Lembranças do espaço!', 18, 14);
 }
 let nanoHostel = null;
 function criarNanoHostel(){
@@ -6741,7 +6820,7 @@ function visitarMuseu(){
 // o cartão lido fica guardado para a sala dos cartões-postais (os MUSEU.postais mais recentes), mesmo antes do museu existir
 function guardarCartaoLido(C){
   if (!Array.isArray(S.cartoesLidos)) S.cartoesLidos = [];
-  S.cartoesLidos.push({ nome: C.nome, msg: C.msg, resort: !!C.resort, em: Date.now() });
+  S.cartoesLidos.push({ nome: C.nome, msg: C.msg, resort: !!C.resort, espaco: !!C.espaco, em: Date.now() });
   if (S.cartoesLidos.length > MUSEU.postais) S.cartoesLidos.splice(0, S.cartoesLidos.length - MUSEU.postais);
 }
 // a janela do museu: uma aba por sala. comentar: o Ed fala quando ela fecha (a visita de verdade)
@@ -6753,7 +6832,7 @@ function abrirMuseu(aba, comentar){
   const postais = (S.cartoesLidos || []).slice().reverse();
   if (abaMuseu === 'figurinhas') h += figurinhasHTML();
   else if (abaMuseu === 'postais'){
-    h += postais.length ? `<p>${contagem(postais.length, 'cartão-postal lido', 'cartões-postais lidos')}, do mais novo para o mais antigo. Toque num para ler de novo.</p><div class="museu-postais">${postais.map((C, i) => `<button class="museu-postal" data-postal-i="${i}" type="button"><canvas width="560" height="380" aria-hidden="true"></canvas><span>De ${esc(C.nome)}, ${C.resort ? 'do resort' : 'da praia'}</span></button>`).join('')}</div>`
+    h += postais.length ? `<p>${contagem(postais.length, 'cartão-postal lido', 'cartões-postais lidos')}, do mais novo para o mais antigo. Toque num para ler de novo.</p><div class="museu-postais">${postais.map((C, i) => `<button class="museu-postal" data-postal-i="${i}" type="button"><canvas width="560" height="380" aria-hidden="true"></canvas><span>${C.espaco ? `Da vaca ${esc(C.nome)}, do espaço` : `De ${esc(C.nome)}, ${C.resort ? 'do resort' : 'da praia'}`}</span></button>`).join('')}</div>`
       : `<p class="museu-vazio">${(S.aposentadas || []).length ? 'Os cartões-postais que o Ed ler daqui em diante ficam expostos aqui.' : 'Quando as galinhas se aposentarem, os cartões-postais que elas mandarem ficam expostos aqui.'}</p>`;
   } else if (abaMuseu === 'cenas'){
     const livre = caminhaoE.estado === 'longe', vistas = cenasVistas();
@@ -11980,6 +12059,7 @@ const CENAS = {
       if (vacasNoEspaco() > 0 && cabeVacaDeVolta()){
         const cabe = c => noCercado('vaca', c) < capCercado('vaca', c), cc = cabe(0) ? 0 : 1, [x, z] = sorteia(pastoDe('vaca', cc));
         const a = novoAnimal('vaca', x + 0.5, z + 0.5, cc, { espaco: true });
+        if (Array.isArray(S.nomesEspaco) && S.nomesEspaco.length) S.nomesEspaco.shift();
         S.vacasEspaco = vacasNoEspaco() - 1;
         for (let i = 0; i < 16; i++) particula(a.pos.x, 0.3, a.pos.y, [0xfff6a0, 0x9fe870][i % 2], 1);
         aviso('A vaca voltou das férias no espaço e já está no curral, de óculos escuros e anteninha de lembrança.', 'grande', 5);
@@ -16386,6 +16466,11 @@ function abrirCenas(){
     const motivoP = !(S.aposentadas && S.aposentadas.length) ? 'Ainda nenhuma galinha se aposentou.' : S.cartao ? 'Tem um cartão esperando na porta da casa.' : null;
     h += `<div class="cartao"><div class="cab"><img src="${icone('cartao')}" alt=""><div><h4>Cartão-postal</h4></div></div><div class="info">Uma galinha aposentada manda um cartão-postal da praia, que chega na porta da casa.${motivoP ? `<br><small>${esc(motivoP)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-postal type="button"${motivoP ? ' disabled' : ''}>Chamar o cartão</button></div></div>`;
   }
+  // o cartão de uma vaquinha que está de férias no espaço, também na hora
+  if (S.viuAbducao){
+    const motivoE = vacasNoEspaco() < 1 ? 'Nenhuma vaca está no espaço agora.' : S.cartao ? 'Tem um cartão esperando na porta da casa.' : null;
+    h += `<div class="cartao"><div class="cab"><img src="${icone('vacaEspaco')}" alt=""><div><h4>Cartão-postal do espaço</h4></div></div><div class="info">Uma vaquinha de férias no espaço manda um cartão-postal da Lua, que chega na porta da casa.${motivoE ? `<br><small>${esc(motivoE)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-postal-espaco type="button"${motivoE ? ' disabled' : ''}>Chamar o cartão</button></div></div>`;
+  }
   // os visitantes da trilha também não são cena: o botão manda um grupo agora
   const motivoV = !S.mirante ? `Construa o mirante da mata (nível ${MIRANTE.nivel}).` : grupoTrilha ? 'Já tem gente na trilha.' : periodo().id === 'noite' ? 'De noite a trilha fica fechada.' : null;
   h += `<div class="cartao"><div class="cab"><img src="${icone('mirante')}" alt=""><div><h4>Visitantes na trilha</h4></div></div><div class="info">Um grupo sobe no mirante, faz a trilha da mata e deixa uma contribuição na caixinha.${motivoV ? `<br><small>${esc(motivoV)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-trilha type="button"${motivoV ? ' disabled' : ''}>Chamar visitantes</button></div></div>`;
@@ -16395,6 +16480,8 @@ function abrirCenas(){
   $('janela').querySelectorAll('[data-luma]').forEach(b => b.addEventListener('click', () => { Som.au(); fecharJanela(); lumaChamar(b.dataset.luma); }));
   const bp = $('janela').querySelector('[data-postal]');
   if (bp) bp.addEventListener('click', () => { Som.clique(); fecharJanela(); chegarCartao(); });
+  const be = $('janela').querySelector('[data-postal-espaco]');
+  if (be) be.addEventListener('click', () => { Som.clique(); fecharJanela(); chegarCartaoEspaco(); });
   const br = $('janela').querySelector('[data-redemoinho]');
   if (br) br.addEventListener('click', () => { Som.clique(); fecharJanela(); chamarRedemoinho(); });
   const bt = $('janela').querySelector('[data-trilha]');
@@ -16729,7 +16816,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Guardião da mata:</b> com uma parcela comprada, de vez em quando a mata precisa do Ed: um foco de fogo, lixo deixado por trilheiros ou um galho caído fechando a trilha. Toque no problema para o Ed resolver. Resolvido, a saúde da mata sobe; esquecido, ela cai. Com a mata exuberante (80% ou mais), as nativas dão uma unidade a mais e os bichos aparecem mais; maltratada (menos de 45%), dão uma a menos.</li>
       <li><b>Mirante da mata</b>${nv(MIRANTE.nivel)}: uma torre na beira da floresta, por ${reais(MIRANTE.preco)}. De dia e de tarde chegam visitantes que sobem nele, fazem a trilha e deixam uma contribuição na caixinha, maior com a mata saudável. Os nanos ganham um mirante do tamanho deles.</li>
       <li><b>Bichos da mata:</b> de vez em quando um bugio, um tucano, um papagaio, uma jaguatirica ou uma cobra-coral aparece na beira da floresta e some de novo.</li>
-      <li><b>Disco voador:</b> de vez em quando um disquinho voador passeia pelo céu da fazenda, para em cima do Ed e ele leva um susto. Para ver na hora, use Chamar o disco na janela Cenas.</li>
+      <li><b>Disco voador:</b> de vez em quando um disquinho voador passeia pelo céu da fazenda, para em cima do Ed e ele leva um susto. Para ver na hora, use Chamar o disco na janela Cenas. As vacas que ele leva ficam de férias no espaço e, de vez em quando, uma delas manda um cartão-postal da Lua, que chega na porta da casa como os das aposentadas e fica guardado no museu.</li>
       <li><b>Galo:</b> cada galinheiro tem um galo em cima de um mourão da cerca. Ele acorda a fazenda de manhã, fica agitado uns segundos antes do disco voador, da chuva e do avião do Milton e quando o caminhão do Beto vem. Tocando nele, ele canta e o Ed vai fazer carinho. Às vezes, quando o Ed recolhe os ovos, ele fica com ciúme e corre atrás do Ed. E às vezes ele foge do galinheiro: toque nele para o Ed pegar no colo e devolver (+${GALO_JOGO.xpFujao} xp); a Luma sai latindo atrás dele. Para ver na hora, use Chamar o galo fujão na janela Cenas.</li>
       <li><b>Pintinhos:</b> com o galo no galinheiro, de vez em quando um ovo choca e nasce um pintinho, se tiver lugar no galinheiro. Ele anda atrás da mãe e vira galinha em ${PINTINHO.cresce / 60} minutos, mesmo com o jogo fechado. Enquanto cresce, já conta como galinha.</li>
       <li><b>Maçã:</b> de vez em quando uma árvore deixa cair uma maçã. Toque nela para o Ed comer: ele agradece à árvore e anda ${MACA.fator}× mais rápido por ${MACA.minutos} minutos de jogo.</li>
@@ -17029,7 +17116,7 @@ function quadro(agoraP){
   atualizarTrufas(dt, t);
   atualizarLucia(dt);
   atualizarAluguel(dt);
-  atualizarAposentadoria(dt);
+  atualizarAposentadoria(dt); atualizarCartaoEspaco(dt);
   atualizarHospedes(dt, t);
   atualizarTrator(dt, t);
   ed.update(dt, t);
@@ -17227,6 +17314,7 @@ async function iniciar(){
     miranteVisao: { V: visaoMirante, cobre: () => miranteCobre(), topo: () => miranteTopo, MIRANTE_VISAO },
     mirante1p: { subir: subirMirante, descer: descerMirante, girar: girarMirante, zoom: zoomMirante, obj: () => miranteFP, cam: () => cameraFP, M1P: MIRANTE_1P },
     enfeitesNovos: { aves, ave: () => { aves.prox = 0; }, AJUDA, vis: () => ENF_VIS, casinha: () => casinhaParaLuma(), piquenique: () => lugarPiquenique(), montar: e => montarEnfeite(e) },
+    cartaoEspaco: { chegar: chegarCartaoEspaco, nomes: nomesNoEspaco, CARTAO_ESPACO },
     museu: { MUSEU, abrir: abrirMuseu, visitar: visitarMuseu, porta: portaMuseu, alvo: alvoMuseu, guardarCartao: guardarCartaoLido },
     observatorio: { OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
