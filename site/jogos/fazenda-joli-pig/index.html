@@ -8276,9 +8276,31 @@ const chave = (x, z) => x + ',' + z;
 const campo = (x, z) => S.campo[chave(x, z)];
 
 // ================= som
+// No iPhone, sair do jogo (bloquear a tela, trocar de app, uma ligação, outro app tocando) deixa o som 'interrupted' ou
+// 'suspended', e ele só volta com resume() num toque. Antes o jogo só religava o 'suspended' e ficava mudo até recarregar
+// (o Lucas notou num iPhone). Agora cada toque religa o que não estiver tocando; se um toque já pediu e o som não
+// voltou, o toque seguinte cria outro (novo, somRecriado). Com o jogo escondido o som fica pausado (pausar, voltar)
 const Som = {
-  ctx: null,
-  ligar(){ if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; } try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e){} },
+  ctx: null, religando: 0,
+  ligar(){
+    const c = this.ctx;
+    if (!c || c.state === 'closed'){ this.novo(); return; }
+    if (c.state === 'running'){ this.religando = 0; return; }
+    const agora = performance.now();
+    if (this.religando && agora - this.religando > 1500){ this.novo(); return; }
+    if (!this.religando) this.religando = agora;
+    try { c.resume().catch(() => {}); } catch (e){}
+  },
+  novo(){
+    const velho = this.ctx; this.religando = 0;
+    // 'playback' faz o jogo tocar mesmo com o iPhone no silencioso (o Lucas pediu); sem isso o Web Audio obedece à chave.
+    // Em troca, a música de outro app pausa quando o jogo toca
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e){}
+    try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e){ return; }
+    if (velho){ try { velho.close().catch(() => {}); } catch (e){} somRecriado(); }
+  },
+  pausar(){ const c = this.ctx; if (c && c.state === 'running') try { c.suspend().catch(() => {}); } catch (e){} },
+  voltar(){ const c = this.ctx; if (c && c.state !== 'running' && c.state !== 'closed') try { c.resume().catch(() => {}); } catch (e){} },
   tom(f, dur, tipoO = 'square', vol = 0.06, f2 = 0, atraso = 0){
     if (!this.ctx || !S || !S.som) return;
     const t = this.ctx.currentTime + atraso, o = this.ctx.createOscillator(), g = this.ctx.createGain();
@@ -15085,6 +15107,12 @@ function motor(ligar){
     setTimeout(() => { try { m.o.stop(); m.o2.stop(); if (m.o3) m.o3.stop(); } catch (e){} }, 1400);
   }
 }
+// o som foi criado de novo (Som.novo): a música recomeça no som novo e o motor do avião, se estava ligado, é refeito
+function somRecriado(){
+  const A = Musica.atual; Musica.atual = null; Musica.ruidoBuf = null;
+  if (A) Musica.pendente = A.id;
+  if (motorSom){ motorSom = null; motor(true); }
+}
 function chamarMilton(){ if (voo.estado === 'fora'){ voo = { estado: 'chegando', t: 0, modelo: temJato() ? 'jato' : 'teco' }; aviao.visible = true; motor(true); } }
 // a cena do jatinho espera o relógio da visita: enquanto ela não acontece, o Milton não vem de teco-teco
 const jatoPendente = () => !temJato() && nivel() >= JATO_VOO.nivel && !!S.conheceuMilton;
@@ -18051,8 +18079,8 @@ function eventos(){
   // com a aba escondida o jogo não anda: ao voltar, pausa o Hud e os pedidos pelo tempo que ficou fora
   let escondidoEm = 0;
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden){ escondidoEm = Date.now(); salvar(); }
-    else if (escondidoEm){ pausarRelogios(Date.now() - escondidoEm); escondidoEm = 0; hud(); salvar(); }
+    if (document.hidden){ escondidoEm = Date.now(); salvar(); Som.pausar(); }
+    else { Som.voltar(); if (escondidoEm){ pausarRelogios(Date.now() - escondidoEm); escondidoEm = 0; hud(); salvar(); } }
   });
   addEventListener('pagehide', salvar);
 }
