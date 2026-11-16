@@ -208,6 +208,7 @@ button{font:inherit;color:inherit}
 .item img{width:30px;height:30px;flex:none}
 .item span{flex:1;min-width:0}
 .item small{display:block;font-weight:700;font-size:12px;color:var(--tinta-suave)}
+.item small u.falta{color:#b8343a;text-decoration:underline 2px #d8344a;text-underline-offset:2px}
 .item b{flex:none;font-size:13px;white-space:nowrap}
 .item:hover{background:var(--amarelo)}
 .item:focus-visible{outline:3px solid var(--rosa);outline-offset:1px}
@@ -8751,7 +8752,12 @@ function escolherRepeticao(id, rid){
   Som.clique(); atualizarBolhaFab(id); hud(); salvar();
 }
 const temItens = entra => Object.entries(entra).every(([k, q]) => (S.celeiro[k] || 0) >= q);
-const textoItens = itens => Object.entries(itens).map(([k, q]) => `${q} ${k === 'racao' ? 'ração' : (q > 1 ? PRODUTOS[k].plural : PRODUTOS[k].nome.toLowerCase())}`).join(' + ');
+const nomeItem = (k, q) => `${q} ${k === 'racao' ? 'ração' : (q > 1 ? PRODUTOS[k].plural : PRODUTOS[k].nome.toLowerCase())}`;
+const textoItens = itens => Object.entries(itens).map(([k, q]) => nomeItem(k, q)).join(' + ');
+// os ingredientes que faltam no celeiro (o Lucas pediu para eles aparecerem sublinhados na receita); o menu aberto se refaz
+// sozinho a cada meio segundo (atualizarEstadoMenu), então o sublinhado aparece na hora em que um item acaba
+const faltamItens = entra => Object.keys(entra).filter(k => (S.celeiro[k] || 0) < entra[k]);
+const htmlItens = (itens, faltam) => Object.entries(itens).map(([k, q]) => faltam.includes(k) ? `<u class="falta" title="falta no celeiro">${esc(nomeItem(k, q))}</u>` : esc(nomeItem(k, q))).join(' + ');
 function itensFabrica(id){
   const F = FABRICAS[id], st = estFab(id), p = PREDIO[id];
   const r = { titulo: F.nome, icone: st.feita ? id : 'obra', itens: [] };
@@ -8800,7 +8806,8 @@ function itensFabrica(id){
     // receitas da mata que ainda não liberaram aparecem apagadas, só a partir de dois níveis antes
     if (trava && R.nivel && nivel() < R.nivel - 2) continue;
     const extra = rid === 'bola' && !S.bolaLuma ? ' · a primeira fica com a Luma' : rid === 'botas' && !S.galochas ? ' · o primeiro par fica com o Ed' : '';
-    r.itens.push({ rotulo: R.nome, sub: trava || `${textoItens(R.entra)} → ${textoItens(R.sai)} · ${tempo(R.tempo)}${extra}${textoFalta(f)}`, icone: sai === 'racao' ? 'racao' : sai, encomenda: f > 0, off: !!trava || cheia || !temItens(R.entra), fn: () => enfileirar('produzir', { k: 'fabrica', id }, rid) });
+    const faltam = trava ? [] : faltamItens(R.entra), resto = ` → ${textoItens(R.sai)} · ${tempo(R.tempo)}${extra}${textoFalta(f)}`;
+    r.itens.push({ rotulo: R.nome, sub: trava || `${textoItens(R.entra)}${resto}`, subHTML: trava ? null : htmlItens(R.entra, faltam) + esc(resto), faltam: faltam.join(','), icone: sai === 'racao' ? 'racao' : sai, encomenda: f > 0, off: !!trava || cheia || !temItens(R.entra), fn: () => enfileirar('produzir', { k: 'fabrica', id }, rid) });
   }
   if (cheia) r.itens.push({ rotulo: 'Fila cheia', sub: `até ${vagasFab(id)} receitas por vez`, icone: id, off: true, leve: true, fn: () => {} });
   {
@@ -15232,7 +15239,7 @@ function abrirMenu(alvo, px, py, manter){
   h += '<div class="itens">';
   r.itens.forEach((it, i) => {
     const marcas = (it.canteiros ? `<i class="tag" title="canteiros com ${esc(it.rotulo.toLowerCase())}">${it.canteiros} canteiro${it.canteiros > 1 ? 's' : ''}</i>` : '') + (it.estrela ? '<i class="estrela" title="rende mais por canteiro hoje">★</i>' : '');
-    h += `<button class="item${it.off ? ' off' : ''}${it.leve ? ' leve' : ''}${it.perigo ? ' perigo' : ''}${it.encomenda ? ' encomenda' : ''}" type="button" role="menuitem" data-i="${i}"${it.off ? ' aria-disabled="true"' : ''}><img src="${icone(it.icone)}" alt=""><span>${esc(it.rotulo)}${marcas}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>${it.preco ? `<b>${esc(it.preco)}</b>` : ''}</button>`;
+    h += `<button class="item${it.off ? ' off' : ''}${it.leve ? ' leve' : ''}${it.perigo ? ' perigo' : ''}${it.encomenda ? ' encomenda' : ''}" type="button" role="menuitem" data-i="${i}"${it.off ? ' aria-disabled="true"' : ''}><img src="${icone(it.icone)}" alt=""><span>${esc(it.rotulo)}${marcas}${it.sub ? `<small>${it.subHTML || esc(it.sub)}</small>` : ''}</span>${it.preco ? `<b>${esc(it.preco)}</b>` : ''}</button>`;
   });
   h += '</div>';
   m.innerHTML = h;
@@ -16411,7 +16418,7 @@ function atualizarEstadoMenu(){
   const r = itensDoAlvo(menuAberto.alvo);
   if (!r) return;
   // botões que mudaram (xp, "o Ed já vai", ligado ou desligado): só reabre se algo for diferente
-  const assina = x => JSON.stringify(x.itens.map(i => [i.rotulo, i.sub, !!i.off, i.canteiros || 0, !!i.estrela, !!i.encomenda]));
+  const assina = x => JSON.stringify(x.itens.map(i => [i.rotulo, i.sub, !!i.off, i.canteiros || 0, !!i.estrela, !!i.encomenda, i.faltam || '']));
   if (assina(r) !== assina(menuAberto.r)){ const m = $('menu'); abrirMenu(menuAberto.alvo, 0, 0, true); return; }
   const e = $('menu').querySelector('.estado'), p = $('menu').querySelector('.prog i');
   // composteira: a cor da caixa e a barra mudam com o estado, então reabre
@@ -16546,6 +16553,7 @@ async function iniciar(){
     trator: () => trator, TRATOR, filaTipos: () => fila.map(t => t.tipo), checar: (t, a, q) => checar(t, a, q), enfileirarTrator: (lote, acao, semente) => enfileirar('trator', { k: 'trator', lote }, { acao, semente }), tratorVis: () => tratorVis,
     resort: { hospedes: () => hospedes, montar: montarHospedes, grade: () => gradeResort, lugares: () => lugaresResort, cena: () => inauguracao, aberto: resortAberto, HOSP },
     arraia: { ARRAIA, obj: () => arraia, rojao, falas: FALAS_ARRAIA },
+    abrirMenu: (alvo, x = 300, y = 300) => abrirMenu(alvo, x, y),
     observatorio: { OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
     luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
