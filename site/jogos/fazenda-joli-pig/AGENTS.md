@@ -386,6 +386,7 @@ O Lucas pediu otimizações sem mexer na imagem nem no jogo. O que foi medido e 
   - freguesia (`FREGUESIA`, `valorVenda`, `cheiosDe`): a partir do nível 30, em cada visita (`S.visitas`) o Beto e o Jaca pagam o preço cheio até R$ 1.500 mais R$ 60 por nível de cada produto; o que passar disso sai por 60%. A janela de venda mostra quantos ainda saem pelo preço cheio e o preço do resto, e explica a regra. O Pelúcio e o Patrinho ficam de fora;
   - o tamanho dos pedidos conta só os seis terrenos da horta (os do canto não fazem os pedidos crescerem);
   - o grosso do equilíbrio fica com as obras grandes do Maurinho (seção Obras novas).
+- "Vender a sobra" (a janela do Beto e do Jaca) guarda o que os pedidos abertos pedem e também os ingredientes do que ainda falta fazer (`reservaPedidos`, `separadoPedidos`): do que falta, primeiro conta o que já está na fila das fábricas ou pronto para recolher (`aCaminhoDasFabricas`); o resto vira receitas de uma fábrica construída e liberada (`receitaQueFaz`), e os ingredientes delas ficam guardados, descendo de nível quando falta um ingrediente (o milho do fubá do bolo). Antes ele vendia esses ingredientes e atrapalhava o progresso (o Lucas notou). Só o celeiro é guardado, até o que tem; os botões de vender um produto continuam vendendo tudo. A janela diz o que ficou separado para os pedidos e o que ficou para fazer o que falta.
 - O contador de ração fica amarelo quando o estoque dá para menos de 10 minutos e vermelho quando não dá para alimentar nem um bicho. Tocar nele abre a loja na ração.
 
 ## Pomar

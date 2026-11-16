@@ -17455,11 +17455,40 @@ function comprarAnimal(tp, pedido = null){
   aviso(`${A.nome} ${A.masc ? 'novo' : 'nova'} no ${A.lugar}${capCercado(tp, 1) ? (c ? ' novo' : ' antigo') : ''}!`);
   hud(); salvar();
 }
-// o que os pedidos abertos precisam, até o que tem no celeiro: o "Vender tudo" deixa isso separado e vende só a sobra
+// o que já vai sair das fábricas: o que está na fila e o que ficou pronto e ainda não foi recolhido
+function aCaminhoDasFabricas(){
+  const a = {}, soma = rid => { const R = RECEITAS[rid]; if (R) for (const k in R.sai) a[k] = (a[k] || 0) + R.sai[k]; };
+  for (const id in FABRICAS){ const st = estFab(id); if (!st.feita) continue; for (const f of st.fila) soma(f.r); for (const r of st.feitos || []) soma(r); }
+  return a;
+}
+// a receita que faz o produto numa fábrica construída e liberada (null se não há)
+function receitaQueFaz(p){
+  for (const id in FABRICAS){ if (!estFab(id).feita) continue; for (const r of FABRICAS[id].receitas) if (RECEITAS[r].sai[p] && !travaReceita(r)) return r; }
+  return null;
+}
+// O que os pedidos abertos precisam, até o que tem no celeiro: o "Vender a sobra" deixa isso separado e vende só o resto.
+// direto: o próprio produto do pedido. ingr: os ingredientes do que ainda falta fazer (o Lucas notou que o "Vender a
+// sobra" vendia o fubá e os ovos do bolo que faltava e atrapalhava o progresso). Do que falta, primeiro sai o que já está
+// nas fábricas; o resto vira receitas, e os ingredientes delas são guardados, descendo de nível quando falta um ingrediente
+function reservaPedidos(){
+  const pede = {}, livre = {}, vem = aCaminhoDasFabricas(), direto = {}, ingr = {}, falta = {};
+  for (const p of S.pedidos || []) if (p && p.itens) for (const [k, q] of p.itens) pede[k] = (pede[k] || 0) + q;
+  const tirar = (p, q, onde) => { const t = Math.min(q, livre[p] != null ? livre[p] : (livre[p] = S.celeiro[p] || 0)); if (t){ livre[p] -= t; onde[p] = (onde[p] || 0) + t; } return q - t; };
+  const fazer = (p, q, prof) => {
+    const v = Math.min(q, vem[p] || 0); if (v){ vem[p] -= v; q -= v; }
+    const r = q > 0 && prof < 4 ? receitaQueFaz(p) : null;
+    if (!r) return;
+    const R = RECEITAS[r], vezes = Math.ceil(q / R.sai[p]);
+    for (const e in R.entra){ const resto = tirar(e, R.entra[e] * vezes, ingr); if (resto) fazer(e, resto, prof + 1); }
+  };
+  // primeiro os produtos dos pedidos, todos, e só depois os ingredientes do que falta
+  for (const k in pede){ const q = tirar(k, pede[k], direto); if (q) falta[k] = q; }
+  for (const k in falta) fazer(k, falta[k], 0);
+  return { direto, ingr };
+}
 function separadoPedidos(){
-  const sep = {};
-  for (const p of S.pedidos || []) if (p && p.itens) for (const [k, q] of p.itens) sep[k] = (sep[k] || 0) + q;
-  for (const k in sep) sep[k] = Math.min(sep[k], S.celeiro[k] || 0);
+  const { direto, ingr } = reservaPedidos(), sep = { ...direto };
+  for (const k in ingr) sep[k] = (sep[k] || 0) + ingr[k];
   return sep;
 }
 const sobraDe = (p, sep) => Math.max(0, (S.celeiro[p] || 0) - (sep[p] || 0));
@@ -17472,7 +17501,7 @@ function linhasProdutos(comVenda, aceita = () => true, vazio = 'O celeiro está 
     const pr = preco(p), q = S.celeiro[p], cheios = comVenda ? cheiosDe(p) : Infinity;
     // com a freguesia: até quanto sai pelo preço cheio nesta visita, e o resto por 60%
     const fregues = cheios >= q ? '' : cheios ? ` · ${cheios} pelo preço cheio, o resto a ${reais(precoResto(p))}` : ` · agora a ${reais(precoResto(p))} cada`;
-    return `<div class="linha${p === of ? ' oferta' : ''}"><img src="${icone(p)}" alt=""><div class="nome">${PRODUTOS[p].nome}${p === of ? '<span class="selo">oferta do dia</span>' : ''}<small>${PRODUTOS[p].venda ? reais(pr) + ' cada' : 'precisa secar no terreiro'}${fregues}${sep[p] ? ` · ${sep[p]} para pedidos` : ''}</small></div><div class="qtd">${q}</div>${comVenda ? `<button class="botao mini claro" data-vender="${p}" data-q="1" type="button">1</button><button class="botao mini" data-vender="${p}" data-q="${q}" type="button">Tudo · ${reais(valorVenda(p, q))}</button>` : ''}</div>`;
+    return `<div class="linha${p === of ? ' oferta' : ''}"><img src="${icone(p)}" alt=""><div class="nome">${PRODUTOS[p].nome}${p === of ? '<span class="selo">oferta do dia</span>' : ''}<small>${PRODUTOS[p].venda ? reais(pr) + ' cada' : 'precisa secar no terreiro'}${fregues}${sep[p] ? ` · ${sep[p]} guardados para os pedidos` : ''}</small></div><div class="qtd">${q}</div>${comVenda ? `<button class="botao mini claro" data-vender="${p}" data-q="1" type="button">1</button><button class="botao mini" data-vender="${p}" data-q="${q}" type="button">Tudo · ${reais(valorVenda(p, q))}</button>` : ''}</div>`;
   }).join('') + '</div>';
 }
 function valorCeleiro(aceita = () => true){ return ORDEM_PRODUTOS.reduce((s, p) => s + (aceita(p) ? (S.celeiro[p] || 0) * preco(p) : 0), 0); }
@@ -17772,7 +17801,11 @@ function abrirBeto(){
   }
   if (!doCafe && !doBistro && S.celeiro.cafe) corpo += `<p style="margin:10px 0 0;font-weight:700;font-size:13px;color:var(--tinta-suave)">O café seco fica guardado para o Pelúcio, da Joli Coffee.</p>`;
   const sep = separadoPedidos(), guardados = ORDEM_PRODUTOS.filter(p => sep[p] > 0 && aceita(p));
-  if (guardados.length) corpo += `<p style="margin:10px 0 0;font-weight:700;font-size:13px;color:var(--tinta-suave)">Separado para os pedidos: ${guardados.map(p => nomeQtd(p, sep[p])).join(', ')}.</p>`;
+  if (guardados.length){
+    const { direto, ingr } = reservaPedidos(), lista = o => ORDEM_PRODUTOS.filter(p => o[p] > 0 && aceita(p)).map(p => nomeQtd(p, o[p])).join(', ');
+    const a = lista(direto), b = lista(ingr);
+    corpo += `<p style="margin:10px 0 0;font-weight:700;font-size:13px;color:var(--tinta-suave)">${a ? `Separado para os pedidos: ${a}.` : ''}${a && b ? ' ' : ''}${b ? `${a ? 'E para' : 'Separado para'} fazer o que falta: ${b}.` : ''}</p>`;
+  }
   if (freguesiaAtiva()) corpo += `<p style="margin:10px 0 0;font-weight:700;font-size:13px;color:var(--tinta-suave)">Freguesia: em cada visita, o ${visita === jaca ? 'Jaca' : 'Beto'} leva até ${reais(demandaVisita())} de cada produto pelo preço cheio. O que passar disso ele paga ${Math.round(FREGUESIA.resto * 100)}%.</p>`;
   const total = ORDEM_PRODUTOS.reduce((t, p) => t + (aceita(p) ? valorVenda(p, sobraDe(p, sep)) : 0), 0);
   corpo += `<div class="rodape-janela"><button class="botao claro" type="button" data-fechar>${D.botaoTchau}</button><button class="botao" id="jTudo" type="button"${total ? '' : ' disabled'}>${guardados.length ? 'Vender a sobra' : 'Vender tudo'} · ${reais(total)}</button></div>`;
@@ -18652,7 +18685,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
+  window.__fazenda = { reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
     galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(FAB_NOVAS).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
