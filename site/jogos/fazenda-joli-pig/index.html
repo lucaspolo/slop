@@ -15197,7 +15197,7 @@ function itensDoAlvoBase(alvo){
       }
       if (adubavel(t) && nivel() >= ADUBO.nivel - 1){
         const tem = S.adubo || 0, bloq = nivel() < ADUBO.nivel;
-        r.itens.push({ rotulo: 'Adubar', sub: bloq ? `nível ${ADUBO.nivel}` : `metade do tempo que falta · tem ${tem}`, icone: 'adubo', off: bloq || tem < 1, fn: () => enfileirar('adubar', alvo) });
+        r.itens.push({ rotulo: 'Adubar', sub: bloq ? `nível ${ADUBO.nivel}` : `metade do tempo que falta · tem ${tem}`, icone: 'adubo', off: bloq || tem < 1, fn: () => enfileirar('adubar', alvo), modo: { tipo: 'adubar' } });
         if (!bloq && tem < 1) r.itens.push({ rotulo: 'Comprar adubo', icone: 'adubo', fn: () => abrirLoja('racao') });
       }
       r.itens.push({ rotulo: 'Arrancar', sub: 'perde a plantação', icone: 'mato', perigo: true, confirmar: 'Tocar de novo para arrancar', fn: () => enfileirar('arrancar', alvo) });
@@ -15451,7 +15451,7 @@ function abrirMenu(alvo, px, py, manter){
     fecharMenu();
     const antes = fila.length;
     it.fn();
-    if (it.modo && fila.length > antes) ligarModo(it.modo, it);
+    if (it.modo && fila.length > antes){ ligarModo(it.modo, it); conferirAduboDoModo(); }
   }));
   const primeiro = m.querySelector('.item:not(.off)');
   if (primeiro && !manter && !matchMedia('(pointer:coarse)').matches) primeiro.focus({ preventScroll: true });
@@ -15459,7 +15459,7 @@ function abrirMenu(alvo, px, py, manter){
 function fecharMenu(){ $('menu').hidden = true; menuAberto = null; marcaSel.visible = false; }
 function ligarModo(m, it){
   modo = m;
-  const nome = m.tipo === 'plantar' ? `Plantando ${CULTURAS[m.param].nome.toLowerCase()}` : { arar: 'Arando', regar: 'Regando', capinar: 'Tirando mato', colher: 'Colhendo', alimentar: 'Alimentando', coletar: 'Coletando' }[m.tipo];
+  const nome = m.tipo === 'plantar' ? `Plantando ${CULTURAS[m.param].nome.toLowerCase()}` : { arar: 'Arando', regar: 'Regando', capinar: 'Tirando mato', colher: 'Colhendo', alimentar: 'Alimentando', coletar: 'Coletando', adubar: 'Adubando' }[m.tipo];
   $('modoTexto').textContent = `${nome}: toque ou arraste em outros`;
   renovarModo();
   $('modoIcone').src = icone(it.icone);
@@ -15467,6 +15467,12 @@ function ligarModo(m, it){
   atualizarModoTodos();
 }
 function desligarModo(){ modo = null; $('modo').hidden = true; clearTimeout(modoTimer); $('modoTodos').hidden = true; }
+// adubando: o último saco foi para a fila, então a ação repetida para e avisa
+function conferirAduboDoModo(){
+  if (!modo || modo.tipo !== 'adubar' || (S.adubo || 0) > 0) return false;
+  desligarModo(); aviso('Acabou o adubo. Tem mais na loja, na aba Ração e adubo.', 'ruim', 3.5);
+  return true;
+}
 // plantando: a barra ganha "Plantar nos N vazios", que enche todos os canteiros arados e livres com a mesma semente
 // (primeiro as da bolsa, depois comprando), os mais perto do Ed primeiro e até o limite da fila
 const LIMITE_FILA = 40;
@@ -15508,6 +15514,8 @@ function pintarAte(cx, cy){
     if (!reservado(alvo) && checar(modo.tipo, alvo, modo.param).ok && enfileirar(modo.tipo, alvo, modo.param, true)){
       pintura.n++; renovarModo(); if (alvo.k === 'tile') marcar(marcaHover, alvo.x, alvo.z);
       if (pintura.n % 2 === 1) Som.clique();
+      // sem adubo, o resto do arrasto não faz nada (nem move a câmera)
+      if (conferirAduboDoModo()) return;
     }
   }
   pintura.ult = [cx, cy];
@@ -16222,7 +16230,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Pomar:</b> ${(l => l.slice(0, -1).join(', ') + ' e ' + l[l.length - 1])(Object.values(FRUTIFERAS).map(F => F.nome.toLowerCase() + nv(F.nivel)))} dão frutas de novo e de novo, sem replantar nem regar. Nos níveis ${POMAR_BLOCOS[1].nivel} e ${POMAR_BLOCOS[2].nivel} dá para comprar terrenos de pomar com mais seis covas cada, mais dois no terreno novo depois de arrendado, e uma árvore pode ser cortada para dar lugar a outra.</li>
       <li><b>Colmeias</b>${nv(COLMEIA.nivel)}: dão mel, e cada colmeia deixa o pomar do mesmo lado da fazenda ${Math.round(COLMEIA.ajuda * 100)}% mais rápido.</li>
       <li><b>Café</b>${nv(CULTURAS.cafe.nivel)}: sai do pé em cereja e seca no terreiro. Só o Pelúcio, da Joli Coffee, compra o café seco, e o torrado, feito no torrador, vale ${reais(PRODUTOS.torrado.venda)}.</li>
-      <li><b>Adubo</b>${nv(ADUBO.nivel)}: vendido na loja, na aba Ração e adubo, a ${reais(ADUBO.preco)} o saco ou ${ADUBO.pacote[0]} por ${reais(ADUBO.pacote[1])}. Toque num canteiro com uma cultura longa crescendo (${ORDEM_CULTURAS.filter(k => CULTURAS[k].tempo >= ADUBO.minTempo).map(k => CULTURAS[k].nome.toLowerCase()).join(', ')}) e escolha Adubar: o tempo que falta para a colheita cai pela metade, mesmo com o jogo fechado. É uma planta por vez, e depois da colheita é preciso adubar de novo. O Hud não aduba.</li>
+      <li><b>Adubo</b>${nv(ADUBO.nivel)}: vendido na loja, na aba Ração e adubo, a ${reais(ADUBO.preco)} o saco ou ${ADUBO.pacote[0]} por ${reais(ADUBO.pacote[1])}. Toque num canteiro com uma cultura longa crescendo (${ORDEM_CULTURAS.filter(k => CULTURAS[k].tempo >= ADUBO.minTempo).map(k => CULTURAS[k].nome.toLowerCase()).join(', ')}) e escolha Adubar: o tempo que falta para a colheita cai pela metade, mesmo com o jogo fechado. Depois do primeiro, toque ou arraste o dedo sobre os outros canteiros para adubar sem abrir o menu; tocar fora deles ou em Pronto para. Cada saco aduba uma planta, e depois da colheita é preciso adubar de novo. O Hud não aduba.</li>
       <li><b>Composteira</b>${nv(COMPOSTEIRA.nivel)}: no nível ${COMPOSTEIRA.nivel} o Ed conhece as Minhoquinhas e constrói a casa delas, de graça, depois da cozinha de doces, na ponta da estradinha de terra. Elas comem restos: cada mato que o Ed ou o Hud tira vira 1 resto; cada secagem de café dá 1 resto a cada ${COMPOSTEIRA.cerejasPorResto} cerejas; as sobras da horta que você der pelo menu dão 1 resto por unidade, de ${COMPOSTEIRA.lote} em ${COMPOSTEIRA.lote} (${COMPOSTEIRA.comida.map(k => PRODUTOS[k].nome.toLowerCase()).join(', ')}). Guardam até ${COMPOSTEIRA.restoMax} restos. Cada ${COMPOSTEIRA.restosPorSaco} restos viram 1 saco de adubo a cada ${tempo(COMPOSTEIRA.base.seg)}, até a caixa encher (${COMPOSTEIRA.base.caixa} sacos), até com o jogo fechado. O Ed recolhe pelo menu e cada saco dá ${COMPOSTEIRA.xpSaco} xp.</li>
       <li><b>Mais minhocas</b>: melhorias da composteira, no menu dela. ${COMPOSTEIRA.melhorias.map((m, i) => `${i ? 'nível' : 'Nível'} ${m.nivel}, ${reais(m.preco)}: um saco a cada ${tempo(m.seg)} e caixa de ${m.caixa}`).join('; ')}. Cada melhoria põe mais Minhoquinhas na casa.</li>
       <li><b>Reformas</b>${nv(REFORMA.nivel[0])}: o Maurinho, irmão arquiteto do Ed, reforma as construções. Toque numa delas e escolha "Reformar com o Maurinho". As fábricas ganham mais uma vaga de produção, o galinheiro e o curral cabem mais bichos, e a casa, o celeiro e o poço ganham visual novo. A <b>2ª reforma</b>${nv(REFORMA.nivel[1])} (todas menos a casa, que vira o casarão) dá mais uma vaga às fábricas e visual novo a todas; nos galinheiros, currais e no galinheiro dos patos ela não aumenta quantos bichos cabem, mas dá conforto, e os bichos soltam coraçõezinhos de vez em quando. Uma obra por vez, e a construção continua funcionando enquanto o andaime está de pé.</li>
@@ -16375,7 +16383,7 @@ function tocou(cx, cy){
   }
   if (modo){
     if ((alvo.k === 'tile' || alvo.k === 'animal') && !reservado(alvo)){
-      if (checar(modo.tipo, alvo, modo.param).ok){ if (enfileirar(modo.tipo, alvo, modo.param)){ renovarModo(); atualizarModoTodos(); if (alvo.k === 'tile') { marcar(marcaHover, alvo.x, alvo.z); } return; } }
+      if (checar(modo.tipo, alvo, modo.param).ok){ if (enfileirar(modo.tipo, alvo, modo.param)){ renovarModo(); atualizarModoTodos(); if (alvo.k === 'tile') { marcar(marcaHover, alvo.x, alvo.z); } conferirAduboDoModo(); return; } }
     }
     desligarModo();
   }
@@ -16415,7 +16423,7 @@ function eventos(){
         if (modo && modo.tipo !== 'enfeite' && !cine && !menuAberto){ pintura = { ult: [inicio.x, inicio.y], feitos: new Set(), n: 0 }; pintarAte(inicio.x + 0.01, inicio.y); }
       }
       if (arrastou && !cine){
-        if (pintura && modo) pintarAte(e.clientX, e.clientY);
+        if (pintura){ if (modo) pintarAte(e.clientX, e.clientY); }
         else { arrastar(dx, dy); marcaHover.visible = false; }
       }
     } else if (ponteiros.size === 2){
