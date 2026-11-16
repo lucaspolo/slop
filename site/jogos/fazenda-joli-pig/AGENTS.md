@@ -245,6 +245,14 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - A vaca que volta fica com a lembrança: óculos escuros e a tiara de anteninhas (`vVaca(true)`, `d.espaco`).
 - Para testar: `__fazenda.observatorio` (`OBSERV`, `VOLTA`, `estrela`, `volta`, `podeDevolver`, `vacas`, `luneta`, `pouso`, `vis`).
 
+### Museu da fazenda
+
+- Nível 56, R$ 2,2 milhões, 35 minutos, 15000 XP, no terreno novo, ao lado do observatório e de frente para a câmera: x 30 a 33, z 45 a 47, porta em 31, 48 (`PREDIOS.museu`, `MUSEU`). O campo grande da festa fica livre à direita.
+- Desenho em `vMuseu` (4 × 3 ladrilhos em cubinhos de 1/8): embasamento de pedra, salão creme com janelas altas dos lados, pórtico de quatro colunas, frontão com o medalhão da carinha de porco num aro dourado, telhado de ardósia em degraus, a porta de duas folhas, dois estandartes (o vermelho com a estrela, das figurinhas, e o azul com o cartão-postal), a escada, vasos de flor e dois postes nos cantos do embasamento. `vestirMuseu` põe o letreiro "MUSEU DA FAZENDA" no friso e acende as janelas e os postes de noite.
+- Visitar: o menu do museu tem "Visitar o museu" (tarefa `museu`, alvo `{ k: 'museu' }`): o Ed sobe até o pé da escada (`portaMuseu`) e abre a janela do museu (`abrirMuseu`), com uma aba por sala: figurinhas (`figurinhasHTML`), cartões-postais, cenas (as que já aconteceram, com "Ver de novo") e recordes (o que a fazenda colheu e fez, pedidos, visitantes da trilha, cuidados com a mata, aposentadas, vaquinhas que foram ao espaço e noites). Dá `MUSEU.xp` uma vez por dia (`S.museuDia`), e o Ed comenta quando a janela fecha (`FALAS_MUSEU`).
+- Cartões-postais: desde o museu, cada cartão que o Ed lê fica guardado em `S.cartoesLidos` (os `MUSEU.postais` mais recentes, `guardarCartaoLido`), mesmo antes do museu existir. Na sala, tocar num abre o cartão (`abrirCartao(C, aoFechar)`), e fechar volta para a sala. Os cartões lidos antes disso não ficaram guardados.
+- Para testar: `__fazenda.museu` (`MUSEU`, `abrir`, `visitar`, `porta`, `alvo`, `guardarCartao`).
+
 ## ArraiEd, o Arraiá do Ed
 
 - Ideia do Lucas: no nível 50 acontece a maior festa de todas, o Arraiá do Ed, também chamado de ArraiEd, e vem todo mundo que existe até ali. Ela entrou no lugar do Parque do lago, que saiu das obras. É de graça, acontece uma vez (a janela Cenas reprisa) e o arraial desmonta no fim; o Lucas escolheu o campo grande do sul do terreno novo (`ARRAIA.meio`, 40,5; 45).
