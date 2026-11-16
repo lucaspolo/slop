@@ -342,6 +342,10 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
   - o grosso do equilíbrio fica com as obras grandes do Maurinho (seção Obras novas).
 - O contador de ração fica amarelo quando o estoque dá para menos de 10 minutos e vermelho quando não dá para alimentar nem um bicho. Tocar nele abre a loja na ração.
 
+## Pomar
+
+- O pomar vem em blocos de seis covas (`POMAR_BLOCOS`, `POMAR_SLOTS`; `S.pomar` é indexado pela cova, e `blocoDoSlot` conta seis por bloco, então bloco novo entra no fim da lista). O primeiro vem com o pomar, e os outros são terrenos à venda com a placa "POMAR À VENDA": dois a leste (13 e 18), a fileira de baixo, entre o pomar e a cerca da fazenda (25, R$ 15 mil, o Lucas pediu; o Ed colhe do lado da cerca, em z 20, que é gramado também antes de arrendar o canto) e dois no canto Sul (30). Comprar devolve para a loja os enfeites que estavam no terreno.
+
 ## Produtos da mata
 
 - Os produtos da mata têm destino além do mercado. Receitas novas: polpa de açaí, doce de cupuaçu e paçoca de castanha (cozinha), guaraná em pó (torrador) e bolo de chocolate (padaria, que precisa da fábrica de barras). Três construções novas: a fábrica de barras (nível 21), a chocolateria (nível 22) e a oficina de borracha (nível 23), numa clareira no canto do terreno abandonado, do outro lado da estrada, de frente para ela, cada uma com uma passagem na cerca. A clareira vai de `Z_CERCA + 1` até `CLAREIRA_ATE`. Ao arrendar o canto, as construções da clareira ficam, e o resto do terreno ganha o lago e as faixas de lotes à venda (ver Terreno do canto Sul).
