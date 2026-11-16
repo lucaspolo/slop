@@ -3390,9 +3390,16 @@ const AVENTURAS = {
   },
   // de manhã, deita num lugar de sol e tira uma soneca
   soneca(L, dt, t, chegou){
-    if (L.passo === 0){ if (!chegou) return; const [x, z] = pontoLumaLivre(); if (!lumaIr(x, z, LUMA_JOGO.vel * 0.8)) return lumaFim(); L.passo = 1; return; }
+    if (L.passo === 0){
+      if (!chegou) return;
+      // com casinha, deita na porta dela (casinhaParaLuma); senão, num lugar de sol
+      L.casinha = casinhaParaLuma();
+      const [x, z] = L.casinha ? L.casinha.porta : pontoLumaLivre();
+      if (!lumaIr(x, z, LUMA_JOGO.vel * 0.8)){ if (!L.casinha) return lumaFim(); L.casinha = null; const [x2, z2] = pontoLumaLivre(); if (!lumaIr(x2, z2, LUMA_JOGO.vel * 0.8)) return lumaFim(); }
+      L.passo = 1; return;
+    }
     if (L.passo === 1){ if (!chegou) return; L.passo = 2; L.ta = 0; return; }
-    if (L.passo === 2){ L.ang += dt * 7; L.angAlvo = L.ang; if (L.ta > 1){ L.passo = 3; L.ta = 0; L.durSono = rnd(...LUMA_SITU.soneca); L.tz = 0.6; L.shhh = false; } return; }
+    if (L.passo === 2){ L.ang += dt * 7; L.angAlvo = L.ang; if (L.ta > 1){ L.passo = 3; L.ta = 0; L.durSono = rnd(...LUMA_SITU.soneca); L.tz = 0.6; L.shhh = false; if (L.casinha) L.ang = L.angAlvo = L.casinha.ang; } return; }
     if (L.passo === 3){
       if ((L.tz -= dt) <= 0){ L.tz = 1.3; zLuma(L); }
       if (!L.shhh && edPerto(2.6)){ L.shhh = true; edFala(FALAS_ED_SONECA); }
@@ -5867,6 +5874,104 @@ function vEstatua(){
   for (const e of ed.m.values()){ const g = (new THREE.Color(e.c).r + new THREE.Color(e.c).g + new THREE.Color(e.c).b) / 3; const c = new THREE.Color(0.55 + g * 0.35, 0.53 + g * 0.35, 0.5 + g * 0.33).getHex(); v.set(e.x, e.y + 10, e.z, c); }
   return v;
 }
+// ================= enfeites novos (o Lucas pediu mais): cada um ocupa um ladrilho, em cubinhos de 1/16 com a frente para +z
+// a casinha da Luma: tábuas cor de mel, telhado rosa com a cumeeira para a frente, a porta de arco escura, a plaquinha
+// rosa com o ossinho e a tigela de ração do lado
+function vCasinhaLuma(){
+  const v = new Vox(), tabua = (x, y, z) => y % 2 ? 0xe2b072 : 0xd29f62;
+  v.box(2, 0, 2, 13, 0, 13, 0xb08a5a);
+  v.box(3, 1, 3, 12, 7, 12, tabua);
+  // o telhado de duas águas, com a cumeeira de frente para trás (z) e o oitão da frente fechado com tábua
+  for (let i = 0; i <= 5; i++){
+    const y = 8 + i, a = 2 + i, b = 13 - i, c = i % 2 ? 0xd8344a : 0xe8526a;
+    v.box(a, y, 1, a, y, 14, c); v.box(b, y, 1, b, y, 14, c);
+    if (a + 1 <= b - 1) v.box(a + 1, y, 3, b - 1, y, 12, tabua);
+  }
+  v.box(7, 14, 1, 8, 14, 14, 0xb82a40);
+  // a porta de arco e a plaquinha com o ossinho
+  for (let x = 6; x <= 9; x++) for (let y = 1; y <= 6; y++){ if (y === 6 && (x === 6 || x === 9)) continue; v.set(x, y, 12, 0x3a2a24); }
+  v.box(6, 8, 13, 9, 9, 13, 0xf28fac); v.box(7, 8, 14, 8, 8, 14, 0xfdf8ef); v.set(6, 9, 14, 0xfdf8ef); v.set(9, 9, 14, 0xfdf8ef);
+  // a tigela de ração
+  v.box(11, 1, 13, 13, 1, 15, 0xd23a2a); v.box(12, 2, 14, 12, 2, 14, 0x8a5a36); v.set(11, 2, 14, 0xd23a2a); v.set(13, 2, 14, 0xd23a2a);
+  return v;
+}
+// a carriola florida: carrinho de mão velho, vermelho, cheio de flores, com a roda na frente
+function vCarriola(){
+  const v = new Vox(), cores = [0xf05d7e, 0xffd34d, 0xffffff, 0xa35ccf, 0xf28fac];
+  for (let y = 0; y <= 4; y++) for (let z = 10; z <= 14; z++) if (Math.hypot(y - 2, z - 12) <= 2.3) v.box(7, y, z, 8, y, z, Math.hypot(y - 2, z - 12) < 1 ? 0x9aa3ab : 0x2a2a2e);
+  for (let y = 3; y <= 6; y++){ const k = y - 3; v.box(4 - k, y, 3 + k, 11 + k, y, 11 - (k >> 1), (x, Y, z) => x === 4 - k || x === 11 + k || z === 3 + k || z === 11 - (k >> 1) ? 0xc8433a : 0x6a4a2c); }
+  for (const x of [4, 11]){ v.box(x, 4, -1, x, 4, 3, 0x8a5a36); v.box(x, 0, 4, x, 3, 4, 0x8a5a36); }
+  for (let x = 2; x <= 13; x += 2) for (let z = 4; z <= 11; z += 2){ const h = 7 + Math.floor(hash(x, 3, z) * 2), c = cores[Math.floor(hash(z, 5, x) * 5)]; v.set(x, h - 1, z, 0x4f9a3d); v.set(x, h, z, c); v.set(x + 1, h, z, c); v.set(x, h, z + 1, c); v.set(x, h + 1, z, 0xffd34d); }
+  return v;
+}
+// a mesa de piquenique: redonda, de madeira, com toalha xadrez vermelha e branca e a cesta de vime no chão. É nela que o
+// cafezinho acontece, quando tem uma (lugarCafe): a mesa do cafezinho não aparece e o prato e a caneca ficam em cima dela
+function vMesaPiquenique(){
+  const v = new Vox(), xadrez = (x, y, z) => ((x >> 1) + (z >> 1)) % 2 ? 0xd8344a : 0xfdf8ef;
+  v.box(6, 0, 6, 9, 0, 9, 0x6a4a2c); v.box(7, 1, 7, 8, 7, 8, 0x8a5a36);
+  for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++){ const d = Math.hypot(x - 7.5, z - 7.5); if (d <= 6.2) v.set(x, 8, z, xadrez(x, 8, z)); else if (d <= 6.9) v.set(x, 7, z, xadrez(x, 7, z)); }
+  // a cesta de vime, no chão, num canto
+  v.box(12, 0, 12, 15, 2, 14, (x, y) => (x + y) % 2 ? 0xc99a5a : 0xb5864a); v.box(12, 3, 13, 12, 4, 13, 0xa47442); v.box(15, 3, 13, 15, 4, 13, 0xa47442); v.box(12, 5, 13, 15, 5, 13, 0xa47442);
+  return v;
+}
+// o relógio de sol: pedestal de pedra, mostrador com as marcas das horas e o ponteiro de latão; a sombra é uma malha à
+// parte (montarEnfeite) que anda com a hora do jogo
+function vRelogioSol(){
+  const v = new Vox(), pedra = (x, y, z) => hash(x, y, z) < 0.5 ? 0xc9c2b4 : 0xbab2a3;
+  v.box(5, 0, 5, 10, 4, 10, pedra); v.box(4, 0, 4, 11, 0, 11, pedra);
+  for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++){
+    const d = Math.hypot(x - 7.5, z - 7.5); if (d > 6.6) continue;
+    const a = Math.atan2(x - 7.5, z - 7.5), marca = d > 5.4 && Math.abs(((a / (Math.PI / 6)) % 1 + 1) % 1 - 0.5) > 0.36;
+    v.set(x, 5, z, d > 6 ? 0xb9a37a : marca ? 0x3b2a20 : 0xeee4cc);
+  }
+  for (let z = 4; z <= 11; z++) v.box(7, 6, z, 8, 6 + Math.round((11 - z) * 0.75), z, 0xc9a23a);
+  return v;
+}
+// a pérgola: arco de madeira branca com a trepadeira florida por cima e subindo pelos esteios
+function vPergola(){
+  const v = new Vox(), branco = 0xf3ece0, cores = [0xf05d7e, 0xb48be0, 0xffd34d];
+  for (const [x, z] of [[2, 2], [13, 2], [2, 13], [13, 13]]) v.box(x, 0, z, x, 15, z, branco);
+  for (const z of [2, 13]) v.box(1, 16, z, 14, 16, z, branco);
+  for (let x = 1; x <= 14; x += 2) v.box(x, 17, 1, x, 17, 14, branco);
+  for (let x = 1; x <= 14; x++) for (let z = 1; z <= 14; z++){ const h = hash(x, 18, z); if (h < 0.55) v.set(x, 18, z, h < 0.12 ? cores[Math.floor(hash(z, 2, x) * 3)] : h < 0.35 ? 0x4f9a3d : 0x3f8a33); }
+  for (const [x, z] of [[2, 2], [13, 2], [2, 13], [13, 13]]) for (let y = 3; y <= 15; y++){ const h = hash(x, y, z); if (h < 0.6){ v.set(x + (x < 8 ? 1 : -1) * (h < 0.3 ? 1 : 0), y, z + (z < 8 ? 1 : -1) * (h >= 0.3 ? 1 : 0), h < 0.1 ? cores[Math.floor(hash(y, 4, x) * 3)] : 0x4f9a3d); } }
+  return v;
+}
+// o balanço de pneu: árvore com um galho comprido; o pneu, as cordas e o gancho são uma malha à parte (vPneuBalanco), que
+// balança em volta do gancho (BALANCO.pivo)
+const BALANCO = { pivo: [10.5, 15, 7.5], corda: 9, amp: 0.1, ampSentado: 0.45, vel: 2.2 };
+function vBalanco(){
+  const v = new Vox(), tronco = (x, y, z) => hash(x, y, z) < 0.25 ? 0x6a4428 : 0x7a5232;
+  v.box(1, 0, 6, 3, 18, 9, tronco); v.box(0, 0, 5, 4, 0, 10, 0x6a4428);
+  v.box(3, 15, 7, 12, 16, 8, tronco);
+  v.ell(4, 21, 7.5, 6, 4, 6, (x, y, z) => [0x4f9a3d, 0x3f8a33, 0x5aa847][Math.floor(hash(x, y, z) * 3)]);
+  v.ell(10, 19, 7.5, 3.5, 2.5, 4, (x, y, z) => [0x4f9a3d, 0x3f8a33, 0x5aa847][Math.floor(hash(z, y, x) * 3)]);
+  return v;
+}
+// o pneu deitado, pendurado por três cordas que se juntam no gancho; a origem é o gancho
+function vPneuBalanco(){
+  const v = new Vox(), L = BALANCO.corda;
+  for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++){ const d = Math.hypot(x, z); if (d <= 3.9 && d >= 1.7) v.box(x, -L - 1, z, x, -L, z, d > 3.2 ? 0x2a2a2e : 0x3a3a3e); }
+  for (const a of [0, 2.1, 4.2]){ const ex = Math.cos(a) * 2.8, ez = Math.sin(a) * 2.8; for (let k = 0; k <= L; k++) v.set(Math.round(ex * k / L), -k, Math.round(ez * k / L), 0xd9c49a); }
+  v.set(0, 0, 0, 0x6a6e74);
+  return v;
+}
+// o comedouro de passarinho: poste, a bandejinha com sementes e o telhadinho vermelho; o tucano e o papagaio pousam na
+// beira da bandeja (COMEDOURO.poleiro)
+const COMEDOURO = { poleiro: [[7.5, 14, 4.2], [4.2, 14, 7.5], [10.8, 14, 7.5]], primeira: [20, 45], intervalo: [50, 110], fica: [14, 24] };
+function vComedouro(){
+  const v = new Vox(), madeira = 0xa47448;
+  v.box(7, 0, 7, 8, 12, 8, 0x8a5a36); v.box(6, 0, 6, 9, 0, 9, 0x6a4a2c);
+  v.box(4, 13, 4, 11, 13, 11, madeira);
+  for (let x = 4; x <= 11; x++) for (const z of [4, 11]) v.set(x, 14, z, madeira);
+  for (let z = 5; z <= 10; z++) for (const x of [4, 11]) v.set(x, 14, z, madeira);
+  for (let x = 5; x <= 10; x++) for (let z = 5; z <= 10; z++) if (hash(x, 14, z) < 0.6) v.set(x, 14, z, [0xe8c56a, 0xc99a4a, 0x8a5a36][Math.floor(hash(z, 1, x) * 3)]);
+  // o telhadinho fica alto, para o passarinho caber embaixo dele
+  for (const [x, z] of [[5, 5], [10, 5], [5, 10], [10, 10]]) v.box(x, 14, z, x, 21, z, madeira);
+  for (let i = 0; i <= 3; i++){ const y = 22 + i, c = i % 2 ? 0xc8433a : 0xd8544a; v.box(3 + i, y, 3, 3 + i, y, 12, c); v.box(12 - i, y, 3, 12 - i, y, 12, c); }
+  v.box(7, 26, 3, 8, 26, 12, 0xa8332a);
+  return v;
+}
 // ================= reformas do Maurinho: cada construção tem a 1ª reforma (nível 31) e a 2ª (nível 35).
 // A reforma é o desenho original com acréscimos, no mesmo lugar: a fazenda não tem espaço para crescer para os lados
 const MODELO_BASE = { casa: () => vCasa(true), celeiro: vCeleiro, poco: vPoco, galinheiro: vGalinheiro, curral: vAbrigo,
@@ -7230,6 +7335,8 @@ const VI = {
   goiabada(){ const v = new Vox(); v.box(-4, 0, -3, 4, 4, 3, 0xb8344a); v.box(-4, 5, -3, 4, 5, 3, 0xd8506a); return v; },
   bolomel(){ const v = new Vox(); v.ell(0, 2, 0, 5, 2.5, 5, (x, y) => y >= 4 ? 0xf2b42a : 0xc98a3a); v.ell(0, 0, 0, 6, 0.6, 6, 0xfdf8ef); return v; },
   colmeia(){ return vColmeia(); }, cova(){ return vCova(); },
+  casinhaLuma(){ return vCasinhaLuma(); }, carriola(){ return vCarriola(); }, mesaPiquenique(){ return vMesaPiquenique(); }, relogioSol(){ return vRelogioSol(); }, pergola(){ return vPergola(); },
+  balanco(){ const v = vBalanco(); const [px, py, pz] = BALANCO.pivo; for (const e of vPneuBalanco().m.values()) v.set(e.x + Math.floor(px), e.y + py, e.z + Math.floor(pz), e.c); return v; }, comedouro(){ return vComedouro(); },
   flores(){ return vCanteiroFlor(); }, banco(){ return vBanco(); }, espantalho(){ return vEspantalho(); }, poste(){ return vPoste(); }, varal(){ return vVaralTrecho(); }, fonte(){ return vFonte(); }, estatua(){ const v = vEstatua(); return v; },
   laranjeira(){ return vFrutifera('laranjeira', true); }, goiabeira(){ return vFrutifera('goiabeira', true); }, mangueira(){ return vFrutifera('mangueira', true); },
   botas(){ const v = new Vox(); for (const e of vPeBota(0x46a352, 0x2c6e35).m.values()) v.set(e.x - 6, e.y, e.z, e.c); for (const e of vPeBota(0x46a352, 0x2c6e35).m.values()) v.set(e.x + 6, e.y, e.z - 2, e.c); return v; },
@@ -10529,7 +10636,7 @@ let cafe = null, proxCafezinho = 0, cafeForca = null, edParadoDesde = 0, lancheP
 // "Tomar um lanchinho", no toque na casa: o cafezinho começa assim que o Ed estiver livre, sem esperar o relógio
 function itemLanche(){
   const motivo = nivel() < 3 ? 'nível 3' : lanchePedido ? 'o Ed já vai' : voo.estado !== 'fora' ? 'quando o Milton decolar' : !lugarCafe() ? 'falta um cantinho livre' : null;
-  return { rotulo: 'Tomar um lanchinho', sub: motivo || 'chocolate quente na frente da casa', icone: 'caneca', off: !!motivo, fn: pedirLanche };
+  return { rotulo: 'Tomar um lanchinho', sub: motivo || (lugarPiquenique() ? 'chocolate quente na mesa de piquenique' : 'chocolate quente na frente da casa'), icone: 'caneca', off: !!motivo, fn: pedirLanche };
 }
 function pedirLanche(){
   lanchePedido = true;
@@ -10538,7 +10645,7 @@ function pedirLanche(){
 }
 const sorteioCafezinho = () => Date.now() + rnd(6, 12) * 60000;
 // o lugar serve se a mesa, os cantos dela e os banquinhos caírem em ladrilhos livres (sem construção, árvore, feno, terreno nem enfeite)
-const lugarCafe = () => CAFE_LUGARES.find(([x, z]) => [[0, 0], [0.52, 0.52], [-0.52, 0.52], [0.52, -0.52], [-0.52, -0.52], ...Object.values(CAFE_ASSENTO)].every(([dx, dz]) => {
+const lugarCafe = () => lugarPiquenique() || CAFE_LUGARES.find(([x, z]) => [[0, 0], [0.52, 0.52], [-0.52, 0.52], [0.52, -0.52], [-0.52, -0.52], ...Object.values(CAFE_ASSENTO)].every(([dx, dz]) => {
   const ix = Math.floor(x + (dx + dz) * Math.SQRT1_2), iz = Math.floor(z + (dz - dx) * Math.SQRT1_2);
   return andavel(ix, iz) && !campo(ix, iz) && loteDe(ix, iz) < 0 && blocoEm(ix, iz) <= 0 && !S.enfeites.some(e => e.x === ix && e.z === iz);
 }));
@@ -10601,16 +10708,18 @@ function falasCafe(p){
 function montarCafe(){
   const { cx, cz, plano } = cafe, g = new THREE.Group();
   g.position.set(cx, 0, cz); g.rotation.y = CAFE_GIRO; g.scale.setScalar(0.001);
-  g.add(malha(geo('cafeMesa', () => vMesaCafe().build(1 / 19))));
+  // na mesa de piquenique, a mesinha não aparece: o prato e a caneca ficam em cima dela (o tampo dela é 9/16)
+  if (!cafe.piquenique) g.add(malha(geo('cafeMesa', () => vMesaCafe().build(1 / 19))));
+  const topo = cafe.piquenique ? 9 / 16 : CAFE_TOPO;
   for (const q of ['ed', plano.hud ? 'hud' : null, plano.conv || plano.dani ? 'conv' : null]){
     if (!q) continue;
     const b = malha(geo('cafeBanco', () => vBancoCafe().build(1 / 19))); b.position.set(CAFE_ASSENTO[q][0], 0, CAFE_ASSENTO[q][1]); g.add(b);
   }
-  const prato = malha(geo('cafePrato', () => vPratoCafe().build(1 / 19))); prato.position.set(CAFE_PRATO[0], CAFE_TOPO, CAFE_PRATO[1]); g.add(prato);
+  const prato = malha(geo('cafePrato', () => vPratoCafe().build(1 / 19))); prato.position.set(CAFE_PRATO[0], topo, CAFE_PRATO[1]); g.add(prato);
   const comida = malha(geo('cafe_' + plano.comida, () => (plano.comida === 'bolo' ? vFatia() : VI[plano.comida]()).build(1 / 19)));
-  comida.position.set(CAFE_PRATO[0], CAFE_TOPO + 1 / 19, CAFE_PRATO[1]); g.add(comida);
+  comida.position.set(CAFE_PRATO[0], topo + 1 / 19, CAFE_PRATO[1]); g.add(comida);
   const caneca = malha(geo('cafeCaneca', () => vCaneca().build(1 / 19)));
-  caneca.position.set(CAFE_CANECA[0], CAFE_TOPO, CAFE_CANECA[1]); g.add(caneca);
+  caneca.position.set(CAFE_CANECA[0], topo, CAFE_CANECA[1]); g.add(caneca);
   scene.add(g);
   Object.assign(cafe, { g, comida, caneca });
 }
@@ -12268,12 +12377,13 @@ const CENAS = {
     iniciar(c){
       caminhaoE.estado = 'cine';
       cam.azAlvo = azPerto(Math.PI / 4);
-      const [lx, lz] = lugarCafe() || CAFE_LUGARES[0], plano = sortearCafe();
+      const [lx, lz, piquenique] = lugarCafe() || CAFE_LUGARES[0], plano = sortearCafe();
       lanchePedido = false;
-      cafe = { cx: lx, cz: lz, mesaOn: false, plano, rel: 0, nasce: 0, agenda: [], gole: 3, vap: 0, comeu: false, encolhe: false, t0: Date.now() };
+      cafe = { cx: lx, cz: lz, piquenique: !!piquenique, mesaOn: false, plano, rel: 0, nasce: 0, agenda: [], gole: 3, vap: 0, comeu: false, encolhe: false, t0: Date.now() };
       // o Hud que está ajudando solta o canteiro e a tarefa e vem de onde estiver
       if (plano.hud && plano.hudModo !== 'casa' && irmaoHud.g.visible){
         if (tarefaHud){ setReserva(tarefaHud.alvo, null); tarefaHud = null; }
+        descerDoBalanco(irmaoHud);
         const H = irmaoHud; H.trab = null; H.pontos = []; H.aoChegar = null; H.estado = 'parado'; H.ferramenta(null); H.saindo = false;
       } else if (plano.hud) plano.hudModo = hudAtivo() ? 'ajuda' : 'casa';
       // o Dani também: solta o que fazia e vem de onde está
@@ -12925,13 +13035,21 @@ function lembretesComposteira(){
 
 // ================= enfeites: comprados na loja, colocados em qualquer gramado livre
 // o espantalho espanta o mato dos canteiros em volta; os outros só deixam a fazenda bonita (e dão um pouquinho de xp, só na compra)
+// os do nível 7 em diante, menos o chafariz e a estátua, vieram depois (o Lucas pediu mais enfeites)
 const ENFEITES = {
   canteiroFlor: { nome: 'Canteiro de flores', art: 'o', preco: 60, nivel: 2, xp: 1 },
   banco:        { nome: 'Banco de praça', art: 'o', preco: 150, nivel: 3, xp: 2 },
   espantalho:   { nome: 'Espantalho', art: 'o', preco: 400, nivel: 5, xp: 3, desc: 'Os canteiros a até 3 passos dele não dão mato.' },
   poste:        { nome: 'Poste de luz', art: 'o', preco: 300, nivel: 6, xp: 2 },
+  casinhaLuma:  { nome: 'Casinha da Luma', art: 'a', preco: 800, nivel: 7, xp: 4, desc: 'De manhã, a Luma às vezes tira a soneca na porta dela.' },
   fonte:        { nome: 'Chafariz', art: 'o', preco: 1500, nivel: 9, xp: 6 },
+  carriola:     { nome: 'Carriola florida', art: 'a', preco: 900, nivel: 11, xp: 4, desc: 'Um carrinho de mão velho cheio de flores.' },
+  mesaPiquenique: { nome: 'Mesa de piquenique', art: 'a', preco: 1200, nivel: 12, xp: 5, desc: 'O cafezinho acontece nela, quando cabem os banquinhos em volta.' },
   estatua:      { nome: 'Estátua do Ed', art: 'a', preco: 5000, nivel: 14, xp: 15 },
+  relogioSol:   { nome: 'Relógio de sol', art: 'o', preco: 1800, nivel: 15, xp: 6, desc: 'A sombra do ponteiro anda com a hora do dia.' },
+  pergola:      { nome: 'Pérgola', art: 'a', preco: 2500, nivel: 17, xp: 7, desc: 'Um arco de madeira coberto de trepadeira florida.' },
+  balanco:      { nome: 'Balanço de pneu', art: 'o', preco: 2000, nivel: 18, xp: 6, desc: 'O Hud e o Dani se balançam quando estão sem tarefa.' },
+  comedouro:    { nome: 'Comedouro de passarinho', art: 'o', preco: 3000, nivel: 20, xp: 8, desc: 'De dia, o tucano e o papagaio da mata vêm comer as sementes.' },
 };
 const RAIO_ESPANTALHO = 3;
 const ENF_VIS = {};
@@ -12970,11 +13088,23 @@ const geoBrilhoPoste = () => { if (!brilhoPoste) brilhoPoste = brilhoDe(vPoste()
 function montarEnfeite(e){
   const k = e.x + ',' + e.z;
   if (ENF_VIS[k]){ scene.remove(ENF_VIS[k]); const i = pickaveis.indexOf(ENF_VIS[k]); if (i >= 0) pickaveis.splice(i, 1); }
-  const modelos = { canteiroFlor: () => vCanteiroFlor(), banco: vBanco, espantalho: vEspantalho, poste: vPoste, fonte: vFonte, estatua: vEstatua };
+  const modelos = { canteiroFlor: () => vCanteiroFlor(), banco: vBanco, espantalho: vEspantalho, poste: vPoste, fonte: vFonte, estatua: vEstatua,
+    casinhaLuma: vCasinhaLuma, carriola: vCarriola, mesaPiquenique: vMesaPiquenique, relogioSol: vRelogioSol, pergola: vPergola, balanco: vBalanco, comedouro: vComedouro };
   const escala = e.tipo === 'estatua' ? 1 / 40 : 1 / 16;
   const m = colocar(malha(geo('enf' + e.tipo, () => modelos[e.tipo]().build(escala, { origin: e.tipo === 'estatua' ? [0.5, 0, 0.5] : [8, 0, 8] }))), e.x + 0.5, 0, e.z + 0.5, (e.rot || 0) * Math.PI / 2);
   // o poste acende à noite: a lâmpada brilha e ganha um halo
   if (e.tipo === 'poste'){ m.add(geoBrilhoPoste()); const h = haloLuz(); h.position.set(0, 1.42, 0); m.add(h); m.userData.poste = true; m.castShadow = LUZ.noite < 0.5; }
+  // a sombra do ponteiro do relógio de sol, girando em volta do meio do mostrador (atualizarEnfeites)
+  if (e.tipo === 'relogioSol'){
+    const piv = new THREE.Object3D(), sombra = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.004, 0.36), new THREE.MeshBasicMaterial({ color: 0x2a1e16, transparent: true, opacity: 0.55, depthWrite: false }));
+    sombra.position.set(0, 0, 0.18); piv.add(sombra); piv.position.set(0, 6 / 16 + 0.003, 0); m.add(piv); m.userData.relogio = piv;
+  }
+  // o pneu do balanço, pendurado no gancho
+  if (e.tipo === 'balanco'){
+    const p = malha(geo('pneuBalanco', () => vPneuBalanco().build(1 / 16, { origin: [0, 0, 0] })));
+    const [px, py, pz] = BALANCO.pivo; p.position.set((px - 8) / 16, py / 16, (pz - 8) / 16); m.add(p);
+    m.userData.pneu = p; m.userData.fase = hash(e.x, 3, e.z) * 6;
+  }
   m.traverse(o => { o.userData.alvo = { k: 'enfeite', e }; }); pickaveis.push(m);
   ENF_VIS[k] = m;
   setT(e.x, e.z, 'feno');
@@ -13023,6 +13153,142 @@ function itensEnfeite(e){
   return r;
 }
 const pertoDeEspantalho = (x, z) => S.enfeites.some(e => e.tipo === 'espantalho' && Math.max(Math.abs(e.x - x), Math.abs(e.z - z)) <= RAIO_ESPANTALHO);
+// ================= o que os enfeites novos fazem
+// as partes que se mexem: a sombra do relógio de sol anda com a hora do dia (de -75° de manhã a +75° no fim da tarde, e
+// some de noite) e o pneu do balanço balança devagar, mais forte com alguém sentado nele
+const _v1E = new THREE.Vector3();
+function atualizarEnfeites(dt, t){
+  for (const k in ENF_VIS){
+    const m = ENF_VIS[k], U = m.userData;
+    if (U.relogio){
+      const r = S.relogio || 0, dia = r < 0.7;
+      U.relogio.visible = dia;
+      if (dia) U.relogio.rotation.y = (-0.42 + r / 0.7 * 0.84) * Math.PI - m.rotation.y;
+    }
+    if (U.pneu){
+      const amp = U.sentado ? BALANCO.ampSentado : BALANCO.amp;
+      U.amp = lerp(U.amp == null ? amp : U.amp, amp, Math.min(1, dt * 1.5));
+      U.pneu.rotation.x = Math.sin(t * BALANCO.vel + U.fase) * U.amp;
+    }
+  }
+  atualizarComedouro(dt, t);
+}
+// onde fica o assento do pneu agora, no mundo
+function assentoPneu(m){
+  m.updateMatrixWorld(true);
+  return m.userData.pneu.localToWorld(_v1E.set(0, -(BALANCO.corda + 0.5) / 16, 0));
+}
+// a Luma: com casinha na fazenda, a soneca da manhã (3 em 4 vezes) é na porta da casinha mais perto
+function casinhaParaLuma(){
+  const L = S.enfeites.filter(e => e.tipo === 'casinhaLuma');
+  if (!L.length || Math.random() < 0.25) return null;
+  L.sort((a, b) => Math.hypot(a.x - luma.pos.x, a.z - luma.pos.y) - Math.hypot(b.x - luma.pos.x, b.z - luma.pos.y));
+  for (const e of L){
+    const ry = (e.rot || 0) * Math.PI / 2, fx = Math.sin(ry), fz = Math.cos(ry), x = e.x + 0.5 + fx * 0.72, z = e.z + 0.5 + fz * 0.72;
+    if (andavel(Math.floor(x), Math.floor(z))) return { porta: [x, z], ang: ry };
+  }
+  return null;
+}
+// a mesa de piquenique: o cafezinho acontece nela quando os banquinhos cabem em volta (lugarCafe)
+function lugarPiquenique(){
+  for (const e of S.enfeites){
+    if (e.tipo !== 'mesaPiquenique') continue;
+    const x = e.x + 0.5, z = e.z + 0.5;
+    const cabe = Object.values(CAFE_ASSENTO).every(([dx, dz]) => {
+      const ix = Math.floor(x + (dx + dz) * Math.SQRT1_2), iz = Math.floor(z + (dz - dx) * Math.SQRT1_2);
+      return andavel(ix, iz) && !campo(ix, iz) && loteDe(ix, iz) < 0 && blocoEm(ix, iz) <= 0 && !S.enfeites.some(f => f.x === ix && f.z === iz);
+    });
+    if (cabe) return [x, z, true];
+  }
+  return null;
+}
+// o balanço: o ajudante (Hud ou Dani) sem tarefa vai até o balanço livre mais perto, senta no pneu e balança até aparecer
+// trabalho (atualizarAjudante). A.balanco: o enfeite em que ele está sentado; A.indoBalanco: o que ele está indo
+function balancarAjudante(A, Hd){
+  if (A.balanco){
+    const e = A.balanco, m = ENF_VIS[e.x + ',' + e.z];
+    if (!m || !S.enfeites.includes(e)){ sairDoBalanco(A, Hd); return; }
+    const p = assentoPneu(m);
+    Hd.colocar(p.x, p.z); Hd.sentado = p.y + 0.01 - Hd.baseSentado; Hd.ang = Hd.angAlvo = m.rotation.y; m.userData.sentado = true;
+    return;
+  }
+  if (A.indoBalanco || Hd.saindo) return;
+  const O = A === AJUDA.hud ? AJUDA.dani : AJUDA.hud;
+  const livres = S.enfeites.filter(e => e.tipo === 'balanco' && O.balanco !== e && O.indoBalanco !== e && ENF_VIS[e.x + ',' + e.z]);
+  if (!livres.length) return;
+  livres.sort((a, b) => Math.hypot(a.x - Hd.pos.x, a.z - Hd.pos.y) - Math.hypot(b.x - Hd.pos.x, b.z - Hd.pos.y));
+  for (const e of livres){
+    const p = assentoPneu(ENF_VIS[e.x + ',' + e.z]), ry = (e.rot || 0) * Math.PI / 2;
+    // chega pelo ladrilho do lado do pneu (na frente ou atrás dele, na direção em que ele balança)
+    for (const s of [1, -1]){
+      const tx = Math.floor(p.x + Math.sin(ry) * s * 0.8), tz = Math.floor(p.z + Math.cos(ry) * s * 0.8);
+      if (!andavel(tx, tz)) continue;
+      const pts = rota(clamp(Math.floor(Hd.pos.x), 0, W - 1), clamp(Math.floor(Hd.pos.y), 0, H - 1), tx, tz);
+      if (!pts) continue;
+      A.indoBalanco = e;
+      Hd.ir([...pts, [tx + 0.5, tz + 0.5]], () => {
+        A.indoBalanco = null;
+        if (!S.enfeites.includes(e) || A.tarefa) return;
+        const gc = Hd.corpo.children[0].geometry; if (!gc.boundingBox) gc.computeBoundingBox();
+        Hd.baseSentado = gc.boundingBox.min.y * Hd.g.scale.y;
+        A.balanco = e; ENF_VIS[e.x + ',' + e.z].userData.sentado = true; Hd.pulo = 0.35; Hd.ferramenta(null);
+      });
+      return;
+    }
+  }
+}
+function sairDoBalanco(A, Hd){
+  const e = A.balanco; A.balanco = null; A.indoBalanco = null;
+  if (!e) return;
+  const m = ENF_VIS[e.x + ',' + e.z]; if (m) m.userData.sentado = false;
+  Hd.sentado = 0; Hd.pulo = 0.3;
+  // desce para o ladrilho livre do lado do pneu
+  const ry = (e.rot || 0) * Math.PI / 2;
+  for (const s of [1, -1]){ const tx = Math.floor(Hd.pos.x + Math.sin(ry) * s * 0.8), tz = Math.floor(Hd.pos.y + Math.cos(ry) * s * 0.8); if (andavel(tx, tz)){ Hd.colocar(tx + 0.5, tz + 0.5); return; } }
+}
+const descerDoBalanco = P => { const A = P === irmaoDani ? AJUDA.dani : AJUDA.hud; if (A.balanco || A.indoBalanco) sairDoBalanco(A, P); };
+// o comedouro: de dia, de vez em quando, um tucano ou um papagaio vem da mata, pousa na beira da bandeja, bica as sementes
+// e volta. Só enfeite, não mexe no save
+const aves = { prox: rnd(...COMEDOURO.primeira), lista: [] };
+function atualizarComedouro(dt, t){
+  const C = aves, comedouros = S.enfeites.filter(e => e.tipo === 'comedouro' && ENF_VIS[e.x + ',' + e.z]);
+  if (comedouros.length && !cine && periodo().id !== 'noite' && (C.prox -= dt) <= 0){
+    C.prox = rnd(...COMEDOURO.intervalo);
+    const e = sorteia(comedouros), m = ENF_VIS[e.x + ',' + e.z], livres = [0, 1, 2].filter(i => !C.lista.some(a => a.e === e && a.i === i));
+    if (livres.length && C.lista.length < 3){
+      const i = sorteia(livres), tipo = Math.random() < 0.5 ? 'tucano' : 'papagaio', [px, py, pz] = COMEDOURO.poleiro[i];
+      m.updateMatrixWorld(true);
+      const ate = m.localToWorld(new THREE.Vector3((px - 8) / 16, py / 16, (pz - 8) / 16)), centro = m.localToWorld(new THREE.Vector3(0, py / 16, 0));
+      const de = ate.clone().add(new THREE.Vector3(rnd(-4, 4), 4.5, rnd(6, 9)));
+      const g = malha(geo('ave' + tipo, () => (tipo === 'tucano' ? vTucano(true) : vPapagaio(true)).build(1 / 34, { origin: [0, 2, 0] })));
+      g.position.copy(de); scene.add(g);
+      C.lista.push({ g, e, i, tipo, fase: 'vem', t: 0, de, ate, centro, fica: rnd(...COMEDOURO.fica), bica: 0 });
+    }
+  }
+  for (let j = C.lista.length - 1; j >= 0; j--){
+    const a = C.lista[j]; a.t += dt;
+    const sumiu = !S.enfeites.includes(a.e);
+    if (a.fase === 'vem' || a.fase === 'vai'){
+      const k = Math.min(1, a.t / 2.4), q = k * k * (3 - 2 * k);
+      a.g.position.lerpVectors(a.de, a.ate, q); a.g.position.y += Math.sin(k * Math.PI) * 0.5;
+      a.g.rotation.set(0, Math.atan2(a.ate.x - a.de.x, a.ate.z - a.de.z), 0);
+      a.g.scale.set(1, 1 + Math.sin(t * 30) * 0.08, 1);
+      if (k >= 1){
+        if (a.fase === 'vai'){ scene.remove(a.g); C.lista.splice(j, 1); continue; }
+        a.fase = 'come'; a.t = 0; a.g.scale.setScalar(1); Som.tom(2600, 0.05, 'sine', 0.018, 3400); Som.tom(3000, 0.05, 'sine', 0.015, 3600, 0.09);
+      }
+    } else {
+      // na beira da bandeja, virado para as sementes, bicando de tempos em tempos
+      a.g.rotation.y = Math.atan2(a.centro.x - a.ate.x, a.centro.z - a.ate.z);
+      if ((a.bica -= dt) <= 0) a.bica = rnd(0.6, 1.8);
+      a.g.rotation.x = a.bica > 0.4 ? 0 : Math.sin(a.bica / 0.4 * Math.PI) * 0.5;
+      if (a.t > a.fica || sumiu || periodo().id === 'noite' || cine){
+        a.fase = 'vai'; a.t = 0; a.de = a.g.position.clone(); a.g.rotation.x = 0;
+        a.ate = a.de.clone().add(new THREE.Vector3(rnd(-5, 5), 5, rnd(6, 9)));
+      }
+    }
+  }
+}
 
 // ================= clima e estações
 // a estação segue o calendário do jogador (hemisfério sul) e muda as culturas que rendem mais;
@@ -14017,8 +14283,10 @@ function atualizarAjudante(A, dt, t){
   Hd.update(dt, t);
   // chegou em casa neste quadro: já sumiu, não repete a saída
   if (!Hd.g.visible) return;
+  if (cine && (A.balanco || A.indoBalanco)) sairDoBalanco(A, Hd);
   if (A.tarefa || Hd.estado !== 'parado' || cine) return;
   if (!A.ativo()){
+    if (A.balanco) sairDoBalanco(A, Hd);
     if (!Hd.saindo){
       Hd.saindo = true;
       falar(Hd, variar(A.cansou()), 3);
@@ -14029,7 +14297,9 @@ function atualizarAjudante(A, dt, t){
     return;
   }
   const alvos = alvosHud();
-  if (!alvos.length) return;
+  // sem nada para fazer, vai para o balanço de pneu, se tiver um livre; com trabalho, desce dele
+  if (!alvos.length){ balancarAjudante(A, Hd); return; }
+  if (A.balanco) sairDoBalanco(A, Hd);
   // vai ao que está mais perto, mas, com o outro ajudante na rua, evita a região onde ele está trabalhando (até
   // AJUDA_LONGE ladrilhos do último alvo dele): assim cada um pega um canto da fazenda e não parecem trabalhar juntos
   const O = A === AJUDA.hud ? AJUDA.dani : AJUDA.hud, Po = O.p();
@@ -14114,6 +14384,7 @@ function soltarCenaDani(){
 }
 // solta a tarefa de quem estava trabalhando, sem esconder (para entrar numa cena)
 function soltarAjudante(P){
+  descerDoBalanco(P);
   const t = P === irmaoDani ? tarefaDani : tarefaHud;
   if (t){ setReserva(t.alvo, null); if (P === irmaoDani) tarefaDani = null; else tarefaHud = null; }
   P.trab = null; P.pontos = []; P.aoChegar = null; P.estado = 'parado'; P.ferramenta(null); P.saindo = false;
@@ -15951,7 +16222,7 @@ const APELIDOS = {
   galinha: 'Galinhas botando ovinhos', vaca: 'Vaquinhas de leite fresquinho', pato: 'Patinhos nadando no lago',
   moinho: 'Moinho girando fubá', queijaria: 'Queijaria de dar água na boca', queijaria2: 'Mais uma queijaria, queijo em dobro', padaria2: 'Mais uma padaria, fornada em dobro', cozinha2: 'Mais uma cozinha de docinhos', padaria: 'Padaria com cheirinho de bolo', cozinha: 'Cozinha dos docinhos', terreiro: 'Terreiro pro café pegar sol', torrador: 'Torrador de café cheiroso', chocobarra: 'Fábrica de barrinhas de chocolate',
   'Enxada afiada': 'Enxada que ara de montão', 'Botas de borracha': 'Botas pra correr mais', 'Botas de corrida': 'Botas de foguete', 'Regador grande': 'Regador caprichado', 'Regador gigante': 'Regador chuva de verão', 'Carrinho de mão': 'Carrinho pra colher mais', 'Carrinho grande': 'Carrinhão de colheita',
-  canteiroFlor: 'Florzinhas pra enfeitar', banco: 'Banco pra tirar uma soneca', espantalho: 'Espantalho espanta-mato', poste: 'Poste pra iluminar a noite', fonte: 'Chafariz de respingar', estatua: 'Estátua do Ed, o famoso!',
+  canteiroFlor: 'Florzinhas pra enfeitar', banco: 'Banco pra tirar uma soneca', espantalho: 'Espantalho espanta-mato', poste: 'Poste pra iluminar a noite', fonte: 'Chafariz de respingar', casinhaLuma: 'Casinha pra Luma dormir', carriola: 'Carriola cheia de flores', mesaPiquenique: 'Mesa pro piquenique e pro cafezinho', relogioSol: 'Relógio de sol', pergola: 'Pérgola florida', balanco: 'Balanço de pneu pros irmãos', comedouro: 'Comedouro pros passarinhos da mata', estatua: 'Estátua do Ed, o famoso!',
 };
 const apelido = (chave, nome) => APELIDOS[chave] || nome;
 // a linha do tempo sai das tabelas do jogo, então o que entrar nelas aparece aqui sozinho.
@@ -16461,7 +16732,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Outro aparelho:</b> a fazenda fica salva só neste navegador. Para jogar em outro aparelho, abra os Ajustes, escolha Levar a fazenda e mande o link para você mesmo. Depois disso, cada aparelho segue sozinho.</li>
       <li><b>Cenas:</b> as cenas da história ficam guardadas e podem ser revistas nos Ajustes ou no caderno do Ed. Rever uma cena não muda nada na fazenda. De vez em quando o Ed para para um cafezinho na frente da casa, às vezes com visita. Para chamar na hora, toque na casa e escolha Tomar um lanchinho.</li>
       <li><b>Pista do Milton:</b> atrás da fazenda, o Milton, irmão do Ed, pousa de tempos em tempos o PIG-MTP. Ele traz sementes ou ração e paga uma taxa pelo uso da pista. O primeiro pouso vem depois da primeira venda ao Joli Market. No nível ${JATO_VOO.nivel} ele troca o teco-teco por um jatinho, que vem mais vezes e paga uma taxa maior. Só acontece com o jogo aberto.</li>
-      <li><b>Enfeites</b>: comprados na loja e colocados em qualquer gramado livre. Dão xp só na compra.</li>
+      <li><b>Enfeites</b>: comprados na loja e colocados em qualquer gramado livre. Dão xp só na compra. Alguns fazem alguma coisa: com a casinha da Luma${nv(ENFEITES.casinhaLuma.nivel)}, a soneca da manhã dela é na porta da casinha; com a mesa de piquenique${nv(ENFEITES.mesaPiquenique.nivel)}, o cafezinho acontece nela; a sombra do relógio de sol${nv(ENFEITES.relogioSol.nivel)} anda com a hora; no balanço de pneu${nv(ENFEITES.balanco.nivel)} o Hud e o Dani se balançam quando estão sem tarefa; e no comedouro${nv(ENFEITES.comedouro.nivel)} o tucano e o papagaio da mata vêm comer de dia.</li>
     </ul>`;
   const abas = `<div class="abas" role="tablist">${ABAS.map(([k, r]) => `<button class="aba" role="tab" aria-selected="${abaAjuda === k}" data-aba-ajuda="${k}" type="button">${r}</button>`).join('')}</div>`;
   abrirJanela(topo('ed', intro === true ? 'Bem-vindo à Fazenda Joli Pig!' : 'Como jogar', 'O porquinho fazendeiro') + `<div class="janela-corpo">${intro === true ? '' : abas}${corpo}
@@ -16777,6 +17048,7 @@ function quadro(agoraP){
   atualizarPiloto(dt, t);
   atualizarObra(dt, t);
   atualizarObservatorio(dt);
+  atualizarEnfeites(dt, t);
   if (milton.g.visible) milton.update(dt, t);
   atualizarPista(dt);
   atualizarHudIrmao(dt, t);
@@ -16950,6 +17222,7 @@ async function iniciar(){
     abrirMenu: (alvo, x = 300, y = 300) => abrirMenu(alvo, x, y),
     miranteVisao: { V: visaoMirante, cobre: () => miranteCobre(), topo: () => miranteTopo, MIRANTE_VISAO },
     mirante1p: { subir: subirMirante, descer: descerMirante, girar: girarMirante, zoom: zoomMirante, obj: () => miranteFP, cam: () => cameraFP, M1P: MIRANTE_1P },
+    enfeitesNovos: { aves, ave: () => { aves.prox = 0; }, AJUDA, vis: () => ENF_VIS, casinha: () => casinhaParaLuma(), piquenique: () => lugarPiquenique(), montar: e => montarEnfeite(e) },
     museu: { MUSEU, abrir: abrirMuseu, visitar: visitarMuseu, porta: portaMuseu, alvo: alvoMuseu, guardarCartao: guardarCartaoLido },
     observatorio: { OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
@@ -17083,7 +17356,7 @@ function catalogoModelos(){
     { nome: 'Automação', itens: [varios('Alimentador', [['Galinheiro', () => vAlimentador(false)], ['Curral', () => vAlimentador(true)]]), varios('Coletor', [['Ovos', () => vColetor(false)], ['Ordenhadeira', () => vColetor(true)]]), um('Esteira', vEsteira), varios('Irrigador', [['Base', vIrrigadorBase], ['Cabeça', vIrrigadorCabeca]]), um('Colmeia', vColmeia)] },
     { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Tratorzinho', vTrator), varios('Bicicleta', CICLISTAS.map((c, i) => [['Vermelha', 'Azul', 'Amarela'][i], () => vBicicleta(c[0])])), um('Teco-teco', vTecoTeco), { nome: 'Jatinho', variantes: [['Fechado', 0], ['Com a escada', 1]].map(([n, a]) => ({ nome: n, cria: () => { const g = montarJatinho(1 / 16); g.userData.escada.rotation.x = a ? -JATO.aberta : 0; return g; } })) }, um('Hélice', vHelice), um('Biruta', vBiruta), { nome: 'Disco voador', variantes: [['Voando', false], ['Com o raio', true]].map(([n, r]) => ({ nome: n, cria: () => { const D = montarDisco(r); D.g.userData.anima = (dt, t) => animarDisco(D, t); D.g.userData.anima(0, 0); return D.g; } })) }] },
     { nome: 'Cenário', itens: [varios('Árvore', [['Maçãs', () => vArvore(0)], ['Sem fruta', () => vArvore(1)], ['Laranjas', () => vArvore(2)]]), um('Arbusto', vArbusto), um('Redemoinho', vRedemoinho), um('Fardo de feno', vFeno), um('Flores', () => vFlores(3)), um('Capim', () => vCapim(1)), um('Cova', vCova), varios('Cerca', [['Reta', () => vCerca(3)], ['Canto', () => vCerca(5)]]), varios('Portão', [['Arco da entrada', () => vPortao(true)], ['Simples', () => vPortao(false)]]), um('Placa', vPlaca), um('Correio', vCorreio)] },
-    { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), { nome: 'Varal de luzes', variantes: [{ nome: '', cria: () => { const v = vVaralTrecho(), m = malha(v.build(1 / RES_VARAL)); m.userData.cubos = v.m.size; return m; } }] }, um('Chafariz', vFonte), um('Estátua do Ed', vEstatua)] },
+    { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), { nome: 'Varal de luzes', variantes: [{ nome: '', cria: () => { const v = vVaralTrecho(), m = malha(v.build(1 / RES_VARAL)); m.userData.cubos = v.m.size; return m; } }] }, um('Chafariz', vFonte), um('Estátua do Ed', vEstatua), um('Casinha da Luma', vCasinhaLuma), um('Carriola florida', vCarriola), um('Mesa de piquenique', vMesaPiquenique), um('Relógio de sol', vRelogioSol), um('Pérgola', vPergola), um('Balanço de pneu', VI.balanco), um('Comedouro de passarinho', vComedouro)] },
     { nome: 'Objetos', itens: [varios('ArraiEd', [['Fogueira', vFogueira], ['Fogo', vChama], ['Mastro', vMastro], ['Barraca do milho', () => vBarraca('milho')], ['Barraca da pescaria', () => vBarraca('pescaria')], ['Bandeirinhas', vBandeirinhas]]), um('Cartão-postal', vCartaoPostal), um('Osso da Luma', vOsso), um('Biscoito da Luma', vBiscoito), um('Ponte do lago', vPonte), um('Rampa dos patos', vRampaPatos), um('Fábrica de barras', vFabBarras), um('Chocolateria', vChocolateria), um('Oficina de borracha', vOficina), um('Mirante da mata', vMirante), varios('Fogo na mata', [0, 1, 2].map(f => ['Fase ' + (f + 1), () => vFogo(f)])), varios('Lixo na mata', [['Garrafa', () => vLixo(0)], ['Latinha', () => vLixo(1)], ['Saquinho', () => vLixo(2)]]), um('Galho caído', vGalho), um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Lanterna', vLanterna), um('Lua', vLua), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Nano Hostel', vNanoHostel), um('Nano Metrô', vNanoMetro), varios('Nano pessoa', [0, 1, 2, 3, 4, 5].map(k => ['Nano ' + (k + 1), () => vNano(k * 7, k === 2)])), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
   ];
   grupos.push({ nome: 'Ícones', itens: Object.keys(VI).filter(k => !usados.has(k)).sort().map(k => um((PRODUTOS[k] && PRODUTOS[k].nome) || k, VI[k])) });

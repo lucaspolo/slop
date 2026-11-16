@@ -262,6 +262,18 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - Falas (`FALAS_ARRAIA`): o Ed abre, falam o Beto, o Maurinho, o Curupira, o Saci, a Lúcia, o ETzinho e uma aposentada; o Milton solta os fogos (`a-fogos`, `rojao`), o Ed puxa a quadrilha (`a-quadrilha`: a roda da família gira em volta da fogueira pulando no ritmo), o Hud grita "olha a cobra", o Jaca e o Dani respondem "é mentira", e no viva (`a-viva`) chove confete com mais fogos. Quem fala sem ser um porquinho dá um pulinho (`aoFalar`).
 - Para testar: `__fazenda.arraia` (`ARRAIA`, `obj`, `rojao`, `falas`).
 
+## Enfeites
+
+- Cada enfeite ocupa um ladrilho de gramado (`ENFEITES`, `montarEnfeite`, `livreParaEnfeite`), em cubinhos de 1/16 com a frente para +z; "Girar" muda `e.rot` de 90 em 90 graus. O ladrilho vira `feno` (ninguém passa).
+- Os do nível 7 em diante, menos o chafariz e a estátua, vieram depois (o Lucas pediu mais enfeites). Os que fazem alguma coisa (`atualizarEnfeites`, chamado todo quadro):
+  - Casinha da Luma (7): de manhã, 3 em 4 sonecas da Luma são deitada na porta da casinha mais perto (`casinhaParaLuma`, na aventura `soneca`), virada para fora.
+  - Mesa de piquenique (12): redonda, com toalha xadrez. Quando os banquinhos cabem em volta (`lugarPiquenique`), o cafezinho acontece nela: `lugarCafe` devolve o meio dela com `true`, a mesinha do cafezinho não aparece e o prato e a caneca ficam no tampo dela (9/16).
+  - Relógio de sol (15): a sombra do ponteiro é uma malha à parte (`userData.relogio`) que gira de -75° de manhã a +75° no fim da tarde e some de noite.
+  - Balanço de pneu (18): árvore com o pneu pendurado (`vPneuBalanco`, malha à parte presa no gancho `BALANCO.pivo`), que balança devagar e mais forte com alguém sentado. O Hud ou o Dani sem tarefa vai até o balanço livre mais perto e senta no pneu (`balancarAjudante`); com trabalho, numa cena ou no fim da ajuda ele desce (`sairDoBalanco`, `descerDoBalanco`).
+  - Comedouro de passarinho (20): de dia, de tempos em tempos (`COMEDOURO`), um tucano ou um papagaio vem da mata, pousa na beira da bandeja, bica as sementes e volta (`atualizarComedouro`, `aves`). Só enfeite, não mexe no save.
+  - A carriola florida (11) e a pérgola (17) só enfeitam.
+- Para testar: `__fazenda.enfeitesNovos` (`aves`, `ave`, `AJUDA`, `vis`, `casinha`, `piquenique`, `montar`).
+
 ## Fábricas novas
 
 - Mais uma queijaria (nível 38, R$ 90.000), padaria (40, R$ 135.000) e cozinha de doces (42, R$ 180.000) no gramado depois da cozinha, na mesma fileira e no mesmo ritmo: x 37 a 38, 41 a 42 e 45 a 46, com a porta em z 4 (`FAB_NOVAS`, que entram em `FABRICAS` com o id `queijaria2`, `padaria2` e `cozinha2`, e `PREDIOS` com `nova: true`).
