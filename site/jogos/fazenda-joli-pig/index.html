@@ -273,6 +273,9 @@ button{font:inherit;color:inherit}
 /* o pular fica fora da caixa de diálogo, visível a cena toda (também nos trechos sem fala) */
 .cine .pular{position:absolute;top:calc(10vh + 12px);right:calc(16px + env(safe-area-inset-right,0px));pointer-events:auto}
 #jogo.cinema .hud-topo,#jogo.cinema .hud-base,#jogo.cinema .camera-ctl,#jogo.cinema .menu{display:none !important}
+body.primeira-pessoa .hud-topo,body.primeira-pessoa .hud-base,body.primeira-pessoa .camera-ctl,body.primeira-pessoa .menu,body.primeira-pessoa .fala,body.primeira-pessoa .flutua{display:none !important}
+.mirante-1p{position:absolute;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;gap:14px;padding:8px 8px 8px 16px;font-weight:700;white-space:nowrap;z-index:6}
+.mirante-1p[hidden]{display:none}
 .janela-topo.rosa2{background:#f7c9c3}
 .janela-topo.marrom{background:#e3c9a8}
 .janela-topo.verde{background:#cdeab0}
@@ -479,6 +482,7 @@ body.modelos #tela{position:absolute;top:var(--md-topo,84px);left:300px;width:ca
     </div>
   </div>
 
+  <div class="mirante-1p painel" id="mirante1p" hidden><span>Arraste para olhar em volta</span><button class="botao" id="miranteDescer" type="button">Descer</button></div>
   <div class="hud-base">
     <div class="fila painel" id="novaVersao" hidden><img data-icone="ed" alt=""><span>Tem novidade na fazenda!</span><button class="botao mini" id="novaVersaoBotao" type="button">atualizar</button></div>
     <div class="andamento solto" id="andamento">
@@ -5153,7 +5157,79 @@ function itensMirante(){
   const r = { titulo: 'Mirante da mata', icone: 'mirante', itens: [] };
   r.estado = `${v ? `${v} ${v > 1 ? 'visitantes já fizeram' : 'visitante já fez'} a trilha.` : 'Nenhum visitante ainda.'} Hoje cada um deixa uns ${reais(taxa)}. ${textoSaude()} ${periodo().id === 'noite' ? 'De noite a trilha fica fechada.' : grupoTrilha ? 'Tem gente na trilha agora.' : 'Os próximos chegam daqui a pouco.'}`;
   r.classe = 'bom';
+  r.itens.push({ rotulo: 'Subir no mirante', sub: 'ver a fazenda e a floresta lá de cima, girando 360°', icone: 'mirante', off: !!miranteFP, fn: () => enfileirar('subirMirante', { k: 'mirante' }) });
   return r;
+}
+// ================= o mirante em primeira pessoa (o Lucas pediu): no menu do mirante, "Subir no mirante". O Ed vai até o pé
+// da escada (tarefa 'subirMirante'), sobe, e a vista troca para uma câmera em perspectiva na altura dos olhos dele, no deque;
+// arrastar gira 360° e olha para cima e para baixo (como num panorama), a rodinha do mouse aproxima, e "Descer" volta para a
+// vista de sempre. Lá em cima a fazenda continua andando, mas o Ed fica no mirante (ed.estado 'mirante'): a fila espera e
+// nenhuma cena começa. A névoa da cor do horizonte e um chão grande em volta do tabuleiro escondem a beira do mapa; a névoa
+// fica sempre na cena, longe demais para aparecer, porque ligar e desligar faria o three.js recompilar os materiais
+const MIRANTE_1P = { olho: 0.95, fov: 62, nevoa: [14, 46], sens: 0.006, sobe: 1.6, deque: 2.3 };
+let miranteFP = null, cameraFP = null, chaoLonge = null;
+const peMirante = () => { const [cx, cz] = centroMirante(); return [cx + 1.3, cz]; };
+const topoEscada = () => { const [cx, cz] = centroMirante(); return [cx + 1.1, cz]; };
+function subirMirante(){
+  if (miranteFP || !S.mirante) return;
+  miranteFP = { fase: 'sobe', t: 0, yaw: Math.PI, pitch: -0.12 };
+  ed.estado = 'mirante'; ed.pontos = []; ed.aoChegar = null; ed.trab = null; ed.ferramenta(null);
+  fecharMenu(); desligarModo();
+}
+function entrarPrimeiraPessoa(){
+  const [cx, cz] = centroMirante(), M = miranteFP;
+  if (!cameraFP){ cameraFP = new THREE.PerspectiveCamera(MIRANTE_1P.fov, innerWidth / innerHeight, 0.05, 300); cameraFP.rotation.order = 'YXZ'; }
+  if (!chaoLonge){
+    chaoLonge = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), new THREE.MeshLambertMaterial({ color: 0x5a9a48 }));
+    chaoLonge.rotation.x = -Math.PI / 2; chaoLonge.position.set(W / 2, -0.06, H / 2); chaoLonge.receiveShadow = true; scene.add(chaoLonge);
+  }
+  chaoLonge.visible = true;
+  cameraFP.position.set(cx, MIRANTE_1P.deque + MIRANTE_1P.olho, cz);
+  [scene.fog.near, scene.fog.far] = MIRANTE_1P.nevoa;
+  ed.g.visible = false;
+  cam.alvo.set(cx, 0, cz);
+  document.body.classList.add('primeira-pessoa'); $('mirante1p').hidden = false;
+  M.fase = 'olhando'; M.t = 0;
+}
+function descerMirante(){
+  const M = miranteFP;
+  if (!M || M.fase !== 'olhando') return;
+  Som.clique();
+  scene.fog.near = 1e5; scene.fog.far = 1e5 + 1;
+  if (chaoLonge) chaoLonge.visible = false;
+  document.body.classList.remove('primeira-pessoa'); $('mirante1p').hidden = true;
+  ceuAplicado = '';
+  for (const b of BOLHAS) if (b.userData.fp){ b.visible = true; delete b.userData.fp; }
+  ed.g.visible = true;
+  M.fase = 'desce'; M.t = 0;
+}
+function girarMirante(dx, dy){
+  const M = miranteFP; if (!M) return;
+  M.yaw += dx * MIRANTE_1P.sens; M.pitch = clamp(M.pitch + dy * MIRANTE_1P.sens, -1.15, 0.85);
+}
+function atualizarMirante1P(dt){
+  const M = miranteFP; if (!M) return;
+  M.t += dt;
+  const [px, pz] = peMirante(), [tx, tz] = topoEscada(), [cx, cz] = centroMirante(), k = Math.min(1, M.t / MIRANTE_1P.sobe);
+  if (M.fase === 'sobe' || M.fase === 'desce'){
+    // na escada, de frente para ela (como os visitantes)
+    const e = M.fase === 'sobe' ? k : 1 - k;
+    ed.colocar(lerp(px, tx, e), lerp(pz, tz, e)); ed.alt = e * MIRANTE_1P.deque; ed.ang = ed.angAlvo = -Math.PI / 2;
+    cam.alvo.lerp(new THREE.Vector3(cx, 1 + e, cz), Math.min(1, dt * 3));
+    if (k >= 1){
+      if (M.fase === 'sobe') entrarPrimeiraPessoa();
+      else { ed.alt = 0; ed.estado = 'parado'; ed.olhar(cx, cz + 2); miranteFP = null; }
+    }
+    return;
+  }
+  // lá em cima: a câmera nos olhos do Ed, a névoa com a cor do horizonte e as bolhas escondidas
+  cameraFP.rotation.set(M.pitch, M.yaw, 0);
+  scene.fog.color.copy(LUZ.ceu2);
+  // o céu do fundo acompanha o olhar: em cima a cor do alto, e da linha do horizonte para baixo a cor da névoa
+  const hz = Math.round(clamp(0.5 + Math.tan(M.pitch) / (2 * Math.tan(grau(cameraFP.fov) / 2)), 0, 1) * 100);
+  const css = `linear-gradient(180deg,#${LUZ.ceu1.getHexString()} 0%,#${LUZ.ceu2.getHexString()} ${hz}%,#${LUZ.ceu2.getHexString()} 100%)`;
+  if (css !== M.ceu){ M.ceu = css; document.body.style.background = css; }
+  for (const b of BOLHAS) if (b.visible){ b.visible = false; b.userData.fp = true; }
 }
 // o caminho de um visitante: chega pela beira da estrada, sobe no mirante, olha a mata, desce, faz a trilha até o fim da
 // parte comprada, volta, deixa a contribuição na caixinha e vai embora; pontos [x, y, z] com pausa e fala opcionais
@@ -7202,6 +7278,7 @@ function iniciarRender(){
   camera = new THREE.OrthographicCamera(-10, 10, 10, -10, -100, 300);
   ceuLuz = new THREE.HemisphereLight(0xfffaf0, 0xa89a78, 0.58); scene.add(ceuLuz);
   sol = new THREE.DirectionalLight(0xfff0d8, 0.68);
+  scene.fog = new THREE.Fog(0xdff3ea, 1e5, 1e5 + 1);
   sol.castShadow = true; sol.shadow.mapSize.set(2048, 2048);
   Object.assign(sol.shadow.camera, { left: -22, right: 22, top: 22, bottom: -22, near: 1, far: 80 });
   sol.shadow.bias = -0.0006; sol.shadow.normalBias = 0.02;
@@ -7217,6 +7294,7 @@ function redimensionar(){
   const a = w / h;
   camera.left = -cam.vista * a / 2; camera.right = cam.vista * a / 2; camera.top = cam.vista / 2; camera.bottom = -cam.vista / 2;
   camera.updateProjectionMatrix();
+  if (cameraFP){ cameraFP.aspect = a; cameraFP.updateProjectionMatrix(); }
 }
 function posicionarCamera(){
   const d = new THREE.Vector3(Math.sin(cam.az) * Math.cos(cam.el), Math.sin(cam.el), Math.cos(cam.az) * Math.cos(cam.el));
@@ -13808,13 +13886,13 @@ function itensHud(){
 
 // ================= tarefas do Ed
 const fila = [];
-const NOMES_ACAO = { estrelas:'Olhar as estrelas', trator:'Sair com o trator', carinhoGalo:'Carinho no galo', pegarGalo:'Pegar o galo', soltarGalo:'Devolver o galo', apagarFogo:'Apagar o fogo', recolherLixo:'Recolher o lixo', tirarGalho:'Tirar o galho', pegarAluguel:'Pegar o aluguel', lerCartao:'Ler o cartão-postal', tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa' };
-const DUR = { estrelas: 4.5, carinhoGalo: 2.4, pegarGalo: 0.5, soltarGalo: 0.7, apagarFogo: 2.2, recolherLixo: 0.8, tirarGalho: 2.4, pegarAluguel: 0.6, lerCartao: 0.6, tirarCerca: 2.4, colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, coletarMata: 1.0, cavarTrufa: 1.6 };
-const FERR = { estrelas: null, carinhoGalo: 'carinho', pegarGalo: null, soltarGalo: 'soltar', apagarFogo: 'regador', recolherLixo: 'cesta', tirarGalho: null, pegarAluguel: null, lerCartao: null, tirarCerca: 'enxada', colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', coletarMata: 'cesta', cavarTrufa: 'enxada' };
+const NOMES_ACAO = { subirMirante:'Subir no mirante', estrelas:'Olhar as estrelas', trator:'Sair com o trator', carinhoGalo:'Carinho no galo', pegarGalo:'Pegar o galo', soltarGalo:'Devolver o galo', apagarFogo:'Apagar o fogo', recolherLixo:'Recolher o lixo', tirarGalho:'Tirar o galho', pegarAluguel:'Pegar o aluguel', lerCartao:'Ler o cartão-postal', tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa' };
+const DUR = { subirMirante: 0.2, estrelas: 4.5, carinhoGalo: 2.4, pegarGalo: 0.5, soltarGalo: 0.7, apagarFogo: 2.2, recolherLixo: 0.8, tirarGalho: 2.4, pegarAluguel: 0.6, lerCartao: 0.6, tirarCerca: 2.4, colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, coletarMata: 1.0, cavarTrufa: 1.6 };
+const FERR = { subirMirante: null, estrelas: null, carinhoGalo: 'carinho', pegarGalo: null, soltarGalo: 'soltar', apagarFogo: 'regador', recolherLixo: 'cesta', tirarGalho: null, pegarAluguel: null, lerCartao: null, tirarCerca: 'enxada', colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', coletarMata: 'cesta', cavarTrufa: 'enxada' };
 const mesmoAlvo = (a, b) => a.k === b.k && (a.k === 'animal' ? a.a === b.a : a.x === b.x && a.z === b.z);
-function reservado(alvo){ if (alvo.k === 'luneta') return fila.some(t => t.tipo === 'estrelas'); if (alvo.k === 'trator') return fila.some(t => t.tipo === 'trator' && t.alvo.lote === alvo.lote); if (alvo.k === 'galo') return fila.some(t => t.alvo.k === 'galo' && t.alvo.id === alvo.id); if (alvo.k === 'ocorrencia') return fila.some(t => t.alvo.k === 'ocorrencia' && t.alvo.id === alvo.id && t.alvo.j === alvo.j); if (alvo.k === 'aluguel') return fila.some(t => t.tipo === 'pegarAluguel'); if (alvo.k === 'cartao') return fila.some(t => t.tipo === 'lerCartao'); if (alvo.k === 'cercaCanto') return fila.some(t => t.tipo === 'tirarCerca'); if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
+function reservado(alvo){ if (alvo.k === 'luneta') return fila.some(t => t.tipo === 'estrelas'); if (alvo.k === 'mirante') return fila.some(t => t.tipo === 'subirMirante'); if (alvo.k === 'trator') return fila.some(t => t.tipo === 'trator' && t.alvo.lote === alvo.lote); if (alvo.k === 'galo') return fila.some(t => t.alvo.k === 'galo' && t.alvo.id === alvo.id); if (alvo.k === 'ocorrencia') return fila.some(t => t.alvo.k === 'ocorrencia' && t.alvo.id === alvo.id && t.alvo.j === alvo.j); if (alvo.k === 'aluguel') return fila.some(t => t.tipo === 'pegarAluguel'); if (alvo.k === 'cartao') return fila.some(t => t.tipo === 'lerCartao'); if (alvo.k === 'cercaCanto') return fila.some(t => t.tipo === 'tirarCerca'); if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
 const visSlot = alvo => { const L = alvo.k === 'pomar' ? POMAR_VIS : alvo.k === 'mata' ? MATA_VIS : COLMEIA_VIS; return L[alvo.i] || (L[alvo.i] = {}); };
-function setReserva(alvo, v){ if (alvo.k === 'trator' || alvo.k === 'luneta') return; if (alvo.k === 'galo'){ if (GALOS[alvo.id]) GALOS[alvo.id].res = v; return; } if (alvo.k === 'ocorrencia' || alvo.k === 'aluguel' || alvo.k === 'cartao' || alvo.k === 'cercaCanto' || alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
+function setReserva(alvo, v){ if (alvo.k === 'trator' || alvo.k === 'luneta' || alvo.k === 'mirante') return; if (alvo.k === 'galo'){ if (GALOS[alvo.id]) GALOS[alvo.id].res = v; return; } if (alvo.k === 'ocorrencia' || alvo.k === 'aluguel' || alvo.k === 'cartao' || alvo.k === 'cercaCanto' || alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
 // diz se a ação vale para o alvo; devolve o custo ou um motivo
 function checar(tipoA, alvo, param){
   if (alvo.k === 'galo'){
@@ -13830,6 +13908,7 @@ function checar(tipoA, alvo, param){
   if (alvo.k === 'cercaCanto') return { ok: tipoA === 'tirarCerca' && S.canto === 1, custo: {} };
   if (alvo.k === 'aluguel') return { ok: tipoA === 'pegarAluguel' && !!S.aluguel, custo: {} };
   if (alvo.k === 'cartao') return { ok: tipoA === 'lerCartao' && !!S.cartao, custo: {} };
+  if (alvo.k === 'mirante') return { ok: tipoA === 'subirMirante' && !!S.mirante && !miranteFP, custo: {} };
   if (alvo.k === 'luneta') return { ok: tipoA === 'estrelas' && obraConcluida('observatorio') && periodo().id === 'noite', motivo: 'Só dá para olhar as estrelas de noite', custo: {} };
   if (alvo.k === 'maca') return { ok: tipoA === 'comerMaca' && !!S.maca, custo: {} };
   if (alvo.k === 'trufa') return { ok: tipoA === 'cavarTrufa' && S.trufas.some(t => t.x === alvo.x && t.z === alvo.z), custo: {} };
@@ -13949,6 +14028,7 @@ function alvoMundo(alvo){
   if (alvo.k === 'composteira') return [COMPOSTEIRA.porta[0] + 0.5, COMPOSTEIRA.porta[1] + 0.5];
   if (alvo.k === 'trator') return [PREDIO.galpao.porta[0] + 0.5, PREDIO.galpao.porta[1] + 0.5];
   if (alvo.k === 'luneta') return lugarDaLuneta();
+  if (alvo.k === 'mirante') return peMirante();
   if (alvo.k === 'fabrica'){ const pt = PREDIO[alvo.id].porta; return [pt[0] + 0.5, pt[1] + 0.5]; }
   if (alvo.k === 'pomar' || alvo.k === 'colmeia'){ const [x, z] = (alvo.k === 'pomar' ? POMAR_SLOTS : COLMEIA_SLOTS)[alvo.i]; return [x + 0.5, z + 1.5]; }
   return alvo.k === 'animal' ? [alvo.a.pos.x, alvo.a.pos.y] : [alvo.x + 0.5, alvo.z + 0.5];
@@ -14130,7 +14210,7 @@ function proximaTarefa(){
     let dx = ultimo[0] - ant[0], dz = ultimo[1] - ant[1], d = Math.hypot(dx, dz);
     if (tarefa.alvo.k === 'animal' || tarefa.alvo.k === 'galo'){ dx = tx - ant[0]; dz = tz - ant[1]; d = Math.hypot(dx, dz); }
     // no galo do mourão o Ed para encostado na cerca, de frente para ele
-    if ((tarefa.alvo.k === 'galo' && tarefa.alvo.onde === 'mourao') || tarefa.alvo.k === 'luneta'){ if (pts.length) pts[pts.length - 1] = [tx, tz]; else pts = [[tx, tz]]; }
+    if ((tarefa.alvo.k === 'galo' && tarefa.alvo.onde === 'mourao') || tarefa.alvo.k === 'luneta' || tarefa.alvo.k === 'mirante'){ if (pts.length) pts[pts.length - 1] = [tx, tz]; else pts = [[tx, tz]]; }
     else if (encostar){
       const cx = gx + 0.5, cz = gz + 0.5, ex = tx - cx, ez = tz - cz, de = Math.hypot(ex, ez) || 1, k = Math.min(0.4, Math.max(0, de - 0.42));
       const fim = [cx + ex / de * k, cz + ez / de * k];
@@ -14150,7 +14230,7 @@ function proximaTarefa(){
       if (G && G.estado === 'chao' && Math.hypot(G.pos.x - ed.pos.x, G.pos.y - ed.pos.y) > 0.85 && (tarefa.tentativas = (tarefa.tentativas || 0) + 1) < 5){ tarefaAtual = null; return; }
     }
     const al = tarefa.alvo, sl = al.k === 'pomar' ? POMAR_SLOTS[al.i] : al.k === 'colmeia' ? COLMEIA_SLOTS[al.i] : al.k === 'mata' ? MATA_XZ[al.i] : null;
-    const [ax, az] = al.k === 'galo' && GALOS[al.id] ? (al.onde === 'mourao' ? centroMourao(GALOS[al.id]) : [GALOS[al.id].pos.x, GALOS[al.id].pos.y]) : al.k === 'ocorrencia' ? olharOcorrencia(al) : al.k === 'composteira' ? centroComposteira() : al.k === 'luneta' ? lunetaMundo() : al.k === 'fabrica' ? centroPredio(PREDIO[al.id]) : sl ? [sl[0] + 0.5, sl[1] + 0.5] : al.k === 'coletor' ? [COLETOR[al.tp].x + 0.5, COLETOR[al.tp].z + 0.5] : alvoMundo(al); ed.olhar(ax, az);
+    const [ax, az] = al.k === 'galo' && GALOS[al.id] ? (al.onde === 'mourao' ? centroMourao(GALOS[al.id]) : [GALOS[al.id].pos.x, GALOS[al.id].pos.y]) : al.k === 'ocorrencia' ? olharOcorrencia(al) : al.k === 'composteira' ? centroComposteira() : al.k === 'luneta' ? lunetaMundo() : al.k === 'mirante' ? centroMirante() : al.k === 'fabrica' ? centroPredio(PREDIO[al.id]) : sl ? [sl[0] + 0.5, sl[1] + 0.5] : al.k === 'coletor' ? [COLETOR[al.tp].x + 0.5, COLETOR[al.tp].z + 0.5] : alvoMundo(al); ed.olhar(ax, az);
     if (!checar(tarefa.tipo, tarefa.alvo, tarefa.param).ok && !(tarefa.custo && Object.keys(tarefa.custo).length)){ fila.shift(); liberar(tarefa, true); tarefaAtual = null; hud(); return; }
     const sons = { arar: () => Som.arar(), regar: () => Som.regar(), plantar: () => Som.plantar(), alimentar: () => Som.ruido(0.3, 0.12, 1800) };
     if (sons[tarefa.tipo]) sons[tarefa.tipo]();
@@ -14258,6 +14338,7 @@ function executar(tarefa){
   if (alvo.k === 'aluguel'){ pegarAluguel(); return; }
   if (alvo.k === 'cartao'){ lerCartao(); return; }
   if (alvo.k === 'luneta'){ olharEstrelas(); return; }
+  if (alvo.k === 'mirante'){ subirMirante(); return; }
   if (alvo.k === 'trufa'){ executarTrufa(tarefa); return; }
   if (alvo.k === 'mata'){ executarMata(tarefa); return; }
   if (alvo.k === 'coletor'){ esvaziarCaixa(alvo.tp); return; }
@@ -16258,6 +16339,7 @@ function eventos(){
   });
   canvas.addEventListener('pointermove', e => {
     const p = ponteiros.get(e.pointerId);
+    if (miranteFP && miranteFP.fase === 'olhando'){ if (p){ girarMirante(e.clientX - p.x, e.clientY - p.y); p.x = e.clientX; p.y = e.clientY; } return; }
     if (!p){
       if (e.pointerType === 'mouse'){
         const a = alvoNaTela(e.clientX, e.clientY);
@@ -16290,13 +16372,13 @@ function eventos(){
   const solta = e => {
     if (!ponteiros.has(e.pointerId)) return;
     ponteiros.delete(e.pointerId);
-    if (e.type === 'pointerup' && !arrastou && ponteiros.size === 0) tocou(e.clientX, e.clientY);
+    if (e.type === 'pointerup' && !arrastou && ponteiros.size === 0 && !miranteFP) tocou(e.clientX, e.clientY);
     if (ponteiros.size === 0){ pinca = 0; pintura = null; }
   };
   canvas.addEventListener('pointerup', solta);
   canvas.addEventListener('pointercancel', solta);
   canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') marcaHover.visible = false; });
-  canvas.addEventListener('wheel', e => { e.preventDefault(); if (cine) return; zoom(Math.exp(e.deltaY * 0.0012)); fecharMenu(); }, { passive: false });
+  canvas.addEventListener('wheel', e => { e.preventDefault(); if (cine) return; if (miranteFP){ if (cameraFP){ cameraFP.fov = clamp(cameraFP.fov * Math.exp(e.deltaY * 0.001), 30, 80); cameraFP.updateProjectionMatrix(); } return; } zoom(Math.exp(e.deltaY * 0.0012)); fecharMenu(); }, { passive: false });
   $('cineDialogo').addEventListener('click', avancarCine);
   $('cinePular').addEventListener('click', e => { e.stopPropagation(); pularCine(); });
   addEventListener('resize', () => { redimensionar(); fecharMenu(); ajustarCameraCtl(); });
@@ -16317,6 +16399,7 @@ function eventos(){
   $('chipRacao').addEventListener('click', () => { Som.ligar(); Som.clique(); if (!cine) abrirLoja('racao'); });
   $('hudPill').addEventListener('click', () => { Som.clique(); mostrarAjuda(false, 'ajuda'); });
   $('urgentePill').addEventListener('click', ev => { ev.stopPropagation(); irAoUrgente(); });
+  $('miranteDescer').addEventListener('click', descerMirante);
   $('daniPill').addEventListener('click', () => { Som.clique(); mostrarAjuda(false, 'ajuda'); });
   $('btnAjustes').addEventListener('click', () => { Som.ligar(); Som.clique(); abrirAjustes(); });
   $('btnCaderno').addEventListener('click', () => { Som.ligar(); Som.clique(); abrirCaderno(); });
@@ -16406,6 +16489,7 @@ function quadro(agoraP){
   atualizarCurupira(dt, t);
   atualizarGuardiao(dt, t);
   atualizarUrgente();
+  atualizarMirante1P(dt);
   atualizarTrilha(dt, t);
   atualizarNanos(dt, t);
   if (pelucio.g.visible) pelucio.update(dt, t);
@@ -16443,7 +16527,7 @@ function quadro(agoraP){
   atualizarFalas();
   if (menuAberto && ['tile', 'animal', 'predio', 'pomar', 'colmeia', 'pomarLote', 'cercadoLote', 'obraLote', 'coletor', 'composteira', 'mata'].includes(menuAberto.alvo.k) && Math.floor(t * 2) !== Math.floor((t - dt) * 2)) atualizarEstadoMenu();
   tSalvo += dt; if (tSalvo > 6){ tSalvo = 0; verificarFigurinhas(); salvar(); }
-  renderer.render(scene, camera);
+  renderer.render(scene, miranteFP && miranteFP.fase === 'olhando' ? cameraFP : camera);
 }
 function atualizarEstadoMenu(){
   const r = itensDoAlvo(menuAberto.alvo);
@@ -16585,6 +16669,7 @@ async function iniciar(){
     resort: { hospedes: () => hospedes, montar: montarHospedes, grade: () => gradeResort, lugares: () => lugaresResort, cena: () => inauguracao, aberto: resortAberto, HOSP },
     arraia: { ARRAIA, obj: () => arraia, rojao, falas: FALAS_ARRAIA },
     abrirMenu: (alvo, x = 300, y = 300) => abrirMenu(alvo, x, y),
+    mirante1p: { subir: subirMirante, descer: descerMirante, girar: girarMirante, obj: () => miranteFP, cam: () => cameraFP },
     observatorio: { OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
     luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
