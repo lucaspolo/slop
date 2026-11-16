@@ -6388,6 +6388,176 @@ function limparVolta(){
   const P = discoJogo;
   P.g.visible = false; P.t = -1; P.g.scale.setScalar(DISCO_JOGO.escala); P.querDevolver = false; P.D.et.rotation.z = 0;
 }
+// ================= ArraiEd, o Arraiá do Ed (nível 50): a maior festa de todas, de graça, no campo grande do sul do terreno
+// novo. Vem todo mundo: a família (Hud, Dani, Beto, Jaca, Pelúcio, Patrinho, Milton, Maurinho e a Luma), o Saci, a Lúcia e os
+// nanos, as Minhoquinhas, o Curupira e os bichos da mata, as galinhas aposentadas, os visitantes da trilha e as vaquinhas
+// espaciais, que o ETzinho traz no disco. O arraial (fogueira, mastro, bandeirinhas e barracas) só existe durante a festa e
+// desmonta no fim (o Lucas pediu). Começa no fim da tarde ou de noite, para a fogueira brilhar. Em cubinhos de 1/16, com a
+// origem no meio da roda (ARRAIA.meio); os ângulos da roda contam a partir de +x, com 90° para o sul (a frente da câmera)
+const ARRAIA = { nivel: 50, meio: [40.5, 45], ed: 90, roda: 2.3, fora: 4.2, perto: 3.4, inicio: 0.66, fim: 0.82, mastro: [0.75, -1.3],
+  postes: [30, 90, 150, 210, 270, 330], raioPostes: 5.3, barracas: [[34.4, 41.3, 'milho'], [46.6, 41.3, 'pescaria']], disco: [3.3, 3.1, -2.6] };
+const grau = g => g * Math.PI / 180;
+const naRoda = (g, r) => [ARRAIA.meio[0] + Math.cos(grau(g)) * r, ARRAIA.meio[1] + Math.sin(grau(g)) * r];
+// a fogueira: as toras em pé, encostadas no meio, e as pedras em volta (o fogo é vChama, à parte, que tremula)
+function vFogueira(){
+  const v = new Vox();
+  for (let k = 0; k < 24; k++){ const a = k / 24 * Math.PI * 2; for (const r of [7, 8]) v.set(Math.round(Math.cos(a) * r), 0, Math.round(Math.sin(a) * r), k % 2 ? 0x9aa3ab : 0x7d8590); }
+  for (let k = 0; k < 6; k++){
+    const a = k / 6 * Math.PI * 2 + 0.3;
+    for (let t = 0; t <= 1; t += 0.05){ const x = Math.round(Math.cos(a) * 6 * (1 - t)), z = Math.round(Math.sin(a) * 6 * (1 - t)), y = Math.round(t * 9); v.box(x, y, z, x + 1, y + 1, z, k % 2 ? 0x7a4a2a : 0x8a5a36); }
+  }
+  v.box(-2, 0, -2, 2, 1, 2, 0x3a2a1e);
+  return v;
+}
+function vChama(){
+  const v = new Vox();
+  for (let y = 0; y <= 13; y++){ const r = 4.6 * (1 - y / 14); for (let x = -5; x <= 5; x++) for (let z = -5; z <= 5; z++) if (Math.hypot(x, z) <= r) v.set(x, y, z, y < 4 ? 0xe8483a : y < 8 ? 0xf08a2c : 0xffd34d); }
+  return v;
+}
+// o mastro de São João: o pau com fitas coloridas em espiral, laranjas penduradas e a bandeira com a carinha do Ed
+function vMastro(){
+  const v = new Vox(), cores = [0xf05d7e, 0xffd34d, 0x58b6f0, 0x8fd06a];
+  for (let y = 0; y <= 44; y++) v.box(0, y, 0, 1, y, 1, (y + Math.floor(y / 6)) % 6 < 2 ? cores[Math.floor(y / 6) % 4] : 0x8a5a36);
+  for (const [x, y, z] of [[-1, 30, 0], [2, 33, 1], [0, 36, -1], [1, 27, 2]]) v.set(x, y, z, 0xf08a2c);
+  v.box(2, 34, 0, 13, 43, 0, (x, y) => x === 2 || x === 13 || y === 34 || y === 43 ? 0xffd34d : 0xf28fac);
+  for (let x = 5; x <= 10; x++) for (let y = 36; y <= 41; y++) if (Math.hypot(x - 7.5, y - 38.5) <= 2.8) v.set(x, y, 0, 0xf6c0b4);
+  v.set(6, 38, 1, 0xe2558f); v.set(9, 38, 1, 0xe2558f); v.set(6, 40, 1, 0x1a1414); v.set(9, 40, 1, 0x1a1414);
+  return v;
+}
+// as bandeirinhas: seis postes em volta da roda, o varal de bandeirinhas ligando um ao outro e dos postes até o topo do mastro
+function vBandeirinhas(){
+  const v = new Vox(), R = ARRAIA.raioPostes * 16, alto = 34, [mx, mz] = ARRAIA.mastro.map(c => Math.round(c * 16));
+  const postes = ARRAIA.postes.map(g => [Math.round(Math.cos(grau(g)) * R), Math.round(Math.sin(grau(g)) * R)]);
+  for (const [x, z] of postes) v.box(x, 0, z, x + 1, alto, z + 1, 0x8a5a36);
+  let n = 0;
+  const fio = (a, b, ya, yb) => {
+    const d = Math.hypot(b[0] - a[0], b[1] - a[1]), passos = Math.ceil(d / 3);
+    for (let i = 1; i < passos; i++){
+      const t = i / passos, x = Math.round(lerp(a[0], b[0], t)), z = Math.round(lerp(a[1], b[1], t)), y = Math.round(lerp(ya, yb, t) - Math.sin(t * Math.PI) * 5);
+      const cor = CORES_FESTA[n++ % CORES_FESTA.length];
+      v.box(x, y - 1, z, x + 1, y, z, cor); v.set(x, y - 2, z, cor);
+    }
+  };
+  postes.forEach((p, i) => { fio(p, postes[(i + 1) % postes.length], alto, alto); if (i % 2) fio(p, [mx, mz], alto, 44); });
+  return v;
+}
+// a barraca: balcão, quatro esteios, telhado listrado e o que ela vende (milho ou pescaria), de frente para +z
+function vBarraca(tipo){
+  const v = new Vox(), listra = tipo === 'milho' ? 0xd8344a : 0x3c7bd8, madeira = 0xb07e4a;
+  for (const [x, z] of [[0, 0], [22, 0], [0, 12], [22, 12]]) v.box(x, 0, z, x + 1, 22, z + 1, madeira);
+  v.box(0, 0, 10, 23, 8, 13, (x, y) => y === 8 ? 0x9a6a40 : (x >> 2) % 2 ? 0xfdf8ef : listra);
+  for (let z = -2; z <= 15; z++){ const y = 23 + Math.round((15 - z) / 6); v.box(-2, y, z, 25, y, z, (x) => (x >> 2) % 2 ? 0xfdf8ef : listra); }
+  v.box(4, 26, 14, 19, 30, 14, 0xffd34d);
+  if (tipo === 'milho') for (let k = 0; k < 6; k++){ const x = 3 + k * 3; v.box(x, 9, 10, x + 1, 9, 12, 0xf2c335); v.set(x, 9, 13, 0x8fd06a); }
+  else { v.box(3, 9, 9, 20, 10, 12, 0x6fc3f5); for (const x of [5, 9, 14, 18]) v.box(x, 11, 10, x + 1, 11, 11, 0xf08a2c); }
+  return v;
+}
+let arraia = null;
+// quem fala e não é um porquinho com aceno: o convidado pula (aoFalar da cena)
+const FALAS_ARRAIA = () => {
+  const A = arraia, ap = (S.aposentadas || []).slice(-1)[0];
+  return [
+    ['ed', 'Ed', 'Aoooa! Bem-vindos ao ArraiEd, o Arraiá do Ed! A maior festa que essa fazenda já viu!'],
+    ['beto', 'Beto', 'Maninho, veio todo mundo! Nem no Joli Market eu vi tanta gente junta.'],
+    ['maurinho', 'Maurinho', 'Mastro, fogueira e bandeirinha: o arraial ficou um brinco!'],
+    ['curupira', 'Curupira', 'A mata inteira veio prestigiar a fazenda!'],
+    ['saci', 'Saci', 'E eu trouxe um redemoinho pra animar a quadrilha!'],
+    ['lucia', 'Lúcia', 'Tomada, os nanos fecharam o hostel só pra vir dançar!'],
+    ['et', 'ETzinho', 'Bip bop! (as vaquinhas espaciais não queriam perder o arraiá)'],
+    ['galinha', ap ? ap.nome : 'Dona Gema', 'Có-có-có! (as aposentadas vieram direto do resort)'],
+    ['milton', 'Milton', 'Milton na área! E trouxe fogos de artifício!', 'a-fogos'],
+    ['ed', 'Ed', 'Atenção, pessoal: olha a quadrilha! Anarriê!', 'a-quadrilha'],
+    ...(A && A.hud ? [['hud', 'Hud', 'Olha a cobra!']] : []),
+    ['jaca', 'Jaca', 'É mentira! A cobra-coral só veio dançar.'],
+    ...(A && A.dani ? [['dani', 'Dani', 'Olha a chuva! É mentira também!']] : []),
+    ['todos', 'Todos', 'Viva o ArraiEd!', 'a-viva'],
+  ];
+};
+// o rojão sobe deixando rastro e estoura numa estrela colorida lá no alto
+function rojao(x, z, cor){
+  const alto = rnd(3, 3.8);
+  for (let i = 0; i < 8; i++) setTimeout(() => particula(x + rnd(-0.05, 0.05), alto * i / 8, z, 0xfff1a8, 0.3), i * 70);
+  Som.tom(500, 0.55, 'sine', 0.02, 1500);
+  setTimeout(() => {
+    if (!arraia) return;
+    for (let i = 0; i < 42; i++){
+      particula(x, alto, z, i % 3 ? cor : 0xffffff, 0);
+      const p = PART[PART.length - 1], a = rnd(0, Math.PI * 2), b = rnd(-1, 1), s = rnd(1.6, 2.4), h = Math.sqrt(1 - b * b);
+      p.v.set(Math.cos(a) * h * s, b * s, Math.sin(a) * h * s); p.g = 0.5; p.vida = 1.8; p.m.scale.setScalar(1.6);
+    }
+    Som.pop();
+  }, 600);
+}
+// monta o arraial e os convidados; desfaz em limparArraia
+function montarArraia(c){
+  const [mx, mz] = ARRAIA.meio, s16 = 1 / 16, g = new THREE.Group(), A = arraia = { g, convidados: [], porcos: [], hud: false, dani: false };
+  const mm = (k, f, s) => malha(geo(k, () => f().build(s, { origin: [0.5, 0, 0.5], jitter: 0.02 })));
+  scene.add(g);
+  const pecas = [['fogueira', vFogueira, mx, mz, 0], ['mastro', vMastro, mx + ARRAIA.mastro[0], mz + ARRAIA.mastro[1], 0]];
+  for (const [k, f, x, z, ry] of pecas){ const m = malha(geo('arraia' + k, () => f().build(s16, { origin: [0, 0, 0], jitter: 0.02 }))); m.position.set(x, 0, z); m.rotation.y = ry; g.add(m); }
+  const band = malha(geo('arraiaBandeirinhas', () => vBandeirinhas().build(s16, { origin: [0, 0, 0], jitter: 0.02 }))); band.position.set(mx, 0, mz); g.add(band);
+  for (const [x, z, tipo] of ARRAIA.barracas){ const m = mm('barraca' + tipo, () => vBarraca(tipo), s16); m.position.set(x, 0, z); m.rotation.y = Math.atan2(mx - x, mz - z); g.add(m); }
+  const vc = vChama(), chama = new THREE.Mesh(vc.build(s16, { origin: [0.5, 0, 0.5], jitter: 0.04 }), new THREE.MeshBasicMaterial({ vertexColors: true }));
+  chama.position.set(mx, 0.12, mz); g.add(chama); A.chama = chama;
+  // os convidados: um grupo por convidado, de frente para a fogueira, que pula e balança no ritmo
+  const convidado = (m, gr, r, opt = {}) => {
+    const [x, z] = naRoda(gr, r), q = new THREE.Group(); q.add(m); q.position.set(x, 0, z); q.rotation.y = Math.atan2(mx - x, mz - z); g.add(q);
+    const cv = { g: q, x, z, ry: q.rotation.y, fase: rnd(0, 6), pulo: opt.pulo == null ? 0.05 : opt.pulo, vel: rnd(5, 8), quem: opt.quem, salto: 0 };
+    A.convidados.push(cv); return cv;
+  };
+  const vis = k => mm('visitante' + k, () => vVisitante(k), MIRANTE.sV);
+  convidado(vis(0), 112, ARRAIA.fora); convidado(vis(3), 122, ARRAIA.fora); convidado(vis(5), 132, ARRAIA.fora);
+  const aps = (S.aposentadas || []).slice(-4);
+  for (let i = 0; i < 4; i++) convidado(mm('hospede' + (i % FITAS_HOSPEDE.length), () => vGalinhaResort(FITAS_HOSPEDE[i % FITAS_HOSPEDE.length]), 1 / 19), 145 + i * 9, ARRAIA.fora, { quem: i === aps.length - 1 || (!aps.length && i === 0) ? 'galinha' : null });
+  // a Lúcia e três nanos, pertinho, e as três Minhoquinhas
+  convidado(mm('lucia', vLucia, NANO.sNano / 2), 186, ARRAIA.perto, { quem: 'lucia', pulo: 0.03 });
+  for (let i = 0; i < 3; i++) convidado(mm('nano' + i, () => vNano(i, false), NANO.sNano), 180 + i * 4, ARRAIA.perto + 0.35, { pulo: 0.02 });
+  for (let i = 0; i < 3; i++) convidado(mm('minhoca', vMinhoca, 1 / 16), 204 + i * 5, ARRAIA.perto, { pulo: 0.03 });
+  convidado(mm('curupira', vCurupira, CURUPIRA.escala), 222, ARRAIA.fora, { quem: 'curupira' });
+  const BM = BICHOS_MATA.modelos;
+  ['bugio', 'jaguatirica', 'tucano', 'papagaio', 'cobra'].forEach((k, i) => convidado(mm('bichoMata' + k, BM[k][0], BM[k][1]), 236 + i * 11, ARRAIA.fora));
+  // as vaquinhas espaciais, embaixo do disco do ETzinho
+  for (let i = 0; i < 2; i++) convidado(mm('vacaEspaco', () => vVaca(true), 1 / 22), 318 + i * 13, ARRAIA.fora, { pulo: 0.04 });
+  convidado(vis(1), 349, ARRAIA.fora); convidado(vis(4), 358, ARRAIA.fora);
+  // a família, na roda de dentro; o Saci junto dos convidados de trás
+  const roda = [[irmaoHud, 125, 'hud'], [beto, 150], [pelucio, 175], [patrinho, 200], [maurinho, 228], [milton, 256], [saci, 270, 'saci'], [jaca, 290], [irmaoDani, 318, 'dani']];
+  for (const [p, gr, quem] of roda){
+    if (quem === 'hud' && (nivel() < HUD.nivel || hudAtivo() || irmaoHud.g.visible)) continue;
+    if (quem === 'dani' && (!S.viuCineDani || daniAtivo() || irmaoDani.g.visible)) continue;
+    if (quem === 'hud') A.hud = true; if (quem === 'dani') A.dani = true;
+    const r = quem === 'saci' ? ARRAIA.perto : ARRAIA.roda, [x, z] = naRoda(gr, r);
+    p.g.visible = true; p.estado = 'parado'; p.pontos = []; p.aoChegar = null; p.sentado = 0; p.colocar(x, z); p.olhar(mx, mz); p.ang = p.angAlvo;
+    A.porcos.push({ p, gr, r });
+  }
+  if (maurinhoObra.g.visible){ pararMaurinhoObra(); maurinhoObra.g.visible = false; obraVis.estado = ''; }
+  // o disco do ETzinho, parado no alto, em cima das vaquinhas
+  const P = discoJogo, [dx, dy, dz] = ARRAIA.disco;
+  P.g.visible = true; P.t = 0; P.g.position.set(mx + dx, dy, mz + dz); P.g.scale.setScalar(DISCO_JOGO.escala);
+  A.disco = P.g.position.clone();
+  lumaSaiPara('inaugura', { ponto: naRoda(62, ARRAIA.roda), olharPara: ARRAIA.meio, teleporta: true, festeja: false }, true);
+}
+function limparArraia(){
+  const A = arraia; arraia = null;
+  lumaFimCena('inaugura');
+  if (!A) return;
+  scene.remove(A.g);
+  for (const { p } of A.porcos){ p.g.visible = false; p.pontos = []; p.aoChegar = null; p.estado = 'parado'; p.aceno = 0; p.pulo = 0; }
+  const P = discoJogo; P.g.visible = false; P.t = -1; P.g.scale.setScalar(DISCO_JOGO.escala);
+  ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado';
+}
+// a cada quadro: o fogo tremula e solta faísca, os convidados dançam, o disco balança
+function animarArraia(c, dt){
+  const A = arraia; if (!A) return;
+  const t = performance.now() / 1000, [mx, mz] = ARRAIA.meio, festa = c.passo === 'a-quadrilha' || c.passo === 'a-viva' || c.passo === 'a-fogos';
+  A.chama.scale.set(1 + Math.sin(t * 7) * 0.08, 0.85 + Math.abs(Math.sin(t * 9)) * 0.3, 1 + Math.cos(t * 6) * 0.08);
+  if (Math.random() < dt * 8) particula(mx + rnd(-0.2, 0.2), 0.7, mz + rnd(-0.2, 0.2), [0xffd34d, 0xf08a2c][Math.floor(Math.random() * 2)], 1.2);
+  for (const q of A.convidados){
+    q.salto = Math.max(0, q.salto - dt);
+    const ritmo = festa ? 1.6 : 1, y = Math.abs(Math.sin(t * q.vel * ritmo + q.fase)) * q.pulo * (festa ? 2 : 1) + Math.sin(Math.min(1, q.salto / 0.45) * Math.PI) * 0.25;
+    q.g.position.y = y; q.g.rotation.y = q.ry + Math.sin(t * 2.2 + q.fase) * 0.18; q.g.rotation.z = Math.sin(t * q.vel * 0.5 + q.fase) * 0.06;
+  }
+  const P = discoJogo; if (P.g.visible && A.disco){ P.g.position.set(A.disco.x + Math.sin(t) * 0.15, A.disco.y + Math.sin(t * 1.7) * 0.08, A.disco.z + Math.cos(t) * 0.15); animarDisco(P.D, t); }
+}
 // ================= Galpão do trator (obra nova do nível 42): 4 × 2 ladrilhos ao lado da horta, em cubinhos de 1/8 a partir do
 // canto de cima à esquerda. Paredes de tábua, telhado de zinco em arco ao longo do galpão e a frente toda aberta para o sul,
 // de onde se vê o trator guardado, o tambor de óleo, os fardos e as ferramentas penduradas no fundo
@@ -6873,6 +7043,11 @@ TEMAS.aposentadoria = { bpm: 104, ganho: 1.15, loop: true, faixas: [
   { tipo: 'triangle', vol: 0.045, leg: 0.85, notas: 'F5:1 A5:1 C6:1 A#5:2 A5:1 G5:1 A#5:1 D6:1 C6:3 A5:1 C6:1 F6:1 E6:2 D6:1 C6:1 A#5:1 G5:1 F5:3' },
   { tipo: 'triangle', vol: 0.05, notas: 'F2:1 r:2 A#2:1 r:2 G2:1 r:2 C3:1 r:2 F2:1 r:2 C3:1 r:2 C3:1 r:2 F2:1 r:2' },
   { tipo: 'sine', vol: 0.02, notas: 'r:1 A3:1 A3:1 r:1 D4:1 D4:1 r:1 A#3:1 A#3:1 r:1 E4:1 E4:1 r:1 C4:1 C4:1 r:1 E4:1 E4:1 r:1 A#3:1 A#3:1 r:1 A3:1 A3:1' } ] };
+// ArraiEd: forró de arraiá em sol mixolídio (o fá natural), com a sanfona na onda quadrada, o baião no baixo e o triângulo
+TEMAS.arraied = { bpm: 138, ganho: 0.8, loop: true, faixas: [
+  { tipo: 'square', vol: 0.024, leg: 0.85, notas: 'G4:.5 B4:.5 D5:.5 F5:.5 E5:1 D5:1 C5:.5 E5:.5 G5:.5 E5:.5 F5:1 D5:1 B4:.5 D5:.5 G5:.5 F5:.5 E5:.5 D5:.5 C5:.5 B4:.5 A4:1 D5:1 G4:2 G4:.5 B4:.5 D5:.5 G5:.5 A5:1 G5:1 F5:.5 E5:.5 D5:.5 C5:.5 D5:1 E5:1 F5:.5 E5:.5 D5:.5 B4:.5 C5:.5 A4:.5 B4:.5 A4:.5 G4:2 r:2' },
+  { tipo: 'triangle', vol: 0.05, notas: ['G2 D3', 'C3 G2', 'G2 D3', 'D3 A2', 'G2 D3', 'F2 C3', 'C3 G2', 'G2 D3'].map(c => { const [a, b] = c.split(' '); return `${a}:.75 ${b}:.25 r:.5 ${a}:.5 ${a}:.75 ${b}:.25 r:.5 ${a}:.5`; }).join(' ') },
+  { tipo: 'x', vol: 0.03, notas: Array(32).fill('x:.5 x:.25 x:.25').join(' ') } ] };
 // De volta das férias: canção de ninar espacial em fá lídio (o si natural dá o ar de sonho), com arpejo em colcheias e baixo
 TEMAS.volta = { bpm: 92, ganho: 1, loop: true, faixas: [
   { tipo: 'sine', vol: 0.045, leg: 0.9, notas: 'F5:1 A5:1 C6:1 B5:1 A5:2 G5:1 E5:1 F5:1 A5:1 C6:1 E6:1 D6:3 r:1 C6:1 B5:1 A5:1 G5:1 A5:2 C6:1 A5:1 G5:1 E5:1 D5:1 E5:1 F5:4' },
@@ -11175,6 +11350,87 @@ const CENAS = {
     },
     restaurar(){ limparAbducao(); },
   },
+  arraied: {
+    flag: 'viuCineArraied', nivel: () => ARRAIA.nivel, musica: 'arraied', icone: 'festa', abducao: true,
+    titulo: 'ArraiEd', desc: 'O Arraiá do Ed: a maior festa de todas, com a família, a mata, o espaço e o resort em volta da fogueira.',
+    trancada: `acontece no nível ${ARRAIA.nivel}, no fim da tarde, no campo grande do terreno novo`,
+    // no fim da tarde ou de noite (antes da hora de nanar), com o terreno novo limpo, o Milton sem visita, o Hud e o Dani em casa
+    // e o disco longe (o ETzinho vem com ele para a festa)
+    pronta: () => nivel() >= ARRAIA.nivel && S.canto === 2 && (S.relogio || 0) >= ARRAIA.inicio && (S.relogio || 0) < ARRAIA.fim && aviaoLivre() && !hudAtivo() && !irmaoHud.g.visible && !daniAtivo() && !irmaoDani.g.visible && !(discoJogo && discoJogo.t >= 0),
+    podeRever: () => (!aviaoLivre() ? 'Dá para rever quando o Milton decolar.' : hudAtivo() || irmaoHud.g.visible || daniAtivo() || irmaoDani.g.visible ? 'Dá para rever quando o Hud e o Dani terminarem a ajuda.' : discoJogo && discoJogo.t >= 0 ? 'Dá para rever quando o disco voador for embora.' : null),
+    get falas(){ return arraia && arraia.falas ? arraia.falas : FALAS_ARRAIA(); },
+    foco(c){
+      const [mx, mz] = ARRAIA.meio, [ex, ez] = naRoda(ARRAIA.ed, ARRAIA.roda);
+      if (c.passo === 'a-indo' && Math.hypot(ed.pos.x - ex, ed.pos.y - ez) > 4) return new THREE.Vector3(ed.pos.x, 0.4, ed.pos.y);
+      if (c.passo === 'a-fogos' || c.passo === 'a-viva') return new THREE.Vector3(mx - 0.4, 2.4, mz - 0.8);
+      return new THREE.Vector3(mx - 0.3, 0.6, mz + 0.2);
+    },
+    vista: c => (telaEstreita() ? 1.45 : 1) * (c.passo === 'a-indo' ? 7.5 : c.passo === 'a-fogos' || c.passo === 'a-viva' ? 12 : 9.5),
+    cameraRapida: c => c.passo === 'a-indo',
+    iniciar(c){
+      caminhaoE.estado = 'cine';
+      cam.azAlvo = azPerto(Math.PI / 4);
+      montarArraia(c);
+      arraia.falas = FALAS_ARRAIA();
+      const [ex, ez] = naRoda(ARRAIA.ed, ARRAIA.roda);
+      ed.trab = null; ed.ferramenta(null);
+      // de longe, o Ed já chega pela beira do campo
+      if (Math.hypot(ed.pos.x - ex, ed.pos.y - ez) > 14){ ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; ed.colocar(ex - 5.5, ez - 1.5); }
+      andarAte(ed, ex, ez, () => { c.edOk = true; });
+      return 'a-indo';
+    },
+    // a fogueira tremula e os convidados dançam a cena inteira, também durante as falas
+    ambiente(dt){ animarArraia(cine, dt); },
+    // quem fala sem ser um porquinho (a Lúcia, o Curupira, a aposentada) dá um pulinho
+    aoFalar(f){ const A = arraia; if (A) for (const q of A.convidados) if (q.quem === f[0]) q.salto = 0.45; },
+    posicionar(){ const [mx, mz] = ARRAIA.meio; virarNaCena(ed, mx, mz); if (arraia) for (const { p } of arraia.porcos) virarNaCena(p, mx, mz); },
+    trecho(c, dt){
+      const A = arraia;
+      switch (c.passo){
+        case 'a-indo':
+          if (Math.hypot(ed.pos.x - naRoda(ARRAIA.ed, ARRAIA.roda)[0], ed.pos.y - naRoda(ARRAIA.ed, ARRAIA.roda)[1]) > 3) ed.pressa = 0.3;
+          if (!c.edOk && c.t > 30){ ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; ed.colocar(...naRoda(ARRAIA.ed, ARRAIA.roda)); c.edOk = true; }
+          if (c.edOk && ed.estado === 'parado' && c.t > 1){ this.posicionar(); c.passo = 'dialogo'; mostrarFalaCine(0); }
+          break;
+        // o Milton solta os fogos atrás do mastro, um depois do outro
+        case 'a-fogos':
+          if (!c.ini){ c.ini = true; c.n = 0; milton.pulo = 0.45; milton.aceno = 2; }
+          if (c.n < 6 && c.t > 0.3 + c.n * 0.7){ const [x, z] = naRoda(235 + c.n * 15, 5.6); rojao(x, z, CORES_FESTA[c.n % CORES_FESTA.length]); c.n++; }
+          if (c.t > 5.6){ this.posicionar(); c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
+          break;
+        // a quadrilha: a roda da família gira em volta da fogueira, pulando no ritmo; o Ed dança no lugar
+        case 'a-quadrilha': {
+          if (!c.ini){ c.ini = true; Som.nivel(); }
+          const passo = Math.floor(c.t / 0.55);
+          for (const q of A.porcos){
+            const g = q.gr + c.t * 30, [x, z] = naRoda(g, q.r), a = grau(g);
+            q.p.colocar(x, z); q.p.ang = q.p.angAlvo = Math.atan2(-Math.sin(a), Math.cos(a));
+            if (q.k !== passo){ q.k = passo; q.p.pulo = 0.32; }
+          }
+          if (c.k !== passo){ c.k = passo; ed.pulo = 0.3; if (luma && luma.acao === 'inaugura') luma.salto = 0.35; }
+          if (c.t > 7){ for (const q of A.porcos) q.gr += c.t * 30; this.posicionar(); c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
+          break;
+        }
+        // viva! confete, mais fogos, todo mundo pula, e a câmera volta
+        case 'a-viva':
+          if (!c.ini){
+            c.ini = true; Musica.vinheta('viva'); confete(ARRAIA.meio[0], 3, ARRAIA.meio[1], 90, 2.5);
+            for (const p of [ed, ...A.porcos.map(q => q.p)]){ p.pulo = 0.45; p.aceno = 1.6; }
+            for (const q of A.convidados) q.salto = 0.45;
+            if (luma && luma.acao === 'inaugura'){ luma.festeja = true; luma.salto = 0.45; }
+            for (let i = 0; i < 5; i++) setTimeout(() => { if (arraia){ const [x, z] = naRoda(220 + i * 28, 5.8); rojao(x, z, CORES_FESTA[(i + 2) % CORES_FESTA.length]); } }, 500 + i * 450);
+          }
+          if (c.t > 1.8 && !c.pulo2){ c.pulo2 = true; for (const q of A.convidados) q.salto = 0.45; for (const p of [ed, ...A.porcos.map(q => q.p)]) p.pulo = 0.45; }
+          if (c.t > 5.5){ c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
+          break;
+      }
+    },
+    fimDasFalas(c){ $('cineDialogo').hidden = true; c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; },
+    pular(){ ed.trab = null; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; },
+    // o arraial desmonta no fim (pular vale como assistir)
+    fim(){ limparArraia(); S.viuCineArraied = true; aviso('Que festa! O ArraiEd entrou para a história da fazenda.', 'grande', 5); salvar(); },
+    restaurar(){ limparArraia(); },
+  },
   volta: {
     flag: 'viuVoltaFerias', nivel: () => OBRAS.observatorio.nivel, repete: true, abducao: true, musica: 'volta', icone: 'vacaEspaco',
     titulo: 'De volta das férias', desc: 'O disco voador pousa no observatório e devolve uma vaca que estava de férias no espaço. Vista daqui, nenhuma vaca entra no curral.',
@@ -11795,7 +12051,7 @@ const CENAS = {
   },
 };
 // a ordem da história; uma cena que ainda não existe em CENAS fica de fora
-const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'patrinho', 'lucia', 'pelucio', 'minhocas', 'mata', 'festa', 'curupira', 'jato', 'dani', 'maurinho', 'abducao', 'aposentadoria', 'nanar', 'cafezinho', 'resort', 'volta'];
+const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'patrinho', 'lucia', 'pelucio', 'minhocas', 'mata', 'festa', 'curupira', 'jato', 'dani', 'maurinho', 'abducao', 'aposentadoria', 'nanar', 'cafezinho', 'resort', 'arraied', 'volta'];
 const ordemCenas = () => ORDEM_CENAS.filter(id => CENAS[id]);
 // uma cena começa sozinha quando ainda não foi vista e está pronta (pelo nível, ou pela regra própria dela)
 const cenaPronta = id => { const C = CENAS[id]; return (!S[C.flag] || C.repete) && (C.pronta ? C.pronta() : nivel() >= C.nivel()); };
@@ -11900,6 +12156,8 @@ function atualizarCine(dt){
     case 'ab-vem': case 'ab-raio': case 'ab-vai': cena.trecho(c, dt); break;
     // cena da aposentadoria
     case 'ap-indo': case 'ap-paga': case 'ap-galo': case 'ap-vai': cena.trecho(c, dt); break;
+    // ArraiEd
+    case 'a-indo': case 'a-fogos': case 'a-quadrilha': case 'a-viva': cena.trecho(c, dt); break;
     // cena da volta das férias no espaço
     case 'v-vem': case 'v-desce': case 'v-raio': case 'v-vai': cena.trecho(c, dt); break;
     // cena da inauguração do resort
@@ -11954,7 +12212,7 @@ function atualizarCine(dt){
 // rosto na caixa de diálogo de quem não tem ícone próprio, e quem acena quando fala
 const ROSTO_CINE = { todos: 'festa', galinha: 'aposentada', vaca: 'vacaEspaco', et: 'disco' };
 function guardarPranchetaCena(){ const M = maurinho; M.trab = null; M.estado = 'parado'; M.mao.rotation.x = 0; M.ferramenta(null); }
-const FALANTES = { beto: () => beto, jaca: () => jaca, pelucio: () => pelucio, milton: () => milton, hud: () => irmaoHud, dani: () => irmaoDani, maurinho: () => maurinho, curupira: () => curupira };
+const FALANTES = { beto: () => beto, jaca: () => jaca, pelucio: () => pelucio, milton: () => milton, hud: () => irmaoHud, dani: () => irmaoDani, maurinho: () => maurinho, curupira: () => curupira, saci: () => saci };
 function mostrarFalaCine(i){
   const c = cine, [quem, nome, txt] = c.cena.falas[i];
   c.linha = i; c.letras = 0; c.tfala = c.t;
@@ -11966,10 +12224,10 @@ function mostrarFalaCine(i){
   if (quem === 'ed'){ ed.pulo = 0.45; ed.aceno = 1.2; }
   else if (quem === 'minhoquinha') for (const w of MINHOCAS) w.pulo = 0.45;
   else if (quem === 'todos'){
-    for (const p of [ed, ...Object.values(FALANTES).map(f => f())]) if (p.g.visible){ p.pulo = 0.45; p.aceno = 1.2; }
+    for (const p of [ed, ...Object.values(FALANTES).map(f => f())]) if (p && p.g && p.g.visible){ p.pulo = 0.45; p.aceno = 1.2; }
     for (const w of MINHOCAS) w.pulo = 0.45;
   }
-  else if (FALANTES[quem]) FALANTES[quem]().aceno = 2;
+  else if (FALANTES[quem]){ const f = FALANTES[quem](); if (f) f.aceno = 2; }
   if (c.cena.aoFalar) c.cena.aoFalar(c.cena.falas[i]);
   if (quem === 'minhoquinha') Som.pop(); else if (quem === 'luma') Som.au(); else if (quem === 'galinha') Som.co(); else if (quem === 'vaca') Som.muu(); else if (quem === 'et') Som.tom(900, 0.25, 'sine', 0.03, 1400); else Som.oinc();
 }
@@ -15795,6 +16053,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Resort das Aposentadas</b>${nv(OBRAS.resort.nivel)}: no terreno novo, depois do lago. Na inauguração as aposentadas chegam pela ponte e se mudam; depois elas tomam sol, boiam na piscina e tomam água de coco, e à noite dormem nos chalés. As próximas que se aposentarem atravessam a ponte para lá, e os cartões-postais passam a vir do resort. Toque numa hóspede para saber quem é.</li>
       <li><b>Casarão</b>${nv(OBRAS.casarao.nivel)}: depois da reforma da casa, o Maurinho faz o casarão em três etapas, pelo menu da casa: o segundo andar, os quartos do Hud e do Dani (cortina amarela e lilás, floreiras e águas-furtadas) e a varanda de cima com duas redes. Na hora de nanar, cada um acende a luz do próprio quarto.</li>
       <li><b>Galpão do trator</b>${nv(OBRAS.galpao.nivel)}: ao lado da horta. Num terreno de canteiros, escolha "Arar", "Plantar" ou "Colher o terreno com o trator": o Ed sobe no trator e faz os 16 canteiros de uma passada. Para plantar, ele usa as sementes da bolsa e compra na hora as que faltarem.</li>
+      <li><b>ArraiEd</b>${nv(ARRAIA.nivel)}: a maior festa de todas, de graça, no fim da tarde, no campo grande do terreno novo. Vem todo mundo: a família, o Saci, a Lúcia e os nanos, as Minhoquinhas, o Curupira e os bichos da mata, as galinhas aposentadas, os visitantes da trilha e as vaquinhas espaciais com o ETzinho. Tem fogueira, mastro, bandeirinhas, barracas, fogos e quadrilha. No fim o arraial é desmontado.</li>
       <li><b>Observatório</b>${nv(OBRAS.observatorio.nivel)}: na ponta de baixo do terreno novo, ao lado da estrada. De noite a cúpula abre e gira; toque no observatório e escolha "Olhar as estrelas": o Ed vai até a luneta e vê estrelas cadentes (${OBSERV.xp} XP, uma vez por noite). As vacas que o disco voador leva vão de férias para o espaço: com o observatório pronto, de noite, o disco às vezes pousa e devolve uma delas, de óculos escuros e anteninha de lembrança, se tiver lugar no curral.</li>
       <li><b>Hangar do PIG-MTP</b>${nv(OBRAS.hangar.nivel)}: pelo menu da pista. O Maurinho troca o hangar velho por um novo com torre de controle, e a pista ganha asfalto. Depois disso, quando o jatinho chega de tarde ou de noite, às vezes o Milton dorme na fazenda: o jato fica no hangar e, de manhã, ele aparece no cafezinho antes de decolar.</li>
     </ul>`;
@@ -16286,6 +16545,7 @@ async function iniciar(){
     pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
     trator: () => trator, TRATOR, filaTipos: () => fila.map(t => t.tipo), checar: (t, a, q) => checar(t, a, q), enfileirarTrator: (lote, acao, semente) => enfileirar('trator', { k: 'trator', lote }, { acao, semente }), tratorVis: () => tratorVis,
     resort: { hospedes: () => hospedes, montar: montarHospedes, grade: () => gradeResort, lugares: () => lugaresResort, cena: () => inauguracao, aberto: resortAberto, HOSP },
+    arraia: { ARRAIA, obj: () => arraia, rojao, falas: FALAS_ARRAIA },
     observatorio: { OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
     luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
@@ -16418,7 +16678,7 @@ function catalogoModelos(){
     { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Tratorzinho', vTrator), varios('Bicicleta', CICLISTAS.map((c, i) => [['Vermelha', 'Azul', 'Amarela'][i], () => vBicicleta(c[0])])), um('Teco-teco', vTecoTeco), { nome: 'Jatinho', variantes: [['Fechado', 0], ['Com a escada', 1]].map(([n, a]) => ({ nome: n, cria: () => { const g = montarJatinho(1 / 16); g.userData.escada.rotation.x = a ? -JATO.aberta : 0; return g; } })) }, um('Hélice', vHelice), um('Biruta', vBiruta), { nome: 'Disco voador', variantes: [['Voando', false], ['Com o raio', true]].map(([n, r]) => ({ nome: n, cria: () => { const D = montarDisco(r); D.g.userData.anima = (dt, t) => animarDisco(D, t); D.g.userData.anima(0, 0); return D.g; } })) }] },
     { nome: 'Cenário', itens: [varios('Árvore', [['Maçãs', () => vArvore(0)], ['Sem fruta', () => vArvore(1)], ['Laranjas', () => vArvore(2)]]), um('Arbusto', vArbusto), um('Redemoinho', vRedemoinho), um('Fardo de feno', vFeno), um('Flores', () => vFlores(3)), um('Capim', () => vCapim(1)), um('Cova', vCova), varios('Cerca', [['Reta', () => vCerca(3)], ['Canto', () => vCerca(5)]]), varios('Portão', [['Arco da entrada', () => vPortao(true)], ['Simples', () => vPortao(false)]]), um('Placa', vPlaca), um('Correio', vCorreio)] },
     { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), { nome: 'Varal de luzes', variantes: [{ nome: '', cria: () => { const v = vVaralTrecho(), m = malha(v.build(1 / RES_VARAL)); m.userData.cubos = v.m.size; return m; } }] }, um('Chafariz', vFonte), um('Estátua do Ed', vEstatua)] },
-    { nome: 'Objetos', itens: [um('Cartão-postal', vCartaoPostal), um('Osso da Luma', vOsso), um('Biscoito da Luma', vBiscoito), um('Ponte do lago', vPonte), um('Rampa dos patos', vRampaPatos), um('Chocolateria', vChocolateria), um('Oficina de borracha', vOficina), um('Mirante da mata', vMirante), varios('Fogo na mata', [0, 1, 2].map(f => ['Fase ' + (f + 1), () => vFogo(f)])), varios('Lixo na mata', [['Garrafa', () => vLixo(0)], ['Latinha', () => vLixo(1)], ['Saquinho', () => vLixo(2)]]), um('Galho caído', vGalho), um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Lanterna', vLanterna), um('Lua', vLua), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Nano Hostel', vNanoHostel), um('Nano Metrô', vNanoMetro), varios('Nano pessoa', [0, 1, 2, 3, 4, 5].map(k => ['Nano ' + (k + 1), () => vNano(k * 7, k === 2)])), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
+    { nome: 'Objetos', itens: [varios('ArraiEd', [['Fogueira', vFogueira], ['Fogo', vChama], ['Mastro', vMastro], ['Barraca do milho', () => vBarraca('milho')], ['Barraca da pescaria', () => vBarraca('pescaria')], ['Bandeirinhas', vBandeirinhas]]), um('Cartão-postal', vCartaoPostal), um('Osso da Luma', vOsso), um('Biscoito da Luma', vBiscoito), um('Ponte do lago', vPonte), um('Rampa dos patos', vRampaPatos), um('Chocolateria', vChocolateria), um('Oficina de borracha', vOficina), um('Mirante da mata', vMirante), varios('Fogo na mata', [0, 1, 2].map(f => ['Fase ' + (f + 1), () => vFogo(f)])), varios('Lixo na mata', [['Garrafa', () => vLixo(0)], ['Latinha', () => vLixo(1)], ['Saquinho', () => vLixo(2)]]), um('Galho caído', vGalho), um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Lanterna', vLanterna), um('Lua', vLua), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Nano Hostel', vNanoHostel), um('Nano Metrô', vNanoMetro), varios('Nano pessoa', [0, 1, 2, 3, 4, 5].map(k => ['Nano ' + (k + 1), () => vNano(k * 7, k === 2)])), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
   ];
   grupos.push({ nome: 'Ícones', itens: Object.keys(VI).filter(k => !usados.has(k)).sort().map(k => um((PRODUTOS[k] && PRODUTOS[k].nome) || k, VI[k])) });
   return grupos.flatMap(g => g.itens.map(it => ({ ...it, grupo: g.nome, ini: it.ini || 0, id: (g.nome + '-' + it.nome).normalize('NFD').replace(/[^\w]+/g, '-').toLowerCase() })));

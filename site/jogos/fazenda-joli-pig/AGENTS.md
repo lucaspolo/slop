@@ -58,6 +58,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 | Férias no espaço | às vezes, quando o disco voador passa e tem vaca no curral; sempre disponível na janela Cenas |
 | Aposentadoria merecida | a partir do nível 10, quando uma galinha passa de 150 ovos (no máximo uma a cada 12 a 20 min, fora da noite): ela sai do galinheiro de chapéu de palha e malinha, o Ed paga o bônus e promete a pensão, o galo canta a despedida e ela vai embora pela estrada. Sempre disponível na janela Cenas a partir do nível 10, com uma galinha dublê |
 | Um cafezinho | de vez em quando a partir do nível 3, ou pela opção "Tomar um lanchinho" da casa. Depois da cena do Dani, ele vem sempre que está ajudando e às vezes de casa, e senta no banquinho do convidado (nesse dia não vem convidado) |
+| ArraiEd | nível 50, de graça, no fim da tarde ou de noite (relógio de 0,66 a 0,82), com o terreno novo limpo, o Milton sem visita, o Hud e o Dani em casa e o disco longe: a maior festa de todas, no campo grande do sul do terreno novo (veja a seção ArraiEd). Na reprise nada muda no save |
 | De volta das férias | de noite, com o observatório pronto (nível 53), quando há vaca de férias no espaço e lugar no curral: o disco desce no pouso do observatório, a vaca desce no raio de óculos escuros e anteninha, o Ed recebe, a vaca e o ETzinho falam (`vaca`, `et`) e o disco vai embora. A vaca entra no curral. Câmera ao sul (`VOLTA.az`), com a vaca e o Ed lado a lado na beira do pouso. Na reprise, uma vaca de mentira faz o papel e nada muda no save |
 | Inauguração do resort | quando o Maurinho termina o Resort das Aposentadas (nível 40), de dia: a família na frente do arco, as aposentadas chegam pela ponte com as malinhas, o Ed corta a fita e elas entram. Na reprise as hóspedes somem durante a cena e voltam no fim |
 
@@ -69,6 +70,7 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - A música baixa com a caixa de fala aberta, some aos poucos ao terminar ou pular e respeita o botão de som dos Ajustes.
 - Sons que se repetem sozinhos ficam baixinhos e sem chiado: o chuá do irrigador é um `Som.sopro` (ruído que entra e sai devagar, só graves e médios), no máximo um a cada 3 s somando todos os irrigadores, e só do que aparece na tela (`IRRIG_SOM`, `volumeNaTela`). O motor do avião do Milton baixa para um quarto fora da tela (`MOTOR_SOM`); o do jatinho é um sopro grave com assobio de triângulo e seno, sem onda serrote. Som novo que toca sem o jogador pedir segue a mesma regra.
 - Milton a jato: `TEMAS.jato`, a fanfarra do Milton (`TEMAS.milton`) um tom acima e mais rápida, com baixo pulsando.
+- ArraiEd: `TEMAS.arraied`, forró de arraiá em sol mixolídio (o fá natural), sanfona na onda quadrada, baião no baixo e triângulo, 138 bpm, `ganho` 0,8.
 - De volta das férias: `TEMAS.volta`, canção de ninar espacial em fá lídio (o si natural dá o ar de sonho), melodia no seno, arpejo em colcheias e baixo, 92 bpm, `ganho` 1.
 - Inauguração do resort: `TEMAS.resort`, bossa nova de beira de piscina em dó (violão em contratempo no seno, baixo gingado no triângulo e chocalho), 112 bpm, `ganho` 0,95.
 
@@ -237,6 +239,14 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - Vacas de férias no espaço: cada abdução de verdade soma uma em `S.vacasEspaco` (saves de antes contam uma, se já houve abdução: `vacasNoEspaco`). Com o observatório pronto, de noite, com vaca no espaço e lugar no curral (`podeDevolverVaca`), o disco que passa sorteia devolver em vez de abduzir (`P.querDevolver`, `VOLTA.chance`; a primeira vem na primeira noite, com o disco em no máximo 20 s). A cena é "De volta das férias" (`CENAS.volta`).
 - A vaca que volta fica com a lembrança: óculos escuros e a tiara de anteninhas (`vVaca(true)`, `d.espaco`).
 - Para testar: `__fazenda.observatorio` (`OBSERV`, `VOLTA`, `estrela`, `volta`, `podeDevolver`, `vacas`, `luneta`, `pouso`, `vis`).
+
+## ArraiEd, o Arraiá do Ed
+
+- Ideia do Lucas: no nível 50 acontece a maior festa de todas, o Arraiá do Ed, também chamado de ArraiEd, e vem todo mundo que existe até ali. Ela entrou no lugar do Parque do lago, que saiu das obras. É de graça, acontece uma vez (a janela Cenas reprisa) e o arraial desmonta no fim; o Lucas escolheu o campo grande do sul do terreno novo (`ARRAIA.meio`, 40,5; 45).
+- O arraial só existe durante a cena (`montarArraia`, `limparArraia`): a fogueira (`vFogueira`, com o fogo `vChama` à parte, que tremula e solta faísca), o mastro de São João com a bandeira da carinha do Ed (`vMastro`), seis postes com as bandeirinhas ligando um ao outro e ao mastro (`vBandeirinhas`) e duas barracas, a do milho e a da pescaria (`vBarraca`). As peças estão no visualizador, em Objetos.
+- Quem vem: a família na roda de dentro (Hud, Dani, Beto, Pelúcio, Patrinho, Maurinho, Milton e o Jaca, os de verdade), o Saci, e na roda de fora os convidados (malhas à parte, de frente para a fogueira, dançando em `animarArraia`): visitantes da trilha, quatro aposentadas de chapéu, a Lúcia e três nanos, as três Minhoquinhas, o Curupira, o bugio, a jaguatirica, o tucano, o papagaio, a cobra-coral e duas vaquinhas espaciais embaixo do disco do ETzinho. A Luma fica perto do Ed (aventura `inaugura`). A frente da roda, do lado da câmera, fica livre.
+- Falas (`FALAS_ARRAIA`): o Ed abre, falam o Beto, o Maurinho, o Curupira, o Saci, a Lúcia, o ETzinho e uma aposentada; o Milton solta os fogos (`a-fogos`, `rojao`), o Ed puxa a quadrilha (`a-quadrilha`: a roda da família gira em volta da fogueira pulando no ritmo), o Hud grita "olha a cobra", o Jaca e o Dani respondem "é mentira", e no viva (`a-viva`) chove confete com mais fogos. Quem fala sem ser um porquinho dá um pulinho (`aoFalar`).
+- Para testar: `__fazenda.arraia` (`ARRAIA`, `obj`, `rojao`, `falas`).
 
 ## Fábricas novas
 
