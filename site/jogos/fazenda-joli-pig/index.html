@@ -286,6 +286,12 @@ button{font:inherit;color:inherit}
 body.primeira-pessoa .hud-topo,body.primeira-pessoa .hud-base,body.primeira-pessoa .camera-ctl,body.primeira-pessoa .menu,body.primeira-pessoa .fala,body.primeira-pessoa .flutua{display:none !important}
 .mirante-1p{position:absolute;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;gap:14px;padding:8px 8px 8px 16px;font-weight:700;white-space:nowrap;z-index:6}
 .mirante-1p[hidden]{display:none}
+.vista-ed{position:absolute;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;gap:14px;padding:8px 8px 8px 16px;font-weight:700;z-index:6;max-width:calc(100vw - 24px)}
+.vista-ed span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.vista-ed .botao{flex:none}
+.vista-ed[hidden],.vista-ed-legenda[hidden]{display:none}
+.vista-ed-legenda{position:absolute;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);max-width:min(520px,calc(100vw - 32px));padding:8px 14px;background:rgba(32,22,16,.78);color:#fff;border-radius:12px;font-weight:700;font-size:15px;line-height:1.3;text-align:center;pointer-events:none;z-index:6}
+@media (max-width:520px){.vista-ed{gap:10px;padding-left:12px}.vista-ed span{font-size:13px}.vista-ed .botao{font-size:13px}}
 .janela-topo.rosa2{background:#f7c9c3}
 .janela-topo.marrom{background:#e3c9a8}
 .janela-topo.verde{background:#cdeab0}
@@ -449,6 +455,9 @@ body.modelos #tela{position:absolute;top:var(--md-topo,84px);left:300px;width:ca
 .md-info small{font-weight:700;color:var(--tinta-suave)}
 .md-chips{display:flex;flex-wrap:wrap;gap:5px;margin-left:auto}
 .md-chips .botao[aria-pressed="true"]{background:var(--rosa);color:#fff}
+.md-var{margin:3px 0 0;font-weight:700;font-size:14px;line-height:1.25}
+.md-var[hidden]{display:none}
+.md-chips .md-num{min-width:34px;padding-left:6px;padding-right:6px}
 @media (max-width:700px){
   body.modelos #tela{left:0;width:100%;height:calc(55% - var(--md-topo,84px))}
   .md-lista{left:8px;right:8px;width:auto;top:55%;bottom:8px;padding:8px}
@@ -492,6 +501,8 @@ body.modelos #tela{position:absolute;top:var(--md-topo,84px);left:300px;width:ca
     </div>
   </div>
 
+  <div class="vista-ed painel" id="vistaEd" hidden><span id="vistaEdFaz"></span><button class="botao" id="vistaEdSair" type="button">Voltar para a vista de cima</button></div>
+  <div class="vista-ed-legenda" id="vistaEdLegenda" hidden></div>
   <div class="mirante-1p painel" id="mirante1p" hidden><span>Arraste para olhar</span><div class="cam-grupo"><button class="cam" id="miranteMenos" type="button" aria-label="Afastar" title="Afastar (-)"><svg viewBox="0 0 24 24" fill="none" stroke="#3b2a20" stroke-width="3.4" stroke-linecap="round"><path d="M5 12h14"/></svg></button><button class="cam" id="miranteMais" type="button" aria-label="Aproximar" title="Aproximar (+)"><svg viewBox="0 0 24 24" fill="none" stroke="#3b2a20" stroke-width="3.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></div><button class="botao" id="miranteDescer" type="button">Descer</button></div>
   <div class="hud-base">
     <div class="fila painel" id="novaVersao" hidden><img data-icone="ed" alt=""><span>Tem novidade na fazenda!</span><button class="botao mini" id="novaVersaoBotao" type="button">atualizar</button></div>
@@ -5311,32 +5322,49 @@ function subirMirante(){
   ed.estado = 'mirante'; ed.pontos = []; ed.aoChegar = null; ed.trab = null; ed.ferramenta(null);
   fecharMenu(); desligarModo();
 }
-function entrarPrimeiraPessoa(){
-  const [cx, cz] = centroMirante(), M = miranteFP;
-  if (!cameraFP){ cameraFP = new THREE.PerspectiveCamera(MIRANTE_1P.fov, innerWidth / innerHeight, 0.05, 300); cameraFP.rotation.order = 'YXZ'; }
+// a primeira pessoa, do mirante e da vista do Ed: a câmera em perspectiva, o chão grande, a névoa e o Ed escondido
+function abrirPrimeiraPessoa(fov, nevoa){
+  if (!cameraFP){ cameraFP = new THREE.PerspectiveCamera(fov, innerWidth / innerHeight, 0.05, 300); cameraFP.rotation.order = 'YXZ'; }
   if (!chaoLonge){
     chaoLonge = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), new THREE.MeshLambertMaterial({ color: 0x5a9a48 }));
     chaoLonge.rotation.x = -Math.PI / 2; chaoLonge.position.set(W / 2, -0.06, H / 2); chaoLonge.receiveShadow = true; scene.add(chaoLonge);
   }
   chaoLonge.visible = true;
-  cameraFP.position.set(cx, MIRANTE_1P.deque + MIRANTE_1P.olho, cz);
-  cameraFP.fov = MIRANTE_1P.fov; cameraFP.updateProjectionMatrix();
-  [scene.fog.near, scene.fog.far] = MIRANTE_1P.nevoa;
+  cameraFP.fov = fov; cameraFP.updateProjectionMatrix();
+  [scene.fog.near, scene.fog.far] = nevoa;
   ed.g.visible = false;
+  document.body.classList.add('primeira-pessoa');
+}
+function fecharPrimeiraPessoa(){
+  scene.fog.near = 1e5; scene.fog.far = 1e5 + 1;
+  if (chaoLonge) chaoLonge.visible = false;
+  document.body.classList.remove('primeira-pessoa');
+  ceuAplicado = '';
+  for (const b of BOLHAS) if (b.userData.fp){ b.visible = true; delete b.userData.fp; }
+  ed.g.visible = true;
+}
+// o céu do fundo acompanha o olhar: em cima a cor do alto, e da linha do horizonte para baixo a cor da névoa (V guarda o
+// último fundo); as bolhas ficam escondidas. Enquanto isso o céu de sempre (atualizarCiclo) não mexe no fundo
+function ceuPrimeiraPessoa(V, pitch){
+  scene.fog.color.copy(LUZ.ceu2);
+  const hz = Math.round(clamp(0.5 + Math.tan(pitch) / (2 * Math.tan(grau(cameraFP.fov) / 2)), 0, 1) * 100);
+  const css = `linear-gradient(180deg,#${LUZ.ceu1.getHexString()} 0%,#${LUZ.ceu2.getHexString()} ${hz}%,#${LUZ.ceu2.getHexString()} 100%)`;
+  if (css !== V.ceu){ V.ceu = css; document.body.style.background = css; }
+  for (const b of BOLHAS) if (b.visible){ b.visible = false; b.userData.fp = true; }
+}
+function entrarPrimeiraPessoa(){
+  const [cx, cz] = centroMirante(), M = miranteFP;
+  abrirPrimeiraPessoa(MIRANTE_1P.fov, MIRANTE_1P.nevoa);
+  cameraFP.position.set(cx, MIRANTE_1P.deque + MIRANTE_1P.olho, cz);
   cam.alvo.set(cx, 0, cz);
-  document.body.classList.add('primeira-pessoa'); $('mirante1p').hidden = false;
+  $('mirante1p').hidden = false;
   M.fase = 'olhando'; M.t = 0;
 }
 function descerMirante(){
   const M = miranteFP;
   if (!M || M.fase !== 'olhando') return;
   Som.clique();
-  scene.fog.near = 1e5; scene.fog.far = 1e5 + 1;
-  if (chaoLonge) chaoLonge.visible = false;
-  document.body.classList.remove('primeira-pessoa'); $('mirante1p').hidden = true;
-  ceuAplicado = '';
-  for (const b of BOLHAS) if (b.userData.fp){ b.visible = true; delete b.userData.fp; }
-  ed.g.visible = true;
+  fecharPrimeiraPessoa(); $('mirante1p').hidden = true;
   M.fase = 'desce'; M.t = 0;
 }
 // girar fica mais lento com o zoom, para a vista não pular
@@ -5367,12 +5395,70 @@ function atualizarMirante1P(dt){
   }
   // lá em cima: a câmera nos olhos do Ed, a névoa com a cor do horizonte e as bolhas escondidas
   cameraFP.rotation.set(M.pitch, M.yaw, 0);
-  scene.fog.color.copy(LUZ.ceu2);
-  // o céu do fundo acompanha o olhar: em cima a cor do alto, e da linha do horizonte para baixo a cor da névoa
-  const hz = Math.round(clamp(0.5 + Math.tan(M.pitch) / (2 * Math.tan(grau(cameraFP.fov) / 2)), 0, 1) * 100);
-  const css = `linear-gradient(180deg,#${LUZ.ceu1.getHexString()} 0%,#${LUZ.ceu2.getHexString()} ${hz}%,#${LUZ.ceu2.getHexString()} 100%)`;
-  if (css !== M.ceu){ M.ceu = css; document.body.style.background = css; }
-  for (const b of BOLHAS) if (b.visible){ b.visible = false; b.userData.fp = true; }
+  ceuPrimeiraPessoa(M, M.pitch);
+}
+// ================= a vista do Ed (o Lucas pediu): tocar no Ed abre o menu dele, com "Ver pela vista do Ed". A vista troca
+// para a câmera em perspectiva do mirante (cameraFP), nos olhos dele, virando junto com ele (devagar, porque ele vira seco
+// nas curvas do caminho). A fazenda continua andando e o Ed continua a fila, mas não dá para tocar em nada: arrastar só vira
+// a cabeça, que volta sozinha para a frente depois de VISTA_ED.volta segundos, e "Voltar para a vista de cima" (ou Esc)
+// sai. Trabalhando ele olha um pouco para baixo e a câmera recua um pouco, para a planta ou a cerca da frente não
+// atravessar a tela. A altura é a do corpo dele (no trator, sentado no banco). Embaixo aparece o que ele
+// está fazendo, e as falas dele viram legenda. Quando começa uma cena (a hora de nanar também é cena), a vista volta
+// para a de cima e a cena usa a câmera dela; se ele sobe no mirante, vale a vista do mirante
+const VISTA_ED = { olho: 0.96, fov: 70, nevoa: [12, 42], segue: 4, avanca: 0.1, recua: -0.28, pitch: -0.08, olharBaixo: -0.38,
+  volta: 3, voltaVel: 2.5, sens: 0.006, legenda: 3.2, balanco: 0.4 };
+let vistaEd = null;
+function entrarVistaEd(){
+  if (vistaEd || cine || miranteFP) return;
+  Som.clique(); fecharMenu(); desligarModo();
+  abrirPrimeiraPessoa(VISTA_ED.fov, VISTA_ED.nevoa);
+  vistaEd = { yaw: ed.ang + Math.PI, pitch: VISTA_ED.pitch, dyaw: 0, dpitch: 0, av: VISTA_ED.avanca, mexeu: 0, ceu: '', txt: '', legendaAte: 0 };
+  $('vistaEd').hidden = false; $('vistaEdLegenda').hidden = true;
+  atualizarVistaEd(0);
+}
+function sairVistaEd(){
+  if (!vistaEd) return;
+  vistaEd = null;
+  fecharPrimeiraPessoa();
+  $('vistaEd').hidden = true; $('vistaEdLegenda').hidden = true;
+  cam.alvo.set(ed.pos.x, 0, ed.pos.y);
+}
+function girarVistaEd(dx, dy){
+  const V = vistaEd; if (!V) return;
+  V.dyaw += dx * VISTA_ED.sens; V.dpitch = clamp(V.dpitch + dy * VISTA_ED.sens, -1.1, 0.8); V.mexeu = performance.now();
+}
+// o que o Ed está fazendo, em poucas palavras (embaixo da vista dele e no menu dele)
+function oQueOEdFaz(){
+  if (trator) return 'Trabalhando com o trator';
+  if (banhoEd) return 'No banho de lama';
+  if (miranteFP) return 'No mirante';
+  const t = tarefaAtual, nf = fila.filter(f => f.tipo !== 'andar' && f !== t).length;
+  let txt = t && t.tipo !== 'andar' && NOMES_ACAO[t.tipo] ? NOMES_ACAO[t.tipo] + (typeof t.param === 'string' && CULTURAS[t.param] ? ' ' + CULTURAS[t.param].nome.toLowerCase() : '')
+    : ed.estado === 'andando' ? 'Andando pela fazenda' : 'Esperando uma tarefa';
+  if (nf) txt += ` · mais ${nf} na fila`;
+  return txt;
+}
+function legendaVistaEd(txt, dur){
+  if (!vistaEd) return;
+  const e = $('vistaEdLegenda'); e.textContent = txt; e.hidden = false;
+  vistaEd.legendaAte = performance.now() + Math.max(dur, VISTA_ED.legenda) * 1000;
+}
+function atualizarVistaEd(dt){
+  const V = vistaEd; if (!V) return;
+  if (cine || miranteFP){ sairVistaEd(); return; }
+  ed.g.visible = false;
+  const R = VISTA_ED, trab = ed.estado === 'trabalhando', k = Math.min(1, dt * 3);
+  V.yaw = anguloPerto(V.yaw, ed.ang + Math.PI, Math.min(1, dt * R.segue));
+  V.pitch += ((trab ? R.olharBaixo : R.pitch) - V.pitch) * k;
+  V.av += ((ed.estado === 'andando' ? R.avanca : trab ? R.recua : 0) - V.av) * k;
+  if (performance.now() - V.mexeu > R.volta * 1000){ const q = Math.min(1, dt * R.voltaVel); V.dyaw -= V.dyaw * q; V.dpitch -= V.dpitch * q; }
+  const fx = -Math.sin(V.yaw), fz = -Math.cos(V.yaw);
+  cameraFP.position.set(ed.pos.x + fx * V.av, ed.g.position.y + R.olho + ed.corpo.position.y * R.balanco, ed.pos.y + fz * V.av);
+  cameraFP.rotation.set(V.pitch + V.dpitch, V.yaw + V.dyaw, 0);
+  cam.alvo.set(ed.pos.x, 0, ed.pos.y);
+  ceuPrimeiraPessoa(V, V.pitch + V.dpitch);
+  const txt = oQueOEdFaz(); if (txt !== V.txt){ V.txt = txt; $('vistaEdFaz').textContent = txt; }
+  if (V.legendaAte && performance.now() > V.legendaAte){ V.legendaAte = 0; $('vistaEdLegenda').hidden = true; }
 }
 // o mirante alto não pode esconder a horta (o Lucas pediu): quando o zoom enquadra um terreno de canteiros (o meio da tela
 // dentro do terreno, com folga, e a câmera mais perto que MIRANTE_VISAO.vista) e a torre cobre na tela um canteiro dele que
@@ -6701,10 +6787,12 @@ function vSpa(){
   return v;
 }
 // ================= os porcos visitantes do spa (o Lucas pediu): porcos de verdade, de quatro patas, com cor, padrão,
-// orelha, focinho e tamanho sorteados pela semente (tracosPorcoSpa). Cubinhos de 1/30, de frente para +z. Peças à parte para
-// andar: o corpo (com a cabeça e o rabinho) e uma pata, que vai quatro vezes, pendurada no quadril (y 5). Com lama, o barro
-// cobre a barriga e as patas (a ducha tira). Os pepinos dos olhos (vPepinos) aparecem na espreguiçadeira
-const PORCO_SPA = { escala: 1 / 30, sementes: 64, quadril: 5, pernas: [[-3.5, 5.5], [3.5, 5.5], [-3.5, -5.5], [3.5, -5.5]], olho: [2, 11, 13],
+// orelha, focinho e tamanho sorteados pela semente (tracosPorcoSpa). Cubinhos de 1/60 (eram de 1/30 e ficavam estranhos no
+// jogo; o Lucas pediu mais detalhe), de frente para +z. Peças à parte para andar: o corpo (com a cabeça, as orelhas e o
+// rabinho enrolado) e uma pata curta e redonda com casco, que vai quatro vezes, pendurada no quadril (y 8). Com lama, o barro
+// cobre a barriga e as patas (a ducha tira). Os pepinos dos olhos aparecem na espreguiçadeira. olho: o canto de dentro do
+// olho direito (2 × 2 cubinhos, para fora em x)
+const PORCO_SPA = { escala: 1 / 60, sementes: 64, quadril: 8, pernas: [[-6.5, 8.5], [6.5, 8.5], [-6.5, -9.5], [6.5, -9.5]], olho: [4, 19, 22],
   cores: [
     { nome: 'rosa', c: 0xf3b4ac, claro: true }, { nome: 'rosinha', c: 0xf9d3c9, claro: true }, { nome: 'branco', c: 0xf7f0e6, claro: true },
     { nome: 'creme', c: 0xecd6aa, claro: true }, { nome: 'ruivo', c: 0xc9692f }, { nome: 'marrom', c: 0x8c4f2e },
@@ -6724,10 +6812,10 @@ function tracosPorcoSpa(seed){
   if (padrao === 'listras'){ b = C[r(4) < 0.5 ? 4 : 5]; cor2 = C[3]; }
   if (padrao === 'meias' && b.claro){ b = C[6]; cor2 = C[2]; }
   return { base: b, cor2, padrao, orelha: r(5) < 0.45 ? 'caida' : 'pe', peludo: padrao !== 'listras' && r(6) < 0.18, tam: padrao === 'listras' ? 0.78 : 0.86 + r(7) * 0.3,
-    focinho: padrao === 'meias' ? 0xf3e8dc : b.claro ? 0xf0a0a0 : 0x6a5555, narina: b.claro || padrao === 'meias' ? 0x9a4a4a : 0x2a2020, seed };
+    focinho: padrao === 'meias' ? 0xf3e8dc : b.claro ? 0xf0a0a0 : { ruivo: 0xb5654a, marrom: 0x8a5040, preto: 0x6a5050, cinza: 0xb09090 }[b.nome] || 0x8a5040, narina: b.claro || padrao === 'meias' ? 0x9a4a4a : 0x2a2020, seed };
 }
 function descricaoPorcoSpa(T){
-  const o = T.orelha === 'caida' ? 'orelhas caídas' : 'orelhas em pé', p = T.peludo ? ', bem peludo' : '';
+  const o = T.orelha === 'caida' ? 'orelhas caídas' : 'orelhas em pé', p = T.peludo ? ', com crina de pelos' : '';
   // a cor da cinta, da mancha e das pintas concorda com elas (preta, pretas)
   const fem = { preto: 'preta', branco: 'branca', ruivo: 'ruiva' }, c2 = T.cor2.nome, f1 = fem[c2] || c2, f2 = fem[c2] ? fem[c2] + 's' : c2 === 'marrom' ? 'marrons' : c2;
   const txt = { liso: `${T.base.nome}`, malhado: `malhado de ${T.base.nome} e ${c2}`, pintas: `${T.base.nome} com pintas ${f2}`,
@@ -6736,50 +6824,86 @@ function descricaoPorcoSpa(T){
   return `${txt[0].toUpperCase()}${txt.slice(1)}, ${o}${p}.`;
 }
 function vPorcoSpa(seed, parte = 'corpo', sujo = false){
-  const v = new Vox(), T = tracosPorcoSpa(seed), c1 = T.base.c, c2 = T.cor2.c;
-  const manchas = []; for (let i = 0; i < 4; i++) manchas.push([hash(seed, 10 + i, 3) * 10 - 5, 6 + hash(seed, 20 + i, 3) * 8, hash(seed, 30 + i, 3) * 22 - 9, 2.6 + hash(seed, 40 + i, 3) * 2.4]);
-  const pintas = []; for (let i = 0; i < 14; i++) pintas.push([hash(seed, 50 + i, 3) * 12 - 6, 5 + hash(seed, 70 + i, 3) * 11, hash(seed, 90 + i, 3) * 24 - 10, 1.1 + hash(seed, 110 + i, 3) * 0.8]);
+  const v = new Vox(), T = tracosPorcoSpa(seed), c1 = T.base.c, c2 = T.cor2.c, [ex, ey, ez] = PORCO_SPA.olho;
+  // as manchas grandes do malhado e as pintas: esferas que cortam a pele do corpo
+  // um ponto da pele do corpo (de cima ou dos lados), para as manchas e as pintas não sumirem lá dentro
+  const naPele = (a, b, c) => { const x = (a * 2 - 1) * 10, z = (b * 2 - 1) * 14 - 1, k = Math.sqrt(Math.max(0, 1 - (x / 10.6) ** 2 - ((z + 1) / 15) ** 2)); return [x, 15 + 10.2 * k * (c < 0.25 ? -0.4 : 1), z]; };
+  const manchas = []; for (let i = 0; i < 4; i++) manchas.push([...naPele(hash(seed, 10 + i, 3), hash(seed, 30 + i, 3), hash(seed, 20 + i, 3)), 5.5 + hash(seed, 40 + i, 3) * 3.5]);
+  const pintas = []; for (let i = 0; i < 24; i++) pintas.push([...naPele(hash(seed, 50 + i, 3), hash(seed, 90 + i, 3), hash(seed, 70 + i, 3)), 1.8 + hash(seed, 110 + i, 3) * 1.4]);
   const olhoE = hash(seed, 8, 91) < 0.5 ? -1 : 1;
   const pele = (x, y, z) => {
     const P = T.padrao;
     if (P === 'malhado' && manchas.slice(0, 3).some(([mx, my, mz, r]) => (x - mx) ** 2 + (y - my) ** 2 + (z - mz) ** 2 <= r * r)) return c2;
     if (P === 'pintas' && pintas.some(([mx, my, mz, r]) => (x - mx) ** 2 + (y - my) ** 2 + (z - mz) ** 2 <= r * r)) return c2;
-    if (P === 'cinta' && z >= 1 && z <= 5) return c2;
-    if (P === 'mancha' && (x - olhoE * 2) ** 2 + (y - 11) ** 2 + (z - 12.5) ** 2 <= 6.5) return c2;
-    if (P === 'listras' && y >= 8 && z < 7 && Math.abs(x) % 3 === 1) return c2;
+    if (P === 'cinta' && z >= 1 && z <= 8) return c2;
+    if (P === 'mancha' && (x - olhoE * (ex + 0.5)) ** 2 + (y - ey - 0.5) ** 2 + (z - ez) ** 2 <= 20) return c2;
+    // as listras do leitãozinho correm ao comprido, pelas costas e pelos lados
+    if (P === 'listras' && y >= 10 && z < 9 && Math.floor((Math.atan2(y - 15, x) + Math.PI) / (Math.PI / 10)) % 2) return c2;
     return c1;
   };
   // o barro da lama: a barriga e um pouco dos lados, com respingos mais para cima
-  const barro = (x, y, z, c) => { if (!sujo) return c; const h = hash(x * 3 + 1, y, z * 5); return (y < 7.5 && h < 0.85) || h < 0.1 ? (h < 0.3 ? 0x5e3a22 : 0x7a5232) : c; };
+  const barro = (x, y, z, c) => { if (!sujo) return c; const h = hash(x * 3 + 1, y, z * 5); return (y < 11 && h < 0.85) || h < 0.08 ? (h < 0.3 ? 0x5e3a22 : 0x7a5232) : c; };
   if (parte === 'pata'){
-    // a pata pendurada no quadril: o pé fica em y -5, com o casco escuro
-    const cor = T.padrao === 'meias' ? c2 : T.padrao === 'cinta' && seed % 2 ? c2 : c1;
-    v.box(-1, -5, -1, 0, -1, 0, (x, y) => y <= -5 ? (sujo ? 0x3e2a1a : 0x4a3a32) : sujo && y <= -2 ? 0x6e4628 : cor);
+    // a pata pendurada no quadril: redonda (4 × 4 sem os cantos), com o casco escuro embaixo
+    const cor = T.padrao === 'meias' ? c2 : T.padrao === 'cinta' && seed % 2 ? c2 : c1, casco = sujo ? 0x3e2a1a : 0x4a3a32;
+    for (let x = -2; x <= 1; x++) for (let z = -2; z <= 1; z++){
+      if ((x === -2 || x === 1) && (z === -2 || z === 1)) continue;
+      for (let y = -8; y <= -1; y++) v.set(x, y, z, y <= -7 ? casco : sujo && y <= -3 ? 0x6e4628 : cor);
+    }
     return v;
   }
   if (parte === 'pepinos'){
-    // as rodelas de pepino nos olhos, de quem está na espreguiçadeira
-    const [ex, ey, ez] = PORCO_SPA.olho;
-    for (const s of [-1, 1]) for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) v.set(s * ex + dx, ey + dy, ez + 1, dx || dy ? 0x6aa84f : 0xd8f0a8);
+    // as rodelas de pepino nos olhos, de quem está na espreguiçadeira: verde-claro no meio e a casca na volta
+    for (const s of [-1, 1]) for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++){
+      if ((i === 0 || i === 3) && (j === 0 || j === 3)) continue;
+      v.set(s * (ex - 1 + i), ey - 1 + j, ez + 1, (i === 1 || i === 2) && (j === 1 || j === 2) ? 0xd8f0a8 : 0x6aa84f);
+    }
     return v;
   }
-  // o corpo, a cabeça redonda colada nele e o focinho achatado com as narinas
-  v.ell(0, 9, 0, 5.2, 4.8, 8.6, (x, y, z) => barro(x, y, z, pele(x, y, z)), (x, y) => y >= 4);
-  v.ell(0, 10.5, 9.4, 4.3, 4.2, 3.6, (x, y, z) => barro(x, y, z, pele(x, y, z)));
-  v.ell(0, 9.6, 13.4, 2.4, 2, 1.3, (x, y, z) => barro(x, y, z, T.focinho));
-  v.set(-1, 9, 14, T.narina); v.set(1, 9, 14, T.narina);
-  const [ex, ey, ez] = PORCO_SPA.olho;
-  for (const s of [-1, 1]){ v.set(s * ex, ey, ez, 0x1a1414); v.set(s * ex, ey + 1, ez, pele(s * ex, ey + 1, ez)); }
-  // as orelhas: em pé (triângulo para cima) ou caídas (abas para a frente, por cima dos olhos)
-  const corOrelha = (x, y, z) => T.padrao === 'mancha' && Math.sign(x) === olhoE ? c2 : T.padrao === 'malhado' && manchas[3][3] > 4 ? c2 : c1;
+  const pintar = (x, y, z) => barro(x, y, z, pele(x, y, z));
+  // a pele mais à frente em (x, y): onde vão o olho, a narina e a bochecha
+  const frente = (x, y) => { for (let z = 40; z > 0; z--) if (v.has(x, y, z)) return z; return null; };
+  // o corpo, um barril redondo e curto com a barriga um pouco reta, e a cabeça grande e redonda colada nele
+  v.ell(0, 15, -1, 10.6, 10.2, 15, pintar, (x, y) => y >= 5);
+  v.ell(0, 18, 15.5, 9, 8.8, 7.6, pintar);
+  // o focinho: um disco achatado, com as narinas fundas
+  v.ell(0, 16, 23.6, 4.8, 4, 2.6, (x, y, z) => barro(x, y, z, T.focinho));
+  for (const x of [-2, 2]) for (const y of [15, 16]){ const z = frente(x, y); v.set(x, y, z, T.narina); v.set(x, y, z - 1, T.narina); }
+  // os olhos pretos com um brilho, e a bochecha rosada nos porcos claros
   for (const s of [-1, 1]){
-    if (T.orelha === 'pe'){ v.box(s * 2, 14, 8, s * 4, 14, 9, corOrelha); v.box(s * 3, 15, 8, s * 4, 15, 9, corOrelha); v.set(s * 4, 16, 8, corOrelha(s, 0, 0)); v.set(s * 3, 14, 10, 0xf2a6a6); }
-    else { v.box(s * 2, 13, 9, s * 4, 14, 10, corOrelha); v.box(s * 3, 12, 11, s * 5, 13, 12, corOrelha); v.set(s * 4, 11, 12, corOrelha(s, 0, 0)); }
+    for (const dx of [0, 1]) for (const dy of [0, 1]){ const x = s * (ex + dx), y = ey + dy; v.set(x, y, frente(x, y), dx === 0 && dy === 1 ? 0xffffff : 0x1a1414); }
+    if (T.base.claro && T.padrao !== 'mancha') for (const dx of [2, 3]){ const x = s * (ex + dx), y = ey - 3; v.set(x, y, frente(x, y), 0xf08c8c); }
   }
-  // o rabinho enrolado
-  for (const [x, y, z] of [[0, 10, -9], [0, 11, -10], [1, 12, -10], [1, 13, -9], [0, 13, -9], [-1, 12, -9]]) v.set(x, y, z, T.padrao === 'meias' ? c2 : barro(x, y, z, c1));
-  // o porco peludo: tufos para fora em parte da pele
-  if (T.peludo) tufosLuma(v, 0, 9, 0, e => e.y >= 6 && e.z < 12 && e.c !== 0x1a1414, 0.35);
+  // as orelhas: em pé (triângulo com o lado de dentro rosado, um pouco para fora e para a frente) ou caídas (abas que vêm
+  // para a frente e descem até em cima dos olhos)
+  const corOrelha = (x, y, z) => T.padrao === 'mancha' && Math.sign(x) === olhoE ? c2 : T.padrao === 'malhado' && manchas[3][3] > 7.5 ? c2 : barro(x, y, z, c1);
+  const dentro = T.base.claro ? 0xf2a0a0 : 0xd48a8a;
+  for (const s of [-1, 1]){
+    if (T.orelha === 'pe'){
+      [[2, 7], [2, 7], [3, 7], [3, 7], [4, 7], [5, 7], [6, 7]].forEach(([a, b], h) => {
+        const y = 24 + h, z = 12 + Math.floor(h * 0.7);
+        for (let x = a; x <= b; x++){ v.set(s * x, y, z, corOrelha(s * x, y, z)); v.set(s * x, y, z + 1, x > a && x < b && h < 5 ? dentro : corOrelha(s * x, y, z + 1)); }
+      });
+    } else {
+      for (let z = 13; z <= 21; z++){
+        const y = Math.round(25.5 - (z - 13) * 0.5), a = z >= 19 ? 4 : 3, b = z >= 20 ? 6 : 7;
+        for (let x = a; x <= b; x++){ v.set(s * x, y, z, corOrelha(s * x, y, z)); v.set(s * (x + 1), y - 1, z, corOrelha(s * x, y, z)); }
+      }
+    }
+  }
+  // o rabinho enrolado, saindo do alto das costas
+  const corRabo = T.padrao === 'meias' ? c2 : c1;
+  for (const [x, y, z] of [[0, 17, -16], [0, 18, -17]]) v.set(x, y, z, barro(x, y, z, corRabo));
+  for (let k = 0; k <= 13; k++){
+    const a = -Math.PI / 2 + k * 0.55, r = 2.4 - k * 0.09, x = Math.round(Math.cos(a) * r), y = Math.round(20.5 + Math.sin(a) * r), z = k > 7 ? -19 : -18;
+    v.set(x, y, z, barro(x, y, z, corRabo));
+  }
+  // o porco peludo: uma crina de pelos espetados no alto das costas, da cabeça ao rabo (pelo no corpo todo parecia carneiro)
+  if (T.peludo) for (const e of [...v.m.values()]){
+    if (Math.abs(e.x) > 2 || e.z > 18 || e.y < 22 || v.has(e.x, e.y + 1, e.z) || hash(e.x * 3 + 1, e.y * 5, e.z * 7) > 0.6) continue;
+    const h = 1 + Math.floor(hash(e.x, e.z, 13) * 2.5);
+    for (let k = 1; k <= h; k++) v.set(e.x, e.y + k, e.z - (k > 1 ? 1 : 0), e.c);
+  }
   return v;
 }
 // o porco inteiro, com as quatro patas no lugar, para ícone e visualizador
@@ -11170,6 +11294,8 @@ function terminarBanhoEd(cancelado){
 }
 function construirPersonagens(){
   ed = new Porco(COR.ed, COR.edBolso, 'ed'); ed.colocar(6.5, 5.5); ed.ang = ed.angAlvo = 0.6; scene.add(ed.g);
+  // tocar no Ed abre o menu dele (a vista do Ed); como os objetos altos, ele não esconde o canteiro atrás dele
+  ed.g.traverse(o => { o.userData.alvo = { k: 'ed' }; }); pickaveis.push(ed.g);
   const gMochila = geo('mochila', () => vMochila().build(1 / 57, { origin: [0.5, 0, 0.5], jitter: 0.015, ao: AO_SUAVE }));
   ed.mochila = malha(gMochila); ed.mochila.visible = false; ed.corpo.add(ed.mochila);
   mochilaChao = malha(gMochila); mochilaChao.visible = false; scene.add(mochilaChao);
@@ -13419,6 +13545,7 @@ function pedirCena(id){
   return true;
 }
 function iniciarCine(id, reprise){
+  sairVistaEd();
   fecharMenu(); desligarModo(); marcaHover.visible = false;
   if (cenaPedida === id) cenaPedida = null;
   const cena = CENAS[id];
@@ -14877,7 +15004,7 @@ function atualizarCiclo(dt){
   LUZES_NOITE.forEach((l, j) => { const q = pts[j]; l.intensity = q ? n * 1.3 : 0; if (q) l.position.set(q[0], q[1], q[2]); });
   // céu do fundo e estrelas (só mexe no CSS quando a cor muda de verdade)
   const css = `linear-gradient(180deg,#${LUZ.ceu1.getHexString()},#${LUZ.ceu2.getHexString()})`;
-  if (css !== ceuAplicado){ ceuAplicado = css; document.body.style.background = css; }
+  if (css !== ceuAplicado && !document.body.classList.contains('primeira-pessoa')){ ceuAplicado = css; document.body.style.background = css; }
   if (n > 0.02 && estrelasFeitas !== innerWidth * 10000 + innerHeight) desenharEstrelas();
   $('estrelas').style.opacity = n.toFixed(2);
   const q = periodo();
@@ -16619,6 +16746,7 @@ function flutuar(pos, txt, classe = '', ic){
 }
 const FALAS = [];
 function falar(quem, txt, dur = 2){
+  if (vistaEd && quem === ed) legendaVistaEd(txt, dur);
   for (const f of FALAS.filter(f => f.quem === quem)){ f.el.remove(); FALAS.splice(FALAS.indexOf(f), 1); }
   const e = document.createElement('div');
   e.className = 'fala ' + (quem.nome || ''); e.textContent = txt;
@@ -16843,7 +16971,13 @@ function itensDoAlvoBase(alvo){
     r.itens.push({ rotulo: 'Comprar ração', icone: 'racao', fn: () => abrirLoja('racao') });
     return r;
   }
-  if (alvo.k === 'ed'){ falar(ed, variar(FALAS_ED), 2); Som.oinc(); return null; }
+  // o Ed: um oinc, uma fala, o que ele está fazendo e a vista dele
+  if (alvo.k === 'ed'){
+    falar(ed, variar(FALAS_ED), 2); Som.oinc();
+    r.titulo = 'Ed'; r.icone = 'ed'; r.estado = oQueOEdFaz() + '.';
+    r.itens.push({ rotulo: 'Ver pela vista do Ed', sub: 'a fazenda na altura dele; ele continua o que estava fazendo', icone: 'ed', off: !!miranteFP, fn: entrarVistaEd });
+    return r;
+  }
   if (alvo.k === 'floresta') return itensFloresta(alvo.x, alvo.z);
   if (alvo.k === 'parcela') return itensParcela(alvo.p);
   if (alvo.k === 'canto') return itensCanto();
@@ -17759,6 +17893,7 @@ function mostrarAjuda(intro, aba){
     <p>Este é o Ed. Ele cuida da fazendinha e o irmão dele, o Beto, tem um mercado na cidade: o Joli Market.</p>
     <ol class="passos">
       <li><b>Toque no chão</b> para ver o que dá para fazer. O Ed anda até lá e faz.</li>
+      <li><b>Toque no Ed</b> para ver a fazenda pela vista dele, na altura dele. Ele continua o que estava fazendo; arraste para olhar em volta.</li>
       <li><b>Are, plante e regue.</b> A semente precisa de água para brotar; as culturas curtas pedem mais água no meio do caminho. Se nascer mato, tire. Na lista de sementes, o número ao lado do nome diz quantos canteiros já têm a planta, a estrela marca a que rende mais por canteiro hoje e o fundo azul marca o que ainda falta para os pedidos.</li>
       <li><b>Cuide dos bichos.</b> Galinhas e vacas comem ração e dão ovos e leite.</li>
       <li><b>Aposentadoria</b>${nv(APOSENTA.nivel)}: uma galinha que passa de ${APOSENTA.ovos} ovos pode se aposentar (no máximo uma a cada ${APOSENTA.minutos[0]} a ${APOSENTA.minutos[1]} minutos de jogo, de dia). O Ed paga um bônus de ${reais(APOSENTA.porOvo)} por ovo, ela vai embora e abre uma vaga no galinheiro. De vez em quando, uma aposentada manda um cartão-postal da praia.</li>
@@ -17883,7 +18018,7 @@ function atualizarDica(){
 
 // ================= entrada
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), planoChao = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), ptChao = new THREE.Vector3();
-const FUNDO_DE_CANTEIRO = ['irrigador', 'enfeite', 'arvore', 'alimentador', 'coletor', 'maca', 'trufa'];
+const FUNDO_DE_CANTEIRO = ['irrigador', 'enfeite', 'arvore', 'alimentador', 'coletor', 'maca', 'trufa', 'ed'];
 const planoCanteiro = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.12), ptCanteiro = new THREE.Vector3();
 function canteiroAtras(obj){
   if (!ray.ray.intersectPlane(planoCanteiro, ptCanteiro)) return null;
@@ -17909,6 +18044,8 @@ function alvoNaTela(cx, cy){
     let o = h.object, vis = true;
     for (let p = o; p; p = p.parent) if (p.visible === false) vis = false;
     if (!vis || !o.userData.alvo) continue;
+    // com uma ação escolhida para os próximos toques, o Ed não atrapalha: o toque passa por ele
+    if (modo && o.userData.alvo.k === 'ed') continue;
     // objetos altos (irrigador, enfeites, árvores, alimentador) não podem esconder os canteiros atrás deles:
     // se o toque passa por cima do objeto e cai num canteiro, vale o canteiro; o objeto só é escolhido tocando na base dele
     if (FUNDO_DE_CANTEIRO.includes(o.userData.alvo.k)){
@@ -17978,6 +18115,13 @@ function eventos(){
   });
   canvas.addEventListener('pointermove', e => {
     const p = ponteiros.get(e.pointerId);
+    // na vista do Ed, arrastar só vira a cabeça dele
+    if (vistaEd){
+      if (!p) return;
+      const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+      if (ponteiros.size === 1) girarVistaEd(dx, dy);
+      return;
+    }
     if (miranteFP && miranteFP.fase === 'olhando'){
       if (!p) return;
       const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
@@ -18018,13 +18162,13 @@ function eventos(){
   const solta = e => {
     if (!ponteiros.has(e.pointerId)) return;
     ponteiros.delete(e.pointerId);
-    if (e.type === 'pointerup' && !arrastou && ponteiros.size === 0 && !miranteFP) tocou(e.clientX, e.clientY);
+    if (e.type === 'pointerup' && !arrastou && ponteiros.size === 0 && !miranteFP && !vistaEd) tocou(e.clientX, e.clientY);
     if (ponteiros.size === 0){ pinca = 0; pintura = null; }
   };
   canvas.addEventListener('pointerup', solta);
   canvas.addEventListener('pointercancel', solta);
   canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') marcaHover.visible = false; });
-  canvas.addEventListener('wheel', e => { e.preventDefault(); if (cine) return; if (miranteFP){ zoomMirante(Math.exp(e.deltaY * 0.001)); return; } zoom(Math.exp(e.deltaY * 0.0012)); fecharMenu(); }, { passive: false });
+  canvas.addEventListener('wheel', e => { e.preventDefault(); if (cine || vistaEd) return; if (miranteFP){ zoomMirante(Math.exp(e.deltaY * 0.001)); return; } zoom(Math.exp(e.deltaY * 0.0012)); fecharMenu(); }, { passive: false });
   $('cineDialogo').addEventListener('click', avancarCine);
   $('cinePular').addEventListener('click', e => { e.stopPropagation(); pularCine(); });
   addEventListener('resize', () => { redimensionar(); fecharMenu(); ajustarCameraCtl(); });
@@ -18046,6 +18190,7 @@ function eventos(){
   $('hudPill').addEventListener('click', () => { Som.clique(); mostrarAjuda(false, 'ajuda'); });
   $('urgentePill').addEventListener('click', ev => { ev.stopPropagation(); irAoUrgente(); });
   $('miranteDescer').addEventListener('click', descerMirante);
+  $('vistaEdSair').addEventListener('click', () => { Som.clique(); sairVistaEd(); });
   $('miranteMais').addEventListener('click', () => { Som.clique(); zoomMirante(0.75); });
   $('miranteMenos').addEventListener('click', () => { Som.clique(); zoomMirante(1 / 0.75); });
   $('daniPill').addEventListener('click', () => { Som.clique(); mostrarAjuda(false, 'ajuda'); });
@@ -18060,7 +18205,7 @@ function eventos(){
   document.addEventListener('pointerdown', e => { if (menuAberto && !$('menu').contains(e.target) && e.target !== canvas) fecharMenu(); });
   addEventListener('keydown', e => {
     if (cine){ if (e.key === 'Escape') pularCine(); else if (e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); avancarCine(); } return; }
-    if (e.key === 'Escape'){ if (algumaJanela()) fecharJanela(); else if (menuAberto) fecharMenu(); else if (modo) desligarModo(); else if (miranteFP) descerMirante(); return; }
+    if (e.key === 'Escape'){ if (algumaJanela()) fecharJanela(); else if (menuAberto) fecharMenu(); else if (modo) desligarModo(); else if (miranteFP) descerMirante(); else if (vistaEd) sairVistaEd(); return; }
     if (algumaJanela() || e.target.tagName === 'INPUT') return;
     const k = e.key.toLowerCase(), passo = 30;
     // lá em cima no mirante: + e − aproximam, as setas giram e Esc desce
@@ -18069,6 +18214,12 @@ function eventos(){
       if (k === '+' || k === '=') zoomMirante(0.85); else if (k === '-') zoomMirante(1 / 0.85);
       else if (k === 'arrowleft' || k === 'a') girarMirante(-40, 0); else if (k === 'arrowright' || k === 'd') girarMirante(40, 0);
       else if (k === 'arrowup' || k === 'w') girarMirante(0, -30); else if (k === 'arrowdown' || k === 's') girarMirante(0, 30);
+      return;
+    }
+    // na vista do Ed as setas viram a cabeça dele
+    if (vistaEd){
+      if (k === 'arrowleft' || k === 'a') girarVistaEd(-40, 0); else if (k === 'arrowright' || k === 'd') girarVistaEd(40, 0);
+      else if (k === 'arrowup' || k === 'w') girarVistaEd(0, -30); else if (k === 'arrowdown' || k === 's') girarVistaEd(0, 30);
       return;
     }
     if (k === 'q') girar(-1); else if (k === 'e') girar(1);
@@ -18146,7 +18297,7 @@ function quadro(agoraP){
   atualizarCurupira(dt, t);
   atualizarGuardiao(dt, t);
   atualizarUrgente();
-  atualizarMirante1P(dt); atualizarVisaoMirante(dt);
+  atualizarMirante1P(dt); atualizarVisaoMirante(dt); atualizarVistaEd(dt);
   atualizarTrilha(dt, t);
   atualizarNanos(dt, t);
   if (pelucio.g.visible) pelucio.update(dt, t);
@@ -18185,7 +18336,7 @@ function quadro(agoraP){
   atualizarFalas();
   if (menuAberto && ['tile', 'animal', 'predio', 'pomar', 'colmeia', 'pomarLote', 'cercadoLote', 'obraLote', 'coletor', 'composteira', 'mata'].includes(menuAberto.alvo.k) && Math.floor(t * 2) !== Math.floor((t - dt) * 2)) atualizarEstadoMenu();
   tSalvo += dt; if (tSalvo > 6){ tSalvo = 0; verificarFigurinhas(); salvar(); }
-  renderer.render(scene, miranteFP && miranteFP.fase === 'olhando' ? cameraFP : camera);
+  renderer.render(scene, (miranteFP && miranteFP.fase === 'olhando') || vistaEd ? cameraFP : camera);
 }
 function atualizarEstadoMenu(){
   const r = itensDoAlvo(menuAberto.alvo);
@@ -18346,6 +18497,7 @@ async function iniciar(){
     arraia: { ARRAIA, obj: () => arraia, rojao, falas: FALAS_ARRAIA },
     abrirMenu: (alvo, x = 300, y = 300) => abrirMenu(alvo, x, y),
     miranteVisao: { V: visaoMirante, cobre: () => miranteCobre(), topo: () => miranteTopo, MIRANTE_VISAO },
+    vistaEd: { entrar: entrarVistaEd, sair: sairVistaEd, girar: girarVistaEd, obj: () => vistaEd, cam: () => cameraFP, faz: oQueOEdFaz, VISTA_ED },
     mirante1p: { subir: subirMirante, descer: descerMirante, girar: girarMirante, zoom: zoomMirante, obj: () => miranteFP, cam: () => cameraFP, M1P: MIRANTE_1P },
     enfeitesNovos: { aves, ave: () => { aves.prox = 0; }, AJUDA, vis: () => ENF_VIS, casinha: () => casinhaParaLuma(), piquenique: () => lugarPiquenique(), montar: e => montarEnfeite(e), FOGUEIRA, LAGUINHO, DESEJO, aquecer, inverno: invernoAgora, assento: assentoFogueira, frentePoco, fazerDesejo, itens: e => itensEnfeite(e), formas: formasLiberadas, grupoComForma },
     cartaoEspaco: { chegar: chegarCartaoEspaco, nomes: nomesNoEspaco, CARTAO_ESPACO },
@@ -18457,7 +18609,7 @@ function catalogoModelos(){
       p.g.userData.anima(0, 0);
       return p.g;
     } }] }] },
-    { nome: 'Bichos', itens: [um('Galinha', vGalinha), um('Galinha aposentada', vGalinhaAposentada), um('Galo', vGalo), um('Pintinho', vPintinho), um('Pato', vPato), um('Curupira', vCurupira), um('Vaca', vVaca), um('Vaca de volta do espaço', () => vVaca(true)), varios('Porcos do spa', [...Array(16).keys()].map(i => [`${i + 1}: ${descricaoPorcoSpa(tracosPorcoSpa(i))}`, () => vPorcoSpaInteiro(i)])), varios('Porco do spa sujo de lama', [0, 5, 9, 14].map(i => [descricaoPorcoSpa(tracosPorcoSpa(i)), () => vPorcoSpaInteiro(i, true)])), um('Minhoca', vMinhoca), um('Bugio', vBugio), um('Jaguatirica', vJaguatirica), um('Tucano', vTucano), um('Papagaio', vPapagaio), um('Cobra-coral', vCobraCoral)] },
+    { nome: 'Bichos', itens: [um('Galinha', vGalinha), um('Galinha aposentada', vGalinhaAposentada), um('Galo', vGalo), um('Pintinho', vPintinho), um('Pato', vPato), um('Curupira', vCurupira), um('Vaca', vVaca), um('Vaca de volta do espaço', () => vVaca(true)), varios('Porcos do spa', [...Array(16).keys()].map(i => [descricaoPorcoSpa(tracosPorcoSpa(i)), () => vPorcoSpaInteiro(i)])), varios('Porco do spa sujo de lama', [0, 5, 9, 14].map(i => [descricaoPorcoSpa(tracosPorcoSpa(i)), () => vPorcoSpaInteiro(i, true)])), um('Minhoca', vMinhoca), um('Bugio', vBugio), um('Jaguatirica', vJaguatirica), um('Tucano', vTucano), um('Papagaio', vPapagaio), um('Cobra-coral', vCobraCoral)] },
     { nome: 'Canteiros', itens: [...Object.keys(CULTURAS).map(k => { const C = CULTURAS[k]; return varios(C.nome, [['Semente', () => vPlanta(k, 0)], ['Muda', () => vPlanta(k, 1)], ['Crescendo', () => vPlanta(k, 2)], ['Pronta', () => vPlanta(k, 3)], ...produto(uso(C.produto || k))], 3); }), um('Mato', vMato), varios('Solo', [['Seco', () => vSolo(false, false)], ['Molhado', () => vSolo(true, false)], ['Adubado', () => vSolo(false, true)]])] },
     { nome: 'Pomar', itens: Object.keys(FRUTIFERAS).map(k => { uso(k); return varios(FRUTIFERAS[k].nome, [['Com fruta', () => vFrutifera(k, true)], ['Sem fruta', () => vFrutifera(k, false)], ...produto(uso(FRUTIFERAS[k].fruta))]); }) },
     { nome: 'Floresta', itens: [varios('Matagal', [['Capim alto', () => vMatagal(0)], ['Moita', () => vMatagal(1)], ['Capim e pedra', () => vMatagal(2)], ['Tronco caído', () => vMatagal(3)]]), ...Object.keys(NATIVAS).map(k => { uso(k); return varios(NATIVAS[k].nome, [['Com fruto', () => vNativa(k, true)], ['Sem fruto', () => vNativa(k, false)], ...produto(uso(NATIVAS[k].produto))]); }), varios('Mata', [[ 'Copa redonda', () => vCopa(0)], ['Copa alta', () => vCopa(1)], ['Copa larga', () => vCopa(2)]])] },
@@ -18506,7 +18658,7 @@ function iniciarModelos(){
   let atual = null, atualObj = null, atualV = 0;
   document.body.insertAdjacentHTML('beforeend', `<aside class="md-lista painel"><a href="./">← voltar para o jogo</a><h1>Modelos 3D</h1>
     <input id="mdBusca" type="search" placeholder="buscar modelo" aria-label="Buscar modelo"><div class="md-itens" id="mdItens">${itens.map((it, i) => `${i === 0 || itens[i - 1].grupo !== it.grupo ? `<h2 data-g="${esc(it.grupo)}">${esc(it.grupo)}</h2>` : ''}<button class="md-item" type="button" data-i="${i}"><i></i><span>${esc(it.nome)}</span></button>`).join('')}</div></aside>
-    <div class="md-info painel"><div><h2 id="mdNome"></h2><small id="mdDados"></small></div><div class="md-chips" id="mdChips"></div></div>`);
+    <div class="md-info painel"><div><h2 id="mdNome"></h2><small id="mdDados"></small><p class="md-var" id="mdVar" hidden></p></div><div class="md-chips" id="mdChips"></div></div>`);
   const botoes = [...document.querySelectorAll('.md-item')];
   const enquadrar = () => { const b = new THREE.Box3().setFromObject(atualObj), t = b.getSize(new THREE.Vector3()); b.getCenter(orb.alvo); orb.r = Math.max(0.05, t.length() / 2); orb.d = orb.r / Math.sin(camera.fov * Math.PI / 360) * 1.12 / Math.min(1, canvas.clientWidth / canvas.clientHeight); orb.el = 0.4; };
   function mostrar(i, v, rolar){
@@ -18518,7 +18670,11 @@ function iniciarModelos(){
     atualObj.traverse(o => { if (o.isMesh && o.geometry.index) tris += o.geometry.index.count / 3; cubos += o.userData.cubos || 0; });
     $('mdNome').textContent = it.nome;
     $('mdDados').textContent = `${it.grupo}${cubos ? ` · ${cubos.toLocaleString('pt-BR')} cubinhos` : ''} · ${tris.toLocaleString('pt-BR')} triângulos`;
-    const vs = it.variantes.length > 1 ? it.variantes.map((x, k) => `<button class="botao mini claro" type="button" data-v="${k}" aria-pressed="${k === v}">${esc(x.nome)}</button>`).join('') : '';
+    // muitas variações de nome comprido (os porcos do spa) viram botões numerados, e o nome da escolhida aparece embaixo do
+    // título; senão a lista tampava o modelo no celular (o Lucas pediu)
+    const longas = it.variantes.length > 1 && (it.variantes.reduce((a, x) => a + x.nome.length, 0) > 140 || it.variantes.some(x => x.nome.length > 28));
+    const vs = it.variantes.length > 1 ? it.variantes.map((x, k) => `<button class="botao mini claro${longas ? ' md-num' : ''}" type="button" data-v="${k}" aria-pressed="${k === v}"${longas ? ` title="${esc(x.nome)}" aria-label="${k + 1}: ${esc(x.nome)}"` : ''}>${longas ? k + 1 : esc(x.nome)}</button>`).join('') : '';
+    $('mdVar').hidden = !longas; $('mdVar').textContent = longas ? `${v + 1}: ${it.variantes[v].nome}` : '';
     $('mdChips').innerHTML = `${vs}<button class="botao mini" id="mdGirar" type="button" aria-pressed="${orb.auto}">girar</button><button class="botao mini" id="mdCentro" type="button">centralizar</button>`;
     $('mdChips').querySelectorAll('[data-v]').forEach(b => b.addEventListener('click', () => mostrar(i, +b.dataset.v)));
     $('mdGirar').addEventListener('click', e => { orb.auto = !orb.auto; e.currentTarget.setAttribute('aria-pressed', orb.auto); });
