@@ -548,6 +548,17 @@ body.modelos #tela{position:absolute;top:var(--md-topo,84px);left:300px;width:ca
 const $ = id => document.getElementById(id);
 if (typeof THREE === 'undefined'){ $('carregando').hidden = true; $('erro').hidden = false; return; }
 
+// ================= economia de bateria (o Lucas pediu otimizações sem mexer na imagem nem no jogo). Cada chave liga uma:
+// mata (os blocos da mata fora da tela não são desenhados), sombra (só entra na sombra o que pode fazer sombra em algo
+// visível), luzes (as luzes pontuais só contam de noite), sim (o crescimento roda 5 vezes por segundo) e limite (até 60
+// quadros por segundo em tela de 90 Hz ou mais). No endereço, ?base desliga todas, para comparar no aparelho, ?semlimite
+// desliga só o limite e ?fps mostra o medidor (medidorDeQuadros). Os testes ligam e desligam por __fazenda.otim
+const OTIM = (() => { const q = new URLSearchParams(location.search), on = !q.has('base'); return { mata: on, sombra: on, luzes: on, sim: on, limite: on && !q.has('semlimite'), medidor: q.has('fps') }; })();
+// escreve no DOM só quando muda: reescrever o mesmo texto ou o mesmo hidden a cada quadro obrigava o navegador a refazer
+// estilo e layout 60 vezes por segundo, mesmo com tudo parado
+const porTexto = (el, s) => { if (el.textContent !== s) el.textContent = s; };
+const porOculto = (el, v) => { if (el.hidden !== v) el.hidden = v; };
+
 // ================= utilidades
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -8157,10 +8168,40 @@ function iniciarRender(){
   Object.assign(sol.shadow.camera, { left: -22, right: 22, top: 22, bottom: -22, near: 1, far: 80 });
   sol.shadow.bias = -0.0006; sol.shadow.normalBias = 0.02;
   scene.add(sol); scene.add(sol.target);
+  recortarSombra();
   const aspecto = innerWidth / innerHeight;
   cam.vista = clamp(26 / Math.max(aspecto, 0.4) * 0.62, 11, 23);
   if (aspecto > 1.2) cam.vista = 15;
   redimensionar();
+}
+// A passada de sombra desenhava tudo o que cabe no quadrado da luz (44 x 44 ladrilhos ou mais), mesmo com o zoom perto:
+// era mais da metade das chamadas de desenho de cada quadro. Agora só entra o que pode fazer sombra em algum ponto que
+// a câmera vê: o volume visível entre SOMBRA_VISTA.baixo (a beirada de terra do mapa) e .alto (nada na fazenda passa
+// disso; o teste confere), levado para o espaço da luz, vira o volume do teste de recorte. O mapa de sombra, a matriz e o
+// desenho continuam os mesmos, então a imagem não muda em nenhum ponto. Só vale para a câmera de sempre (cameraDoQuadro);
+// em primeira pessoa (mirante, vista do Ed) e no visualizador de modelos a sombra continua inteira
+const SOMBRA_VISTA = { alto: 8, baixo: -2, margem: 1, caixa: null };
+let cameraDoQuadro = null;
+function recortarSombra(){
+  const sh = sol.shadow, base = sh.updateMatrices, P = new THREE.Matrix4(), PV = new THREE.Matrix4(), v = new THREE.Vector3(), frente = new THREE.Vector3();
+  sh.updateMatrices = function(luz){
+    base.call(this, luz);
+    const c = cameraDoQuadro, sc = this.camera, R = SOMBRA_VISTA;
+    R.caixa = null;
+    if (!OTIM.sombra || !c || !c.isOrthographicCamera) return;
+    c.getWorldDirection(frente);
+    if (frente.y > -0.05) return;
+    let l = Infinity, r = -Infinity, b = Infinity, t = -Infinity;
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const h of [R.baixo, R.alto]){
+      v.set(sx, sy, -1).unproject(c); v.addScaledVector(frente, (h - v.y) / frente.y); v.applyMatrix4(sc.matrixWorldInverse);
+      if (v.x < l) l = v.x; if (v.x > r) r = v.x; if (v.y < b) b = v.y; if (v.y > t) t = v.y;
+    }
+    l = Math.max(sc.left, l - R.margem); r = Math.min(sc.right, r + R.margem); b = Math.max(sc.bottom, b - R.margem); t = Math.min(sc.top, t + R.margem);
+    if (l >= r || b >= t) return;
+    R.caixa = [l, r, b, t];
+    P.makeOrthographic(l, r, t, b, sc.near, sc.far); PV.multiplyMatrices(P, sc.matrixWorldInverse);
+    this._frustum.setFromProjectionMatrix(PV);
+  };
 }
 function redimensionar(){
   const w = innerWidth, h = innerHeight;
@@ -8403,11 +8444,15 @@ const campo = (x, z) => S.campo[chave(x, z)];
 // No iPhone, sair do jogo (bloquear a tela, trocar de app, uma ligação, outro app tocando) deixa o som 'interrupted' ou
 // 'suspended', e ele só volta com resume() num toque. Antes o jogo só religava o 'suspended' e ficava mudo até recarregar
 // (o Lucas notou num iPhone). Agora cada toque religa o que não estiver tocando; se um toque já pediu e o som não
-// voltou, o toque seguinte cria outro (novo, somRecriado). Com o jogo escondido o som fica pausado (pausar, voltar)
+// voltou, o toque seguinte cria outro (novo, somRecriado). Com o jogo escondido o som fica pausado (pausar, voltar).
+// Com o som desligado nos Ajustes o áudio do aparelho nem é ligado (desligar): antes o primeiro toque ligava do mesmo
+// jeito, o que gasta bateria e, no iPhone, com a sessão 'playback', pausava a música de outro app sem o jogo tocar nada
 const Som = {
   ctx: null, religando: 0,
   ligar(){
+    if (!S || !S.som){ this.desligar(); return; }
     const c = this.ctx;
+    this.sessao('playback');
     if (!c || c.state === 'closed'){ this.novo(); return; }
     if (c.state === 'running'){ this.religando = 0; return; }
     const agora = performance.now();
@@ -8417,14 +8462,23 @@ const Som = {
   },
   novo(){
     const velho = this.ctx; this.religando = 0;
-    // 'playback' faz o jogo tocar mesmo com o iPhone no silencioso (o Lucas pediu); sem isso o Web Audio obedece à chave.
-    // Em troca, a música de outro app pausa quando o jogo toca
-    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e){}
+    this.sessao('playback');
     try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e){ return; }
     if (velho){ try { velho.close().catch(() => {}); } catch (e){} somRecriado(); }
   },
+  // 'playback' faz o jogo tocar mesmo com o iPhone no silencioso (o Lucas pediu); sem isso o Web Audio obedece à chave.
+  // Em troca, a música de outro app pausa quando o jogo toca. Com o som do jogo desligado a sessão volta para 'auto'
+  sessao(tipo){ try { if (navigator.audioSession && navigator.audioSession.type !== tipo) navigator.audioSession.type = tipo; } catch (e){} },
+  // som desligado nos Ajustes: fecha o áudio de verdade (o que estava tocando morre junto) e larga a sessão
+  desligar(){
+    const c = this.ctx; this.religando = 0;
+    if (!c) return;
+    this.ctx = null;
+    try { c.close().catch(() => {}); } catch (e){}
+    somFechado(); this.sessao('auto');
+  },
   pausar(){ const c = this.ctx; if (c && c.state === 'running') try { c.suspend().catch(() => {}); } catch (e){} },
-  voltar(){ const c = this.ctx; if (c && c.state !== 'running' && c.state !== 'closed') try { c.resume().catch(() => {}); } catch (e){} },
+  voltar(){ const c = this.ctx; if (c && S && S.som && c.state !== 'running' && c.state !== 'closed') try { c.resume().catch(() => {}); } catch (e){} },
   tom(f, dur, tipoO = 'square', vol = 0.06, f2 = 0, atraso = 0){
     if (!this.ctx || !S || !S.som) return;
     const t = this.ctx.currentTime + atraso, o = this.ctx.createOscillator(), g = this.ctx.createGain();
@@ -8596,6 +8650,9 @@ function instanciasMata(geom, lista){
     const im = new THREE.InstancedMesh(g, MAT, l.length);
     l.forEach(([x, z, ry, s], i) => im.setMatrixAt(i, M.compose(new THREE.Vector3(x, 0, z), q.setFromAxisAngle(eixo, ry), new THREE.Vector3(s, s, s))));
     im.receiveShadow = true;
+    // o three.js r128 desliga o recorte nas malhas instanciadas; sem religar, a esfera de cima não servia de nada e a mata
+    // inteira (148 mil triângulos) era desenhada em todo quadro, mesmo fora da tela
+    im.frustumCulled = OTIM.mata;
     grupo.add(im);
   }
   scene.add(grupo);
@@ -13524,15 +13581,21 @@ const ordemCenas = () => ORDEM_CENAS.filter(id => CENAS[id]);
 const cenaPronta = id => { const C = CENAS[id]; return (!S[C.flag] || C.repete) && (C.pronta ? C.pronta() : nivel() >= C.nivel()); };
 // devolve a cena que deve começar agora (a primeira da ordem que ainda não foi vista), ou null; uma cena pedida na janela Cenas vem antes
 function podeIniciarCine(){
-  if (!S || cine || emEncontroSaci() || ed.estado !== 'parado' || tarefaAtual || algumaJanela() || menuAberto || caminhaoE.estado !== 'longe') return null;
+  if (!S || cine || emEncontroSaci() || ed.estado !== 'parado' || tarefaAtual || algumaJanela() || menuAberto || caminhaoE.estado !== 'longe'){ cineBusca.livre = false; return null; }
   if (cenaPedida){
     const C = CENAS[cenaPedida], motivo = C.podeRever && C.podeRever();
     if (motivo){ aviso(motivo); cenaPedida = null; return null; }
     return cenaPedida;
   }
-  if (performance.now() < cineLivreEm) return null;
+  const agora = performance.now();
+  if (agora < cineLivreEm){ cineBusca.livre = false; return null; }
+  // a busca (o pronta() de cada cena ainda não vista) pesa e quase nunca muda de resposta: no quadro em que o Ed fica
+  // livre ela roda na hora, como sempre; com ele parado e nada pronto, de novo só depois de 250 ms
+  if (OTIM.sim && cineBusca.livre && agora < cineBusca.ate) return null;
+  cineBusca.livre = true; cineBusca.ate = agora + 250;
   return ordemCenas().find(cenaPronta) || null;
 }
+const cineBusca = { livre: false, ate: 0 };
 // pede para rever uma cena já vista; ela começa quando o Ed terminar o que está fazendo
 function pedirCena(id){
   const cena = CENAS[id];
@@ -14650,13 +14713,32 @@ const HALOS = [];
 // luzes de verdade em volta dos postes mais perto da câmera e da porta de casa: um número fixo, para o three.js não
 // recompilar os materiais quando a quantidade muda
 const LUZES_NOITE = [];
+// As sete luzes pontuais (as quatro da noite e as três lanternas) só contam no desenho quando alguma está acesa. Com força
+// zero a imagem é a mesma, mas o three.js calculava todas em cada vértice, o dia inteiro. Mudar a quantidade de luzes faz
+// o three.js montar outra versão dos programas de desenho (uma vez por versão), então são só dois estados: todas ou
+// nenhuma. Os dois são montados já na abertura (aquecerLuzes, depois do primeiro quadro), para o anoitecer não dar tranco
+let luzesNaCena = true;
+function porLuzes(v){ luzesNaCena = v; for (const l of LUZES_NOITE) l.visible = v; for (const q of LANTERNAS) q.luz.visible = v; }
+function luzesPontuais(){
+  let quer = !OTIM.luzes;
+  if (!quer){ for (const l of LUZES_NOITE) if (l.intensity > 0) quer = true; for (const q of LANTERNAS) if (q.luz.intensity > 0) quer = true; }
+  if (quer !== luzesNaCena) porLuzes(quer);
+}
+// desenha a cena uma vez, fora da tela (num alvo de 4 x 4 pontos), com as luzes no estado contrário ao de agora
+function aquecerLuzes(cam){
+  if (!OTIM.luzes || !LUZES_NOITE.length) return;
+  const alvo = new THREE.WebGLRenderTarget(4, 4), estado = luzesNaCena;
+  porLuzes(!estado);
+  renderer.setRenderTarget(alvo); renderer.render(scene, cam); renderer.setRenderTarget(null);
+  porLuzes(estado); alvo.dispose();
+}
 function criarLuzesNoite(){
   for (let i = 0; i < 4; i++){ const l = new THREE.PointLight(0xffd890, 0, 4.5, 2); scene.add(l); LUZES_NOITE.push(l); }
   criarLanternas();
 }
 // ================= lanternas: à noite, andando pela mata, o Ed, o Hud e o Dani acendem uma lanterna na mão esquerda.
-// Cada um tem uma luz de verdade (criada junto com as da noite, para a quantidade de luzes nunca mudar), um facho
-// no chão à frente e a lente acesa. Elas acendem e apagam aos poucos ao entrar e sair da mata
+// Cada um tem uma luz de verdade (criada junto com as da noite: as sete entram e saem do desenho juntas, em luzesPontuais),
+// um facho no chão à frente e a lente acesa. Elas acendem e apagam aos poucos ao entrar e sair da mata
 const LANTERNA = { zMata: Z_MATA - 1, noite: 0.35, cor: 0xfff0c8, forca: 2.2, alcance: 5, lente: 0xfff4b0 };
 const LANTERNAS = [];
 function criarLanternas(){
@@ -14866,7 +14948,7 @@ function desenharEstrelas(){
   }
   estrelasFeitas = w * 10000 + h;
 }
-let ceuAplicado = '';
+let ceuAplicado = '', opEstrelas = '';
 // ================= hora de nanar: na metade da noite o Ed (e o Hud, se estiver ajudando) vai dormir.
 // O sono acelera o resto da noite até o amanhecer; esse tempo da noite foi para a tarde, que anda mais devagar,
 // e o ciclo continua com uns 30 minutos: dia 12, tarde 13,5 e noite 4,5 até a hora de nanar.
@@ -15002,11 +15084,12 @@ function atualizarCiclo(dt){
   if (!LUZES_NOITE.length) criarLuzesNoite();
   const pts = n > 0.02 ? pontosDeLuz().sort((q, r) => Math.hypot(q[0] - cam.alvo.x, q[2] - cam.alvo.z) - Math.hypot(r[0] - cam.alvo.x, r[2] - cam.alvo.z)) : [];
   LUZES_NOITE.forEach((l, j) => { const q = pts[j]; l.intensity = q ? n * 1.3 : 0; if (q) l.position.set(q[0], q[1], q[2]); });
+  luzesPontuais();
   // céu do fundo e estrelas (só mexe no CSS quando a cor muda de verdade)
   const css = `linear-gradient(180deg,#${LUZ.ceu1.getHexString()},#${LUZ.ceu2.getHexString()})`;
   if (css !== ceuAplicado && !document.body.classList.contains('primeira-pessoa')){ ceuAplicado = css; document.body.style.background = css; }
   if (n > 0.02 && estrelasFeitas !== innerWidth * 10000 + innerHeight) desenharEstrelas();
-  $('estrelas').style.opacity = n.toFixed(2);
+  const opE = n.toFixed(2); if (opE !== opEstrelas){ opEstrelas = opE; $('estrelas').style.opacity = opE; }
   const q = periodo();
   // quanto do período já passou e quanto falta para o próximo (o relógio só anda com o jogo aberto); à noite, a conta
   // vai até a hora de nanar, e no sono o chip mostra Zzz
@@ -15017,7 +15100,7 @@ function atualizarCiclo(dt){
   const nanando = q.id === 'noite' && !ateNanar;
   const txtFalta = sono || nanando ? 'Zzz' : falta >= 60 ? `${Math.ceil(falta / 60)} min` : `${Math.ceil(falta)} s`;
   if ($('horaFalta').textContent !== txtFalta){
-    $('horaFalta').textContent = txtFalta;
+    $('horaFalta').textContent = txtFalta; barraSuja = true;
     $('chipHora').title = sono || nanando ? 'Noite: hora de nanar' : ateNanar ? `Noite: faltam ${txtFalta} para a hora de nanar`
       : `${q.nome}: faltam ${txtFalta} para ${prox.id === 'dia' ? 'amanhecer' : prox.id === 'tarde' ? 'a tarde' : 'anoitecer'}${q.id === 'noite' ? ' (o Ed está com sono)' : ''}`;
   }
@@ -15026,8 +15109,12 @@ function atualizarCiclo(dt){
   if ($('hora').dataset.p !== q.id){
     $('hora').dataset.p = q.id; $('hora').innerHTML = `<b>${q.icone}</b>`;
     $('chipHora').classList.toggle('tarde', q.id === 'tarde'); $('chipHora').classList.toggle('noite', q.id === 'noite');
+    barraSuja = true;
   }
-  ajustarCameraCtl();
+  // a barra de cima só é conferida quando algo nela muda (hud, o relógio) e uma vez por segundo, por garantia. Antes era a
+  // cada quadro, e a conferência lê medidas da página: obrigava o navegador a refazer o layout 60 vezes por segundo
+  const agoraB = performance.now();
+  if (barraSuja || agoraB > barraEm){ barraSuja = false; barraEm = agoraB + 1000; ajustarCameraCtl(); }
 }
 function atualizarClima(dt){
   const agora = Date.now();
@@ -15233,6 +15320,12 @@ function motor(ligar){
     m.g.gain.exponentialRampToValueAtTime(0.0001, Som.ctx.currentTime + 1.2);
     setTimeout(() => { try { m.o.stop(); m.o2.stop(); if (m.o3) m.o3.stop(); } catch (e){} }, 1400);
   }
+}
+// o som foi fechado (Som.desligar): a música da cena fica esperando o som voltar e o motor do avião some com ele
+function somFechado(){
+  const A = Musica.atual; Musica.atual = null; Musica.ruidoBuf = null;
+  if (A && A.T.loop) Musica.pendente = A.id;
+  motorSom = null;
 }
 // o som foi criado de novo (Som.novo): a música recomeça no som novo e o motor do avião, se estava ligado, é refeito
 function somRecriado(){
@@ -16429,8 +16522,8 @@ function atualizarMaca(dt, t){
   if (ativa && cine) S.macaAte += dt * 1000;
   if (macaLigada && !ativa){ aviso('O efeito da maçã acabou.'); const f = variar(FALAS_FIM_MACA); falar(ed, f, tempoDeLeitura(f)); }
   macaLigada = ativa;
-  $('macaPill').hidden = !ativa;
-  if (ativa){ $('macaTexto').textContent = 'Ed veloz'; $('macaTempo').textContent = tempo((S.macaAte - Date.now()) / 1000); }
+  porOculto($('macaPill'), !ativa);
+  if (ativa){ porTexto($('macaTexto'), 'Ed veloz'); porTexto($('macaTempo'), tempo((S.macaAte - Date.now()) / 1000)); }
   if (ed.turbo > 1 && ed.estado === 'andando' && (macaRastro -= dt) <= 0){
     macaRastro = 0.08;
     particula(ed.pos.x + rnd(-0.15, 0.15), 0.1, ed.pos.y + rnd(-0.15, 0.15), sorteia([0xffe066, 0xffffff]), 0.35);
@@ -16514,13 +16607,13 @@ function arrumarAndamento(){
   if (n < 2) return;
   const agora = Date.now(), comTempo = vis.filter(v => v[3]).map(v => [v, v[3]() - agora]).sort((a, b) => a[1] - b[1]);
   let ultima = null, maior = -Infinity;
-  for (const v of vis){ const c = comTempo.find(x => x[0] === v), o = c ? Math.round(c[1] / 1000) : 1e6; $(v[0]).style.order = o; if (o > maior){ maior = o; ultima = v[0]; } }
+  for (const v of vis){ const c = comTempo.find(x => x[0] === v), o = c ? Math.round(c[1] / 1000) : 1e6, e = $(v[0]); if (e.style.order !== String(o)) e.style.order = o; if (o > maior){ maior = o; ultima = v[0]; } }
   for (const [id] of ANDAMENTO) $(id).classList.toggle('ultima', id === ultima);
   const val = x => typeof x === 'function' ? x() : x, pilha = vis.map(v => val(v[2])).join();
   if (pilha !== andamentoPilha){ andamentoPilha = pilha; $('resumoPilha').innerHTML = vis.slice(0, 3).map(v => `<img src="${icone(val(v[2]))}" alt="">`).join(''); }
-  $('resumoQtd').textContent = `${n} em andamento`;
+  porTexto($('resumoQtd'), `${n} em andamento`);
   const p = comTempo[0];
-  $('resumoProx').textContent = p ? `${val(p[0][1])} ${tempo(p[1] / 1000)}` : $('filaTexto').textContent;
+  porTexto($('resumoProx'), p ? `${val(p[0][1])} ${tempo(p[1] / 1000)}` : $('filaTexto').textContent);
   // com um urgente, o resumo fica vermelho
   $('resumo').classList.toggle('urgente', !$('urgentePill').hidden);
 }
@@ -16666,7 +16759,7 @@ const textoFalta = f => f ? ` · ${f > 1 ? 'faltam' : 'falta'} ${f} pro pedido` 
 // ================= interface: HUD
 // no celular os botões da câmera ficam logo abaixo da barra de cima, no canto direito
 const telaCelular = matchMedia('(max-width:560px)');
-let ctlTopo = '';
+let ctlTopo = '', barraSuja = true, barraEm = 0;
 // no celular a barra de cima ocupa a largura toda; quando os números não cabem, ela aperta em dois passos (aperto1, aperto2)
 let barraChave = '';
 function ajustarBarra(){
@@ -16698,6 +16791,7 @@ function presentesDaOficina(){
 }
 function hud(){
   if (!S) return;
+  barraSuja = true;
   presentesDaOficina();
   if (modo) atualizarModoTodos();
   $('dinheiro').textContent = Math.round(S.dinheiro).toLocaleString('pt-BR');
@@ -18248,6 +18342,30 @@ function girar(s){ cam.azAlvo += s * Math.PI / 2; fecharMenu(); Som.clique(); }
 
 // ================= laço principal
 let ultimoReal = Date.now(), ultimoQuadro = performance.now(), tSalvo = 0;
+// ================= o ritmo do laço
+// Limite de quadros (o Lucas aprovou): em tela de 90 Hz ou mais o navegador chama o laço 90, 120 ou 144 vezes por segundo,
+// e o jogo desenhava todas. Agora ele mede o ritmo da tela (o intervalo curto mais comum entre as chamadas) e, acima de
+// 80 Hz, desenha uma chamada sim, uma não (ou uma a cada três): 120 vira 60, 144 vira 72 e 90 vira 45, porque 60 não divide
+// 90 por igual e ficaria tremido. Em tela de 60 Hz nada muda. A conta é pelo tempo desde o último quadro desenhado, e não
+// por contagem, para um quadro pesado não fazer pular dois
+const RITMO = { amostras: [], hz: 60, periodo: 1000 / 60, div: 1, ult: 0, desenhado: 0, medeEm: 0 };
+function pularQuadro(agoraP){
+  const R = RITMO, d = agoraP - R.ult; R.ult = agoraP;
+  if (d > 2 && d < 100){ R.amostras.push(d); if (R.amostras.length > 90) R.amostras.shift(); }
+  if (R.amostras.length >= 30 && agoraP > R.medeEm){
+    R.medeEm = agoraP + 1000;
+    const o = R.amostras.slice().sort((a, b) => a - b);
+    R.periodo = o[Math.floor(o.length * 0.2)]; R.hz = 1000 / R.periodo;
+    R.div = OTIM.limite && R.hz > 80 ? Math.ceil(R.hz / 75) : 1;
+  }
+  if (R.div > 1 && agoraP - R.desenhado < R.periodo * (R.div - 0.5)) return true;
+  R.desenhado = agoraP;
+  return false;
+}
+// O crescimento das plantas, dos bichos e das fábricas é conta de tempo, sem nada que se veja quadro a quadro: roda a cada
+// SIM_PASSO segundos, com o tempo acumulado, e não 60 vezes por segundo (era 7% da CPU de cada quadro)
+const SIM_PASSO = 0.2;
+let simAcum = 0;
 function simular(dt){
   for (const k in S.campo){
     const t = S.campo[k];
@@ -18267,9 +18385,12 @@ function simular(dt){
 }
 function quadro(agoraP){
   requestAnimationFrame(quadro);
+  if (pularQuadro(agoraP)) return;
+  const m0 = OTIM.medidor ? performance.now() : 0;
   const agora = Date.now();
   const real = Math.max(0, (agora - ultimoReal) / 1000); ultimoReal = agora;
-  simular(real);
+  simAcum += real;
+  if (!OTIM.sim || simAcum >= SIM_PASSO){ simular(simAcum); simAcum = 0; }
   const dt = Math.min(0.1, (agoraP - ultimoQuadro) / 1000); ultimoQuadro = agoraP;
   const t = agoraP / 1000;
   cam.az = lerp(cam.az, cam.azAlvo, Math.min(1, dt * 9));
@@ -18311,10 +18432,10 @@ function quadro(agoraP){
   if (milton.g.visible) milton.update(dt, t);
   atualizarPista(dt);
   atualizarHudIrmao(dt, t);
-  if (irmaoHud.g.visible || hudAtivo()){ $('hudPill').hidden = !hudAtivo(); if (hudAtivo()){ $('hudTexto').textContent = 'Hud ajudando'; $('hudTempo').textContent = tempo((S.hudAte - Date.now()) / 1000); } }
+  if (irmaoHud.g.visible || hudAtivo()){ porOculto($('hudPill'), !hudAtivo()); if (hudAtivo()){ porTexto($('hudTexto'), 'Hud ajudando'); porTexto($('hudTempo'), tempo((S.hudAte - Date.now()) / 1000)); } }
   else if (!$('hudPill').hidden) $('hudPill').hidden = true;
   atualizarDani(dt, t);
-  if (irmaoDani.g.visible || daniAtivo()){ $('daniPill').hidden = !daniAtivo(); if (daniAtivo()){ $('daniTexto').textContent = 'Dani ajudando'; $('daniTempo').textContent = tempo((S.daniAte - Date.now()) / 1000); } }
+  if (irmaoDani.g.visible || daniAtivo()){ porOculto($('daniPill'), !daniAtivo()); if (daniAtivo()){ porTexto($('daniTexto'), 'Dani ajudando'); porTexto($('daniTempo'), tempo((S.daniAte - Date.now()) / 1000)); } }
   else if (!$('daniPill').hidden) $('daniPill').hidden = true;
   arrumarAndamento();
   if (beto.g.visible) beto.update(dt, t);
@@ -18336,7 +18457,34 @@ function quadro(agoraP){
   atualizarFalas();
   if (menuAberto && ['tile', 'animal', 'predio', 'pomar', 'colmeia', 'pomarLote', 'cercadoLote', 'obraLote', 'coletor', 'composteira', 'mata'].includes(menuAberto.alvo.k) && Math.floor(t * 2) !== Math.floor((t - dt) * 2)) atualizarEstadoMenu();
   tSalvo += dt; if (tSalvo > 6){ tSalvo = 0; verificarFigurinhas(); salvar(); }
-  renderer.render(scene, (miranteFP && miranteFP.fase === 'olhando') || vistaEd ? cameraFP : camera);
+  cameraDoQuadro = (miranteFP && miranteFP.fase === 'olhando') || vistaEd ? cameraFP : camera;
+  if (OTIM.medidor) renderer.info.reset();
+  renderer.render(scene, cameraDoQuadro);
+  if (!luzesAquecidas){ luzesAquecidas = true; aquecerLuzes(cameraDoQuadro); }
+  if (OTIM.medidor) medidorDeQuadros(agoraP, performance.now() - m0);
+}
+let luzesAquecidas = false;
+// ================= medidor (?fps no endereço): quadros por segundo, o ritmo da tela, o tempo de CPU do laço e o que foi
+// desenhado, para medir no aparelho de verdade. Com ?fps&base as otimizações ficam desligadas, para comparar
+const MEDIDOR = { el: null, n: 0, ms: 0, pior: 0, t0: 0, linhas: [] };
+function medidorDeQuadros(agoraP, ms){
+  const M = MEDIDOR;
+  if (!M.el){
+    M.el = document.createElement('div'); M.el.id = 'medidor';
+    M.el.style.cssText = 'position:fixed;left:6px;top:42%;z-index:50;padding:6px 8px;border-radius:8px;background:rgba(20,14,10,.78);color:#fff;font:700 12px/1.35 ui-monospace,Menlo,Consolas,monospace;white-space:pre;pointer-events:none';
+    document.body.appendChild(M.el); M.t0 = agoraP;
+    // o three.js zera a contagem depois da passada de sombra; no medidor a conta é zerada aqui, para somar as duas passadas
+    renderer.info.autoReset = false;
+  }
+  M.n++; M.ms += ms; if (ms > M.pior) M.pior = ms;
+  if (agoraP - M.t0 < 500) return;
+  const I = renderer.info.render, R = RITMO, num = v => v.toFixed(1).replace('.', ',');
+  M.linhas = [`${Math.round(M.n * 1000 / (agoraP - M.t0))} quadros/s · tela ${Math.round(R.hz)} Hz${R.div > 1 ? ' ÷ ' + R.div : ''}`,
+    `laço ${num(M.ms / M.n)} ms · pior ${num(M.pior)} ms`,
+    `${I.calls} desenhos · ${num(I.triangles / 1000)} mil triângulos`,
+    OTIM.mata ? (OTIM.limite ? 'otimizado' : 'otimizado, sem limite') : 'base (sem otimizar)'];
+  M.el.textContent = M.linhas.join('\n');
+  M.n = 0; M.ms = 0; M.pior = 0; M.t0 = agoraP;
 }
 function atualizarEstadoMenu(){
   const r = itensDoAlvo(menuAberto.alvo);
@@ -18497,6 +18645,7 @@ async function iniciar(){
     arraia: { ARRAIA, obj: () => arraia, rojao, falas: FALAS_ARRAIA },
     abrirMenu: (alvo, x = 300, y = 300) => abrirMenu(alvo, x, y),
     miranteVisao: { V: visaoMirante, cobre: () => miranteCobre(), topo: () => miranteTopo, MIRANTE_VISAO },
+    otim: { OTIM, RITMO, SOMBRA_VISTA, MEDIDOR, pular: pularQuadro, luzes: () => luzesNaCena, porLuzes, luzesPontuais, aquecer: aquecerLuzes, mata: v => { OTIM.mata = v; scene.traverse(o => { if (o.isInstancedMesh) o.frustumCulled = v; }); }, render: () => ({ renderer, scene, camera, sol }), cineBusca },
     vistaEd: { entrar: entrarVistaEd, sair: sairVistaEd, girar: girarVistaEd, obj: () => vistaEd, cam: () => cameraFP, faz: oQueOEdFaz, VISTA_ED },
     mirante1p: { subir: subirMirante, descer: descerMirante, girar: girarMirante, zoom: zoomMirante, obj: () => miranteFP, cam: () => cameraFP, M1P: MIRANTE_1P },
     enfeitesNovos: { aves, ave: () => { aves.prox = 0; }, AJUDA, vis: () => ENF_VIS, casinha: () => casinhaParaLuma(), piquenique: () => lugarPiquenique(), montar: e => montarEnfeite(e), FOGUEIRA, LAGUINHO, DESEJO, aquecer, inverno: invernoAgora, assento: assentoFogueira, frentePoco, fazerDesejo, itens: e => itensEnfeite(e), formas: formasLiberadas, grupoComForma },
