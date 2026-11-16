@@ -920,7 +920,7 @@ Object.assign(PRECO_REFORMA, { galinheiro2: PRECO_REFORMA.galinheiro, curral2: P
 const NIVEL_REFORMA = { patos: [36, 40] };
 const nivelDaReforma = (id, n) => (NIVEL_REFORMA[id] || REFORMA.nivel)[n];
 const vagasFab = id => VAGAS_FAB + nivelReforma(id);
-// ================= obras novas do Maurinho (nível 40 em diante): construções grandes, feitas do zero num lote demarcado
+// ================= obras novas do Maurinho (nível 39 em diante): construções grandes, feitas do zero num lote demarcado
 // (predio: o lugar delas em PREDIOS, com obra: a chave daqui). Cada obra tem uma ou mais etapas, pagas e esperadas uma de
 // cada vez; S.obrasFeitas guarda quantas etapas de cada uma já terminaram. A obra em andamento usa o mesmo S.obra das
 // reformas, com obra: a chave daqui, porque o Maurinho faz uma coisa de cada vez. O lote aparece um nível antes de liberar
@@ -936,6 +936,15 @@ const OBRAS = {
       tx.position.set(0, 21 / 8, (RESORT.fundo - RESORT.fundo / 2) / 8 + 0.008); m.add(tx);
     },
     menu(r){ const n = (S.aposentadas || []).length; r.estado = n ? `${n > 1 ? n + ' galinhas aposentadas moram' : 'Uma galinha aposentada mora'} aqui, entre a piscina, o quiosque de coco e os chalés.` : 'Pronto para receber as galinhas que se aposentarem.'; },
+  },
+  spa: { nome: 'Spa dos pigs', nivel: 39, predio: 'spa', canto: true, icone: 'spa', andaimeAlto: 17,
+    etapas: [{ preco: 300000, minutos: 15, xp: 3500 }],
+    desc: 'Piscina de lama, ofurô de água quente, sauna, duchas e espreguiçadeiras com pepino nos olhos. Porcos da região toda vêm pela estrada, pagam a entrada e passam a tarde relaxando; a família também aparece, sem pagar.',
+    pronto: 'Os porcos visitantes já estão chegando pela estrada.',
+    modelo: () => vSpa(),
+    vestir: m => vestirSpa(m),
+    aoTerminar: () => abrirPassagemSpa(),
+    menu(r){ menuSpa(r); },
   },
   casarao: { nome: 'Casarão', nivel: 45, predio: 'casa', icone: 'casa', andaimeAlto: 42,
     etapas: [{ preco: 300000, minutos: 10, xp: 3000, nome: 'o segundo andar' }, { preco: 300000, minutos: 10, xp: 3000, nome: 'os quartos do Hud e do Dani' }, { preco: 300000, minutos: 10, xp: 3000, nome: 'a varanda das redes' }],
@@ -1143,9 +1152,11 @@ const PREDIOS = [
   { id:'patos',      nome:'Galinheiro dos patos', x0:49, z0:27, x1:50, z1:28, porta:[49, 26], lote: true },
   // as obras novas do Maurinho (OBRAS): o lugar fica gramado até a obra começar
   { id:'resort',     nome:'Resort das Aposentadas', x0:45, z0:32, x1:51, z1:37, porta:[48, 38], obra: 'resort' },
-  { id:'observatorio', nome:'Observatório',      x0:24, z0:44, x1:28, z1:47, porta:[27, 48], obra: 'observatorio' },
+  { id:'observatorio', nome:'Observatório',      x0:24, z0:35, x1:28, z1:38, porta:[27, 39], obra: 'observatorio' },
   // o museu, ao lado do observatório, de frente para a câmera; a festa do campo grande fica livre à direita
   { id:'museu',      nome:'Museu da fazenda',    x0:30, z0:45, x1:33, z1:47, porta:[31, 48], obra: 'museu' },
+  // o spa dos pigs, no canto de baixo encostado na estrada (o Lucas pediu ali; o observatório subiu para trás dele)
+  { id:'spa',        nome:'Spa dos pigs',        x0:23, z0:41, x1:28, z1:49, porta:[24, 50], obra: 'spa' },
   { id:'galpao',     nome:'Galpão do trator',    x0:0,  z0:7,  x1:3,  z1:8,  porta:[1, 9], obra: 'galpao' },
   // fora do mapa de ladrilhos: no fim da pista, ao norte dela (fora: sem ladrilho, sem lote; o Maurinho trabalha na beira da fazenda)
   { id:'hangar',     nome:'Hangar do PIG-MTP',   x0:47, z0:-6, x1:51, z1:-5, porta:[49, -4], obra: 'hangar', fora: true },
@@ -6586,6 +6597,192 @@ function vFitaResort(){
   v.box(7, -4, 0, 7, -2, 0, c); v.box(8, -4, 0, 8, -2, 0, c);
   return v;
 }
+// ================= Spa dos pigs (obra nova do nível 39, o Lucas pediu): 6 × 9 ladrilhos no canto de baixo do terreno novo,
+// encostado na estrada (x 23 a 28, z 41 a 49), em cubinhos de 1/8 a partir do canto de cima à esquerda (x para leste, z para
+// o sul). A entrada fica no sul, perto do vão na cerca da estrada (SPA.vao): o arco de bambu com o letreiro, o caminho de
+// pedra, o jardim à esquerda e o balcão da recepção à direita, com as toalhas. No meio, a piscina de lama com borda de pedra;
+// à direita dela, as duas duchas no deck; no fundo, a sauna de madeira (à esquerda) e o ofurô redondo (à direita); na
+// frente, à direita, as espreguiçadeiras de frente para a câmera. Uma cerca de bambu contorna tudo, aberta no arco.
+// Os lugares de cada atividade (lama, ofuro, ducha, cadeira) e a porta da sauna ficam em cubinhos do desenho
+const SPA = { larg: 48, fundo: 72, lama: [4, 31, 26, 46], ofuro: [34, 10, 7], sauna: [2, 19, 2, 17], portaSauna: [9, 12],
+  duchas: [[41, 31], [41, 43]], cadeiras: [31, 36, 41], zCadeira: 55, arco: [8, 15], balcao: [18, 20, 58, 66],
+  prateleira: [23, 24, 58, 66], bambuzal: [[44, 3], [3, 52]] };
+function bambuzal(v, cx, cz, n, alto){
+  for (let i = 0; i < n; i++){
+    const a = i * 2.4, r = i ? 1.4 + (i % 3) * 0.7 : 0, x = Math.round(cx + Math.cos(a) * r), z = Math.round(cz + Math.sin(a) * r), h = alto - (i % 4) * 2;
+    for (let y = 1; y <= h; y++) v.set(x, y, z, y % 4 === 0 ? 0x5f8a32 : i % 2 ? 0x9cc45a : 0x88b64a);
+    for (let k = 0; k < 4; k++){ const b = k * 1.6 + i, dx = Math.round(Math.cos(b) * 1.6), dz = Math.round(Math.sin(b) * 1.6); v.set(x + dx, h - k % 2, z + dz, k % 2 ? 0x4f9a3d : 0x6cbf47); v.set(x + Math.sign(dx), h + 1 - k % 2, z + Math.sign(dz), 0x5aa847); }
+  }
+}
+function vSpa(){
+  const v = new Vox(), R = SPA, X1 = R.larg - 1, Z1 = R.fundo - 1;
+  const branco = 0xfdf8ef, rosa = 0xf07aa8, turquesa = 0x3fb8b0, amarelo = 0xf2c335, madeira = 0x8a5a36, madeiraE = 0x6e4428, madeiraC = 0xc99a66, inox = 0xc8d0d8;
+  const lajota = (x, y, z) => { const h = hash(x >> 2, 5, z >> 2); return h < 0.33 ? 0xe9e2d3 : h < 0.66 ? 0xe1d8c6 : 0xd9cfbc; };
+  const bambu = (x, y, z) => y % 4 === 0 ? 0x5f8a32 : hash(x, 3, z) < 0.5 ? 0x9cc45a : 0x88b64a;
+  const pedra = (x, y, z) => { const h = hash(x, y + 9, z); return h < 0.3 ? 0xb9b1a3 : h < 0.65 ? 0xa59d8f : 0xcac3b6; };
+  const lama = (x, y, z) => { const h = hash(x, 11, z); return h < 0.2 ? 0x5e3a22 : h < 0.6 ? 0x6e4628 : 0x7a5232; };
+  // o chão de lajotas claras, o caminho de pedra da entrada e o jardim à esquerda dele
+  v.box(0, 0, 0, X1, 0, Z1, lajota);
+  const [a0, a1] = R.arco;
+  v.box(a0, 0, 49, a1, 0, Z1, (x, y, z) => ((x >> 1) + (z >> 1)) % 2 ? 0xcfc4ae : 0xc2b69e);
+  v.box(1, 0, 50, a0 - 2, 0, Z1 - 1, (x, y, z) => hash(x, 1, z) < 0.5 ? 0x6cbf47 : 0x5aa83c);
+  for (let x = 1; x <= a0 - 2; x++) for (let z = 57; z < Z1; z++){ const h = hash(x, 2, z); if (h < 0.3) v.set(x, 1, z, 0x4f9a3d); if (h < 0.12) v.set(x, 2, z, [rosa, amarelo, 0xb48be0, 0xf05d7e][Math.floor(hash(x, 4, z) * 4)]); }
+  // a piscina de lama: borda de pedra de dois cubinhos com os cantos arredondados, a lama um abaixo dela e uns montinhos
+  const [l0, l1, m0, m1] = R.lama;
+  v.box(l0 - 2, 1, m0 - 2, l1 + 2, 2, m1 + 2, pedra);
+  v.box(l0, 1, m0, l1, 2, m1, null);
+  v.box(l0, 1, m0, l1, 1, m1, lama);
+  for (const [x, z] of [[l0 - 2, m0 - 2], [l1 + 2, m0 - 2], [l0 - 2, m1 + 2], [l1 + 2, m1 + 2]]) v.box(x, 1, z, x, 2, z, null);
+  for (let x = l0; x <= l1; x++) for (let z = m0; z <= m1; z++) if (hash(x, 12, z) < 0.05) v.set(x, 2, z, 0x86603a);
+  // o deck das duchas, à direita da lama: cada ducha tem o ralo no chão, o cano com o registro e o chuveiro
+  v.box(36, 0, 24, 46, 0, 48, (x) => (x >> 1) % 2 ? 0xd6a970 : 0xc99b62);
+  for (const [dx, dz] of R.duchas){
+    v.box(dx - 2, 0, dz - 2, dx + 2, 0, dz + 2, (x, y, z) => (x + z) % 2 ? 0x8a9298 : 0x9fa7ad);
+    v.box(dx + 3, 1, dz, dx + 3, 14, dz, inox); v.box(dx, 14, dz, dx + 2, 14, dz, inox);
+    v.box(dx - 1, 13, dz - 1, dx + 1, 13, dz + 1, inox); v.set(dx, 12, dz, 0x9ad8f0);
+    v.set(dx + 3, 7, dz + 1, 0xe0404a);
+  }
+  // o ofurô: tina redonda de tábuas claras com dois aros escuros, a água quente e um degrau na frente
+  const [ox, oz, or] = R.ofuro;
+  for (let x = ox - or - 1; x <= ox + or + 1; x++) for (let z = oz - or - 1; z <= oz + or + 1; z++){
+    const d = Math.hypot(x - ox, z - oz);
+    if (d > or + 0.5) continue;
+    if (d > or - 1.2){ const ripa = Math.floor((Math.atan2(z - oz, x - ox) + Math.PI) / (Math.PI / 10)) % 2; v.box(x, 1, z, x, 4, z, (xx, y) => y === 2 || y === 4 ? 0x5a4a3a : ripa ? madeiraC : 0xb98a56); }
+    else v.box(x, 1, z, x, 2, z, (xx, y, zz) => y === 2 && hash(xx, 4, zz) < 0.25 ? 0xa8e4f0 : 0x6cc8de);
+  }
+  v.box(ox - 2, 1, oz + or + 1, ox + 2, 1, oz + or + 1, madeira);
+  // a sauna: casinha de tábuas escuras, porta com janelinha redonda, janela do lado, telhado de duas águas e a chaminé de pedra
+  const [s0, s1, t0, t1] = R.sauna, [p0, p1] = R.portaSauna;
+  v.box(s0, 1, t0, s1, 10, t1, (x, y) => y % 2 ? madeira : madeiraE);
+  v.box(p0, 1, t1, p1, 7, t1, (x, y) => x === p0 || x === p1 || y === 7 ? 0x4a2e1c : 0x5a3a22);
+  v.set(p0 + 1, 5, t1, 0xbfe5f5); v.set(p0 + 2, 5, t1, 0xbfe5f5); v.set(p1 - 1, 3, t1, amarelo);
+  v.box(s1, 5, 7, s1, 7, 11, 0xbfe5f5); v.box(s1, 4, 6, s1, 4, 12, madeiraC); v.box(s1, 8, 6, s1, 8, 12, madeiraC);
+  for (let i = 0; ; i++){ const a = t0 - 1 + 2 * i, b = t1 + 1 - 2 * i; if (a > b) break; v.box(s0 - 1, 11 + i, a, s1 + 1, 11 + i, b, i % 2 ? 0x7a4a2a : 0x8a5434); }
+  v.box(4, 11, 4, 5, 18, 5, pedra);
+  // as espreguiçadeiras, de frente para a câmera (encosto no norte), com a toalha listrada e uma toalha dobrada no pé
+  R.cadeiras.forEach((x0, i) => {
+    const z0 = R.zCadeira, cor = [rosa, turquesa, amarelo][i];
+    for (const [x, z] of [[x0, z0 + 1], [x0 + 3, z0 + 1], [x0, z0 + 7], [x0 + 3, z0 + 7]]) v.set(x, 1, z, branco);
+    v.box(x0, 2, z0 + 1, x0 + 3, 2, z0 + 7, (x, y, z) => z % 2 ? cor : branco);
+    v.box(x0, 3, z0, x0 + 3, 5, z0, (x, y) => y % 2 ? cor : branco);
+    v.box(x0 + 1, 3, z0 + 7, x0 + 2, 3, z0 + 7, branco);
+  });
+  // a recepção: balcão de madeira com a faixa rosa e o sininho dourado; atrás, a prateleira de toalhas enroladas e o vaso
+  const [b0, b1, c0, c1] = R.balcao;
+  v.box(b0, 1, c0, b1, 4, c1, (x, y) => y === 3 ? rosa : madeiraC);
+  v.box(b0 - 1, 5, c0 - 1, b1, 5, c1 + 1, madeira);
+  v.set(b0, 6, 62, amarelo); v.set(b0, 7, 62, 0x9a7a2a);
+  // a prateleira é vazada, com as toalhas enroladas à vista dos dois lados
+  const [q0, q1, r0, r1] = R.prateleira;
+  for (const z of [r0, r1]) v.box(q0, 1, z, q1, 9, z, madeira);
+  for (const y of [3, 6, 9]){
+    v.box(q0, y - 1, r0, q1, y - 1, r1, madeiraC);
+    for (let z = r0 + 1, k = y; z < r1; z += 2, k++) v.box(q0, y, z, q1, y, z + 1, [rosa, turquesa, branco, amarelo][k % 4]);
+  }
+  v.box(27, 1, 59, 28, 2, 60, 0xb5603c); bambuzal(v, 28, 60, 1, 12);
+  // o arco de bambu da entrada, com a placa (o letreiro vem por cima, em vestir)
+  for (const x0 of [a0 - 2, a1 + 1]) v.box(x0, 1, Z1 - 1, x0 + 1, 15, Z1, bambu);
+  v.box(a0 - 3, 16, Z1 - 1, a1 + 3, 17, Z1, bambu);
+  v.box(a0, 12, Z1, a1, 15, Z1, (x, y) => x === a0 || x === a1 || y === 12 || y === 15 ? rosa : branco);
+  // a cerca de bambu em volta, aberta no arco, com a ponta de cada vareta um pouco mais alta
+  for (let x = 0; x <= X1; x++) for (let z = 0; z <= Z1; z++){
+    if (x > 0 && x < X1 && z > 0 && z < Z1) continue;
+    if (z === Z1 && x >= a0 - 2 && x <= a1 + 2) continue;
+    v.box(x, 1, z, x, (x + z) % 2 ? 5 : 6, z, bambu);
+  }
+  // os bambuzais: no canto do fundo à direita e no jardim da entrada
+  bambuzal(v, ...R.bambuzal[0], 7, 22);
+  bambuzal(v, ...R.bambuzal[1], 4, 14);
+  return v;
+}
+// ================= os porcos visitantes do spa (o Lucas pediu): porcos de verdade, de quatro patas, com cor, padrão,
+// orelha, focinho e tamanho sorteados pela semente (tracosPorcoSpa). Cubinhos de 1/30, de frente para +z. Peças à parte para
+// andar: o corpo (com a cabeça e o rabinho) e uma pata, que vai quatro vezes, pendurada no quadril (y 5). Com lama, o barro
+// cobre a barriga e as patas (a ducha tira). Os pepinos dos olhos (vPepinos) aparecem na espreguiçadeira
+const PORCO_SPA = { escala: 1 / 30, sementes: 64, quadril: 5, pernas: [[-3.5, 5.5], [3.5, 5.5], [-3.5, -5.5], [3.5, -5.5]], olho: [2, 11, 13],
+  cores: [
+    { nome: 'rosa', c: 0xf3b4ac, claro: true }, { nome: 'rosinha', c: 0xf9d3c9, claro: true }, { nome: 'branco', c: 0xf7f0e6, claro: true },
+    { nome: 'creme', c: 0xecd6aa, claro: true }, { nome: 'ruivo', c: 0xc9692f }, { nome: 'marrom', c: 0x8c4f2e },
+    { nome: 'preto', c: 0x3b3535 }, { nome: 'cinza', c: 0x9b9591 },
+  ],
+  padroes: ['liso', 'liso', 'malhado', 'malhado', 'pintas', 'cinta', 'meias', 'mancha', 'listras'],
+  nomes: ['Bolota', 'Pipoca', 'Chiquinha', 'Paçoca', 'Biscoito', 'Pudim', 'Jujuba', 'Quindim', 'Cocada', 'Pingo', 'Tico', 'Nina',
+    'Lola', 'Bidu', 'Mel', 'Floquinho', 'Fofura', 'Tetê', 'Pitoco', 'Rosinha', 'Bolinha', 'Frida', 'Tonico', 'Peteca'] };
+// os traços de cada semente; os nomes das cores e dos padrões viram a descrição do menu
+function tracosPorcoSpa(seed){
+  const r = n => hash(seed, n, 91), C = PORCO_SPA.cores, base = C[Math.floor(r(1) * C.length)];
+  const padrao = PORCO_SPA.padroes[Math.floor(r(2) * PORCO_SPA.padroes.length)];
+  const outras = C.filter(c => c.claro !== base.claro && c !== base);
+  let cor2 = outras[Math.floor(r(3) * outras.length)];
+  // as listras são do leitãozinho de javali: marrom ou ruivo com listras creme
+  let b = base;
+  if (padrao === 'listras'){ b = C[r(4) < 0.5 ? 4 : 5]; cor2 = C[3]; }
+  if (padrao === 'meias' && b.claro){ b = C[6]; cor2 = C[2]; }
+  return { base: b, cor2, padrao, orelha: r(5) < 0.45 ? 'caida' : 'pe', peludo: padrao !== 'listras' && r(6) < 0.18, tam: padrao === 'listras' ? 0.78 : 0.86 + r(7) * 0.3,
+    focinho: padrao === 'meias' ? 0xf3e8dc : b.claro ? 0xf0a0a0 : 0x6a5555, narina: b.claro || padrao === 'meias' ? 0x9a4a4a : 0x2a2020, seed };
+}
+function descricaoPorcoSpa(T){
+  const o = T.orelha === 'caida' ? 'orelhas caídas' : 'orelhas em pé', p = T.peludo ? ', bem peludo' : '';
+  // a cor da cinta, da mancha e das pintas concorda com elas (preta, pretas)
+  const fem = { preto: 'preta', branco: 'branca', ruivo: 'ruiva' }, c2 = T.cor2.nome, f1 = fem[c2] || c2, f2 = fem[c2] ? fem[c2] + 's' : c2 === 'marrom' ? 'marrons' : c2;
+  const txt = { liso: `${T.base.nome}`, malhado: `malhado de ${T.base.nome} e ${c2}`, pintas: `${T.base.nome} com pintas ${f2}`,
+    cinta: `${T.base.nome} com uma cinta ${f1} nos ombros`, meias: `${T.base.nome} de meias e focinho brancos`,
+    mancha: `${T.base.nome} com uma mancha ${f1} no olho`, listras: `leitãozinho listrado, ${T.base.nome} e creme` }[T.padrao];
+  return `${txt[0].toUpperCase()}${txt.slice(1)}, ${o}${p}.`;
+}
+function vPorcoSpa(seed, parte = 'corpo', sujo = false){
+  const v = new Vox(), T = tracosPorcoSpa(seed), c1 = T.base.c, c2 = T.cor2.c;
+  const manchas = []; for (let i = 0; i < 4; i++) manchas.push([hash(seed, 10 + i, 3) * 10 - 5, 6 + hash(seed, 20 + i, 3) * 8, hash(seed, 30 + i, 3) * 22 - 9, 2.6 + hash(seed, 40 + i, 3) * 2.4]);
+  const pintas = []; for (let i = 0; i < 14; i++) pintas.push([hash(seed, 50 + i, 3) * 12 - 6, 5 + hash(seed, 70 + i, 3) * 11, hash(seed, 90 + i, 3) * 24 - 10, 1.1 + hash(seed, 110 + i, 3) * 0.8]);
+  const olhoE = hash(seed, 8, 91) < 0.5 ? -1 : 1;
+  const pele = (x, y, z) => {
+    const P = T.padrao;
+    if (P === 'malhado' && manchas.slice(0, 3).some(([mx, my, mz, r]) => (x - mx) ** 2 + (y - my) ** 2 + (z - mz) ** 2 <= r * r)) return c2;
+    if (P === 'pintas' && pintas.some(([mx, my, mz, r]) => (x - mx) ** 2 + (y - my) ** 2 + (z - mz) ** 2 <= r * r)) return c2;
+    if (P === 'cinta' && z >= 1 && z <= 5) return c2;
+    if (P === 'mancha' && (x - olhoE * 2) ** 2 + (y - 11) ** 2 + (z - 12.5) ** 2 <= 6.5) return c2;
+    if (P === 'listras' && y >= 8 && z < 7 && Math.abs(x) % 3 === 1) return c2;
+    return c1;
+  };
+  // o barro da lama: a barriga e um pouco dos lados, com respingos mais para cima
+  const barro = (x, y, z, c) => { if (!sujo) return c; const h = hash(x * 3 + 1, y, z * 5); return (y < 7.5 && h < 0.85) || h < 0.1 ? (h < 0.3 ? 0x5e3a22 : 0x7a5232) : c; };
+  if (parte === 'pata'){
+    // a pata pendurada no quadril: o pé fica em y -5, com o casco escuro
+    const cor = T.padrao === 'meias' ? c2 : T.padrao === 'cinta' && seed % 2 ? c2 : c1;
+    v.box(-1, -5, -1, 0, -1, 0, (x, y) => y <= -5 ? (sujo ? 0x3e2a1a : 0x4a3a32) : sujo && y <= -2 ? 0x6e4628 : cor);
+    return v;
+  }
+  if (parte === 'pepinos'){
+    // as rodelas de pepino nos olhos, de quem está na espreguiçadeira
+    const [ex, ey, ez] = PORCO_SPA.olho;
+    for (const s of [-1, 1]) for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) v.set(s * ex + dx, ey + dy, ez + 1, dx || dy ? 0x6aa84f : 0xd8f0a8);
+    return v;
+  }
+  // o corpo, a cabeça redonda colada nele e o focinho achatado com as narinas
+  v.ell(0, 9, 0, 5.2, 4.8, 8.6, (x, y, z) => barro(x, y, z, pele(x, y, z)), (x, y) => y >= 4);
+  v.ell(0, 10.5, 9.4, 4.3, 4.2, 3.6, (x, y, z) => barro(x, y, z, pele(x, y, z)));
+  v.ell(0, 9.6, 13.4, 2.4, 2, 1.3, (x, y, z) => barro(x, y, z, T.focinho));
+  v.set(-1, 9, 14, T.narina); v.set(1, 9, 14, T.narina);
+  const [ex, ey, ez] = PORCO_SPA.olho;
+  for (const s of [-1, 1]){ v.set(s * ex, ey, ez, 0x1a1414); v.set(s * ex, ey + 1, ez, pele(s * ex, ey + 1, ez)); }
+  // as orelhas: em pé (triângulo para cima) ou caídas (abas para a frente, por cima dos olhos)
+  const corOrelha = (x, y, z) => T.padrao === 'mancha' && Math.sign(x) === olhoE ? c2 : T.padrao === 'malhado' && manchas[3][3] > 4 ? c2 : c1;
+  for (const s of [-1, 1]){
+    if (T.orelha === 'pe'){ v.box(s * 2, 14, 8, s * 4, 14, 9, corOrelha); v.box(s * 3, 15, 8, s * 4, 15, 9, corOrelha); v.set(s * 4, 16, 8, corOrelha(s, 0, 0)); v.set(s * 3, 14, 10, 0xf2a6a6); }
+    else { v.box(s * 2, 13, 9, s * 4, 14, 10, corOrelha); v.box(s * 3, 12, 11, s * 5, 13, 12, corOrelha); v.set(s * 4, 11, 12, corOrelha(s, 0, 0)); }
+  }
+  // o rabinho enrolado
+  for (const [x, y, z] of [[0, 10, -9], [0, 11, -10], [1, 12, -10], [1, 13, -9], [0, 13, -9], [-1, 12, -9]]) v.set(x, y, z, T.padrao === 'meias' ? c2 : barro(x, y, z, c1));
+  // o porco peludo: tufos para fora em parte da pele
+  if (T.peludo) tufosLuma(v, 0, 9, 0, e => e.y >= 6 && e.z < 12 && e.c !== 0x1a1414, 0.35);
+  return v;
+}
+// o porco inteiro, com as quatro patas no lugar, para ícone e visualizador
+function vPorcoSpaInteiro(seed, sujo){
+  const v = vPorcoSpa(seed, 'corpo', sujo), p = vPorcoSpa(seed, 'pata', sujo), Q = PORCO_SPA.quadril;
+  for (const [px, pz] of PORCO_SPA.pernas) for (const e of p.m.values()) v.set(e.x + Math.floor(px) + 1, e.y + Q, e.z + Math.floor(pz) + 1, e.c);
+  return v;
+}
 // ================= Casarão (obra nova do nível 45, em três etapas): a casa reformada ganha um segundo andar do mesmo
 // tamanho, com o telhado subindo junto (1), as janelas dos quartos do Hud (à esquerda) e do Dani (à direita), com cortina e
 // floreira, e as águas-furtadas no telhado (2), e a varanda de cima, por cima da varanda da reforma, com duas redes (3).
@@ -7454,6 +7651,16 @@ const VI = {
   enxada(){ return vEnxada(); }, regador(){ return vRegador(); }, cesta(){ return vCesta(); },
   galinha(){ return vGalinha(); }, vaca(){ return vVaca(); }, galo(){ return vGalo(); }, pintinho(){ return vPintinho(); },
   aposentada(){ return vGalinhaAposentada(); }, cartao(){ return vCartaoPostal(); },
+  porcoSpa(){ return vPorcoSpaInteiro(8); },
+  // o spa: uma tina de lama com borda de pedra e um porquinho rosa com a cabeça de fora
+  spa(){
+    const v = new Vox(), pedra = (x, y, z) => hash(x, y, z) < 0.5 ? 0xb9b1a3 : 0xa59d8f, lama = (x, y, z) => hash(x, 1, z) < 0.4 ? 0x6e4628 : 0x7a5232, rosa = 0xf3b4ac;
+    for (let x = -9; x <= 9; x++) for (let z = -7; z <= 7; z++){ const d = (x / 9) ** 2 + (z / 7) ** 2; if (d > 1) continue; v.box(x, 0, z, x, d > 0.62 ? 3 : 1, z, d > 0.62 ? pedra : lama); }
+    v.ell(0, 4, 0, 4.2, 3.6, 3.6, rosa, (x, y) => y >= 2); v.ell(0, 3.6, 3.6, 2.2, 1.8, 1, 0xf0a0a0); v.set(-1, 3, 5, 0x9a4a4a); v.set(1, 3, 5, 0x9a4a4a);
+    for (const s of [-1, 1]){ v.set(s * 2, 5, 3, 0x1a1414); v.box(s * 2, 7, -1, s * 4, 8, 0, rosa); v.set(s * 4, 9, -1, rosa); }
+    for (const [x, z] of [[-6, -2], [5, 3], [6, -3]]) v.set(x, 2, z, 0x86603a);
+    return v;
+  },
   pato(){ return vPato(); }, patos(){ return vCasaPatos(); }, curupira(){ return vCurupira(); },
   ovopata(){ const v = new Vox(); v.ell(0, 4.4, 0, 3, 4.2, 3, (x, y) => y > 6 ? 0xf6f8ef : 0xe4ead8); return v; },
   milton(){ return vPorco(0, 0, false, 'moletom'); }, aviao(){ return vTecoTeco(); }, jato(){ return vJatinho(); },
@@ -10479,6 +10686,459 @@ const MODELO_PATRINHO = { corpo: () => vPorco(0, 0, false, 'sueter'), braco: vBr
 const MODELO_MAURINHO = Object.assign({}, MODELO_PATRINHO, { corpo: () => vPorco(0, 0, false, 'sueterBranco'), braco: () => vBracoSueter(SUETER_BRANCO) });
 const MODELO_MAURINHO_OCULOS = Object.assign({}, MODELO_MAURINHO, { corpo: () => vPorco(0, 0, false, 'sueterBranco', true) });
 const CAMINHAO_MARKET = [false, [['JOLI', 1, '#2f6fb3'], ['MARKET', 0.62, '#e0408a']], '#fdf8ef'], CAMINHAO_CAFE = [true, [['JOLI', 1, '#7a4a2a'], ['COFFEE', 0.62, '#e0408a']], '#fdf3e6'];
+// ================= o spa funcionando: os porcos visitantes vêm pela estrada, da ponta de baixo, passam pelo vão da cerca
+// (SPA.vao), andam pela fileira de baixo até o arco, pagam a entrada no balcão (SPA.entrada) e fazem de duas a quatro
+// atividades (SPA.peso): rolar na lama, o ofurô, a sauna (entram e somem um tempo) e a espreguiçadeira com pepino nos olhos.
+// Quem sai da lama passa na ducha antes de qualquer outra coisa. Depois vão embora pelo mesmo caminho. A família
+// (FAMILIA_SPA) aparece de vez em quando, um por vez, e não paga. Todos andam pela grade do chão livre do desenho
+// (montarGradeSpa, caminhoSpa, como as hóspedes do resort) e pulam para o lugar da atividade. De noite não chega ninguém, e
+// quem está lá termina o que faz e vai embora. Os visitantes não ficam no save; só os totais (S.spaEntradas, S.spaReais e
+// S.spaHoje, o dia de hoje)
+Object.assign(SPA, { entrada: 300, xp: 250, vao: [22, 50], chegada: [70, 150], primeira: [6, 15], familia: [240, 480], max: 8,
+  vel: 0.55, velFamilia: 0.85, quer: [2, 4], paga: [15.2, 62.5], porta: [12, 71], maxSauna: 3,
+  tempo: { lama: [14, 24], ofuro: [12, 20], sauna: [9, 15], ducha: [3.5, 5], cadeira: [14, 24], passeio: [2, 4] },
+  peso: { lama: 4, ofuro: 2, sauna: 2, cadeira: 3, passeio: 1 },
+  // a altura de cada lugar e a do porco da família sentado nele (sentado: a altura do quadril, como no cafezinho)
+  altura: { lama: 0.2, ofuro: 0.125, ducha: 0.125, cadeira: 0.375 }, sentado: { lama: 0.02, ofuro: 0.16, cadeira: 0.375 } });
+const spaAberto = () => !!S && obraConcluida('spa');
+let gradeSpa = null, lugaresSpa = null, visitantesSpa = [], proxSpa = null, proxFamiliaSpa = null, efeitoSpaT = 0;
+const mundoSpa = (lx, lz) => [PREDIO.spa.x0 + lx / 8, PREDIO.spa.z0 + lz / 8];
+const localSpa = (x, z) => [(x - PREDIO.spa.x0) * 8, (z - PREDIO.spa.z0) * 8];
+function montarGradeSpa(){
+  const R = SPA, v = vSpa(), cheio = new Uint8Array(R.larg * R.fundo), livre = new Uint8Array(R.larg * R.fundo);
+  for (const e of v.m.values()) if (e.y >= 1 && e.y <= 7 && e.x >= 0 && e.z >= 0 && e.x < R.larg && e.z < R.fundo) cheio[e.z * R.larg + e.x] = 1;
+  for (let z = 1; z < R.fundo - 1; z++) for (let x = 1; x < R.larg - 1; x++){
+    let ok = 1;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (cheio[(z + dz) * R.larg + x + dx]) ok = 0;
+    livre[z * R.larg + x] = ok;
+  }
+  // o vão do arco, por onde entram e saem
+  for (let z = R.fundo - 3; z < R.fundo; z++) for (let x = R.arco[0] + 1; x <= R.arco[1] - 1; x++) livre[z * R.larg + x] = 1;
+  gradeSpa = livre;
+  const L = [], [, l1, , m1] = R.lama, [ox, oz] = R.ofuro;
+  for (const x of [8, 15, 22, 28]) L.push({ tipo: 'lama', x: x + 0.5, z: m1 - 2.5, ang: 0 });
+  for (const z of [31, 37]) L.push({ tipo: 'lama', x: l1 - 2.5, z: z + 0.5, ang: Math.PI / 2 });
+  L.push({ tipo: 'ofuro', x: ox - 2.5, z: oz + 2, ang: 0.35 }, { tipo: 'ofuro', x: ox + 2.5, z: oz + 2, ang: -0.35 });
+  for (const [dx, dz] of R.duchas) L.push({ tipo: 'ducha', x: dx + 0.5, z: dz + 0.5, ang: 0 });
+  R.cadeiras.forEach(x0 => L.push({ tipo: 'cadeira', x: x0 + 2, z: R.zCadeira + 4.6, ang: 0 }));
+  for (const q of L){ q.y = R.altura[q.tipo]; q.perto = celulaSpa(q.x, q.z); }
+  lugaresSpa = L;
+}
+// a célula livre mais perto de (lx, lz)
+function celulaSpa(lx, lz){
+  const R = SPA; let melhor = null, bd = Infinity;
+  for (let z = 0; z < R.fundo; z++) for (let x = 0; x < R.larg; x++) if (gradeSpa[z * R.larg + x]){ const d = Math.hypot(x + 0.5 - lx, z + 0.5 - lz); if (d < bd){ bd = d; melhor = [x, z]; } }
+  return melhor;
+}
+// o caminho de uma célula até outra pela grade (com diagonais que não cortam canto), um ponto a cada três cubinhos, no mundo
+function caminhoSpa(de, ate){
+  const R = SPA, Lg = R.larg, N = Lg * R.fundo, ant = new Int32Array(N).fill(-1), ini = de[1] * Lg + de[0], fim = ate[1] * Lg + ate[0], fila = [ini];
+  if (!gradeSpa[ini] || !gradeSpa[fim]) return null;
+  ant[ini] = ini;
+  for (let i = 0; i < fila.length && ant[fim] < 0; i++){
+    const c = fila[i], x = c % Lg, z = (c / Lg) | 0;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]){
+      const nx = x + dx, nz = z + dz;
+      if (nx < 0 || nz < 0 || nx >= Lg || nz >= R.fundo) continue;
+      const n = nz * Lg + nx;
+      if (ant[n] >= 0 || !gradeSpa[n] || (dx && dz && (!gradeSpa[z * Lg + nx] || !gradeSpa[nz * Lg + x]))) continue;
+      ant[n] = c; fila.push(n);
+    }
+  }
+  if (ant[fim] < 0) return null;
+  const out = []; for (let c = fim; c !== ini; c = ant[c]) out.push([c % Lg + 0.5, ((c / Lg) | 0) + 0.5]);
+  out.reverse();
+  return out.filter((_, i) => i % 3 === 2 || i === out.length - 1).map(([x, z]) => mundoSpa(x, z));
+}
+const celulaDe = v => { const [lx, lz] = localSpa(v.x, v.z); return [clamp(Math.floor(lx), 0, SPA.larg - 1), clamp(Math.floor(lz), 0, SPA.fundo - 1)]; };
+// a estrada até o arco: sobe pela estrada desde a ponta de baixo, passa no vão da cerca e anda pela fileira de baixo
+function estradaDoSpa(){
+  const [vx, vz] = SPA.vao, [ax] = mundoSpa(SPA.porta[0] + 0.5, 0), zf = vz + 0.5;
+  return [[X_CURVA, zf], [vx + 0.5, zf], [ax, zf], mundoSpa(SPA.porta[0] + 0.5, SPA.fundo - 0.4)];
+}
+// o vão na cerca da estrada e o caminho de terra até o arco, quando o spa fica pronto
+function abrirPassagemSpa(refazer = true){
+  const [vx, vz] = SPA.vao, [ax] = mundoSpa(SPA.porta[0] + 0.5, 0);
+  for (let x = vx; x <= Math.floor(ax); x++) setT(x, vz, 'caminho');
+  if (!refazer) return;
+  atualizarCercas(vx - 1, vz - 1, vx + 1, vz);
+  refazerChao();
+}
+// ----- os porcos visitantes
+function criarPorcoSpa(seed){
+  const T = tracosPorcoSpa(seed), E = PORCO_SPA.escala, g = new THREE.Group(), corpo = new THREE.Group();
+  const geoC = sujo => geo('porcoSpa' + seed + (sujo ? 'L' : ''), () => vPorcoSpa(seed, 'corpo', sujo).build(E, { origin: [0.5, 0, 0.5], jitter: 0.02 }));
+  const geoP = sujo => geo('pataSpa' + seed + (sujo ? 'L' : ''), () => vPorcoSpa(seed, 'pata', sujo).build(E, { origin: [0, 0, 0] }));
+  const mc = malha(geoC(false)); corpo.add(mc); g.add(corpo);
+  const pernas = PORCO_SPA.pernas.map(([px, pz]) => { const q = new THREE.Group(); q.position.set(px * E, PORCO_SPA.quadril * E, pz * E); q.add(malha(geoP(false))); corpo.add(q); return q; });
+  const pep = malha(geo('pepinosSpa', () => vPorcoSpa(0, 'pepinos').build(E, { origin: [0.5, 0, 0.5] }))); pep.visible = false; corpo.add(pep);
+  g.scale.setScalar(T.tam); g.visible = false; scene.add(g);
+  const v = { tipo: 'porco', seed, T, nome: 'visitanteSpa', apelido: sorteia(PORCO_SPA.nomes.filter(n => !visitantesSpa.some(o => o.apelido === n))) || 'Bolota', g, corpo, mc, pernas, pep, geoC, geoP,
+    topo(){ return new THREE.Vector3(this.x, this.y + 0.62 * this.T.tam, this.z); } };
+  g.traverse(o => { o.userData.alvo = { k: 'spaVisitante', v }; }); pickaveis.push(g);
+  return v;
+}
+function sujarSpa(v, sujo){
+  v.sujo = sujo;
+  if (v.tipo !== 'porco') return;
+  v.mc.geometry = v.geoC(sujo);
+  for (const q of v.pernas) q.children[0].geometry = v.geoP(sujo);
+}
+// ----- a família, um por vez: cópias dos personagens só para o spa, e só de quem não está em outro lugar da fazenda
+const FAMILIA_SPA = {
+  beto: { nome: 'Beto', pode: () => true, orig: () => beto, cria: () => new Porco(COR.beto, COR.betoBolso, 'beto') },
+  pelucio: { nome: 'Pelúcio', pode: () => !!S.viuCinePelucio, orig: () => pelucio, cria: () => new Porco(0, 0, 'pelucio', modeloMoletom(1.32)) },
+  patrinho: { nome: 'Patrinho', pode: () => !!S.viuCinePatrinho, orig: () => patrinho, cria: () => new Porco(0, 0, 'patrinho', MODELO_PATRINHO) },
+  maurinho: { nome: 'Maurinho', pode: () => !!S.viuCineMaurinho && !S.obra, orig: () => maurinho, cria: () => new Porco(0, 0, 'maurinho', MODELO_MAURINHO) },
+  milton: { nome: 'Milton', pode: () => !!S.conheceuMilton && voo.estado === 'fora', orig: () => milton, escala: 0.5, cria: () => new Porco(0, 0, 'milton', modeloMoletom(0.7)) },
+  hud: { nome: 'Hud', pode: () => !!S.viuCineHud && !hudAtivo(), orig: () => irmaoHud, escala: 0.5, cria: () => new Porco(COR.ed, COR.edBolso, 'hud', MODELO_HUD) },
+  dani: { nome: 'Dani', pode: () => !!S.viuCineDani && !daniAtivo(), orig: () => irmaoDani, escala: ESCALA_DANI, cria: () => new Porco(COR.dani, COR.daniBolso, 'dani', MODELO_DANI) },
+};
+const COPIA_SPA = {};
+function criarFamiliaSpa(quem){
+  const F = FAMILIA_SPA[quem];
+  let p = COPIA_SPA[quem];
+  if (!p){ p = COPIA_SPA[quem] = F.cria(); if (F.escala) p.g.scale.setScalar(F.escala); }
+  p.sentado = 0; p.alt = 0; p.estado = 'parado'; p.pontos = []; p.aceno = 0; p.pulo = 0; p.g.visible = false; scene.add(p.g);
+  const v = { tipo: 'familia', quem, p, g: p.g, nome: quem, apelido: F.nome, topo(){ return new THREE.Vector3(this.x, this.y + this.p.altura * (F.escala || 1), this.z); } };
+  p.g.traverse(o => { o.userData.alvo = { k: 'spaVisitante', v }; });
+  if (!pickaveis.includes(p.g)) pickaveis.push(p.g);
+  return v;
+}
+// quem da família pode vir agora: liberado, sem estar em outro lugar da fazenda e sem já estar no spa
+const familiaLivreSpa = () => Object.keys(FAMILIA_SPA).filter(k => FAMILIA_SPA[k].pode() && !FAMILIA_SPA[k].orig().g.visible && !visitantesSpa.some(v => v.quem === k));
+// ----- chegada: a estrada até o arco, pelo balcão
+function soltarNoSpa(v, espera){
+  Object.assign(v, { x: X_CURVA, z: H + 0.6 + espera * 0.9, y: 0, ang: Math.PI, fase: rnd(0, 6), estado: 'chegando', t: 0, lugar: null, sujo: false, pulo: 0, feitas: 0,
+    quer: Math.floor(rnd(SPA.quer[0], SPA.quer[1] + 0.99)) });
+  const [px, pz] = mundoSpa(...SPA.paga), dentro = caminhoSpa(SPA.porta, [Math.floor(SPA.paga[0]), Math.floor(SPA.paga[1])]) || [];
+  v.pts = [...estradaDoSpa(), ...dentro, [px, pz]];
+  visitantesSpa.push(v);
+}
+function chegarAoSpa(n){
+  if (!spaAberto() || cine) return false;
+  if (!gradeSpa) montarGradeSpa();
+  const cabem = SPA.max - visitantesSpa.filter(v => v.tipo === 'porco').length;
+  for (let i = 0; i < Math.min(n, cabem); i++) soltarNoSpa(criarPorcoSpa(Math.floor(Math.random() * PORCO_SPA.sementes)), i);
+  return cabem > 0;
+}
+function chegarFamiliaSpa(quem){
+  if (!spaAberto() || cine) return false;
+  if (!gradeSpa) montarGradeSpa();
+  const livres = familiaLivreSpa(); quem = quem && livres.includes(quem) ? quem : sorteia(livres);
+  if (!quem) return false;
+  soltarNoSpa(criarFamiliaSpa(quem), 0);
+  return true;
+}
+function tirarDoSpa(v){
+  const i = visitantesSpa.indexOf(v); if (i >= 0) visitantesSpa.splice(i, 1);
+  v.g.visible = false; scene.remove(v.g);
+  if (v.tipo === 'porco'){ const k = pickaveis.indexOf(v.g); if (k >= 0) pickaveis.splice(k, 1); }
+}
+function esvaziarSpa(){ for (const v of visitantesSpa.slice()) tirarDoSpa(v); }
+// ----- o que cada um faz: um lugar livre de uma atividade sorteada pelo peso; saindo da lama, a ducha
+const ocupadosSpa = () => new Set([...visitantesSpa.map(o => o.lugar), banhoEd && banhoEd.lugar].filter(Boolean));
+function proximaNoSpa(v){
+  v.lugar = null;
+  const noite = periodo().id === 'noite', ocupados = ocupadosSpa(), livres = t => lugaresSpa.filter(q => q.tipo === t && !ocupados.has(q));
+  if (v.sujo){
+    const q = sorteia(livres('ducha'));
+    if (q){ irAoLugarSpa(v, q); return; }
+    v.estado = 'parado'; v.t = rnd(0.8, 1.6); return;
+  }
+  if (v.feitas >= v.quer || noite){ sairDoSpa(v); return; }
+  const naSauna = visitantesSpa.filter(o => o.estado === 'sauna' || o.vai === 'sauna').length;
+  const tipos = Object.keys(SPA.peso).filter(t => t === 'passeio' || (t === 'sauna' ? naSauna < SPA.maxSauna : livres(t).length));
+  let soma = 0; for (const t of tipos) soma += SPA.peso[t];
+  let r = Math.random() * soma, tipo = tipos[0];
+  for (const t of tipos){ r -= SPA.peso[t]; if (r <= 0){ tipo = t; break; } }
+  v.feitas++;
+  if (tipo === 'passeio'){ v.feitas--; v.vai = 'passeio'; const de = celulaDe(v), alvo = sorteia(livresGradeSpa().filter(c => Math.hypot(c[0] - de[0], c[1] - de[1]) > 8)); andarNoSpa(v, alvo); return; }
+  if (tipo === 'sauna'){ v.vai = 'sauna'; andarNoSpa(v, celulaSpa(SPA.portaSauna[0] + 2, SPA.sauna[3] + 2)); return; }
+  irAoLugarSpa(v, sorteia(livres(tipo)));
+}
+function irAoLugarSpa(v, q){ v.lugar = q; v.vai = 'lugar'; andarNoSpa(v, q.perto); }
+const livresGradeSpa = () => { const out = [], R = SPA; for (let z = 20; z < R.fundo - 4; z++) for (let x = 2; x < R.larg - 2; x++) if (gradeSpa[z * R.larg + x]) out.push([x, z]); return out; };
+function andarNoSpa(v, cel){
+  const pts = cel && caminhoSpa(celulaDe(v), cel);
+  v.pts = pts || []; v.estado = v.pts.length ? 'andando' : 'chegou';
+}
+function sairDoSpa(v){
+  v.vai = 'sair'; v.lugar = null;
+  const dentro = caminhoSpa(celulaDe(v), SPA.porta) || [];
+  v.pts = [...dentro, ...estradaDoSpa().reverse(), [X_CURVA, H + 1]]; v.estado = 'saindo';
+}
+// um pulinho em arco até (x, y, z) no mundo; o ofurô pede um pulo mais alto, por cima da tina
+function pularNoSpa(v, x, y, z, alto, depois){ v.salto = { x0: v.x, z0: v.z, y0: v.y, x1: x, z1: z, y1: y, alto, t: 0, depois }; v.estado = 'pulando'; v.ang = Math.atan2(x - v.x, z - v.z); }
+const FALAS_SPA_VISITANTE = ['Oinc! (suspira, relaxado)', 'Oinc oinc! (rola de alegria)', 'Óinc... (fecha os olhinhos)', 'Oinc! (balança o rabinho enrolado)', 'Oinc-oinc! (faz bolhinha na lama)', 'Óóóinc... (que delícia)', 'Oinc! (acena com a patinha)', 'Oinc oinc! (o melhor spa da região!)', 'Oinc... (pede mais lama)', 'Óinc! (se espreguiça todinho)', 'Oinc! (cochila de novo)', 'Oinc-oinc! (dá uma piscadinha)'];
+const FALAS_SPA_PAGA = ['Oinc! (paga a entrada)', 'Oinc oinc! (deixa as moedinhas no balcão)', 'Oinc! (toca o sininho)', 'Óinc! (pega uma toalha rosa)', 'Oinc! (escolhe a toalha listrada)', 'Oinc-oinc! (paga e já olha pra lama)', 'Oinc! (mostra o cartão fidelidade)', 'Oinc! (conta moedinha por moedinha)', 'Oinc oinc! (pergunta se a lama tá quentinha)', 'Óinc! (sorri pra recepção)', 'Oinc! (pede um pepino extra)'];
+const FALAS_SPA_FAMILIA_ENTRADA = ['Família não paga, né? Oinc!', 'Vim só dar uma relaxadinha!', 'O Ed disse que pra família é de graça!', 'Hoje é dia de spa!', 'Guarda uma toalha pra mim?', 'Cheguei! Cadê a lama mais quentinha?', 'Trabalhei a semana toda, eu mereço!', 'O spa da fazenda é o melhor da região!', 'Só uma horinha de lama e já volto!', 'Oinc! Que cheirinho de lama fresca!', 'Se precisarem de mim, tô no ofurô!'];
+const FALAS_SPA_FAMILIA = ['Ahhh, isso que é vida!', 'Essa lama faz milagre na pele!', 'Não me acorda, tô relaxando...', 'O ofurô tá na temperatura certinha.', 'Spa de família é outra coisa!', 'Deixa eu ficar só mais um pouquinho.', 'Que ideia boa foi esse spa!', 'Já tô novinho em folha!', 'A sauna abre os poros, sabia?', 'Oinc... que delícia.', 'Vou contar pra todo mundo desse spa!'];
+// ----- o relógio do spa e de cada um
+function atualizarSpa(dt, t){
+  if (!spaAberto()){ if (visitantesSpa.length) esvaziarSpa(); return; }
+  if (cine){ if (visitantesSpa.length) esvaziarSpa(); return; }
+  const noite = periodo().id === 'noite';
+  if (proxSpa == null) proxSpa = rnd(...SPA.primeira);
+  if (proxFamiliaSpa == null) proxFamiliaSpa = rnd(...SPA.familia) * 0.5;
+  if (!noite){
+    if ((proxSpa -= dt) <= 0){ proxSpa = rnd(...SPA.chegada); chegarAoSpa(Math.random() < 0.2 ? 3 : Math.random() < 0.5 ? 2 : 1); }
+    if ((proxFamiliaSpa -= dt) <= 0){ proxFamiliaSpa = rnd(...SPA.familia); if (!visitantesSpa.some(v => v.tipo === 'familia')) chegarFamiliaSpa(); }
+  }
+  for (const v of visitantesSpa.slice()){
+    // alguém da família foi chamado para outro lugar da fazenda: some do spa
+    if (v.tipo === 'familia' && FAMILIA_SPA[v.quem].orig().g.visible){ tirarDoSpa(v); continue; }
+    passoSpa(v, dt, t, noite);
+    if (!visitantesSpa.includes(v)) continue;
+    animarSpa(v, dt, t);
+  }
+  efeitosSpa(dt, t);
+}
+
+function passoSpa(v, dt, t, noite){
+  const vel = v.tipo === 'porco' ? SPA.vel : SPA.velFamilia;
+  switch (v.estado){
+    case 'chegando': case 'andando': case 'saindo': {
+      const P = v.pts[0];
+      if (!P){
+        if (v.estado === 'saindo'){ tirarDoSpa(v); return; }
+        if (v.estado === 'chegando'){ v.estado = 'pagando'; v.t = 1.2; v.ang = Math.PI / 2; break; }
+        v.estado = 'chegou'; break;
+      }
+      const dx = P[0] - v.x, dz = P[1] - v.z, d = Math.hypot(dx, dz), passo = vel * dt;
+      v.ang = Math.atan2(dx, dz);
+      if (d > passo){ v.x += dx / d * passo; v.z += dz / d * passo; } else { v.x = P[0]; v.z = P[1]; v.pts.shift(); }
+      // dentro do spa o chão é o das lajotas, um cubinho acima da grama
+      v.y = dentroDoSpa(v.x, v.z) ? 1 / 8 : 0;
+      v.g.visible = v.z < H - 0.02;
+      break;
+    }
+    case 'pagando':
+      v.t -= dt;
+      if (v.t <= 0.6 && !v.pagou){
+        v.pagou = true;
+        if (v.tipo === 'porco') pagarSpa(v);
+        else { const f = variar(FALAS_SPA_FAMILIA_ENTRADA); falar(v, f, tempoDeLeitura(f)); v.p.aceno = 1.2; }
+      }
+      if (v.t <= 0){ v.estado = 'parado'; v.t = rnd(0.3, 0.8); }
+      break;
+    case 'parado': v.t -= dt; if (v.t <= 0) proximaNoSpa(v); break;
+    case 'chegou':
+      if (v.vai === 'sauna'){
+        // entra pela porta e some lá dentro
+        const [x, z] = mundoSpa(SPA.portaSauna[0] + 2, SPA.sauna[3] + 1.3);
+        v.ang = Math.PI; v.x += (x - v.x) * Math.min(1, dt * 3); v.z += (z - v.z) * Math.min(1, dt * 3);
+        if (Math.hypot(x - v.x, z - v.z) < 0.05){ v.estado = 'sauna'; v.t = rnd(...SPA.tempo.sauna); v.g.visible = false; }
+        break;
+      }
+      if (v.vai === 'lugar' && v.lugar){
+        const q = v.lugar, [x, z] = mundoSpa(q.x, q.z);
+        pularNoSpa(v, x, q.y, z, q.tipo === 'ofuro' ? 0.62 : 0.22, () => {
+          v.estado = 'atividade'; v.t = rnd(...SPA.tempo[q.tipo]); v.ang = q.ang;
+          if (q.tipo === 'lama' || q.tipo === 'ofuro'){ respingoSpa(v.x, v.z, q.tipo); if (naTelaSpa(v.x, v.z)) Som.tom(q.tipo === 'lama' ? 140 : 300, 0.18, 'sine', 0.05, q.tipo === 'lama' ? 70 : 180); }
+          if (q.tipo === 'cadeira' && v.tipo === 'porco') v.pep.visible = true;
+        });
+        break;
+      }
+      v.estado = 'parado'; v.t = rnd(...SPA.tempo.passeio);
+      break;
+    case 'pulando': {
+      const S2 = v.salto; S2.t = Math.min(1, S2.t + dt / 0.5);
+      v.x = lerp(S2.x0, S2.x1, S2.t); v.z = lerp(S2.z0, S2.z1, S2.t); v.y = lerp(S2.y0, S2.y1, S2.t) + Math.sin(S2.t * Math.PI) * S2.alto;
+      if (S2.t >= 1){ v.salto = null; S2.depois(); }
+      break;
+    }
+    case 'atividade': {
+      const q = v.lugar; v.t -= dt;
+      if (q.tipo === 'ducha' && Math.random() < dt * 14) particula(v.x + rnd(-0.12, 0.12), 1.5, v.z + rnd(-0.12, 0.12), 0x9ad8f0, -1);
+      if (q.tipo === 'lama' && Math.random() < dt * 0.6) respingoSpa(v.x, v.z, 'lama', 2);
+      // hora de sair: pula de volta para o chão (de noite sai antes)
+      if (v.t <= 0 || (noite && v.t > 1.5)){
+        if (v.tipo === 'porco') v.pep.visible = false;
+        if (q.tipo === 'lama') sujarSpa(v, true);
+        if (q.tipo === 'ducha'){ sujarSpa(v, false); v.lugar = null; v.estado = 'parado'; v.t = rnd(0.3, 0.8); break; }
+        const [cx, cz] = q.perto, [x, z] = mundoSpa(cx + 0.5, cz + 0.5);
+        pularNoSpa(v, x, 1 / 8, z, q.tipo === 'ofuro' ? 0.62 : 0.22, () => { v.lugar = null; v.estado = 'parado'; v.t = rnd(0.3, 1.2); });
+      }
+      break;
+    }
+    case 'sauna':
+      v.t -= dt;
+      if (v.t <= 0 || noite){
+        // sai da sauna numa nuvem de vapor
+        const [x, z] = mundoSpa(SPA.portaSauna[0] + 2, SPA.sauna[3] + 1.4);
+        v.x = x; v.z = z; v.y = 1 / 8; v.ang = 0; v.g.visible = true; v.vai = null;
+        for (let i = 0; i < 6; i++) vaporSpa(x + rnd(-0.15, 0.15), 0.3, z + rnd(-0.1, 0.1));
+        v.estado = 'parado'; v.t = rnd(0.5, 1.2);
+      }
+      break;
+  }
+}
+const dentroDoSpa = (x, z) => { const P = PREDIO.spa; return x >= P.x0 && x < P.x1 + 1 && z >= P.z0 && z < P.z1 + 1; };
+const naTelaSpa = (x, z) => Math.hypot(x - cam.alvo.x, z - cam.alvo.z) < cam.vista * 0.9;
+function pagarSpa(v){
+  const val = SPA.entrada, [x, z] = [v.x + 0.3, v.z];
+  S.dinheiro += val; S.spaEntradas = (S.spaEntradas || 0) + 1; S.spaReais = (S.spaReais || 0) + val;
+  if (!S.spaHoje || S.spaHoje.dia !== diaAtual()) S.spaHoje = { dia: diaAtual(), n: 0, reais: 0 };
+  S.spaHoje.n++; S.spaHoje.reais += val;
+  chipPulsa('chipDinheiro'); if (naTelaSpa(v.x, v.z)){ Som.moeda(); Som.tom(1568, 0.3, 'sine', 0.03, 0, 0.12); }
+  flutuar(new THREE.Vector3(x, 0.9, z), '+' + reais(val), '', 'moeda');
+  if (Math.random() < 0.45){ const f = variar(FALAS_SPA_PAGA); falar(v, f, tempoDeLeitura(f)); }
+  hud(); salvar();
+}
+// os efeitos: bolhas na lama, o vapor do ofurô e da chaminé da sauna, só com o spa perto do meio da tela
+function respingoSpa(x, z, tipo, n = 8){ for (let i = 0; i < n; i++) particula(x + rnd(-0.15, 0.15), 0.3, z + rnd(-0.15, 0.15), tipo === 'lama' ? (i % 2 ? 0x6e4628 : 0x86603a) : 0xa8e4f0, 0.8); }
+// o vapor: fiapos brancos translúcidos que sobem devagar, crescem e encolhem no fim (sem apagar a cor de um por um)
+const VAPOR = [], MAT_VAPOR = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.32, depthWrite: false });
+function vaporSpa(x, y, z){
+  if (VAPOR.length > 60) return;
+  const m = new THREE.Mesh(geoPart, MAT_VAPOR); m.position.set(x, y, z); scene.add(m);
+  VAPOR.push({ m, v: new THREE.Vector3(rnd(-0.06, 0.06), rnd(0.16, 0.26), rnd(-0.06, 0.06)), t: 0, vida: rnd(1.4, 2) });
+}
+function atualizarVapor(dt){
+  for (let i = VAPOR.length - 1; i >= 0; i--){
+    const p = VAPOR[i]; p.t += dt;
+    if (p.t >= p.vida){ scene.remove(p.m); VAPOR.splice(i, 1); continue; }
+    p.m.position.addScaledVector(p.v, dt); p.m.rotation.y += dt;
+    const k = p.t / p.vida; p.m.scale.setScalar(1 + Math.sin(k * Math.PI) * 1.6);
+  }
+}
+function efeitosSpa(dt){
+  const P = PREDIO.spa, cx = (P.x0 + P.x1 + 1) / 2, cz = (P.z0 + P.z1 + 1) / 2;
+  if (cine || !naTelaSpa(cx, cz) || (efeitoSpaT -= dt) > 0) return;
+  efeitoSpaT = 0.22;
+  const [ox, oz, or] = SPA.ofuro, a = rnd(0, Math.PI * 2), r = rnd(0, or - 2), [vx, vz] = mundoSpa(ox + Math.cos(a) * r, oz + Math.sin(a) * r);
+  vaporSpa(vx, 0.42, vz);
+  if (Math.random() < 0.6){ const [sx, sz] = mundoSpa(5, 5); vaporSpa(sx, 2.35, sz); }
+  if (Math.random() < 0.5){ const [l0, l1, m0, m1] = SPA.lama, [bx, bz] = mundoSpa(rnd(l0, l1 + 1), rnd(m0, m1 + 1)); particula(bx, 0.27, bz, 0x86603a, 0.25); }
+}
+function animarSpa(v, dt, t){
+  const andando = v.estado === 'andando' || v.estado === 'chegando' || v.estado === 'saindo';
+  if (andando) v.fase += dt * 10;
+  const sw = andando ? Math.sin(v.fase) : 0, q = v.estado === 'atividade' ? v.lugar : null;
+  let y = v.y;
+  if (v.tipo === 'porco'){
+    // deitado na lama ou na espreguiçadeira: as patas dobram e a barriga encosta (o corpo desce o tamanho da pata)
+    const deita = q && (q.tipo === 'lama' || q.tipo === 'cadeira');
+    v.pernas.forEach((p, i) => { p.rotation.x = deita ? (i < 2 ? -1.35 : 1.35) : sw * (i === 0 || i === 3 ? 0.6 : -0.6); });
+    if (deita) y -= PORCO_SPA.quadril * PORCO_SPA.escala * v.T.tam;
+    v.corpo.position.y = andando ? Math.abs(Math.sin(v.fase)) * 0.012 : 0;
+    // na lama ele rola de um lado para o outro; na ducha, se sacode
+    v.corpo.rotation.z = q && q.tipo === 'lama' ? Math.max(0, Math.sin(t * 0.9 + v.fase)) * 0.9 * Math.sin(t * 0.45 + v.fase) : q && q.tipo === 'ducha' ? Math.sin(t * 18) * 0.12 * (v.t < 1 ? 1 : 0) : 0;
+    v.corpo.rotation.x = andando ? 0 : Math.sin(t * 1.4 + v.fase) * 0.02;
+  } else {
+    const p = v.p, sentado = q && SPA.sentado[q.tipo];
+    p.pos.set(v.x, v.z);
+    p.pE.rotation.x = sentado ? -1.3 : sw * 0.7; p.pD.rotation.x = sentado ? -1.3 : -sw * 0.7;
+    if (q && q.tipo === 'ducha'){ p.bE.rotation.set(-2.6 + Math.sin(t * 9) * 0.25, 0, -0.4); p.bD.rotation.set(-2.6 - Math.sin(t * 9) * 0.25, 0, 0.4); }
+    else if (p.aceno > 0){ p.aceno -= dt; p.bE.rotation.set(-sw * 0.6, 0, -0.65); p.bD.rotation.set(-0.3, 0, 2.5 + Math.sin(t * 11) * 0.35); }
+    else { p.bE.rotation.set(-sw * 0.6, 0, -0.65); p.bD.rotation.set(sw * 0.6, 0, 0.65); }
+    p.corpo.position.y = andando ? Math.abs(Math.sin(v.fase)) * 0.045 : 0;
+    p.corpo.rotation.set(sentado ? -0.12 : 0, 0, andando ? Math.sin(v.fase) * 0.06 : 0);
+    if (sentado) y = sentado;
+  }
+  if (v.pulo > 0){ v.pulo = Math.max(0, v.pulo - dt); y += Math.sin((1 - v.pulo / 0.3) * Math.PI) * 0.08; }
+  v.g.position.set(v.x, y, v.z);
+  v.g.rotation.y = anguloPerto(v.g.rotation.y, v.ang, Math.min(1, dt * 8));
+}
+const OQUE_SPA = { lama: 'Está rolando na lama.', ofuro: 'Está no ofurô quentinho.', ducha: 'Está tomando uma ducha.', cadeira: 'Está na espreguiçadeira com pepino nos olhos.', sauna: 'Está na sauna.' };
+function itensVisitanteSpa(v){
+  v.pulo = 0.3;
+  const q = v.estado === 'atividade' && v.lugar, oque = v.estado === 'sauna' ? OQUE_SPA.sauna : q ? (v.tipo === 'familia' && q.tipo === 'cadeira' ? 'Está descansando na espreguiçadeira.' : OQUE_SPA[q.tipo]) : v.estado === 'chegando' ? 'Está chegando.' : v.estado === 'saindo' ? 'Está indo embora, novinho em folha.' : 'Está passeando pelo spa.';
+  if (v.tipo === 'familia'){
+    Som.oinc(); const f = variar(FALAS_SPA_FAMILIA); falar(v, f, tempoDeLeitura(f));
+    return { titulo: `${v.apelido} no spa`, icone: v.quem, estado: `Veio relaxar no spa. A família não paga a entrada. ${oque}`, itens: [] };
+  }
+  Som.oinc(); falar(v, variar(FALAS_SPA_VISITANTE), 2.4);
+  return { titulo: v.apelido, icone: 'porcoSpa', estado: `Visitante do spa. ${descricaoPorcoSpa(v.T)} ${oque}${v.sujo ? ' Está todo sujo de lama.' : ''}`, itens: [] };
+}
+// ----- o letreiro do arco
+function vestirSpa(m){
+  const [ox, , oz] = ORIGEM_PREDIO.spa, s = 1 / 8, [a0, a1] = SPA.arco;
+  const tx = placaDeTexto(texturaTexto([['SPA DOS PIGS', 1, '#e0408a']], 320, 64, '#fdf8ef'), (a1 - a0 - 1) / 8, 2.2 / 8);
+  tx.position.set(((a0 + a1 + 1) / 2 - ox) * s, 13.95 * s, (SPA.fundo - oz) * s + 0.008); m.add(tx);
+}
+// ----- o menu do spa pronto: quem está lá, o que entrou hoje, e o banho de lama do Ed
+function menuSpa(r){
+  if (!obraConcluida('spa')){ r.estado = OBRAS.spa.desc; return; }
+  const H2 = S.spaHoje && S.spaHoje.dia === diaAtual() ? S.spaHoje : { n: 0, reais: 0 }, aqui = visitantesSpa.filter(v => v.estado !== 'chegando' && v.estado !== 'saindo').length;
+  r.estado = `Entrada de ${reais(SPA.entrada)} por porquinho visitante; a família não paga. Hoje: ${contagem(H2.n, 'visitante', 'visitantes')} e ${reais(H2.reais)}.${aqui ? ` Agora ${aqui > 1 ? aqui + ' porquinhos estão' : 'um porquinho está'} relaxando.` : ''}${periodo().id === 'noite' ? ' De noite o spa fecha.' : ''}`;
+  const ja = S.spaDia === diaAtual(), naFila = fila.find(t => t.tipo === 'spa');
+  if (naFila){ r.itens.push({ rotulo: 'Cancelar o banho de lama', icone: 'ed', fn: () => cancelar(naFila) }); return; }
+  r.itens.push({ rotulo: 'Banho de lama', sub: `o Ed rola na lama e passa na ducha; ${ja ? 'o XP de hoje já veio' : SPA.xp + ' XP, uma vez por dia'}`, icone: 'spa', fn: () => enfileirar('spa', { k: 'spa' }) });
+}
+// ----- o banho de lama do Ed (tarefa 'spa'): ele chega no arco, entra, pula num lugar livre da lama, fica sentado
+// rolando um tempo, passa na ducha e sai pelo arco. A tarefa fica em andamento até ele sair (como o trator), então a fila
+// espera e nenhuma cena começa. Cancelar no meio põe o Ed na frente do arco na hora
+const BANHO_ED = { lama: 9, ducha: 3.2, sentado: 0.02 };
+let banhoEd = null;
+const FALAS_ED_LAMA = ['Aoooa! Que lama gostosa!', 'Oinc! Lama quentinha é tudo de bom.', 'Ahhh... agora sim, um porquinho feliz.', 'Nada como um banho de lama depois do trabalho!', 'Oinc oinc! Tô rolando na lama!', 'Essa lama vale cada moedinha.', 'Ai, que relaxante... nem lembro da enxada.', 'Lama na orelha, lama no focinho. Perfeito!', 'Os visitantes têm razão: que spa bom!', 'Aoooa! Vou sair daqui novinho!', 'Só mais um minutinho de lama...'];
+const FALAS_ED_DUCHA = ['Pronto, limpinho de novo!', 'Uma ducha geladinha pra fechar!', 'Agora sim, cheiroso e descansado.', 'Volto pro trabalho novinho em folha!', 'Oinc! Que spa bom esse da fazenda.', 'Tchau, lama! Até amanhã.', 'Saí da lama direto pra ducha. Ufa!', 'Aoooa! Pronto pra mais um dia de fazenda.', 'Pele de pelúcia nova!', 'Que banho! Vou recomendar pro Beto.', 'Nada como cuidar de quem cuida da fazenda.'];
+const portaSpaMundo = () => mundoSpa(SPA.porta[0] + 0.5, SPA.fundo + 3.6);
+function comecarBanhoEd(tarefa){
+  if (!gradeSpa) montarGradeSpa();
+  const ocupados = ocupadosSpa(), q = sorteia(lugaresSpa.filter(l => l.tipo === 'lama' && !ocupados.has(l))) || lugaresSpa.find(l => l.tipo === 'lama');
+  banhoEd = { tarefa, lugar: q, fase: 'entra', t: 0 };
+  const dentro = caminhoSpa(SPA.porta, q.perto) || [];
+  ed.ir([mundoSpa(SPA.porta[0] + 0.5, SPA.fundo - 0.4), ...dentro], () => {
+    if (!banhoEd) return;
+    const [x, z] = mundoSpa(q.x, q.z);
+    banhoEd.fase = 'pula'; banhoEd.t = 0; banhoEd.de = [ed.pos.x, ed.pos.y]; banhoEd.ate = [x, z];
+  });
+}
+function atualizarBanhoEd(dt, t){
+  const B = banhoEd; if (!B) return;
+  B.t += dt;
+  if (B.fase === 'pula' || B.fase === 'sai'){
+    const k = Math.min(1, B.t / 0.5), [x0, z0] = B.de, [x1, z1] = B.ate;
+    ed.pos.set(lerp(x0, x1, k), lerp(z0, z1, k)); ed.alt = Math.sin(k * Math.PI) * 0.25 + (B.fase === 'pula' ? k * 0.1 : (1 - k) * 0.1);
+    ed.angAlvo = Math.atan2(x1 - x0, z1 - z0);
+    if (k >= 1){
+      ed.alt = 0;
+      if (B.fase === 'pula'){
+        B.fase = 'lama'; B.t = 0; ed.sentado = BANHO_ED.sentado; ed.angAlvo = B.lugar.ang;
+        respingoSpa(ed.pos.x, ed.pos.y, 'lama', 12); Som.tom(140, 0.2, 'sine', 0.06, 70);
+        const f = variar(FALAS_ED_LAMA); falar(ed, f, tempoDeLeitura(f));
+      } else {
+        // da beira da lama até a ducha livre
+        const ocupados = ocupadosSpa(), d = sorteia(lugaresSpa.filter(l => l.tipo === 'ducha' && !ocupados.has(l))) || lugaresSpa.find(l => l.tipo === 'ducha');
+        B.lugar = d; B.fase = 'vaiDucha';
+        ed.ir([...(caminhoSpa(celulaDe({ x: ed.pos.x, z: ed.pos.y }), d.perto) || []), mundoSpa(d.x, d.z)], () => { if (!banhoEd) return; B.fase = 'ducha'; B.t = 0; ed.angAlvo = 0; });
+      }
+    }
+    return;
+  }
+  if (B.fase === 'lama'){
+    ed.corpo.rotation.z = Math.sin(B.t * 1.6) * 0.18;
+    if (Math.random() < dt * 1.2) respingoSpa(ed.pos.x, ed.pos.y, 'lama', 3);
+    if (B.t >= BANHO_ED.lama){
+      ed.sentado = 0; ed.corpo.rotation.z = 0;
+      const [cx, cz] = B.lugar.perto;
+      B.fase = 'sai'; B.t = 0; B.de = [ed.pos.x, ed.pos.y]; B.ate = mundoSpa(cx + 0.5, cz + 0.5);
+    }
+    return;
+  }
+  if (B.fase === 'ducha'){
+    if (Math.random() < dt * 16) particula(ed.pos.x + rnd(-0.15, 0.15), 1.5, ed.pos.y + rnd(-0.15, 0.15), 0x9ad8f0, -1);
+    ed.bE.rotation.set(-2.6 + Math.sin(t * 9) * 0.25, 0, -0.4); ed.bD.rotation.set(-2.6 - Math.sin(t * 9) * 0.25, 0, 0.4);
+    if (B.t >= BANHO_ED.ducha){
+      B.fase = 'saindo';
+      const f = variar(FALAS_ED_DUCHA); falar(ed, f, tempoDeLeitura(f));
+      if (S.spaDia !== diaAtual()){ S.spaDia = diaAtual(); ganharXP(SPA.xp, new THREE.Vector3(ed.pos.x, 1.3, ed.pos.y)); }
+      ed.ir([...(caminhoSpa(celulaDe({ x: ed.pos.x, z: ed.pos.y }), SPA.porta) || []), mundoSpa(SPA.porta[0] + 0.5, SPA.fundo - 0.4), portaSpaMundo()], () => terminarBanhoEd(false));
+    }
+  }
+}
+function terminarBanhoEd(cancelado){
+  const B = banhoEd; if (!B) return;
+  banhoEd = null;
+  ed.sentado = 0; ed.alt = 0; ed.corpo.rotation.z = 0;
+  if (cancelado){ ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; ed.colocar(...portaSpaMundo()); return; }
+  const tarefa = B.tarefa;
+  if (fila[0] === tarefa) fila.shift();
+  if (tarefaAtual === tarefa) tarefaAtual = null;
+  liberar(tarefa, false); hud(); salvar();
+}
 function construirPersonagens(){
   ed = new Porco(COR.ed, COR.edBolso, 'ed'); ed.colocar(6.5, 5.5); ed.ang = ed.angAlvo = 0.6; scene.add(ed.g);
   const gMochila = geo('mochila', () => vMochila().build(1 / 57, { origin: [0.5, 0, 0.5], jitter: 0.015, ao: AO_SUAVE }));
@@ -14793,13 +15453,13 @@ function itensHud(){
 
 // ================= tarefas do Ed
 const fila = [];
-const NOMES_ACAO = { desejo:'Fazer um pedido', museu:'Visitar o museu', subirMirante:'Subir no mirante', estrelas:'Olhar as estrelas', trator:'Sair com o trator', carinhoGalo:'Carinho no galo', pegarGalo:'Pegar o galo', soltarGalo:'Devolver o galo', apagarFogo:'Apagar o fogo', recolherLixo:'Recolher o lixo', tirarGalho:'Tirar o galho', pegarAluguel:'Pegar o aluguel', lerCartao:'Ler o cartão-postal', tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa' };
-const DUR = { desejo: 1.4, museu: 0.5, subirMirante: 0.2, estrelas: 4.5, carinhoGalo: 2.4, pegarGalo: 0.5, soltarGalo: 0.7, apagarFogo: 2.2, recolherLixo: 0.8, tirarGalho: 2.4, pegarAluguel: 0.6, lerCartao: 0.6, tirarCerca: 2.4, colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, coletarMata: 1.0, cavarTrufa: 1.6 };
-const FERR = { desejo: null, museu: null, subirMirante: null, estrelas: null, carinhoGalo: 'carinho', pegarGalo: null, soltarGalo: 'soltar', apagarFogo: 'regador', recolherLixo: 'cesta', tirarGalho: null, pegarAluguel: null, lerCartao: null, tirarCerca: 'enxada', colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', coletarMata: 'cesta', cavarTrufa: 'enxada' };
+const NOMES_ACAO = { spa:'Banho de lama', desejo:'Fazer um pedido', museu:'Visitar o museu', subirMirante:'Subir no mirante', estrelas:'Olhar as estrelas', trator:'Sair com o trator', carinhoGalo:'Carinho no galo', pegarGalo:'Pegar o galo', soltarGalo:'Devolver o galo', apagarFogo:'Apagar o fogo', recolherLixo:'Recolher o lixo', tirarGalho:'Tirar o galho', pegarAluguel:'Pegar o aluguel', lerCartao:'Ler o cartão-postal', tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa' };
+const DUR = { spa: 0.3, desejo: 1.4, museu: 0.5, subirMirante: 0.2, estrelas: 4.5, carinhoGalo: 2.4, pegarGalo: 0.5, soltarGalo: 0.7, apagarFogo: 2.2, recolherLixo: 0.8, tirarGalho: 2.4, pegarAluguel: 0.6, lerCartao: 0.6, tirarCerca: 2.4, colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, coletarMata: 1.0, cavarTrufa: 1.6 };
+const FERR = { spa: null, desejo: null, museu: null, subirMirante: null, estrelas: null, carinhoGalo: 'carinho', pegarGalo: null, soltarGalo: 'soltar', apagarFogo: 'regador', recolherLixo: 'cesta', tirarGalho: null, pegarAluguel: null, lerCartao: null, tirarCerca: 'enxada', colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', coletarMata: 'cesta', cavarTrufa: 'enxada' };
 const mesmoAlvo = (a, b) => a.k === b.k && (a.k === 'animal' ? a.a === b.a : a.x === b.x && a.z === b.z);
-function reservado(alvo){ if (alvo.k === 'poco') return fila.some(t => t.tipo === 'desejo'); if (alvo.k === 'museu') return fila.some(t => t.tipo === 'museu'); if (alvo.k === 'luneta') return fila.some(t => t.tipo === 'estrelas'); if (alvo.k === 'mirante') return fila.some(t => t.tipo === 'subirMirante'); if (alvo.k === 'trator') return fila.some(t => t.tipo === 'trator' && t.alvo.lote === alvo.lote); if (alvo.k === 'galo') return fila.some(t => t.alvo.k === 'galo' && t.alvo.id === alvo.id); if (alvo.k === 'ocorrencia') return fila.some(t => t.alvo.k === 'ocorrencia' && t.alvo.id === alvo.id && t.alvo.j === alvo.j); if (alvo.k === 'aluguel') return fila.some(t => t.tipo === 'pegarAluguel'); if (alvo.k === 'cartao') return fila.some(t => t.tipo === 'lerCartao'); if (alvo.k === 'cercaCanto') return fila.some(t => t.tipo === 'tirarCerca'); if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
+function reservado(alvo){ if (alvo.k === 'spa') return fila.some(t => t.tipo === 'spa'); if (alvo.k === 'poco') return fila.some(t => t.tipo === 'desejo'); if (alvo.k === 'museu') return fila.some(t => t.tipo === 'museu'); if (alvo.k === 'luneta') return fila.some(t => t.tipo === 'estrelas'); if (alvo.k === 'mirante') return fila.some(t => t.tipo === 'subirMirante'); if (alvo.k === 'trator') return fila.some(t => t.tipo === 'trator' && t.alvo.lote === alvo.lote); if (alvo.k === 'galo') return fila.some(t => t.alvo.k === 'galo' && t.alvo.id === alvo.id); if (alvo.k === 'ocorrencia') return fila.some(t => t.alvo.k === 'ocorrencia' && t.alvo.id === alvo.id && t.alvo.j === alvo.j); if (alvo.k === 'aluguel') return fila.some(t => t.tipo === 'pegarAluguel'); if (alvo.k === 'cartao') return fila.some(t => t.tipo === 'lerCartao'); if (alvo.k === 'cercaCanto') return fila.some(t => t.tipo === 'tirarCerca'); if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
 const visSlot = alvo => { const L = alvo.k === 'pomar' ? POMAR_VIS : alvo.k === 'mata' ? MATA_VIS : COLMEIA_VIS; return L[alvo.i] || (L[alvo.i] = {}); };
-function setReserva(alvo, v){ if (alvo.k === 'trator' || alvo.k === 'luneta' || alvo.k === 'mirante' || alvo.k === 'museu' || alvo.k === 'poco') return; if (alvo.k === 'galo'){ if (GALOS[alvo.id]) GALOS[alvo.id].res = v; return; } if (alvo.k === 'ocorrencia' || alvo.k === 'aluguel' || alvo.k === 'cartao' || alvo.k === 'cercaCanto' || alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
+function setReserva(alvo, v){ if (alvo.k === 'trator' || alvo.k === 'luneta' || alvo.k === 'mirante' || alvo.k === 'museu' || alvo.k === 'poco' || alvo.k === 'spa') return; if (alvo.k === 'galo'){ if (GALOS[alvo.id]) GALOS[alvo.id].res = v; return; } if (alvo.k === 'ocorrencia' || alvo.k === 'aluguel' || alvo.k === 'cartao' || alvo.k === 'cercaCanto' || alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
 // diz se a ação vale para o alvo; devolve o custo ou um motivo
 function checar(tipoA, alvo, param){
   if (alvo.k === 'galo'){
@@ -14818,6 +15478,7 @@ function checar(tipoA, alvo, param){
   if (alvo.k === 'mirante') return { ok: tipoA === 'subirMirante' && !!S.mirante && !miranteFP, custo: {} };
   if (alvo.k === 'luneta') return { ok: tipoA === 'estrelas' && obraConcluida('observatorio') && periodo().id === 'noite', motivo: 'Só dá para olhar as estrelas de noite', custo: {} };
   if (alvo.k === 'museu') return { ok: tipoA === 'museu' && obraConcluida('museu'), custo: {} };
+  if (alvo.k === 'spa') return { ok: tipoA === 'spa' && spaAberto() && !banhoEd, custo: {} };
   if (alvo.k === 'poco'){ const e = pocoEm(alvo.x, alvo.z); return { ok: tipoA === 'desejo' && !!e && !!frentePoco(e) && S.dinheiro >= DESEJO.preco, motivo: 'Falta uma moedinha', custo: {} }; }
   if (alvo.k === 'maca') return { ok: tipoA === 'comerMaca' && !!S.maca, custo: {} };
   if (alvo.k === 'trufa') return { ok: tipoA === 'cavarTrufa' && S.trufas.some(t => t.x === alvo.x && t.z === alvo.z), custo: {} };
@@ -14912,7 +15573,7 @@ function liberar(tarefa, devolver){
 function cancelar(tarefa){
   const i = fila.indexOf(tarefa);
   if (i < 0) return;
-  if (i === 0 && tarefaAtual === tarefa){ if (trator && trator.tarefa === tarefa) guardarTrator(true); ed.estado = 'parado'; ed.pontos = []; ed.aoChegar = null; ed.trab = null; ed.ferramenta(null); tarefaAtual = null; }
+  if (i === 0 && tarefaAtual === tarefa){ if (trator && trator.tarefa === tarefa) guardarTrator(true); if (banhoEd && banhoEd.tarefa === tarefa) terminarBanhoEd(true); ed.estado = 'parado'; ed.pontos = []; ed.aoChegar = null; ed.trab = null; ed.ferramenta(null); tarefaAtual = null; }
   fila.splice(i, 1); liberar(tarefa, true); hud();
 }
 function limparFila(){ for (const t of fila.slice()) cancelar(t); }
@@ -14938,6 +15599,7 @@ function alvoMundo(alvo){
   if (alvo.k === 'trator') return [PREDIO.galpao.porta[0] + 0.5, PREDIO.galpao.porta[1] + 0.5];
   if (alvo.k === 'luneta') return lugarDaLuneta();
   if (alvo.k === 'museu') return portaMuseu();
+  if (alvo.k === 'spa') return portaSpaMundo();
   if (alvo.k === 'poco'){ const e = pocoEm(alvo.x, alvo.z); return (e && frentePoco(e)) || [alvo.x + 0.5, alvo.z + 0.5]; }
   if (alvo.k === 'mirante') return peMirante();
   if (alvo.k === 'fabrica'){ const pt = PREDIO[alvo.id].porta; return [pt[0] + 0.5, pt[1] + 0.5]; }
@@ -15121,7 +15783,7 @@ function proximaTarefa(){
     let dx = ultimo[0] - ant[0], dz = ultimo[1] - ant[1], d = Math.hypot(dx, dz);
     if (tarefa.alvo.k === 'animal' || tarefa.alvo.k === 'galo'){ dx = tx - ant[0]; dz = tz - ant[1]; d = Math.hypot(dx, dz); }
     // no galo do mourão o Ed para encostado na cerca, de frente para ele
-    if ((tarefa.alvo.k === 'galo' && tarefa.alvo.onde === 'mourao') || tarefa.alvo.k === 'luneta' || tarefa.alvo.k === 'mirante' || tarefa.alvo.k === 'museu' || tarefa.alvo.k === 'poco'){ if (pts.length) pts[pts.length - 1] = [tx, tz]; else pts = [[tx, tz]]; }
+    if ((tarefa.alvo.k === 'galo' && tarefa.alvo.onde === 'mourao') || tarefa.alvo.k === 'luneta' || tarefa.alvo.k === 'mirante' || tarefa.alvo.k === 'museu' || tarefa.alvo.k === 'poco' || tarefa.alvo.k === 'spa'){ if (pts.length) pts[pts.length - 1] = [tx, tz]; else pts = [[tx, tz]]; }
     else if (encostar){
       const cx = gx + 0.5, cz = gz + 0.5, ex = tx - cx, ez = tz - cz, de = Math.hypot(ex, ez) || 1, k = Math.min(0.4, Math.max(0, de - 0.42));
       const fim = [cx + ex / de * k, cz + ez / de * k];
@@ -15135,6 +15797,7 @@ function proximaTarefa(){
   ed.ir(pts, () => {
     if (tarefa.tipo === 'andar'){ fila.shift(); tarefaAtual = null; hud(); return; }
     if (tarefa.tipo === 'trator'){ if (checar('trator', tarefa.alvo, tarefa.param).ok) sairComTrator(tarefa); else { fila.shift(); liberar(tarefa, true); tarefaAtual = null; hud(); } return; }
+    if (tarefa.tipo === 'spa'){ if (checar('spa', tarefa.alvo).ok) comecarBanhoEd(tarefa); else { fila.shift(); liberar(tarefa, true); tarefaAtual = null; hud(); } return; }
     // o galo solto correu enquanto o Ed vinha: a tarefa fica na frente da fila e o Ed vai de novo (no máximo 4 vezes)
     if (tarefa.alvo.k === 'galo' && tarefa.tipo === 'pegarGalo'){
       const G = GALOS[tarefa.alvo.id];
@@ -16115,6 +16778,7 @@ function itensDoAlvoBase(alvo){
   if (alvo.k === 'cercadoLote') return itensCercadoLote(alvo.id);
   if (alvo.k === 'obraLote') return itensObraLote(alvo.id);
   if (alvo.k === 'hospede') return itensHospede(alvo.h);
+  if (alvo.k === 'spaVisitante') return itensVisitanteSpa(alvo.v);
   if (alvo.k === 'colmeia') return itensColmeia(alvo.i);
   if (alvo.k === 'irrigador'){
     r.titulo = 'Irrigador automático'; r.icone = 'irrigador';
@@ -16779,6 +17443,11 @@ function abrirCenas(){
     const motivoE = vacasNoEspaco() < 1 ? 'Nenhuma vaca está no espaço agora.' : S.cartao ? 'Tem um cartão esperando na porta da casa.' : null;
     h += `<div class="cartao"><div class="cab"><img src="${icone('vacaEspaco')}" alt=""><div><h4>Cartão-postal do espaço</h4></div></div><div class="info">Uma vaquinha de férias no espaço manda um cartão-postal da Lua, que chega na porta da casa.${motivoE ? `<br><small>${esc(motivoE)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-postal-espaco type="button"${motivoE ? ' disabled' : ''}>Chamar o cartão</button></div></div>`;
   }
+  // os porquinhos do spa também não são cena: o botão manda alguns agora
+  if (nivel() >= OBRAS.spa.nivel){
+    const motivoS = !obraConcluida('spa') ? `Construa o spa dos pigs com o Maurinho (nível ${OBRAS.spa.nivel}).` : periodo().id === 'noite' ? 'De noite o spa fica fechado.' : visitantesSpa.filter(v => v.tipo === 'porco').length >= SPA.max ? 'O spa está lotado.' : null;
+    h += `<div class="cartao"><div class="cab"><img src="${icone('spa')}" alt=""><div><h4>Porquinhos no spa</h4></div></div><div class="info">Porcos da região chegam pela estrada, pagam a entrada e vão relaxar no spa. Às vezes alguém da família aparece junto.${motivoS ? `<br><small>${esc(motivoS)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-spa type="button"${motivoS ? ' disabled' : ''}>Chamar porquinhos</button></div></div>`;
+  }
   // os visitantes da trilha também não são cena: o botão manda um grupo agora
   const motivoV = !S.mirante ? `Construa o mirante da mata (nível ${MIRANTE.nivel}).` : grupoTrilha ? 'Já tem gente na trilha.' : periodo().id === 'noite' ? 'De noite a trilha fica fechada.' : null;
   h += `<div class="cartao"><div class="cab"><img src="${icone('mirante')}" alt=""><div><h4>Visitantes na trilha</h4></div></div><div class="info">Um grupo sobe no mirante, faz a trilha da mata e deixa uma contribuição na caixinha.${motivoV ? `<br><small>${esc(motivoV)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-trilha type="button"${motivoV ? ' disabled' : ''}>Chamar visitantes</button></div></div>`;
@@ -16792,6 +17461,8 @@ function abrirCenas(){
   if (be) be.addEventListener('click', () => { Som.clique(); fecharJanela(); chegarCartaoEspaco(); });
   const br = $('janela').querySelector('[data-redemoinho]');
   if (br) br.addEventListener('click', () => { Som.clique(); fecharJanela(); chamarRedemoinho(); });
+  const bsp = $('janela').querySelector('[data-spa]');
+  if (bsp) bsp.addEventListener('click', () => { Som.clique(); fecharJanela(); chegarAoSpa(2); if (Math.random() < 0.5) chegarFamiliaSpa(); });
   const bt = $('janela').querySelector('[data-trilha]');
   if (bt) bt.addEventListener('click', () => { Som.clique(); fecharJanela(); chamarVisitantes(); });
   const bg = $('janela').querySelector('[data-galo]');
@@ -17095,11 +17766,12 @@ function mostrarAjuda(intro, aba){
       <li><b>Mais minhocas</b>: melhorias da composteira, no menu dela. ${COMPOSTEIRA.melhorias.map((m, i) => `${i ? 'nível' : 'Nível'} ${m.nivel}, ${reais(m.preco)}: um saco a cada ${tempo(m.seg)} e caixa de ${m.caixa}`).join('; ')}. Cada melhoria põe mais Minhoquinhas na casa.</li>
       <li><b>Reformas</b>${nv(REFORMA.nivel[0])}: o Maurinho, irmão arquiteto do Ed, reforma as construções. Toque numa delas e escolha "Reformar com o Maurinho". As fábricas ganham mais uma vaga de produção, o galinheiro e o curral cabem mais bichos, e a casa, o celeiro e o poço ganham visual novo. A <b>2ª reforma</b>${nv(REFORMA.nivel[1])} (todas menos a casa, que vira o casarão) dá mais uma vaga às fábricas e visual novo a todas; nos galinheiros, currais e no galinheiro dos patos ela não aumenta quantos bichos cabem, mas dá conforto, e os bichos soltam coraçõezinhos de vez em quando. Uma obra por vez, e a construção continua funcionando enquanto o andaime está de pé.</li>
       <li><b>Obras novas</b>${nv(Math.min(...Object.values(OBRAS).map(O => O.nivel)))}: construções grandes que o Maurinho faz do zero. Um nível antes de cada uma liberar aparece o lote, demarcado com estacas e a placa da obra; toque nele e chame o Maurinho. A construção vai subindo enquanto ele trabalha, inclusive com o jogo fechado, e cada obra dá bastante XP. Uma obra por vez, junto com as reformas. ${Object.values(OBRAS).map(O => `${O.nome}: nível ${O.nivel}, ${reais(O.etapas.reduce((t, E) => t + E.preco, 0))}${O.etapas.length > 1 ? ` em ${O.etapas.length} etapas` : ''}`).join('; ')}.</li>
+      <li><b>Spa dos pigs</b>${nv(OBRAS.spa.nivel)}: no canto de baixo do terreno novo, encostado na estrada. Tem piscina de lama, ofurô, sauna, duchas e espreguiçadeiras. Porcos da região toda, cada um de um jeito (malhados, pintados, peludos, de orelha caída...), vêm pela estrada, pagam ${reais(SPA.entrada)} de entrada no balcão e passam um tempo relaxando: rolam na lama, passam na ducha, entram na sauna e deitam com pepino nos olhos. A família também aparece de vez em quando, sem pagar. De noite o spa fecha. Toque no spa e escolha "Banho de lama" para o Ed relaxar (${SPA.xp} XP uma vez por dia); toque num visitante para saber quem é.</li>
       <li><b>Resort das Aposentadas</b>${nv(OBRAS.resort.nivel)}: no terreno novo, depois do lago. Na inauguração as aposentadas chegam pela ponte e se mudam; depois elas tomam sol, boiam na piscina e tomam água de coco, e à noite dormem nos chalés. As próximas que se aposentarem atravessam a ponte para lá, e os cartões-postais passam a vir do resort. Toque numa hóspede para saber quem é.</li>
       <li><b>Casarão</b>${nv(OBRAS.casarao.nivel)}: depois da reforma da casa, o Maurinho faz o casarão em três etapas, pelo menu da casa: o segundo andar, os quartos do Hud e do Dani (cortina amarela e lilás, floreiras e águas-furtadas) e a varanda de cima com duas redes. Na hora de nanar, cada um acende a luz do próprio quarto.</li>
       <li><b>Galpão do trator</b>${nv(OBRAS.galpao.nivel)}: ao lado da horta. Num terreno de canteiros, escolha "Arar", "Plantar" ou "Colher o terreno com o trator": o Ed sobe no trator e faz os 16 canteiros de uma passada. Para plantar, ele usa as sementes da bolsa e compra na hora as que faltarem.</li>
       <li><b>ArraiEd</b>${nv(ARRAIA.nivel)}: a maior festa de todas, de graça, no fim da tarde, no campo grande do terreno novo. Vem todo mundo: a família, o Saci, a Lúcia e os nanos, as Minhoquinhas, o Curupira e os bichos da mata, as galinhas aposentadas, os visitantes da trilha e as vaquinhas espaciais com o ETzinho. Tem fogueira, mastro, bandeirinhas, barracas, fogos e quadrilha. No fim o arraial é desmontado.</li>
-      <li><b>Observatório</b>${nv(OBRAS.observatorio.nivel)}: na ponta de baixo do terreno novo, ao lado da estrada. De noite a cúpula abre e gira; toque no observatório e escolha "Olhar as estrelas": o Ed vai até a luneta e vê estrelas cadentes (${OBSERV.xp} XP, uma vez por noite). As vacas que o disco voador leva vão de férias para o espaço: com o observatório pronto, de noite, o disco às vezes pousa e devolve uma delas, de óculos escuros e anteninha de lembrança, se tiver lugar no curral.</li>
+      <li><b>Observatório</b>${nv(OBRAS.observatorio.nivel)}: no terreno novo, atrás do spa, ao lado da estrada. De noite a cúpula abre e gira; toque no observatório e escolha "Olhar as estrelas": o Ed vai até a luneta e vê estrelas cadentes (${OBSERV.xp} XP, uma vez por noite). As vacas que o disco voador leva vão de férias para o espaço: com o observatório pronto, de noite, o disco às vezes pousa e devolve uma delas, de óculos escuros e anteninha de lembrança, se tiver lugar no curral.</li>
       <li><b>Museu da fazenda</b>${nv(OBRAS.museu.nivel)}: ao lado do observatório, no terreno novo. Toque no museu e escolha "Visitar o museu": o Ed sobe a escada e abre as quatro salas, a das figurinhas, a dos cartões-postais (os que ele já leu; toque num para ler de novo), a das cenas (dá para rever daqui) e a dos recordes da fazenda. A visita dá ${MUSEU.xp} XP uma vez por dia.</li>
       <li><b>Hangar do PIG-MTP</b>${nv(OBRAS.hangar.nivel)}: pelo menu da pista. O Maurinho troca o hangar velho por um novo com torre de controle, e a pista ganha asfalto. Depois disso, quando o jatinho chega de tarde ou de noite, às vezes o Milton dorme na fazenda: o jato fica no hangar e, de manhã, ele aparece no cafezinho antes de decolar.</li>
     </ul>`;
@@ -17426,6 +18098,7 @@ function quadro(agoraP){
   atualizarAluguel(dt);
   atualizarAposentadoria(dt); atualizarCartaoEspaco(dt);
   atualizarHospedes(dt, t);
+  atualizarSpa(dt, t); atualizarBanhoEd(dt, t); atualizarVapor(dt);
   atualizarTrator(dt, t);
   ed.update(dt, t);
   // no trator, as duas mãos no volante
@@ -17521,8 +18194,16 @@ async function iniciar(){
     if (S.obra.obra){ S.obrasFeitas[S.obra.obra] = S.obra.n; obraNovaPronta = S.obra; } else { S.reformas[S.obra.id] = S.obra.n; obraPronta = S.obra; }
     S.obra = null;
   }
+  // o observatório subiu para trás do spa (no lugar antigo dele fica o spa): o enfeite que estava no lugar novo volta
+  // para a loja, uma vez
+  if (!S.obsAtrasDoSpa){
+    const P = PREDIO.observatorio;
+    if (loteObraAberto('observatorio') && Array.isArray(S.enfeites)){ if (!S.guardados) S.guardados = {}; devolverEnfeites((x, z) => (x >= P.x0 && x <= P.x1 && z >= P.z0 && z <= P.z1) || (x === P.porta[0] && z === P.porta[1]), 'novo do observatório'); }
+    S.obsAtrasDoSpa = true;
+  }
   // os lotes das obras novas que já começaram viram construção
   for (const k in OBRAS) if (loteObraAberto(k)) abrirLoteObra(k, false);
+  if (spaAberto()) abrirPassagemSpa(false);
   fazendaNova = novo;
   proxCafezinho = sorteioCafezinho();
   // o tempo do Hud e o prazo dos pedidos ficam parados enquanto o jogo está fechado
@@ -17624,6 +18305,8 @@ async function iniciar(){
     enfeitesNovos: { aves, ave: () => { aves.prox = 0; }, AJUDA, vis: () => ENF_VIS, casinha: () => casinhaParaLuma(), piquenique: () => lugarPiquenique(), montar: e => montarEnfeite(e), FOGUEIRA, LAGUINHO, DESEJO, aquecer, inverno: invernoAgora, assento: assentoFogueira, frentePoco, fazerDesejo, itens: e => itensEnfeite(e), formas: formasLiberadas, grupoComForma },
     cartaoEspaco: { chegar: chegarCartaoEspaco, nomes: nomesNoEspaco, CARTAO_ESPACO },
     museu: { MUSEU, abrir: abrirMuseu, visitar: visitarMuseu, porta: portaMuseu, alvo: alvoMuseu, guardarCartao: guardarCartaoLido },
+    spa: { SPA, PORCO_SPA, visitantes: () => visitantesSpa, chegar: chegarAoSpa, familia: chegarFamiliaSpa, livres: familiaLivreSpa, lugares: () => lugaresSpa, grade: () => gradeSpa, banho: () => banhoEd, mundo: mundoSpa, esvaziar: esvaziarSpa, tracos: tracosPorcoSpa, descricao: descricaoPorcoSpa, itens: v => itensVisitanteSpa(v), menu: r => menuSpa(r), aberto: spaAberto, relogio: () => ({ proxSpa, proxFamiliaSpa }), zerar: () => { proxSpa = 0.1; proxFamiliaSpa = 0.1; }, sujar: sujarSpa, abrirCenas, pedirCena,
+      noLugar: (v, tipo, i = 0, t = 999) => { if (!gradeSpa) montarGradeSpa(); const q = lugaresSpa.filter(l => l.tipo === tipo)[i], [x, z] = mundoSpa(q.x, q.z); Object.assign(v, { x, z, y: q.y, lugar: q, vai: 'lugar', estado: 'atividade', t, ang: q.ang, pagou: true, pts: [] }); v.g.visible = true; if (tipo === 'cadeira' && v.pep) v.pep.visible = true; } },
     observatorio: { OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
     luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
@@ -17729,7 +18412,7 @@ function catalogoModelos(){
       p.g.userData.anima(0, 0);
       return p.g;
     } }] }] },
-    { nome: 'Bichos', itens: [um('Galinha', vGalinha), um('Galinha aposentada', vGalinhaAposentada), um('Galo', vGalo), um('Pintinho', vPintinho), um('Pato', vPato), um('Curupira', vCurupira), um('Vaca', vVaca), um('Vaca de volta do espaço', () => vVaca(true)), um('Minhoca', vMinhoca), um('Bugio', vBugio), um('Jaguatirica', vJaguatirica), um('Tucano', vTucano), um('Papagaio', vPapagaio), um('Cobra-coral', vCobraCoral)] },
+    { nome: 'Bichos', itens: [um('Galinha', vGalinha), um('Galinha aposentada', vGalinhaAposentada), um('Galo', vGalo), um('Pintinho', vPintinho), um('Pato', vPato), um('Curupira', vCurupira), um('Vaca', vVaca), um('Vaca de volta do espaço', () => vVaca(true)), varios('Porcos do spa', [...Array(16).keys()].map(i => [`${i + 1}: ${descricaoPorcoSpa(tracosPorcoSpa(i))}`, () => vPorcoSpaInteiro(i)])), varios('Porco do spa sujo de lama', [0, 5, 9, 14].map(i => [descricaoPorcoSpa(tracosPorcoSpa(i)), () => vPorcoSpaInteiro(i, true)])), um('Minhoca', vMinhoca), um('Bugio', vBugio), um('Jaguatirica', vJaguatirica), um('Tucano', vTucano), um('Papagaio', vPapagaio), um('Cobra-coral', vCobraCoral)] },
     { nome: 'Canteiros', itens: [...Object.keys(CULTURAS).map(k => { const C = CULTURAS[k]; return varios(C.nome, [['Semente', () => vPlanta(k, 0)], ['Muda', () => vPlanta(k, 1)], ['Crescendo', () => vPlanta(k, 2)], ['Pronta', () => vPlanta(k, 3)], ...produto(uso(C.produto || k))], 3); }), um('Mato', vMato), varios('Solo', [['Seco', () => vSolo(false, false)], ['Molhado', () => vSolo(true, false)], ['Adubado', () => vSolo(false, true)]])] },
     { nome: 'Pomar', itens: Object.keys(FRUTIFERAS).map(k => { uso(k); return varios(FRUTIFERAS[k].nome, [['Com fruta', () => vFrutifera(k, true)], ['Sem fruta', () => vFrutifera(k, false)], ...produto(uso(FRUTIFERAS[k].fruta))]); }) },
     { nome: 'Floresta', itens: [varios('Matagal', [['Capim alto', () => vMatagal(0)], ['Moita', () => vMatagal(1)], ['Capim e pedra', () => vMatagal(2)], ['Tronco caído', () => vMatagal(3)]]), ...Object.keys(NATIVAS).map(k => { uso(k); return varios(NATIVAS[k].nome, [['Com fruto', () => vNativa(k, true)], ['Sem fruto', () => vNativa(k, false)], ...produto(uso(NATIVAS[k].produto))]); }), varios('Mata', [[ 'Copa redonda', () => vCopa(0)], ['Copa alta', () => vCopa(1)], ['Copa larga', () => vCopa(2)]])] },
@@ -17739,6 +18422,7 @@ function catalogoModelos(){
         .map(([id, nome]) => varios('Reforma: ' + nome, [['Original', () => id === 'moinho' ? vMoinhoCompleto(0) : vReforma(id, 0)], ['Em obra', () => vEmObra(id)], ['1ª reforma', () => id === 'moinho' ? vMoinhoCompleto(1) : vReforma(id, 1)], ...(id === 'casa' ? [] : [['2ª reforma', () => id === 'moinho' ? vMoinhoCompleto(2) : vReforma(id, 2)]])], id === 'casa' ? 2 : 3)),
       um('Prancheta', vPrancheta), um('Trena', vTrena), um('Martelo', vMartelo)] },
     { nome: 'Obras do Maurinho', itens: [
+      varios('Spa dos pigs', [['Pronto', vSpa], ['Obra no começo', () => vObraSubindo('spa', 0, 1)], ['Obra na metade', () => vObraSubindo('spa', 0, 4)]]),
       varios('Resort das Aposentadas', [['Pronto', vResort], ['Obra no começo', () => vObraSubindo('resort', 0, 1)], ['Obra na metade', () => vObraSubindo('resort', 0, 4)], ['Obra quase pronta', () => vObraSubindo('resort', 0, 7)]]),
       um('Fita da inauguração', vFitaResort), um('Estacas do lote', () => vEstacas(2, 2)),
       varios('Hangar do PIG-MTP', [['Pronto', vHangarNovo], ['Obra na metade', () => vObraSubindo('hangar', 0, 4)]]),
