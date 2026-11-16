@@ -5137,14 +5137,12 @@ const centroMirante = () => [(MIRANTE.x0 + MIRANTE.x1 + 1) / 2, (MIRANTE.z0 + MI
 function montarMirante(){
   if (miranteM || !S.mirante) return;
   const [cx, cz] = centroMirante();
-  // a escada fica do lado direito (x maior), que a câmera de sempre enxerga. A torre sai em duas malhas: a base e a parte
-  // de cima (MIRANTE_VISAO.corte), que fica translúcida quando cobre a horta (atualizarVisaoMirante)
-  const parte = cima => { const v = vMirante(), p = new Vox(); for (const e of v.m.values()) if ((e.y >= MIRANTE_VISAO.corte) === cima) p.set(e.x, e.y, e.z, e.c); return p; };
-  miranteM = colocar(malha(geo('miranteBase', () => parte(false).build(1 / 16, { origin: [16, 0, 16], jitter: 0.02 }))), cx, 0, cz);
+  // a escada fica do lado direito (x maior), que a câmera de sempre enxerga. A torre tem material próprio, que fica
+  // translúcido quando o zoom enquadra o terreno da horta que ela cobre (atualizarVisaoMirante)
+  miranteM = colocar(malha(geo('mirante', () => vMirante().build(1 / 16, { origin: [16, 0, 16], jitter: 0.02 }))), cx, 0, cz);
   miranteM.rotation.y = -Math.PI / 2;
-  const topo = malha(geo('miranteTopo', () => parte(true).build(1 / 16, { origin: [16, 0, 16], jitter: 0.02 })));
-  topo.material = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 1 }); topo.material.onBeforeCompile = MAT.onBeforeCompile;
-  miranteM.add(topo); miranteTopo = topo;
+  miranteM.material = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 1 }); miranteM.material.onBeforeCompile = MAT.onBeforeCompile;
+  miranteTopo = miranteM;
   miranteM.traverse(o => { o.userData.alvo = { k: 'mirante' }; }); pickaveis.push(miranteM);
   for (let x = MIRANTE.x0; x <= MIRANTE.x1; x++) for (let z = MIRANTE.z0; z <= MIRANTE.z1; z++) setT(x, z, 'mirante');
   montarMiniMirante();
@@ -5274,15 +5272,19 @@ function atualizarMirante1P(dt){
   if (css !== M.ceu){ M.ceu = css; document.body.style.background = css; }
   for (const b of BOLHAS) if (b.visible){ b.visible = false; b.userData.fp = true; }
 }
-// o mirante alto não pode esconder a horta (o Lucas pediu): quando a parte de cima da torre cobre na tela um canteiro, um
-// bicho ou alguém da família que está atrás dela, ela fica translúcida e o toque passa por ela e chega no que está atrás.
-// A base continua sólida e é por ela que se abre o menu do mirante. Lá em cima, em primeira pessoa, a torre fica sólida
-const MIRANTE_VISAO = { corte: 36, opac: 0.22, vel: 5, cada: 0.2, folga: 0.02 };
+// o mirante alto não pode esconder a horta (o Lucas pediu): quando o zoom enquadra um terreno de canteiros (o meio da tela
+// dentro do terreno, com folga, e a câmera mais perto que MIRANTE_VISAO.vista) e a torre cobre na tela um canteiro dele que
+// está atrás, ela inteira fica translúcida, sem sombra, e o toque passa por ela e chega no canteiro. Fora disso ela fica
+// como sempre. Lá em cima, em primeira pessoa, fica sólida. O menu do mirante abre pelo chão entre as pernas
+const MIRANTE_VISAO = { opac: 0.3, vel: 6, cada: 0.2, folga: 0.02, vista: 13, margem: 0.5 };
 const visaoMirante = { t: 0, cobre: false };
 const _vM = new THREE.Vector3(), _cxM = new THREE.Box3();
 function miranteCobre(){
-  if (!miranteTopo) return false;
-  // o retângulo da parte de cima na tela e a profundidade do meio da torre
+  if (!miranteTopo || cam.vista > MIRANTE_VISAO.vista) return false;
+  const m = MIRANTE_VISAO.margem, A = cam.alvo;
+  const enquadrados = LOTES.filter(l => (!l.canto || S.canto === 2) && A.x >= l.x - m && A.x <= l.x + 4 + m && A.z >= l.z - m && A.z <= l.z + 4 + m);
+  if (!enquadrados.length) return false;
+  // o retângulo da torre na tela e a profundidade do meio dela
   camera.updateMatrixWorld(); _cxM.setFromObject(miranteTopo);
   let x0 = 2, x1 = -2, y0 = 2, y1 = -2;
   for (let i = 0; i < 8; i++){
@@ -5291,13 +5293,7 @@ function miranteCobre(){
   }
   const [cx, cz] = centroMirante(), d0 = _vM.set(cx, 2, cz).project(camera).z, f = MIRANTE_VISAO.folga;
   const atras = (x, y, z) => { _vM.set(x, y, z).project(camera); return _vM.z > d0 && _vM.x > x0 - f && _vM.x < x1 + f && _vM.y > y0 - f && _vM.y < y1 + f; };
-  // os canteiros dos terrenos (os do canto só com o terreno novo limpo), os bichos e a família
-  for (const l of LOTES){
-    if (l.canto && S.canto !== 2) continue;
-    for (let i = 0; i < 4; i++) for (let k = 0; k < 4; k++) if (atras(l.x + i + 0.5, 0.15, l.z + k + 0.5)) return true;
-  }
-  for (const a of ANI) if (a.g && a.g.visible && atras(a.pos.x, 0.3, a.pos.y)) return true;
-  for (const p of [ed, irmaoHud, irmaoDani]) if (p && p.g && p.g.visible && atras(p.pos.x, 0.5, p.pos.y)) return true;
+  for (const l of enquadrados) for (let i = 0; i < 4; i++) for (let k = 0; k < 4; k++) if (atras(l.x + i + 0.5, 0.15, l.z + k + 0.5)) return true;
   return false;
 }
 function atualizarVisaoMirante(dt){
@@ -5306,7 +5302,9 @@ function atualizarVisaoMirante(dt){
   if ((V.t -= dt) <= 0){ V.t = MIRANTE_VISAO.cada; V.cobre = !miranteFP && miranteCobre(); }
   const M = miranteTopo.material, alvo = V.cobre ? MIRANTE_VISAO.opac : 1;
   if (M.opacity !== alvo) M.opacity = Math.abs(M.opacity - alvo) < 0.01 ? alvo : lerp(M.opacity, alvo, Math.min(1, dt * MIRANTE_VISAO.vel));
-  // translúcida, a parte de cima deixa o toque passar
+  // translúcida: não escreve profundidade (sem pedaços da torre tapando outros), não faz sombra e deixa o toque passar
+  const solida = M.opacity > 0.98;
+  if (M.depthWrite !== solida){ M.depthWrite = solida; miranteTopo.castShadow = solida; }
   miranteTopo.userData.alvo = V.cobre ? null : { k: 'mirante' };
 }
 // o caminho de um visitante: chega pela beira da estrada, sobe no mirante, olha a mata, desce, faz a trilha até o fim da
