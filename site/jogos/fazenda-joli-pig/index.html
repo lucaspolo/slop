@@ -550,10 +550,12 @@ if (typeof THREE === 'undefined'){ $('carregando').hidden = true; $('erro').hidd
 
 // ================= economia de bateria (o Lucas pediu otimizações sem mexer na imagem nem no jogo). Cada chave liga uma:
 // mata (os blocos da mata fora da tela não são desenhados), sombra (só entra na sombra o que pode fazer sombra em algo
-// visível), luzes (as luzes pontuais só contam de noite), sim (o crescimento roda 5 vezes por segundo) e limite (até 60
-// quadros por segundo em tela de 90 Hz ou mais). No endereço, ?base desliga todas, para comparar no aparelho, ?semlimite
-// desliga só o limite e ?fps mostra o medidor (medidorDeQuadros). Os testes ligam e desligam por __fazenda.otim
-const OTIM = (() => { const q = new URLSearchParams(location.search), on = !q.has('base'); return { mata: on, sombra: on, luzes: on, sim: on, limite: on && !q.has('semlimite'), medidor: q.has('fps') }; })();
+// visível), luzes (as luzes pontuais só contam de noite, e as lanternas só na mata), sim (o crescimento roda 5 vezes por
+// segundo), cercas (as cercas vão juntas em blocos), lotes (o solo, as plantas e o mato de cada terreno saem num desenho
+// por modelo), part (as partículas e as abelhas saem todas num desenho só) e limite (até 60 quadros por segundo em tela de
+// 90 Hz ou mais). No endereço, ?base desliga todas, para comparar no aparelho, ?semlimite desliga só o limite e ?fps mostra
+// o medidor (medidorDeQuadros). Os testes ligam e desligam por __fazenda.otim
+const OTIM = (() => { const q = new URLSearchParams(location.search), on = !q.has('base'); return { mata: on, sombra: on, luzes: on, sim: on, cercas: on, lotes: on, part: on, limite: on && !q.has('semlimite'), medidor: q.has('fps') }; })();
 // escreve no DOM só quando muda: reescrever o mesmo texto ou o mesmo hidden a cada quadro obrigava o navegador a refazer
 // estilo e layout 60 vezes por segundo, mesmo com tudo parado
 const porTexto = (el, s) => { if (el.textContent !== s) el.textContent = s; };
@@ -742,6 +744,9 @@ class Vox {
   }
 }
 const MAT = new THREE.MeshLambertMaterial({ vertexColors: true });
+// o mesmo material, só para as malhas instanciadas dos canteiros (desenhoDoLote). Com um material à parte o three.js desenha
+// todas elas seguidas; no MAT elas ficariam misturadas com as malhas comuns e ele trocaria de programa a cada uma
+const MAT_INST = new THREE.MeshLambertMaterial({ vertexColors: true });
 function malha(geo, sombra = true){ const m = new THREE.Mesh(geo, MAT); m.castShadow = sombra; m.receiveShadow = true; return m; }
 
 // ================= paleta
@@ -8165,6 +8170,7 @@ function iniciarRender(){
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   scene = new THREE.Scene();
+  scene.add(grupoLotes);
   camera = new THREE.OrthographicCamera(-10, 10, 10, -10, -100, 300);
   ceuLuz = new THREE.HemisphereLight(0xfffaf0, 0xa89a78, 0.58); scene.add(ceuLuz);
   sol = new THREE.DirectionalLight(0xfff0d8, 0.68);
@@ -8657,7 +8663,7 @@ function instanciasMata(geom, lista){
     im.receiveShadow = true;
     // o three.js r128 desliga o recorte nas malhas instanciadas; sem religar, a esfera de cima não servia de nada e a mata
     // inteira (148 mil triângulos) era desenhada em todo quadro, mesmo fora da tela
-    im.frustumCulled = OTIM.mata;
+    im.frustumCulled = OTIM.mata; im.userData.mata = true;
     grupo.add(im);
   }
   scene.add(grupo);
@@ -8967,25 +8973,57 @@ function itensFloresta(x, z){
 
 const ehCerca = (x, z) => { const t = tipo(x, z); return t === 'cerca' || t === 'portao'; };
 const mascaraCerca = (x, z) => (ehCerca(x + 1, z) ? 1 : 0) | (ehCerca(x - 1, z) ? 2 : 0) | (ehCerca(x, z + 1) ? 4 : 0) | (ehCerca(x, z - 1) ? 8 : 0);
+const geoCerca = m => geo('cerca' + m, () => vCerca(m).build(1 / 16, { origin: [8, 0, 8] }));
 function colocarCerca(x, z){
-  const m = mascaraCerca(x, z);
-  return colocar(malha(geo('cerca' + m, () => vCerca(m).build(1 / 16, { origin: [8, 0, 8] }))), x + 0.5, 0, z + 0.5);
+  return colocar(malha(geoCerca(mascaraCerca(x, z))), x + 0.5, 0, z + 0.5);
 }
 // a porteira acompanha a cerca em que está
 function colocarPortao(x, z, arco = false){
   const aoLongoX = ehCerca(x + 1, z) || ehCerca(x - 1, z);
   return colocar(malha(geo('portao' + arco, () => vPortao(arco).build(1 / 16, { origin: [8, 0, 8] }))), x + 0.5, 0, z + 0.5, aoLongoX ? 0 : Math.PI / 2);
 }
-// uma malha por ladrilho de cerca ou porteira. Quando um ladrilho vira cerca ou deixa de ser (o canto Sul, um cercado novo),
-// atualizarCercas refaz a região e os vizinhos, porque o desenho de cada mourão depende deles
-const CERCA_VIS = {};
+// um desenho por ladrilho de cerca ou porteira. Quando um ladrilho vira cerca ou deixa de ser (o canto Sul, um cercado novo),
+// atualizarCercas refaz a região e os vizinhos, porque o desenho de cada mourão depende deles.
+// Com OTIM.cercas as cercas não entram na cena uma a uma (eram mais de 150 malhas, cada uma desenhada duas vezes por quadro,
+// na sombra e na imagem): as de cada bloco de CERCA_BLOCO x CERCA_BLOCO ladrilhos viram uma malha só (CERCA_BLOCOS), com os
+// mesmos vértices. As porteiras continuam sozinhas. Quando um ladrilho muda, só o bloco dele é refeito
+const CERCA_VIS = {}, CERCA_BLOCO = 6, CERCA_BLOCOS = {}, cercasSujas = new Set();
+const blocoDaCerca = (x, z) => Math.floor(x / CERCA_BLOCO) + ',' + Math.floor(z / CERCA_BLOCO);
+// várias geometrias de voxels numa só: pecas é uma lista de [geometria, dx, dz], com o deslocamento de cada uma
+function juntarGeometrias(pecas){
+  let nv = 0, ni = 0;
+  for (const [g] of pecas){ nv += g.attributes.position.count; ni += g.index.count; }
+  const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), cor = new Float32Array(nv * 3), idx = new (nv > 65535 ? Uint32Array : Uint16Array)(ni);
+  let v = 0, i = 0;
+  for (const [g, dx, dz] of pecas){
+    const p = g.attributes.position.array, n = g.attributes.position.count, id = g.index.array;
+    for (let k = 0, a = v * 3; k < n * 3; k += 3, a += 3){ pos[a] = p[k] + dx; pos[a + 1] = p[k + 1]; pos[a + 2] = p[k + 2] + dz; }
+    nor.set(g.attributes.normal.array, v * 3); cor.set(g.attributes.color.array, v * 3);
+    for (let k = 0; k < id.length; k++) idx[i + k] = id[k] + v;
+    v += n; i += id.length;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  out.setAttribute('color', new THREE.BufferAttribute(cor, 3));
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  out.computeBoundingSphere(); out.computeBoundingBox();
+  return out;
+}
+function refazerBlocoDeCerca(kb){
+  const N = CERCA_BLOCO, [bx, bz] = kb.split(',').map(Number), velho = CERCA_BLOCOS[kb], pecas = [];
+  if (velho){ scene.remove(velho); velho.geometry.dispose(); delete CERCA_BLOCOS[kb]; }
+  for (let x = bx * N; x < bx * N + N; x++) for (let z = bz * N; z < bz * N + N; z++){ const v = CERCA_VIS[x + ',' + z]; if (v && v.g) pecas.push([v.g, x + 0.5 - bx * N, z + 0.5 - bz * N]); }
+  if (pecas.length) CERCA_BLOCOS[kb] = colocar(malha(juntarGeometrias(pecas)), bx * N, 0, bz * N);
+}
 function montarCerca(x, z){
   const k = x + ',' + z, t = tipo(x, z), arco = x === X_PORTEIRA && z === Z_CERCA;
   const assin = t === 'cerca' ? 'c' + mascaraCerca(x, z) : t === 'portao' ? 'p' + (ehCerca(x + 1, z) || ehCerca(x - 1, z)) : '';
   const velha = CERCA_VIS[k];
   if (velha && velha.assin === assin) return;
-  if (velha){ scene.remove(velha.m); delete CERCA_VIS[k]; }
+  if (velha){ if (velha.m) scene.remove(velha.m); else cercasSujas.add(blocoDaCerca(x, z)); delete CERCA_VIS[k]; }
   if (!assin) return;
+  if (t === 'cerca' && OTIM.cercas){ CERCA_VIS[k] = { m: null, g: geoCerca(mascaraCerca(x, z)), assin }; cercasSujas.add(blocoDaCerca(x, z)); return; }
   const m = t === 'cerca' ? colocarCerca(x, z) : colocarPortao(x, z, arco);
   if (arco){
     const tex = texturaTexto([['FAZENDA', 0.62, '#7a4a2a'], ['JOLI PIG', 1, '#c2365f']], 768, 256, '#f3e3c3');
@@ -9000,6 +9038,15 @@ function montarCerca(x, z){
 }
 function atualizarCercas(x0, z0, x1, z1){
   for (let x = Math.max(0, x0 - 1); x <= Math.min(W - 1, x1 + 1); x++) for (let z = Math.max(0, z0 - 1); z <= Math.min(H - 1, z1 + 1); z++) montarCerca(x, z);
+  for (const kb of cercasSujas) refazerBlocoDeCerca(kb);
+  cercasSujas.clear();
+}
+// tira e monta todas de novo (os testes trocam OTIM.cercas com o jogo aberto, para comparar a imagem)
+function refazerCercas(){
+  for (const k in CERCA_VIS){ if (CERCA_VIS[k].m) scene.remove(CERCA_VIS[k].m); delete CERCA_VIS[k]; }
+  for (const kb in CERCA_BLOCOS){ scene.remove(CERCA_BLOCOS[kb]); CERCA_BLOCOS[kb].geometry.dispose(); delete CERCA_BLOCOS[kb]; }
+  cercasSujas.clear();
+  atualizarCercas(0, 0, W - 1, H - 1);
 }
 // ================= o galo
 // Um em cima de um mourão de cada galinheiro (o do novo aparece quando ele é comprado), olhando ao longo da cerca. O
@@ -9921,7 +9968,7 @@ function fumaca(x, y, z){
   const cor = Math.random() < 0.5 ? 0xd9d4cc : 0xc2bcb2;
   const mat = matsPart[cor] || (matsPart[cor] = new THREE.MeshLambertMaterial({ color: cor }));
   const m = new THREE.Mesh(geoPart, mat);
-  m.position.set(x + rnd(-0.05, 0.05), y, z); m.scale.setScalar(1.1); scene.add(m);
+  m.position.set(x + rnd(-0.05, 0.05), y, z); m.scale.setScalar(1.1); soltar(m);
   PART.push({ m, v: new THREE.Vector3(rnd(-0.1, 0.1), rnd(0.35, 0.55), rnd(-0.1, 0.1)), vida: 1.6, g: 0, cresce: 0.45 });
 }
 
@@ -9991,7 +10038,7 @@ function criarAbelhas(){
   for (const a of ABELHAS) scene.remove(a.m);
   ABELHAS.length = 0;
   const mat = new THREE.MeshLambertMaterial({ color: 0xf5d142 });
-  S.colmeias.forEach((d, i) => { if (!d) return; for (let k = 0; k < 3; k++){ const m = new THREE.Mesh(geoPart, mat); m.scale.setScalar(0.7); scene.add(m); ABELHAS.push({ m, i, fase: rnd(0, 6), raio: rnd(0.35, 0.8), vel: rnd(2, 3.5) }); } });
+  S.colmeias.forEach((d, i) => { if (!d) return; for (let k = 0; k < 3; k++){ const m = new THREE.Mesh(geoPart, mat); m.scale.setScalar(0.7); soltar(m); ABELHAS.push({ m, i, fase: rnd(0, 6), raio: rnd(0.35, 0.8), vel: rnd(2, 3.5) }); } });
 }
 function atualizarAbelhas(t){
   for (const a of ABELHAS){
@@ -10119,10 +10166,11 @@ function executarPomar(tarefa){
 
 // ================= irrigadores
 const IRRIG = {};
+const geoIrrigBase = () => geo('irrigBase', () => vIrrigadorBase().build(1 / 16, { origin: [0, 0, 0] }));
 function montarIrrigador(l){
   if (IRRIG[l]) return IRRIG[l];
   const L = LOTES[l];
-  const base = colocar(malha(geo('irrigBase', () => vIrrigadorBase().build(1 / 16, { origin: [0, 0, 0] }))), L.x + 2, 0, L.z + 2);
+  const base = colocar(malha(geoIrrigBase()), L.x + 2, 0, L.z + 2);
   const cabeca = malha(geo('irrigCabeca', () => vIrrigadorCabeca().build(1 / 16, { origin: [0, 0, 0] })));
   cabeca.position.set(-0.5 / 16, 10 / 16, -0.5 / 16); base.add(cabeca);
   base.traverse(o => { o.userData.alvo = { k: 'irrigador', l }; });
@@ -10172,7 +10220,7 @@ function gotinha(x, y, z, vx, vy, vz){
   const cor = Math.random() < 0.5 ? 0x6fc3f5 : 0xa8dcfa;
   const mat = matsPart[cor] || (matsPart[cor] = new THREE.MeshLambertMaterial({ color: cor }));
   const m = new THREE.Mesh(geoPart, mat);
-  m.position.set(x, y, z); m.scale.setScalar(0.7); scene.add(m);
+  m.position.set(x, y, z); m.scale.setScalar(0.7); soltar(m);
   PART.push({ m, v: new THREE.Vector3(vx, vy, vz), vida: 0.9 });
 }
 function comprarIrrigador(l){
@@ -10181,6 +10229,7 @@ function comprarIrrigador(l){
   if (S.dinheiro < IRRIGADOR.preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return; }
   gastar(IRRIGADOR.preco); S.irrigador[l] = true;
   montarIrrigador(l);
+  reporCanteirosDoMeio(l);
   // o que estava com sede é regado na hora, e as regas que o Ed ia fazer ali saem da fila
   for (const tf of fila.slice()) if (tf.tipo === 'regar' && tf.alvo.k === 'tile' && loteDe(tf.alvo.x, tf.alvo.z) === l) cancelar(tf);
   const L = LOTES[l];
@@ -10368,31 +10417,154 @@ function plaquinha(V, x, z, nome){
     V.placa.position.set(x + 0.84, 0.24, z + 0.84);
   } else if (V.placa){ scene.remove(V.placa); V.placa = null; }
 }
+// ================= canteiros desenhados por terreno
+// Com OTIM.lotes, o solo, as plantas e o mato não entram na cena um a um (eram até 128 canteiros, cada um com duas ou três
+// malhas, e as plantas ainda eram desenhadas outra vez na sombra): cada terreno tem uma malha instanciada por modelo (o solo
+// molhado, o milho no estágio 2...), que desenha de uma vez os canteiros iguais dele. A malha de cada canteiro continua
+// existindo, fora da cena: ela guarda a posição e o tamanho (a planta cresce de 0,6 a 1 ao mudar de estágio) e é nela que o
+// toque acerta (pickaveis), então o toque e a animação ficam como eram. gravarCanteiro copia a matriz dela para a instância
+const LOTE_DES = new Map(), grupoLotes = new THREE.Group(), M_LOTE = new THREE.Matrix4();
+function desenhoDoLote(x, z, chave, g, sombra, ordem){
+  const tx = Math.floor(x), tz = Math.floor(z), l = LOTES.findIndex(L => tx >= L.x && tx < L.x + 4 && tz >= L.z && tz < L.z + 4);
+  // canteiro fora de qualquer terreno (não devia existir): vai por quadrados de 4 x 4
+  const cx = l >= 0 ? LOTES[l].x + 2 : (tx >> 2) * 4 + 2, cz = l >= 0 ? LOTES[l].z + 2 : (tz >> 2) * 4 + 2, k = cx + ',' + cz + '|' + chave;
+  let im = LOTE_DES.get(k);
+  if (!im){
+    // a geometria só aponta para os dados da original (a placa de vídeo guarda uma cópia só), com a esfera de recorte do
+    // terreno inteiro: os canteiros ficam a até 2,13 do meio dele
+    const g2 = new THREE.BufferGeometry(), e = g.boundingSphere;
+    for (const n in g.attributes) g2.setAttribute(n, g.attributes[n]);
+    g2.setIndex(g.index);
+    g2.boundingSphere = new THREE.Sphere(e.center.clone(), e.radius + 2.2);
+    im = new THREE.InstancedMesh(g2, MAT_INST, 16);
+    im.count = 0; im.castShadow = sombra; im.receiveShadow = true; im.frustumCulled = true;
+    // antes do resto (o chão embaixo dos canteiros nem chega a ser pintado) e sempre na mesma ordem: plantas, mato e solo.
+    // Onde dois modelos têm faces no mesmo lugar (o mato e a planta do mesmo canteiro, os grãos de adubo e a planta), aparece
+    // o que é desenhado por último, e com as malhas soltas essa era a ordem
+    im.renderOrder = ordem;
+    im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    im.position.set(cx, 0, cz); im.userData.donos = [];
+    LOTE_DES.set(k, im);
+  }
+  return im;
+}
+// As faces de um modelo de voxels de 1/16, por lugar e direção (o meio de cada face, em meios cubinhos), para saber se
+// dois modelos têm alguma face no mesmo lugar
+function facesDe(g, dx, dy, dz){
+  const P = g.attributes.position, N = g.attributes.normal, out = new Set();
+  for (let i = 0; i < P.count; i += 4){
+    let x = 0, y = 0, z = 0;
+    for (let k = i; k < i + 4; k++){ x += P.getX(k); y += P.getY(k); z += P.getZ(k); }
+    out.add(Math.round((x / 4 + dx) * 32) + ',' + Math.round((y / 4 + dy) * 32) + ',' + Math.round((z / 4 + dz) * 32) + ',' + N.getX(i) + ',' + N.getY(i) + ',' + N.getZ(i));
+  }
+  return out;
+}
+// A chapa da base do irrigador cobre a pontinha dos canteiros do meio do terreno, e em dois deles o topo dela fica no mesmo
+// lugar que o topo de um sulco do solo. Onde duas faces coincidem aparece a que é desenhada por último, e entre o solo e
+// o irrigador isso depende da ordem das duas malhas (muda com o giro da câmera). Para a imagem ficar igual à de antes,
+// o modelo de canteiro que tem face no mesmo lugar de uma face da base fica fora do desenho do terreno, solto como era
+const EMPATE_IRRIG = {};
+let facesIrrig = null;
+function empataComIrrigador(m, chave){
+  const x = Math.floor(m.position.x), z = Math.floor(m.position.z), l = LOTES.findIndex(L => x >= L.x && x < L.x + 4 && z >= L.z && z < L.z + 4);
+  if (l < 0 || !S.irrigador[l]) return false;
+  const dx = m.position.x - LOTES[l].x - 2, dz = m.position.z - LOTES[l].z - 2;
+  if (Math.abs(dx) > 0.5 || Math.abs(dz) > 0.5) return false;
+  const k = chave + '|' + dx + ',' + dz;
+  if (EMPATE_IRRIG[k] == null){
+    facesIrrig = facesIrrig || facesDe(geoIrrigBase(), 0, 0, 0);
+    EMPATE_IRRIG[k] = false;
+    for (const f of facesDe(m.geometry, dx, m.position.y, dz)) if (facesIrrig.has(f)){ EMPATE_IRRIG[k] = true; break; }
+  }
+  return EMPATE_IRRIG[k];
+}
+// põe a malha de um canteiro (já no lugar e do tamanho certo) no desenho: no do terreno, ou sozinha na cena.
+// ordem: -3 para planta, -2 para mato e -1 para solo (veja desenhoDoLote)
+function porCanteiro(m, chave, ordem){
+  m.userData.chave = chave; m.userData.ordem = ordem;
+  if (OTIM.lotes && !empataComIrrigador(m, chave)){
+    const im = desenhoDoLote(m.position.x, m.position.z, chave, m.geometry, m.castShadow, ordem);
+    if (im.count < 16){
+      const i = im.count++;
+      im.userData.donos[i] = m; m.userData.des = im; m.userData.i = i;
+      gravarCanteiro(m);
+      if (!i) grupoLotes.add(im);
+      return m;
+    }
+  }
+  scene.add(m);
+  return m;
+}
+function gravarCanteiro(m){
+  const im = m.userData.des;
+  m.updateMatrixWorld();
+  M_LOTE.copy(m.matrixWorld); M_LOTE.elements[12] -= im.position.x; M_LOTE.elements[14] -= im.position.z;
+  im.setMatrixAt(m.userData.i, M_LOTE); im.instanceMatrix.needsUpdate = true;
+}
+function tirarCanteiro(m){
+  const im = m.userData.des;
+  if (!im){ scene.remove(m); return; }
+  // a última instância vem para o lugar da que saiu
+  const D = im.userData.donos, i = m.userData.i, u = --im.count;
+  if (i !== u){ const o = D[u]; D[i] = o; o.userData.i = i; gravarCanteiro(o); }
+  D.length = u; m.userData.des = null;
+  if (!u) grupoLotes.remove(im);
+}
+// irrigador novo no terreno: os quatro canteiros do meio são postos de novo, para valer a regra de empataComIrrigador
+function reporCanteirosDoMeio(l){
+  const L = LOTES[l];
+  for (let x = L.x + 1; x <= L.x + 2; x++) for (let z = L.z + 1; z <= L.z + 2; z++){
+    const v = VIS[chave(x, z)];
+    if (v) for (const n of ['solo', 'planta', 'mato']) if (v[n]){ tirarCanteiro(v[n]); porCanteiro(v[n], v[n].userData.chave, v[n].userData.ordem); }
+  }
+}
+// tira e monta todos de novo (os testes trocam OTIM.lotes com o jogo aberto, para comparar a imagem)
+function refazerCanteiros(){
+  for (const k in VIS){
+    const v = VIS[k];
+    for (const n of ['solo', 'planta', 'mato']) if (v[n]){ tirarCanteiro(v[n]); v[n] = null; }
+    v.cs = v.cp = '';
+  }
+  for (let i = pickaveis.length - 1; i >= 0; i--) if (pickaveis[i].userData.canteiro) pickaveis.splice(i, 1);
+  for (const k in S.campo){ const [x, z] = k.split(',').map(Number); atualizarCampo(x, z); }
+}
 function atualizarCampo(x, z){
   const t = campo(x, z), k = chave(x, z);
   const vis = VIS[k] || (VIS[k] = { solo: null, planta: null, mato: null, bolha: null, cs: '', cp: '' });
   const px = x + 0.5, pz = z + 0.5;
   const cs = !t || t.e === 'grama' ? '' : (t.e === 'plantado' && t.p !== 'sede' ? 'molhado' : 'seco') + (t.e === 'plantado' && t.adub ? '+adubo' : '');
   if (cs !== vis.cs){
-    if (vis.solo) scene.remove(vis.solo);
-    vis.solo = cs ? colocar(malha(geo('solo' + cs, () => vSolo(cs.startsWith('molhado'), cs.endsWith('+adubo')).build(1 / 16, { origin: [8, 0, 8] })), false), px, 0, pz) : null;
+    if (vis.solo) tirarCanteiro(vis.solo);
+    vis.solo = null;
+    if (cs){
+      // no desenho do terreno o solo vai sem as faces de baixo, que ficam coladas no chão e ninguém vê (um terço dos triângulos)
+      const semFundo = OTIM.lotes, m = malha(geo('solo' + cs + (semFundo ? ' sem fundo' : ''), () => vSolo(cs.startsWith('molhado'), cs.endsWith('+adubo')).build(1 / 16, { origin: [8, 0, 8], semFundo })), false);
+      m.position.set(px, 0, pz);
+      vis.solo = porCanteiro(m, 'solo' + cs, -1);
+    }
     vis.cs = cs;
   }
   const est = t ? estagio(t) : -1;
   const cp = est >= 0 ? t.c + est : '';
   if (cp !== vis.cp){
-    if (vis.planta){ scene.remove(vis.planta); const i = pickaveis.indexOf(vis.planta); if (i >= 0) pickaveis.splice(i, 1); }
+    if (vis.planta){ tirarCanteiro(vis.planta); const i = pickaveis.indexOf(vis.planta); if (i >= 0) pickaveis.splice(i, 1); }
     vis.planta = null;
     if (cp){
-      vis.planta = colocar(malha(geo('planta' + cp, () => vPlanta(t.c, est).build(1 / 16, { origin: [8, 0, 8] }))), px, 2 / 16, pz);
-      vis.planta.userData.alvo = { k: 'tile', x, z }; pickaveis.push(vis.planta);
-      if (vis.cp && est > 0) vis.planta.scale.setScalar(0.6);
+      const m = malha(geo('planta' + cp, () => vPlanta(t.c, est).build(1 / 16, { origin: [8, 0, 8] })));
+      m.position.set(px, 2 / 16, pz);
+      if (vis.cp && est > 0) m.scale.setScalar(0.6);
+      m.userData.alvo = { k: 'tile', x, z }; m.userData.canteiro = true; pickaveis.push(m);
+      vis.planta = porCanteiro(m, 'planta' + cp, -3);
     }
     vis.cp = cp;
   }
   const temMato = t && t.e === 'plantado' && t.p === 'mato';
-  if (temMato && !vis.mato) vis.mato = colocar(malha(geo('mato', () => vMato().build(1 / 16, { origin: [8, 0, 8] }))), px, 2 / 16, pz);
-  if (!temMato && vis.mato){ scene.remove(vis.mato); vis.mato = null; }
+  if (temMato && !vis.mato){
+    const m = malha(geo('mato', () => vMato().build(1 / 16, { origin: [8, 0, 8] })));
+    m.position.set(px, 2 / 16, pz);
+    vis.mato = porCanteiro(m, 'mato', -2);
+  }
+  if (!temMato && vis.mato){ tirarCanteiro(vis.mato); vis.mato = null; }
   let b = '';
   if (t && t.e === 'plantado'){ if (t.p === 'sede') b = 'gota'; else if (t.p === 'mato') b = 'mato'; else if (t.prog >= 1) b = CULTURAS[t.c].produto || t.c; }
   if (b){
@@ -11824,7 +11996,7 @@ const pufCafe = () => { for (let i = 0; i < 16; i++) particula(cafe.cx + rnd(-1,
 function vapor(x, y, z){
   const mat = matsPart[0xffffff] || (matsPart[0xffffff] = new THREE.MeshLambertMaterial({ color: 0xffffff }));
   const m = new THREE.Mesh(geoPart, mat);
-  m.position.set(x + rnd(-0.03, 0.03), y, z + rnd(-0.03, 0.03)); m.scale.setScalar(0.9); scene.add(m);
+  m.position.set(x + rnd(-0.03, 0.03), y, z + rnd(-0.03, 0.03)); m.scale.setScalar(0.9); soltar(m);
   PART.push({ m, v: new THREE.Vector3(rnd(-0.05, 0.05), rnd(0.3, 0.45), rnd(-0.05, 0.05)), vida: 1.3, g: 0, cresce: 0.5 });
 }
 function sentarCafe(p, quem){
@@ -14732,23 +14904,32 @@ const HALOS = [];
 // luzes de verdade em volta dos postes mais perto da câmera e da porta de casa: um número fixo, para o three.js não
 // recompilar os materiais quando a quantidade muda
 const LUZES_NOITE = [];
-// As sete luzes pontuais (as quatro da noite e as três lanternas) só contam no desenho quando alguma está acesa. Com força
-// zero a imagem é a mesma, mas o three.js calculava todas em cada vértice, o dia inteiro. Mudar a quantidade de luzes faz
-// o three.js montar outra versão dos programas de desenho (uma vez por versão), então são só dois estados: todas ou
-// nenhuma. Os dois são montados já na abertura (aquecerLuzes, depois do primeiro quadro), para o anoitecer não dar tranco
-let luzesNaCena = true;
-function porLuzes(v){ luzesNaCena = v; for (const l of LUZES_NOITE) l.visible = v; for (const q of LANTERNAS) q.luz.visible = v; }
+// As sete luzes pontuais (as quatro da noite e as três lanternas) só contam no desenho quando estão acesas. Com força zero
+// a imagem é a mesma, mas o three.js calculava todas em cada vértice, o dia inteiro. Mudar a quantidade de luzes faz o
+// three.js montar outra versão dos programas de desenho (uma vez por versão), então são só três estados (luzesNaCena):
+// 0, nenhuma (de dia); 1, as quatro da noite; 2, todas (de noite, com alguém de lanterna acesa na mata). Os três são
+// montados já na abertura (aquecerLuzes, depois do primeiro quadro), para o anoitecer e a lanterna não darem tranco
+let luzesNaCena = 2;
+function porLuzes(n){ luzesNaCena = n; for (const l of LUZES_NOITE) l.visible = n >= 1; for (const q of LANTERNAS) q.luz.visible = n >= 2; }
 function luzesPontuais(){
-  let quer = !OTIM.luzes;
-  if (!quer){ for (const l of LUZES_NOITE) if (l.intensity > 0) quer = true; for (const q of LANTERNAS) if (q.luz.intensity > 0) quer = true; }
+  let quer = 2;
+  if (OTIM.luzes){
+    quer = 0;
+    for (const l of LUZES_NOITE) if (l.intensity > 0) quer = 1;
+    for (const q of LANTERNAS) if (q.luz.intensity > 0) quer = 2;
+  }
   if (quer !== luzesNaCena) porLuzes(quer);
 }
-// desenha a cena uma vez, fora da tela (num alvo de 4 x 4 pontos), com as luzes no estado contrário ao de agora
+// desenha a cena fora da tela (num alvo de 4 x 4 pontos), uma vez com cada um dos outros estados das luzes. A sombra não
+// depende delas, então o mapa de sombra não é refeito
 function aquecerLuzes(cam){
   if (!OTIM.luzes || !LUZES_NOITE.length) return;
-  const alvo = new THREE.WebGLRenderTarget(4, 4), estado = luzesNaCena;
-  porLuzes(!estado);
-  renderer.setRenderTarget(alvo); renderer.render(scene, cam); renderer.setRenderTarget(null);
+  const alvo = new THREE.WebGLRenderTarget(4, 4), estado = luzesNaCena, sombra = renderer.shadowMap.autoUpdate;
+  renderer.shadowMap.autoUpdate = false;
+  renderer.setRenderTarget(alvo);
+  for (let n = 0; n < 3; n++) if (n !== estado){ porLuzes(n); renderer.render(scene, cam); }
+  renderer.setRenderTarget(null);
+  renderer.shadowMap.autoUpdate = sombra;
   porLuzes(estado); alvo.dispose();
 }
 function criarLuzesNoite(){
@@ -14756,7 +14937,7 @@ function criarLuzesNoite(){
   criarLanternas();
 }
 // ================= lanternas: à noite, andando pela mata, o Ed, o Hud e o Dani acendem uma lanterna na mão esquerda.
-// Cada um tem uma luz de verdade (criada junto com as da noite: as sete entram e saem do desenho juntas, em luzesPontuais),
+// Cada um tem uma luz de verdade (criada junto com as da noite; as três entram no desenho só quando uma acende, em luzesPontuais),
 // um facho no chão à frente e a lente acesa. Elas acendem e apagam aos poucos ao entrar e sair da mata
 const LANTERNA = { zMata: Z_MATA - 1, noite: 0.35, cor: 0xfff0c8, forca: 2.2, alcance: 5, lente: 0xfff4b0 };
 const LANTERNAS = [];
@@ -14834,6 +15015,7 @@ MAT.onBeforeCompile = sh => {
     }
     #include <envmap_fragment>`);
 };
+MAT_INST.onBeforeCompile = MAT.onBeforeCompile;
 let varalMalha = null, ergueVaral = null;
 // o mapa de luz: cada fonte ilumina em volta, num tom quente puxado para a cor dela. O alfa guarda quanto da luz de cada
 // ponto vem do varal, para ela acompanhar o varal subindo e descendo (ergueVaral); a da pista fica sempre
@@ -16877,13 +17059,53 @@ function atualizarFalas(){
 }
 
 // partículas
+// Com OTIM.part, as partículas (as gotinhas dos irrigadores, a fumaça, a terra, o confete) e as abelhas não entram na cena
+// uma a uma: com os irrigadores ligados eram centenas de cubinhos, cada um um desenho. A malha de cada uma continua existindo,
+// fora da cena, só para guardar a posição, o giro, o tamanho e a cor, e juntarParticulas copia tudo, uma vez por quadro, para
+// uma malha instanciada só (PART_DES). Partícula nova entra com soltar(m), não com scene.add
 const PART = [];
 const geoPart = new THREE.BoxGeometry(0.06, 0.06, 0.06);
 const matsPart = {};
+const PART_DES = { im: null, cap: 0, mat: new THREE.MeshLambertMaterial({ color: 0xffffff }) };
+const soltar = m => { if (!OTIM.part) scene.add(m); return m; };
+function juntarParticulas(){
+  const D = PART_DES;
+  if (!OTIM.part){ if (D.im) D.im.count = 0; return; }
+  const n = PART.length + ABELHAS.length;
+  if (!D.im || n > D.cap){
+    // a malha fica sempre na cena, mesmo vazia: assim o programa de desenho dela é montado na abertura, com os outros
+    if (D.im){ scene.remove(D.im); D.im.dispose(); }
+    D.cap = Math.max(256, D.cap * 2, n);
+    D.im = new THREE.InstancedMesh(geoPart, D.mat, D.cap);
+    D.im.instanceColor = new THREE.BufferAttribute(new Float32Array(D.cap * 3), 3);
+    D.im.instanceMatrix.setUsage(THREE.DynamicDrawUsage); D.im.instanceColor.setUsage(THREE.DynamicDrawUsage);
+    D.im.count = 0; scene.add(D.im);
+  }
+  const im = D.im;
+  if (!n){ im.count = 0; return; }
+  const mats = im.instanceMatrix.array, cores = im.instanceColor.array;
+  let i = 0;
+  for (let l = 0; l < 2; l++) for (const p of l ? ABELHAS : PART){
+    const m = p.m, c = m.material.color;
+    m.updateMatrix(); mats.set(m.matrix.elements, i * 16);
+    cores[i * 3] = c.r; cores[i * 3 + 1] = c.g; cores[i * 3 + 2] = c.b;
+    i++;
+  }
+  im.count = n;
+  // só a parte usada vai para a placa de vídeo
+  im.instanceMatrix.updateRange.count = n * 16; im.instanceMatrix.needsUpdate = true;
+  im.instanceColor.updateRange.count = n * 3; im.instanceColor.needsUpdate = true;
+}
+// os testes trocam OTIM.part com o jogo aberto, para comparar a imagem
+function particulasJuntas(v){
+  OTIM.part = v;
+  for (let l = 0; l < 2; l++) for (const p of l ? ABELHAS : PART){ if (v) scene.remove(p.m); else scene.add(p.m); }
+  juntarParticulas();
+}
 function particula(x, y, z, cor, sobe = 1){
   const mat = matsPart[cor] || (matsPart[cor] = new THREE.MeshLambertMaterial({ color: cor }));
   const m = new THREE.Mesh(geoPart, mat);
-  m.position.set(x, y, z); scene.add(m);
+  m.position.set(x, y, z); soltar(m);
   PART.push({ m, v: new THREE.Vector3(rnd(-0.6, 0.6), sobe > 0 ? rnd(1.2, 2.4) * sobe : rnd(-0.3, 0.2), rnd(-0.6, 0.6)), vida: 0.7 });
 }
 function atualizarParticulas(dt){
@@ -18498,7 +18720,7 @@ function quadro(agoraP){
   atualizarGalos(dt, t);
   for (const b of BOLHAS){ b.position.y = b.userData.base + Math.sin(t * 3 + (b.userData.fase || 0)) * 0.04; }
   marcadores.forEach((m, i) => { const tf = fila.find(f => f.marca === m); if (!tf) return; const G = tf.alvo.k === 'galo' && GALOS[tf.alvo.id]; const [x, z] = G ? (tf.alvo.onde === 'mourao' ? centroMourao(G) : [G.pos.x, G.pos.y]) : alvoMundo(tf.alvo); m.position.set(x, (G ? (tf.alvo.onde === 'mourao' ? ALTURA_MOURAO + 1.4 : 1.25) : 1.15) + Math.sin(t * 5 + i) * 0.05, z); m.rotation.y = t * 2; });
-  for (const k in VIS){ const p = VIS[k].planta; if (p && p.scale.x < 1) p.scale.setScalar(Math.min(1, p.scale.x + dt * 2.5)); }
+  for (const k in VIS){ const p = VIS[k].planta; if (p && p.scale.x < 1){ p.scale.setScalar(Math.min(1, p.scale.x + dt * 2.5)); if (p.userData.des) gravarCanteiro(p); } }
   atualizarIrrigadores(dt);
   atualizarFabricas(dt);
   atualizarAbelhas(t);
@@ -18510,6 +18732,7 @@ function quadro(agoraP){
   if (menuAberto && ['tile', 'animal', 'predio', 'pomar', 'colmeia', 'pomarLote', 'cercadoLote', 'obraLote', 'coletor', 'composteira', 'mata'].includes(menuAberto.alvo.k) && Math.floor(t * 2) !== Math.floor((t - dt) * 2)) atualizarEstadoMenu();
   tSalvo += dt; if (tSalvo > 6){ tSalvo = 0; verificarFigurinhas(); salvar(); }
   cameraDoQuadro = (miranteFP && miranteFP.fase === 'olhando') || vistaEd ? cameraFP : camera;
+  juntarParticulas();
   if (OTIM.medidor) renderer.info.reset();
   renderer.render(scene, cameraDoQuadro);
   if (!luzesAquecidas){ luzesAquecidas = true; aquecerLuzes(cameraDoQuadro); }
@@ -18697,7 +18920,7 @@ async function iniciar(){
     arraia: { ARRAIA, obj: () => arraia, rojao, falas: FALAS_ARRAIA },
     abrirMenu: (alvo, x = 300, y = 300) => abrirMenu(alvo, x, y),
     miranteVisao: { V: visaoMirante, cobre: () => miranteCobre(), topo: () => miranteTopo, MIRANTE_VISAO },
-    otim: { OTIM, RITMO, SOMBRA_VISTA, MEDIDOR, pular: pularQuadro, luzes: () => luzesNaCena, porLuzes, luzesPontuais, aquecer: aquecerLuzes, mata: v => { OTIM.mata = v; scene.traverse(o => { if (o.isInstancedMesh) o.frustumCulled = v; }); }, render: () => ({ renderer, scene, camera, sol }), cineBusca },
+    otim: { OTIM, RITMO, SOMBRA_VISTA, MEDIDOR, pular: pularQuadro, luzes: () => luzesNaCena, lanternas: () => LANTERNAS.map(q => +q.luz.intensity.toFixed(2)), porLuzes, luzesPontuais, aquecer: aquecerLuzes, mata: v => { OTIM.mata = v; scene.traverse(o => { if (o.isInstancedMesh && o.userData.mata) o.frustumCulled = v; }); }, cercas: v => { OTIM.cercas = v; refazerCercas(); }, lotes: v => { OTIM.lotes = v; refazerCanteiros(); }, part: particulasJuntas, juntar: juntarParticulas, particula, jato: irrigadorJato, CERCA_VIS, CERCA_BLOCOS, LOTE_DES, PART_DES, PART, ABELHAS, VIS, pickaveis, render: () => ({ renderer, scene, camera, sol }), cineBusca },
     vistaEd: { entrar: entrarVistaEd, sair: sairVistaEd, girar: girarVistaEd, obj: () => vistaEd, cam: () => cameraFP, faz: oQueOEdFaz, VISTA_ED },
     mirante1p: { subir: subirMirante, descer: descerMirante, girar: girarMirante, zoom: zoomMirante, obj: () => miranteFP, cam: () => cameraFP, M1P: MIRANTE_1P },
     enfeitesNovos: { aves, ave: () => { aves.prox = 0; }, AJUDA, vis: () => ENF_VIS, casinha: () => casinhaParaLuma(), piquenique: () => lugarPiquenique(), montar: e => montarEnfeite(e), FOGUEIRA, LAGUINHO, DESEJO, aquecer, inverno: invernoAgora, assento: assentoFogueira, frentePoco, fazerDesejo, itens: e => itensEnfeite(e), formas: formasLiberadas, grupoComForma },
