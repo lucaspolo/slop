@@ -6055,6 +6055,126 @@ function vComedouro(){
   v.box(7, 26, 3, 8, 26, 12, 0xa8332a);
   return v;
 }
+// a fogueira de roda: o círculo de pedras, as cinzas, as toras em pé no meio e três troncos de sentar em volta (na frente e
+// dos lados). O fogo é uma malha à parte (vChama), acesa só de noite (atualizarEnfeites)
+const FOGUEIRA = { assentos: [[7.5, 13.6, 0], [13.6, 7.5, -Math.PI / 2], [1.4, 7.5, Math.PI / 2]], altura: 3 / 16, chama: 0.5, forcaInverno: false };
+function vFogueiraRoda(){
+  const v = new Vox(), pedra = (x, y, z) => hash(x, y, z) < 0.5 ? 0x9a948a : 0x878177, tora = (x, y, z) => hash(x, y, z) < 0.3 ? 0x6a4428 : 0x7a5232;
+  for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++){ const d = Math.hypot(x - 7.5, z - 7.5); if (d <= 4.6 && d >= 3.4) v.box(x, 0, z, x, 1, z, pedra); else if (d < 3.4) v.set(x, 0, z, hash(x, 1, z) < 0.5 ? 0x4a4440 : 0x5a524c); }
+  for (const [a, b] of [[[6, 6], [8, 9]], [[9, 6], [7, 9]], [[6, 9], [9, 6]]]) for (let k = 0; k <= 5; k++){ const t = k / 5; v.set(Math.round(a[0] + (b[0] - a[0]) * t * 0.5), 1 + k, Math.round(a[1] + (b[1] - a[1]) * t * 0.5), tora(k, a[0], b[1])); }
+  // os troncos de sentar
+  v.box(4, 0, 13, 11, 2, 14, tora); v.box(13, 0, 4, 14, 2, 11, tora); v.box(1, 0, 4, 2, 2, 11, tora);
+  for (const [x, z] of [[4, 13], [11, 13], [13, 4], [13, 11], [1, 4], [1, 11]]) v.set(x, 2, z, 0xc99a66);
+  return v;
+}
+// o laguinho: borda de pedra, água azul, duas vitórias-régias (uma com flor) e taboas no canto. O sapinho é uma malha à
+// parte (vSapinho) que pula de uma folha para a outra e, de noite, coaxa
+const LAGUINHO = { folhas: [[5.5, 9.5], [10, 6.5]], pulo: [6, 14], coaxa: [4, 10] };
+function vLaguinho(){
+  const v = new Vox(), pedra = (x, y, z) => hash(x, y, z) < 0.5 ? 0xbdb6aa : 0xa9a296;
+  for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++){
+    const d = Math.hypot((x - 7.5) / 1.05, z - 7.5);
+    if (d <= 7.4 && d >= 5.9) v.box(x, 0, z, x, 1, z, pedra);
+    else if (d < 5.9) v.set(x, 0, z, hash(x, 2, z) < 0.15 ? 0x7cc6ee : (x + z) % 5 === 0 ? 0x5aaedc : 0x4f9fd6);
+  }
+  for (const [fx, fz] of LAGUINHO.folhas) for (let x = -2; x <= 2; x++) for (let z = -2; z <= 2; z++) if (Math.hypot(x, z) <= 2.2 && !(x === 1 && z === 0)) v.set(Math.round(fx + x), 1, Math.round(fz + z), (x + z) % 2 ? 0x4f9a3d : 0x5aa847);
+  // a flor de lótus fica na água, longe das folhas onde o sapinho pula
+  for (const [x, z] of [[11, 10], [12, 11], [10, 11], [11, 12]]) v.set(x, 1, z, 0xf7b3c8);
+  v.set(11, 1, 11, 0xf28fac); v.set(11, 2, 11, 0xffd34d);
+  for (const [x, z, h] of [[2, 12, 7], [3, 13, 9], [1, 11, 6]]){ v.box(x, 1, z, x, h, z, 0x5f8a3a); v.box(x, h + 1, z, x, h + 2, z, 0x7a4a2a); }
+  return v;
+}
+function vSapinho(){
+  const v = new Vox(), verde = 0x5fb04a, escuro = 0x3f8a33;
+  v.ell(0, 1.5, 0, 2.2, 1.5, 2.4, (x, y, z) => y < 1 ? 0xd8e8a0 : (x + z) % 3 ? verde : escuro);
+  for (const x of [-1, 1]){ v.box(x * 1.5 | 0, 3, 1, x * 1.5 | 0, 3, 1, 0xfdf8ef); v.set(x * 1.5 | 0, 3, 2, 0x1a1414); v.box(x * 2, 0, -1, x * 3, 0, 1, verde); }
+  v.box(-1, 1, 2, 1, 1, 2, 0x2a4a20);
+  return v;
+}
+// a topiaria: o vaso de terracota com terra e, em cima, o arbusto podado no formato escolhido (FORMAS_TOPIARIA): a forma é o
+// desenho do bicho ou do porquinho com as cores trocadas por verdes de folha
+const FORMAS_TOPIARIA = {
+  porquinho: { nome: 'Porquinho', vox: () => vPorco(COR.ed, COR.edBolso), s: 1 / 64 },
+  galinha: { nome: 'Galinha', vox: () => vGalinha(), s: 1 / 19 },
+  vaca: { nome: 'Vaca', vox: () => vVaca(), s: 1 / 27 },
+  luma: { nome: 'Luma', vox: () => vLumaInteira(), s: LUMA.escala / 57 },
+};
+// as estátuas da família: na mesma pedra da estátua do Ed. O Milton e o Jaca aparecem depois que eles chegam na fazenda
+const FORMAS_ESTATUA = {
+  beto: { nome: 'Beto', vox: () => vPorco(COR.beto, COR.betoBolso), s: 1 / 40 },
+  milton: { nome: 'Milton', vox: () => vPorco(0, 0, false, 'moletom'), s: 1 / 40, pode: () => !!S.conheceuMilton },
+  jaca: { nome: 'Jaca', vox: () => vJaca(false), s: 1 / 40, pode: () => !!S.conheceuJaca },
+  luma: { nome: 'Luma', vox: () => vLumaInteira(), s: LUMA.escala / 38 },
+};
+// a Luma inteira numa peça só, parada: o tronco no lugar dele e as outras partes nos pontos do montarLuma
+function vLumaInteira(){
+  const v = new Vox(), Q = LUMA.quadril, junta = (p, [x, y, z]) => { for (const e of p.m.values()) v.set(Math.round(e.x + x), Math.round(e.y + y), Math.round(e.z + z), e.c); };
+  junta(vLumaTronco(), [0, 0, 0]); junta(vLumaCabeca(), LUMA.pescoco); junta(vLumaRabo(), LUMA.rabo);
+  LUMA.pernas.forEach(([x, z], i) => junta(vLumaPerna(i < 2), [x, Q[1], z]));
+  return v;
+}
+// troca as cores pelos verdes de folha (topiaria) ou pelo cinza de pedra (estátua), pela claridade de cada cubinho
+function recorTopiaria(v){
+  const r = new Vox(), c = new THREE.Color();
+  for (const e of v.m.values()){ c.setHex(e.c); const g = (c.r + c.g + c.b) / 3; r.set(e.x, e.y, e.z, g < 0.18 ? 0x1f4a1c : hash(e.x, e.y, e.z) < 0.3 ? 0x5aa847 : g < 0.55 ? 0x3f8a33 : 0x4f9a3d); }
+  return r;
+}
+function recorPedra(v){
+  const r = new Vox(), c = new THREE.Color();
+  for (const e of v.m.values()){ c.setHex(e.c); const g = (c.r + c.g + c.b) / 3; r.set(e.x, e.y, e.z, new THREE.Color(0.55 + g * 0.35, 0.53 + g * 0.35, 0.5 + g * 0.33).getHex()); }
+  return r;
+}
+function vVasoTopiaria(){
+  const v = new Vox();
+  v.box(3, 0, 3, 12, 3, 12, (x, y) => y === 3 ? 0xc8734c : 0xb5603c); v.box(4, 4, 4, 11, 4, 11, 0x6a4a2c);
+  return v;
+}
+function vPedestal(){ const v = new Vox(); v.box(-14, 0, -14, 14, 9, 14, (x, y) => y === 9 ? 0xd9d2c4 : 0xc9c2b4); return v; }
+// a peça inteira (base e forma numa escala só, a da forma) para o ícone e o visualizador
+function vComBase(base, sBase, cx, topo, F, recor){
+  const k = sBase / F.s, v = new Vox();
+  for (const e of base.m.values()) v.box(Math.floor((e.x - cx) * k), Math.floor(e.y * k), Math.floor((e.z - cx) * k), Math.ceil((e.x - cx + 1) * k) - 1, Math.ceil((e.y + 1) * k) - 1, Math.ceil((e.z - cx + 1) * k) - 1, e.c);
+  const y0 = Math.round(topo * k);
+  for (const e of recor(F.vox()).m.values()) v.set(e.x, e.y + y0, e.z, e.c);
+  return v;
+}
+const vTopiaria = (forma = 'porquinho') => vComBase(vVasoTopiaria(), 1 / 16, 8, 5, FORMAS_TOPIARIA[forma], recorTopiaria);
+const vEstatuaFamilia = (forma = 'beto') => vComBase(vPedestal(), 1 / 40, 0, 10, FORMAS_ESTATUA[forma], recorPedra);
+// o poço dos desejos: mureta redonda de pedra, a água com as moedinhas, os esteios, o telhadinho e o balde na corda
+function vPocoDesejos(){
+  const v = new Vox(), pedra = (x, y, z) => (x + y * 2 + z) % 3 ? 0xc9c2b4 : 0xb9b2a3;
+  for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++){
+    const d = Math.hypot(x - 7.5, z - 7.5);
+    if (d <= 6 && d >= 4.4) v.box(x, 0, z, x, 5, z, pedra);
+    else if (d < 4.4) v.set(x, 3, z, hash(x, 3, z) < 0.12 ? 0xf2c13a : 0x3f8fd0);
+  }
+  for (const x of [2, 13]) v.box(x, 6, 7, x, 16, 8, 0x8a5a36);
+  v.box(2, 14, 7, 13, 14, 8, 0x6a4428);
+  for (let i = 0; i <= 4; i++){ const y = 17 + i, c = i % 2 ? 0x5e7da6 : 0x6e8db6; v.box(0, y, 3 + i, 15, y, 3 + i, c); v.box(0, y, 12 - i, 15, y, 12 - i, c); }
+  v.box(0, 21, 7, 15, 21, 8, 0x4e6d96);
+  v.box(7, 9, 7, 8, 13, 8, 0xd9c49a); v.box(6, 6, 6, 9, 8, 9, (x, y) => y === 8 ? 0x8a8a8e : 0x9a6a3a);
+  return v;
+}
+// as bandeirinhas do ArraiEd: dois mastrinhos com o cordão de bandeirinhas coloridas caindo no meio e um balãozinho de papel
+// pendurado no centro (que acende de noite). O cordão é uma malha à parte, que balança com o vento
+function vBandeirinhasMastros(){
+  const v = new Vox();
+  for (const x of [1, 14]){ v.box(x, 0, 7, x, 17, 8, 0x8a5a36); v.box(x - 1, 0, 6, x + 1, 0, 9, 0x6a4428); }
+  return v;
+}
+function vBandeirinhasCordao(){
+  const v = new Vox(), cores = [0xf05d7e, 0xffd34d, 0x58b6f0, 0x8fd06a, 0xb48be0, 0xff8a3a];
+  // origem: o meio do cordão, na altura dos mastros
+  for (let x = -6; x <= 6; x++){ const y = Math.round(-((6.5 * 6.5 - x * x) / 6.5) * 0.45); v.set(x, y, 0, 0x3b2a20); if ((x + 7) % 2 === 0){ const c = cores[((x + 7) / 2) % cores.length]; v.box(x, y - 2, 0, x + 1, y - 1, 0, c); v.set(x, y - 3, 0, c); } }
+  // o balãozinho de papel listrado
+  v.box(-1, -9, 0, 1, -6, 0, (x, y) => y % 2 ? 0xf05d7e : 0xffd34d); v.box(0, -5, 0, 0, -4, 0, 0x3b2a20); v.set(0, -10, 0, 0xfff1a8);
+  return v;
+}
+function vBandeirinhas(){
+  const v = vBandeirinhasMastros();
+  for (const e of vBandeirinhasCordao().m.values()) v.set(e.x + 8, e.y + 16, e.z + 7, e.c);
+  return v;
+}
 // ================= reformas do Maurinho: cada construção tem a 1ª reforma (nível 31) e a 2ª (nível 35).
 // A reforma é o desenho original com acréscimos, no mesmo lugar: a fazenda não tem espaço para crescer para os lados
 const MODELO_BASE = { casa: () => vCasa(true), celeiro: vCeleiro, poco: vPoco, galinheiro: vGalinheiro, curral: vAbrigo,
@@ -7419,6 +7539,8 @@ const VI = {
   bolomel(){ const v = new Vox(); v.ell(0, 2, 0, 5, 2.5, 5, (x, y) => y >= 4 ? 0xf2b42a : 0xc98a3a); v.ell(0, 0, 0, 6, 0.6, 6, 0xfdf8ef); return v; },
   colmeia(){ return vColmeia(); }, cova(){ return vCova(); },
   casinhaLuma(){ return vCasinhaLuma(); }, carriola(){ return vCarriola(); }, mesaPiquenique(){ return vMesaPiquenique(); }, relogioSol(){ return vRelogioSol(); }, pergola(){ return vPergola(); },
+  fogueira(){ return vFogueiraRoda(); }, laguinho(){ return vLaguinho(); }, pocoDesejos(){ return vPocoDesejos(); }, bandeirinhas(){ return vBandeirinhas(); },
+  topiaria(){ return vTopiaria(); }, estatuaFamilia(){ return vEstatuaFamilia(); },
   balanco(){ const v = vBalanco(); const [px, py, pz] = BALANCO.pivo; for (const e of vPneuBalanco().m.values()) v.set(e.x + Math.floor(px), e.y + py, e.z + Math.floor(pz), e.c); return v; }, comedouro(){ return vComedouro(); },
   flores(){ return vCanteiroFlor(); }, banco(){ return vBanco(); }, espantalho(){ return vEspantalho(); }, poste(){ return vPoste(); }, varal(){ return vVaralTrecho(); }, fonte(){ return vFonte(); }, estatua(){ const v = vEstatua(); return v; },
   laranjeira(){ return vFrutifera('laranjeira', true); }, goiabeira(){ return vFrutifera('goiabeira', true); }, mangueira(){ return vFrutifera('mangueira', true); },
@@ -12450,7 +12572,7 @@ const CENAS = {
     titulo: 'Um cafezinho', desc: 'O Ed faz uma pausa na frente da casa.', trancada: 'acontece de vez em quando a partir do nível 3, ou toque na casa e escolha "Tomar um lanchinho"',
     // nível 3, avião fora e um cantinho livre; e então o lanchinho pedido na casa (fora do modo enfeite) ou, de vez em quando, relógio vencido com o Ed parado há 20 s sem nada para fazer
     pronta: () => nivel() >= 3 && !!S.viuCineInicio && (voo.estado === 'fora' || cafeDoMilton()) && !!lugarCafe()
-      && (lanchePedido ? !modo : cafeDoMilton() ? !!edParadoDesde && performance.now() - edParadoDesde >= 3000 : Date.now() >= proxCafezinho && !!edParadoDesde && performance.now() - edParadoDesde >= 20000),
+      && (lanchePedido ? !modo : cafeDoMilton() ? !!edParadoDesde && performance.now() - edParadoDesde >= 3000 : Date.now() >= proxCafezinho && !aquecer.ed && !!edParadoDesde && performance.now() - edParadoDesde >= 20000),
     podeRever: () => (voo.estado !== 'fora' ? 'Dá para rever quando o Milton decolar.' : !lugarCafe() ? 'Falta um cantinho livre na frente da casa.' : null),
     foco: () => (cafe.mesaOn ? new THREE.Vector3(cafe.cx - 0.05, 0.5, cafe.cz - 0.1) : new THREE.Vector3(ed.pos.x, 0.4, ed.pos.y)), // até a mesa surgir, a câmera segue o Ed
     cameraRapida: c => c.passo === 'c-monta',
@@ -13134,6 +13256,12 @@ const ENFEITES = {
   pergola:      { nome: 'Pérgola', art: 'a', preco: 2500, nivel: 17, xp: 7, desc: 'Um arco de madeira coberto de trepadeira florida.' },
   balanco:      { nome: 'Balanço de pneu', art: 'o', preco: 2000, nivel: 18, xp: 6, desc: 'O Hud e o Dani se balançam quando estão sem tarefa.' },
   comedouro:    { nome: 'Comedouro de passarinho', art: 'o', preco: 3000, nivel: 20, xp: 8, desc: 'De dia, o tucano e o papagaio da mata vêm comer as sementes.' },
+  fogueira:     { nome: 'Fogueira de roda', art: 'a', preco: 40000, nivel: 44, xp: 30, desc: 'Acesa de noite. Nas noites de inverno, o Ed senta num tronco para se aquecer, e o Hud e o Dani também.' },
+  laguinho:     { nome: 'Laguinho com sapinho', art: 'o', preco: 50000, nivel: 46, xp: 35, desc: 'O sapinho pula de folha em folha e coaxa de noite.' },
+  topiaria:     { nome: 'Topiaria', art: 'a', preco: 60000, nivel: 48, xp: 40, desc: 'Um arbusto podado em forma de porquinho, galinha, vaca ou Luma. Toque nele para trocar o formato.' },
+  pocoDesejos:  { nome: 'Poço dos desejos', art: 'o', preco: 70000, nivel: 49, xp: 45, desc: 'O Ed joga uma moedinha e faz um pedido. De noite passa uma estrela cadente.' },
+  estatuaFamilia: { nome: 'Estátua da família', art: 'a', preco: 80000, nivel: 51, xp: 50, desc: 'Na mesma pedra da estátua do Ed: o Beto, o Milton, o Jaca ou a Luma. Toque nela para trocar quem.' },
+  bandeirinhas: { nome: 'Bandeirinhas do ArraiEd', art: 'as', preco: 30000, nivel: 52, xp: 20, desc: 'Uma lembrança da festa: o cordão de bandeirinhas balança com o vento e o balãozinho acende de noite.' },
 };
 const RAIO_ESPANTALHO = 3;
 const ENF_VIS = {};
@@ -13169,13 +13297,30 @@ function ladrilhoDeBeirada(x, z){
 const livreParaEnfeite = (x, z) => livreSemColetor(x, z) && !pertoDoColetor(x, z) && !ladrilhoDeBeirada(x, z);
 let brilhoPoste = null;
 const geoBrilhoPoste = () => { if (!brilhoPoste) brilhoPoste = brilhoDe(vPoste(), 1 / 16, { origin: [8, 0, 8] }, [0xfff1a8]); return brilhoPoste.clone(); };
+// a topiaria e a estátua da família: o vaso (ou a pedra) numa escala e a forma escolhida na escala do desenho dela
+const formasDe = tipo => tipo === 'topiaria' ? FORMAS_TOPIARIA : FORMAS_ESTATUA;
+const formasLiberadas = tipo => Object.keys(formasDe(tipo)).filter(k => !formasDe(tipo)[k].pode || formasDe(tipo)[k].pode());
+const formaDoEnfeite = e => formasLiberadas(e.tipo).includes(e.forma) ? e.forma : formasLiberadas(e.tipo)[0];
+function grupoComForma(tipo, forma){
+  const top = tipo === 'topiaria', F = formasDe(tipo)[forma], g = new THREE.Group();
+  const base = top ? malha(geo('vasoTopiaria', () => vVasoTopiaria().build(1 / 16, { origin: [8, 0, 8] }))) : malha(geo('pedestal', () => vPedestal().build(1 / 40, { origin: [0.5, 0, 0.5] })));
+  const corpo = malha(geo((top ? 'topiaria_' : 'estatuaF_') + forma, () => (top ? recorTopiaria : recorPedra)(F.vox()).build(F.s, { origin: [0.5, 0, 0.5] })));
+  corpo.position.y = top ? 5 / 16 : 10 / 40;
+  g.add(base, corpo);
+  return g;
+}
+const tirarHalos = m => m.traverse(o => { if (o.userData.halo){ const i = HALOS.indexOf(o); if (i >= 0) HALOS.splice(i, 1); } });
 function montarEnfeite(e){
   const k = e.x + ',' + e.z;
-  if (ENF_VIS[k]){ scene.remove(ENF_VIS[k]); const i = pickaveis.indexOf(ENF_VIS[k]); if (i >= 0) pickaveis.splice(i, 1); }
+  if (ENF_VIS[k]){ tirarHalos(ENF_VIS[k]); scene.remove(ENF_VIS[k]); const i = pickaveis.indexOf(ENF_VIS[k]); if (i >= 0) pickaveis.splice(i, 1); }
   const modelos = { canteiroFlor: () => vCanteiroFlor(), banco: vBanco, espantalho: vEspantalho, poste: vPoste, fonte: vFonte, estatua: vEstatua,
-    casinhaLuma: vCasinhaLuma, carriola: vCarriola, mesaPiquenique: vMesaPiquenique, relogioSol: vRelogioSol, pergola: vPergola, balanco: vBalanco, comedouro: vComedouro };
+    casinhaLuma: vCasinhaLuma, carriola: vCarriola, mesaPiquenique: vMesaPiquenique, relogioSol: vRelogioSol, pergola: vPergola, balanco: vBalanco, comedouro: vComedouro,
+    fogueira: vFogueiraRoda, laguinho: vLaguinho, pocoDesejos: vPocoDesejos, bandeirinhas: vBandeirinhasMastros };
   const escala = e.tipo === 'estatua' ? 1 / 40 : 1 / 16;
-  const m = colocar(malha(geo('enf' + e.tipo, () => modelos[e.tipo]().build(escala, { origin: e.tipo === 'estatua' ? [0.5, 0, 0.5] : [8, 0, 8] }))), e.x + 0.5, 0, e.z + 0.5, (e.rot || 0) * Math.PI / 2);
+  let m;
+  // a topiaria e a estátua da família: a base numa escala e a forma escolhida (e.forma) na escala do desenho dela
+  if (e.tipo === 'topiaria' || e.tipo === 'estatuaFamilia'){ m = grupoComForma(e.tipo, formaDoEnfeite(e)); colocar(m, e.x + 0.5, 0, e.z + 0.5, (e.rot || 0) * Math.PI / 2); }
+  else m = colocar(malha(geo('enf' + e.tipo, () => modelos[e.tipo]().build(escala, { origin: e.tipo === 'estatua' ? [0.5, 0, 0.5] : [8, 0, 8] }))), e.x + 0.5, 0, e.z + 0.5, (e.rot || 0) * Math.PI / 2);
   // o poste acende à noite: a lâmpada brilha e ganha um halo
   if (e.tipo === 'poste'){ m.add(geoBrilhoPoste()); const h = haloLuz(); h.position.set(0, 1.42, 0); m.add(h); m.userData.poste = true; m.castShadow = LUZ.noite < 0.5; }
   // a sombra do ponteiro do relógio de sol, girando em volta do meio do mostrador (atualizarEnfeites)
@@ -13189,13 +13334,33 @@ function montarEnfeite(e){
     const [px, py, pz] = BALANCO.pivo; p.position.set((px - 8) / 16, py / 16, (pz - 8) / 16); m.add(p);
     m.userData.pneu = p; m.userData.fase = hash(e.x, 3, e.z) * 6;
   }
+  // o fogo da fogueira (aceso de noite) e o calor em volta
+  if (e.tipo === 'fogueira'){
+    const ch = new THREE.Mesh(geo('chamaFogueira', () => vChama().build(FOGUEIRA.chama / 16, { origin: [0.5, 0, 0.5], jitter: 0.04 })), new THREE.MeshBasicMaterial({ vertexColors: true }));
+    ch.position.y = 1 / 16; ch.visible = false; m.add(ch);
+    const h = haloLuz(0xffa040, 2.4); h.position.set(0, 0.45, 0); m.add(h);
+    m.userData.chama = ch; m.userData.fase = hash(e.x, 5, e.z) * 6;
+  }
+  // o sapinho do laguinho, em cima de uma das folhas
+  if (e.tipo === 'laguinho'){
+    const sp = malha(geo('sapinho', () => vSapinho().build(1 / 28, { origin: [0, 0, 0] }))), [fx, fz] = LAGUINHO.folhas[0];
+    sp.position.set((fx - 8) / 16, 2 / 16, (fz - 8) / 16); m.add(sp);
+    Object.assign(m.userData, { sapo: sp, folha: 0, sapoT: rnd(...LAGUINHO.pulo), coaxaT: rnd(...LAGUINHO.coaxa), puff: 0 });
+  }
+  // o cordão das bandeirinhas, que balança, e o balãozinho, que acende de noite
+  if (e.tipo === 'bandeirinhas'){
+    const c = malha(geo('cordaoBandeirinhas', () => vBandeirinhasCordao().build(1 / 16, { origin: [0, 0, 0] })), false);
+    c.position.set(0, 17 / 16, (7.5 - 8) / 16); m.add(c);
+    const h = haloLuz(0xffd070, 0.8); h.position.set(0, (17 - 8) / 16, 0); c.add(h);
+    m.userData.cordao = c; m.userData.fase = hash(e.x, 7, e.z) * 6;
+  }
   m.traverse(o => { o.userData.alvo = { k: 'enfeite', e }; }); pickaveis.push(m);
   ENF_VIS[k] = m;
   setT(e.x, e.z, 'feno');
 }
 function removerEnfeite(e){
   const k = e.x + ',' + e.z;
-  if (ENF_VIS[k]) ENF_VIS[k].traverse(o => { if (o.userData.halo) HALOS.splice(HALOS.indexOf(o), 1); });
+  if (ENF_VIS[k]) tirarHalos(ENF_VIS[k]);
   if (ENF_VIS[k]){ scene.remove(ENF_VIS[k]); const i = pickaveis.indexOf(ENF_VIS[k]); if (i >= 0) pickaveis.splice(i, 1); delete ENF_VIS[k]; }
   S.enfeites.splice(S.enfeites.indexOf(e), 1);
   setT(e.x, e.z, 'grama');
@@ -13231,6 +13396,15 @@ function colocarEnfeite(id, x, z){
 function itensEnfeite(e){
   const E = ENFEITES[e.tipo], r = { titulo: E.nome, icone: e.tipo === 'canteiroFlor' ? 'flores' : e.tipo, itens: [] };
   r.estado = E.desc || 'Deixa a fazenda mais bonita.';
+  if (e.tipo === 'pocoDesejos'){
+    const ja = S.desejoDia === diaAtual();
+    r.itens.push({ rotulo: 'Fazer um pedido', sub: `R$ ${DESEJO.preco} na água; ${ja ? 'o XP de hoje já veio' : DESEJO.xp + ' XP, uma vez por dia'}`, icone: 'ed', fn: () => enfileirar('desejo', { k: 'poco', x: e.x, z: e.z }) });
+  }
+  if (e.tipo === 'topiaria' || e.tipo === 'estatuaFamilia'){
+    const lista = formasLiberadas(e.tipo), prox = lista[(lista.indexOf(formaDoEnfeite(e)) + 1) % lista.length], F = formasDe(e.tipo);
+    r.estado += ` Agora: ${F[formaDoEnfeite(e)].nome}.`;
+    if (lista.length > 1) r.itens.push({ rotulo: e.tipo === 'topiaria' ? 'Trocar o formato' : 'Trocar quem', sub: `para ${e.tipo === 'topiaria' ? 'o formato de ' : ''}${F[prox].nome}`, icone: e.tipo, fn: () => { e.forma = prox; montarEnfeite(e); Som.plantar(); salvar(); } });
+  }
   r.itens.push({ rotulo: 'Girar', icone: 'ed', fn: () => { e.rot = ((e.rot || 0) + 1) % 4; montarEnfeite(e); salvar(); } });
   r.itens.push({ rotulo: 'Mudar de lugar', icone: 'ed', fn: () => { removerEnfeite(e); S.guardados[e.tipo] = (S.guardados[e.tipo] || 0) + 1; ligarModoEnfeite(e.tipo); salvar(); } });
   r.itens.push({ rotulo: 'Guardar', sub: 'volta para a loja, em Enfeites', icone: 'celeiro', leve: true, fn: () => { removerEnfeite(e); S.guardados[e.tipo] = (S.guardados[e.tipo] || 0) + 1; salvar(); aviso(`${E.nome} guardado.`); } });
@@ -13254,8 +13428,36 @@ function atualizarEnfeites(dt, t){
       U.amp = lerp(U.amp == null ? amp : U.amp, amp, Math.min(1, dt * 1.5));
       U.pneu.rotation.x = Math.sin(t * BALANCO.vel + U.fase) * U.amp;
     }
+    if (U.chama){
+      const acesa = LUZ.noite > 0.3;
+      U.chama.visible = acesa;
+      if (acesa) U.chama.scale.set(1 + Math.sin(t * 13 + U.fase) * 0.08, 1 + Math.sin(t * 9.3 + U.fase * 2) * 0.16, 1 + Math.cos(t * 11 + U.fase) * 0.08);
+    }
+    if (U.sapo) atualizarSapinho(m, U, dt, t);
+    if (U.cordao) U.cordao.rotation.x = Math.sin(t * 1.7 + U.fase) * 0.14;
   }
   atualizarComedouro(dt, t);
+  atualizarFogueiraEd();
+}
+function atualizarSapinho(m, U, dt, t){
+  const S2 = U.sapo, F = LAGUINHO.folhas;
+  if (U.pulo){
+    U.pulo.t += dt; const k = Math.min(1, U.pulo.t / 0.55);
+    S2.position.set(lerp(U.pulo.de[0], U.pulo.ate[0], k), 2 / 16 + Math.sin(k * Math.PI) * 0.22, lerp(U.pulo.de[1], U.pulo.ate[1], k));
+    if (k >= 1){ U.pulo = null; Som.tom(420, 0.04, 'sine', 0.012, 260); }
+  } else if ((U.sapoT -= dt) <= 0){
+    U.sapoT = rnd(...LAGUINHO.pulo); const de = F[U.folha]; U.folha = (U.folha + 1) % F.length; const ate = F[U.folha];
+    U.pulo = { t: 0, de: [(de[0] - 8) / 16, (de[1] - 8) / 16], ate: [(ate[0] - 8) / 16, (ate[1] - 8) / 16] };
+    S2.rotation.y = Math.atan2(ate[0] - de[0], ate[1] - de[1]);
+  }
+  // de noite coaxa, com o laguinho perto do meio da tela
+  if (periodo().id === 'noite' && (U.coaxaT -= dt) <= 0){
+    U.coaxaT = rnd(...LAGUINHO.coaxa); U.puff = 0.5;
+    if (!cine && Math.hypot(m.position.x - cam.alvo.x, m.position.z - cam.alvo.z) < cam.vista * 0.7) coaxar();
+  }
+  U.puff = Math.max(0, U.puff - dt);
+  const p = U.puff > 0 ? Math.sin(U.puff / 0.5 * Math.PI * 2) * 0.18 : 0;
+  S2.scale.set(1 + p, 1 + p * 0.5, 1 + p);
 }
 // onde fica o assento do pneu agora, no mundo
 function assentoPneu(m){
@@ -13330,7 +13532,106 @@ function sairDoBalanco(A, Hd){
   const ry = (e.rot || 0) * Math.PI / 2;
   for (const s of [1, -1]){ const tx = Math.floor(Hd.pos.x + Math.sin(ry) * s * 0.8), tz = Math.floor(Hd.pos.y + Math.cos(ry) * s * 0.8); if (andavel(tx, tz)){ Hd.colocar(tx + 0.5, tz + 0.5); return; } }
 }
-const descerDoBalanco = P => { const A = P === irmaoDani ? AJUDA.dani : AJUDA.hud; if (A.balanco || A.indoBalanco) sairDoBalanco(A, P); };
+const descerDoBalanco = P => { const A = P === irmaoDani ? AJUDA.dani : AJUDA.hud; if (A.balanco || A.indoBalanco) sairDoBalanco(A, P); if (A.fogueira) sairDaFogueira(A, P); };
+// a fogueira de roda: nas noites de inverno, o Ed parado à toa senta num tronco para se aquecer (o da frente, se estiver
+// livre), e o Hud e o Dani sem tarefa sentam nos outros. Eles ficam na beira do ladrilho, de frente para o fogo, para o
+// ladrilho deles continuar sendo andável (as rotas começam de onde eles estão)
+const invernoAgora = () => FOGUEIRA.forcaInverno || estacaoAtual().nome === 'Inverno';
+const noiteDeFogueira = () => periodo().id === 'noite';
+const aquecer = { ed: null };
+function assentoFogueira(e, i){
+  const ry = (e.rot || 0) * Math.PI / 2, [sx, sz] = FOGUEIRA.assentos[i], lx = (sx - 8) / 16, lz = (sz - 8) / 16, d = Math.hypot(lx, lz) || 1;
+  // rotação do three.js em volta do y; o lugar de sentar fica um tiquinho fora do ladrilho da fogueira
+  const ox = (lx * Math.cos(ry) + lz * Math.sin(ry)) / d, oz = (-lx * Math.sin(ry) + lz * Math.cos(ry)) / d;
+  const cx = e.x + 0.5, cz = e.z + 0.5, x = cx + ox * 0.53, z = cz + oz * 0.53;
+  return { x, z, ang: Math.atan2(cx - x, cz - z), tx: Math.floor(x), tz: Math.floor(z) };
+}
+const assentoOcupado = (e, i) => (aquecer.ed && aquecer.ed.e === e && aquecer.ed.i === i) || [AJUDA.hud, AJUDA.dani].some(A => A.fogueira && A.fogueira.e === e && A.fogueira.i === i);
+function lugarNaFogueira(p, ordem){
+  const lista = S.enfeites.filter(e => e.tipo === 'fogueira' && ENF_VIS[e.x + ',' + e.z]);
+  lista.sort((a, b) => Math.hypot(a.x - p.pos.x, a.z - p.pos.y) - Math.hypot(b.x - p.pos.x, b.z - p.pos.y));
+  for (const e of lista) for (const i of ordem){
+    if (assentoOcupado(e, i)) continue;
+    const A = assentoFogueira(e, i);
+    if (!andavel(A.tx, A.tz)) continue;
+    const pts = rota(clamp(Math.floor(p.pos.x), 0, W - 1), clamp(Math.floor(p.pos.y), 0, H - 1), A.tx, A.tz);
+    if (pts) return { e, i, A, pts: [...pts, [A.x, A.z]] };
+  }
+  return null;
+}
+function sentarNaFogueira(p, A){
+  const gc = p.corpo.children[0].geometry; if (!gc.boundingBox) gc.computeBoundingBox();
+  p.colocar(A.x, A.z); p.sentado = FOGUEIRA.altura + 0.004 - gc.boundingBox.min.y * p.g.scale.y; p.ang = p.angAlvo = A.ang; p.ferramenta(null);
+}
+// levanta onde está: o lugar de sentar já fica dentro de um ladrilho andável
+function levantarDaFogueira(p){ if (p.sentado){ p.sentado = 0; p.pulo = 0.2; } }
+function atualizarFogueiraEd(){
+  const pode = invernoAgora() && noiteDeFogueira() && !cine && !miranteFP && !trator;
+  const L = aquecer.ed;
+  if (L){
+    // a caminho: desiste se o jogador mandou o Ed fazer outra coisa no meio
+    if (L.indo){ if (!pode || fila.length || tarefaAtual || ed.aoChegar !== L.cb) aquecer.ed = null; return; }
+    if (!pode || fila.length || tarefaAtual || ed.estado !== 'parado' || !S.enfeites.includes(L.e)){ levantarDaFogueira(ed); aquecer.ed = null; }
+    return;
+  }
+  if (!pode || fila.length || tarefaAtual || ed.estado !== 'parado' || modo || menuAberto || !edParadoDesde || performance.now() - edParadoDesde < 6000) return;
+  const lugar = lugarNaFogueira(ed, [0, 1, 2]);
+  if (!lugar) return;
+  const cb = () => {
+    const L2 = aquecer.ed; if (!L2 || L2.cb !== cb) return; L2.indo = false;
+    if (fila.length || tarefaAtual || cine || !S.enfeites.includes(L2.e)){ aquecer.ed = null; return; }
+    sentarNaFogueira(ed, L2.A); ed.pulo = 0.2;
+    if (Math.random() < 0.6){ const f = variar(FALAS_FOGUEIRA); falar(ed, f, tempoDeLeitura(f)); }
+  };
+  aquecer.ed = { ...lugar, indo: true, cb };
+  ed.ir(lugar.pts, cb);
+}
+const FALAS_FOGUEIRA = ['Que friozinho! Nada como uma fogueira.', 'Ahh, quentinho. Agora sim.', 'Noite de inverno pede fogueira.', 'Se tivesse milho, eu fazia pipoca aqui.', 'Daqui dá pra ver as estrelas e esquentar as patinhas.', 'O fogo estalando é a melhor música.', 'Só mais um pouquinho e eu vou nanar.', 'Fogueira me lembra o ArraiEd!', 'Quentinho por fora, sono por dentro.', 'Bom demais. Até o rabicó esquentou.', 'Vou ficar aqui até a hora de nanar.'];
+// o ajudante sem tarefa, nas noites de inverno, senta num tronco livre da fogueira (os dos lados primeiro)
+function aquecerAjudante(A, Hd){
+  if (!(invernoAgora() && noiteDeFogueira())) return false;
+  if (A.fogueira){
+    if (!S.enfeites.includes(A.fogueira.e)){ sairDaFogueira(A, Hd); return false; }
+    if (!A.fogueira.indo){ sentarNaFogueira(Hd, A.fogueira.A); }
+    return true;
+  }
+  const lugar = lugarNaFogueira(Hd, [1, 2, 0]);
+  if (!lugar) return false;
+  A.fogueira = { ...lugar, indo: true };
+  Hd.ir(lugar.pts, () => { if (A.fogueira) A.fogueira.indo = false; });
+  return true;
+}
+function sairDaFogueira(A, Hd){ A.fogueira = null; levantarDaFogueira(Hd); }
+// o laguinho: o sapinho pula de uma folha para a outra de vez em quando; de noite ele coaxa (o som só toca com o laguinho
+// perto do meio da tela) e o papo dele estufa
+function coaxar(){ Som.tom(170, 0.09, 'square', 0.025, 120); Som.tom(190, 0.08, 'square', 0.022, 130, 0.13); }
+// o poço dos desejos: o Ed joga uma moedinha (R$ 1), faz um pedido e, de noite, passa uma estrela cadente; de dia sobem
+// brilhinhos dourados do poço. Dá DESEJO.xp uma vez por dia (S.desejoDia)
+const DESEJO = { xp: 400, preco: 1 };
+const pocoEm = (x, z) => S.enfeites.find(e => e.tipo === 'pocoDesejos' && e.x === x && e.z === z);
+const FALAS_DESEJO = ['Desejo que a colheita de amanhã seja enorme!', 'Desejo que a Luma pare de roubar cenoura. Ou não...', 'Desejo que o Milton pouse sem susto da próxima vez.', 'Desejo uma vaquinha de volta do espaço!', 'Desejo que chova só de noite, pra regar e não molhar ninguém.', 'Desejo que o Hud cresça forte que nem o Dani.', 'Desejo que as aposentadas tenham sol todo dia no resort.', 'Desejo mais um ArraiEd! O maior de todos!', 'Desejo que a mata fique bem verdinha.', 'Desejo uma fazenda cheia de amigos.', 'Desejo... não posso contar, senão não vale!'];
+function frentePoco(e){
+  const ry = (e.rot || 0) * Math.PI / 2;
+  for (const [dx, dz] of [[Math.round(Math.sin(ry)), Math.round(Math.cos(ry))], [1, 0], [-1, 0], [0, 1], [0, -1]]){
+    const tx = e.x + dx, tz = e.z + dz;
+    if (andavel(tx, tz)) return [e.x + 0.5 + dx * 0.62, e.z + 0.5 + dz * 0.62];
+  }
+  return null;
+}
+function fazerDesejo(e){
+  if (!S.enfeites.includes(e)) return;
+  const cx = e.x + 0.5, cz = e.z + 0.5;
+  S.dinheiro -= DESEJO.preco; chipPulsa('chipDinheiro');
+  // a moedinha voando até a água
+  for (let i = 0; i < 6; i++) setTimeout(() => particula(lerp(ed.pos.x, cx, i / 5), 0.6 + Math.sin(i / 5 * Math.PI) * 0.35, lerp(ed.pos.y, cz, i / 5), 0xf2c13a, 0.25), i * 60);
+  setTimeout(() => { Som.tom(1900, 0.06, 'sine', 0.03, 2400); for (let i = 0; i < 8; i++) particula(cx + rnd(-0.15, 0.15), 0.25, cz + rnd(-0.15, 0.15), 0x9fd6f5, 0.5); }, 420);
+  if (periodo().id === 'noite'){ setTimeout(estrelaCadente, 900); if (Math.random() < 0.5) setTimeout(estrelaCadente, 1900); }
+  else for (let i = 0; i < 18; i++) setTimeout(() => particula(cx + rnd(-0.25, 0.25), 0.4, cz + rnd(-0.25, 0.25), [0xffe066, 0xfff6c0, 0xf2c13a][i % 3], 0.7), 700 + i * 70);
+  const f = variar(FALAS_DESEJO); falar(ed, f, tempoDeLeitura(f));
+  if (S.desejoDia !== diaAtual()){ S.desejoDia = diaAtual(); ganharXP(DESEJO.xp, new THREE.Vector3(ed.pos.x, 1.4, ed.pos.y)); }
+  hud(); salvar();
+}
+
 // o comedouro: de dia, de vez em quando, um tucano ou um papagaio vem da mata, pousa na beira da bandeja, bica as sementes
 // e volta. Só enfeite, não mexe no save
 const aves = { prox: rnd(...COMEDOURO.primeira), lista: [] };
@@ -14368,9 +14669,11 @@ function atualizarAjudante(A, dt, t){
   // chegou em casa neste quadro: já sumiu, não repete a saída
   if (!Hd.g.visible) return;
   if (cine && (A.balanco || A.indoBalanco)) sairDoBalanco(A, Hd);
+  if (cine && A.fogueira) sairDaFogueira(A, Hd);
   if (A.tarefa || Hd.estado !== 'parado' || cine) return;
   if (!A.ativo()){
     if (A.balanco) sairDoBalanco(A, Hd);
+    if (A.fogueira) sairDaFogueira(A, Hd);
     if (!Hd.saindo){
       Hd.saindo = true;
       falar(Hd, variar(A.cansou()), 3);
@@ -14382,8 +14685,10 @@ function atualizarAjudante(A, dt, t){
   }
   const alvos = alvosHud();
   // sem nada para fazer, vai para o balanço de pneu, se tiver um livre; com trabalho, desce dele
-  if (!alvos.length){ balancarAjudante(A, Hd); return; }
+  // nas noites de inverno, a fogueira vem antes do balanço
+  if (!alvos.length){ if (!aquecerAjudante(A, Hd)) balancarAjudante(A, Hd); return; }
   if (A.balanco) sairDoBalanco(A, Hd);
+  if (A.fogueira) sairDaFogueira(A, Hd);
   // vai ao que está mais perto, mas, com o outro ajudante na rua, evita a região onde ele está trabalhando (até
   // AJUDA_LONGE ladrilhos do último alvo dele): assim cada um pega um canto da fazenda e não parecem trabalhar juntos
   const O = A === AJUDA.hud ? AJUDA.dani : AJUDA.hud, Po = O.p();
@@ -14488,13 +14793,13 @@ function itensHud(){
 
 // ================= tarefas do Ed
 const fila = [];
-const NOMES_ACAO = { museu:'Visitar o museu', subirMirante:'Subir no mirante', estrelas:'Olhar as estrelas', trator:'Sair com o trator', carinhoGalo:'Carinho no galo', pegarGalo:'Pegar o galo', soltarGalo:'Devolver o galo', apagarFogo:'Apagar o fogo', recolherLixo:'Recolher o lixo', tirarGalho:'Tirar o galho', pegarAluguel:'Pegar o aluguel', lerCartao:'Ler o cartão-postal', tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa' };
-const DUR = { museu: 0.5, subirMirante: 0.2, estrelas: 4.5, carinhoGalo: 2.4, pegarGalo: 0.5, soltarGalo: 0.7, apagarFogo: 2.2, recolherLixo: 0.8, tirarGalho: 2.4, pegarAluguel: 0.6, lerCartao: 0.6, tirarCerca: 2.4, colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, coletarMata: 1.0, cavarTrufa: 1.6 };
-const FERR = { museu: null, subirMirante: null, estrelas: null, carinhoGalo: 'carinho', pegarGalo: null, soltarGalo: 'soltar', apagarFogo: 'regador', recolherLixo: 'cesta', tirarGalho: null, pegarAluguel: null, lerCartao: null, tirarCerca: 'enxada', colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', coletarMata: 'cesta', cavarTrufa: 'enxada' };
+const NOMES_ACAO = { desejo:'Fazer um pedido', museu:'Visitar o museu', subirMirante:'Subir no mirante', estrelas:'Olhar as estrelas', trator:'Sair com o trator', carinhoGalo:'Carinho no galo', pegarGalo:'Pegar o galo', soltarGalo:'Devolver o galo', apagarFogo:'Apagar o fogo', recolherLixo:'Recolher o lixo', tirarGalho:'Tirar o galho', pegarAluguel:'Pegar o aluguel', lerCartao:'Ler o cartão-postal', tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa' };
+const DUR = { desejo: 1.4, museu: 0.5, subirMirante: 0.2, estrelas: 4.5, carinhoGalo: 2.4, pegarGalo: 0.5, soltarGalo: 0.7, apagarFogo: 2.2, recolherLixo: 0.8, tirarGalho: 2.4, pegarAluguel: 0.6, lerCartao: 0.6, tirarCerca: 2.4, colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, coletarMata: 1.0, cavarTrufa: 1.6 };
+const FERR = { desejo: null, museu: null, subirMirante: null, estrelas: null, carinhoGalo: 'carinho', pegarGalo: null, soltarGalo: 'soltar', apagarFogo: 'regador', recolherLixo: 'cesta', tirarGalho: null, pegarAluguel: null, lerCartao: null, tirarCerca: 'enxada', colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', coletarMata: 'cesta', cavarTrufa: 'enxada' };
 const mesmoAlvo = (a, b) => a.k === b.k && (a.k === 'animal' ? a.a === b.a : a.x === b.x && a.z === b.z);
-function reservado(alvo){ if (alvo.k === 'museu') return fila.some(t => t.tipo === 'museu'); if (alvo.k === 'luneta') return fila.some(t => t.tipo === 'estrelas'); if (alvo.k === 'mirante') return fila.some(t => t.tipo === 'subirMirante'); if (alvo.k === 'trator') return fila.some(t => t.tipo === 'trator' && t.alvo.lote === alvo.lote); if (alvo.k === 'galo') return fila.some(t => t.alvo.k === 'galo' && t.alvo.id === alvo.id); if (alvo.k === 'ocorrencia') return fila.some(t => t.alvo.k === 'ocorrencia' && t.alvo.id === alvo.id && t.alvo.j === alvo.j); if (alvo.k === 'aluguel') return fila.some(t => t.tipo === 'pegarAluguel'); if (alvo.k === 'cartao') return fila.some(t => t.tipo === 'lerCartao'); if (alvo.k === 'cercaCanto') return fila.some(t => t.tipo === 'tirarCerca'); if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
+function reservado(alvo){ if (alvo.k === 'poco') return fila.some(t => t.tipo === 'desejo'); if (alvo.k === 'museu') return fila.some(t => t.tipo === 'museu'); if (alvo.k === 'luneta') return fila.some(t => t.tipo === 'estrelas'); if (alvo.k === 'mirante') return fila.some(t => t.tipo === 'subirMirante'); if (alvo.k === 'trator') return fila.some(t => t.tipo === 'trator' && t.alvo.lote === alvo.lote); if (alvo.k === 'galo') return fila.some(t => t.alvo.k === 'galo' && t.alvo.id === alvo.id); if (alvo.k === 'ocorrencia') return fila.some(t => t.alvo.k === 'ocorrencia' && t.alvo.id === alvo.id && t.alvo.j === alvo.j); if (alvo.k === 'aluguel') return fila.some(t => t.tipo === 'pegarAluguel'); if (alvo.k === 'cartao') return fila.some(t => t.tipo === 'lerCartao'); if (alvo.k === 'cercaCanto') return fila.some(t => t.tipo === 'tirarCerca'); if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
 const visSlot = alvo => { const L = alvo.k === 'pomar' ? POMAR_VIS : alvo.k === 'mata' ? MATA_VIS : COLMEIA_VIS; return L[alvo.i] || (L[alvo.i] = {}); };
-function setReserva(alvo, v){ if (alvo.k === 'trator' || alvo.k === 'luneta' || alvo.k === 'mirante' || alvo.k === 'museu') return; if (alvo.k === 'galo'){ if (GALOS[alvo.id]) GALOS[alvo.id].res = v; return; } if (alvo.k === 'ocorrencia' || alvo.k === 'aluguel' || alvo.k === 'cartao' || alvo.k === 'cercaCanto' || alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
+function setReserva(alvo, v){ if (alvo.k === 'trator' || alvo.k === 'luneta' || alvo.k === 'mirante' || alvo.k === 'museu' || alvo.k === 'poco') return; if (alvo.k === 'galo'){ if (GALOS[alvo.id]) GALOS[alvo.id].res = v; return; } if (alvo.k === 'ocorrencia' || alvo.k === 'aluguel' || alvo.k === 'cartao' || alvo.k === 'cercaCanto' || alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
 // diz se a ação vale para o alvo; devolve o custo ou um motivo
 function checar(tipoA, alvo, param){
   if (alvo.k === 'galo'){
@@ -14513,6 +14818,7 @@ function checar(tipoA, alvo, param){
   if (alvo.k === 'mirante') return { ok: tipoA === 'subirMirante' && !!S.mirante && !miranteFP, custo: {} };
   if (alvo.k === 'luneta') return { ok: tipoA === 'estrelas' && obraConcluida('observatorio') && periodo().id === 'noite', motivo: 'Só dá para olhar as estrelas de noite', custo: {} };
   if (alvo.k === 'museu') return { ok: tipoA === 'museu' && obraConcluida('museu'), custo: {} };
+  if (alvo.k === 'poco'){ const e = pocoEm(alvo.x, alvo.z); return { ok: tipoA === 'desejo' && !!e && !!frentePoco(e) && S.dinheiro >= DESEJO.preco, motivo: 'Falta uma moedinha', custo: {} }; }
   if (alvo.k === 'maca') return { ok: tipoA === 'comerMaca' && !!S.maca, custo: {} };
   if (alvo.k === 'trufa') return { ok: tipoA === 'cavarTrufa' && S.trufas.some(t => t.x === alvo.x && t.z === alvo.z), custo: {} };
   if (alvo.k === 'composteira') return checarComposteira(tipoA, param);
@@ -14632,6 +14938,7 @@ function alvoMundo(alvo){
   if (alvo.k === 'trator') return [PREDIO.galpao.porta[0] + 0.5, PREDIO.galpao.porta[1] + 0.5];
   if (alvo.k === 'luneta') return lugarDaLuneta();
   if (alvo.k === 'museu') return portaMuseu();
+  if (alvo.k === 'poco'){ const e = pocoEm(alvo.x, alvo.z); return (e && frentePoco(e)) || [alvo.x + 0.5, alvo.z + 0.5]; }
   if (alvo.k === 'mirante') return peMirante();
   if (alvo.k === 'fabrica'){ const pt = PREDIO[alvo.id].porta; return [pt[0] + 0.5, pt[1] + 0.5]; }
   if (alvo.k === 'pomar' || alvo.k === 'colmeia'){ const [x, z] = (alvo.k === 'pomar' ? POMAR_SLOTS : COLMEIA_SLOTS)[alvo.i]; return [x + 0.5, z + 1.5]; }
@@ -14814,7 +15121,7 @@ function proximaTarefa(){
     let dx = ultimo[0] - ant[0], dz = ultimo[1] - ant[1], d = Math.hypot(dx, dz);
     if (tarefa.alvo.k === 'animal' || tarefa.alvo.k === 'galo'){ dx = tx - ant[0]; dz = tz - ant[1]; d = Math.hypot(dx, dz); }
     // no galo do mourão o Ed para encostado na cerca, de frente para ele
-    if ((tarefa.alvo.k === 'galo' && tarefa.alvo.onde === 'mourao') || tarefa.alvo.k === 'luneta' || tarefa.alvo.k === 'mirante' || tarefa.alvo.k === 'museu'){ if (pts.length) pts[pts.length - 1] = [tx, tz]; else pts = [[tx, tz]]; }
+    if ((tarefa.alvo.k === 'galo' && tarefa.alvo.onde === 'mourao') || tarefa.alvo.k === 'luneta' || tarefa.alvo.k === 'mirante' || tarefa.alvo.k === 'museu' || tarefa.alvo.k === 'poco'){ if (pts.length) pts[pts.length - 1] = [tx, tz]; else pts = [[tx, tz]]; }
     else if (encostar){
       const cx = gx + 0.5, cz = gz + 0.5, ex = tx - cx, ez = tz - cz, de = Math.hypot(ex, ez) || 1, k = Math.min(0.4, Math.max(0, de - 0.42));
       const fim = [cx + ex / de * k, cz + ez / de * k];
@@ -14834,7 +15141,7 @@ function proximaTarefa(){
       if (G && G.estado === 'chao' && Math.hypot(G.pos.x - ed.pos.x, G.pos.y - ed.pos.y) > 0.85 && (tarefa.tentativas = (tarefa.tentativas || 0) + 1) < 5){ tarefaAtual = null; return; }
     }
     const al = tarefa.alvo, sl = al.k === 'pomar' ? POMAR_SLOTS[al.i] : al.k === 'colmeia' ? COLMEIA_SLOTS[al.i] : al.k === 'mata' ? MATA_XZ[al.i] : null;
-    const [ax, az] = al.k === 'galo' && GALOS[al.id] ? (al.onde === 'mourao' ? centroMourao(GALOS[al.id]) : [GALOS[al.id].pos.x, GALOS[al.id].pos.y]) : al.k === 'ocorrencia' ? olharOcorrencia(al) : al.k === 'composteira' ? centroComposteira() : al.k === 'luneta' ? lunetaMundo() : al.k === 'mirante' ? centroMirante() : al.k === 'fabrica' ? centroPredio(PREDIO[al.id]) : al.k === 'museu' ? centroPredio(PREDIO.museu) : sl ? [sl[0] + 0.5, sl[1] + 0.5] : al.k === 'coletor' ? [COLETOR[al.tp].x + 0.5, COLETOR[al.tp].z + 0.5] : alvoMundo(al); ed.olhar(ax, az);
+    const [ax, az] = al.k === 'galo' && GALOS[al.id] ? (al.onde === 'mourao' ? centroMourao(GALOS[al.id]) : [GALOS[al.id].pos.x, GALOS[al.id].pos.y]) : al.k === 'ocorrencia' ? olharOcorrencia(al) : al.k === 'composteira' ? centroComposteira() : al.k === 'luneta' ? lunetaMundo() : al.k === 'mirante' ? centroMirante() : al.k === 'fabrica' ? centroPredio(PREDIO[al.id]) : al.k === 'museu' ? centroPredio(PREDIO.museu) : al.k === 'poco' ? [al.x + 0.5, al.z + 0.5] : sl ? [sl[0] + 0.5, sl[1] + 0.5] : al.k === 'coletor' ? [COLETOR[al.tp].x + 0.5, COLETOR[al.tp].z + 0.5] : alvoMundo(al); ed.olhar(ax, az);
     if (!checar(tarefa.tipo, tarefa.alvo, tarefa.param).ok && !(tarefa.custo && Object.keys(tarefa.custo).length)){ fila.shift(); liberar(tarefa, true); tarefaAtual = null; hud(); return; }
     const sons = { arar: () => Som.arar(), regar: () => Som.regar(), plantar: () => Som.plantar(), alimentar: () => Som.ruido(0.3, 0.12, 1800) };
     if (sons[tarefa.tipo]) sons[tarefa.tipo]();
@@ -14943,6 +15250,7 @@ function executar(tarefa){
   if (alvo.k === 'cartao'){ lerCartao(); return; }
   if (alvo.k === 'luneta'){ olharEstrelas(); return; }
   if (alvo.k === 'museu'){ visitarMuseu(); return; }
+  if (alvo.k === 'poco'){ const e = pocoEm(alvo.x, alvo.z); if (e) fazerDesejo(e); return; }
   if (alvo.k === 'mirante'){ subirMirante(); return; }
   if (alvo.k === 'trufa'){ executarTrufa(tarefa); return; }
   if (alvo.k === 'mata'){ executarMata(tarefa); return; }
@@ -16306,7 +16614,7 @@ const APELIDOS = {
   galinha: 'Galinhas botando ovinhos', vaca: 'Vaquinhas de leite fresquinho', pato: 'Patinhos nadando no lago',
   moinho: 'Moinho girando fubá', queijaria: 'Queijaria de dar água na boca', queijaria2: 'Mais uma queijaria, queijo em dobro', padaria2: 'Mais uma padaria, fornada em dobro', cozinha2: 'Mais uma cozinha de docinhos', padaria: 'Padaria com cheirinho de bolo', cozinha: 'Cozinha dos docinhos', terreiro: 'Terreiro pro café pegar sol', torrador: 'Torrador de café cheiroso', chocobarra: 'Fábrica de barrinhas de chocolate',
   'Enxada afiada': 'Enxada que ara de montão', 'Botas de borracha': 'Botas pra correr mais', 'Botas de corrida': 'Botas de foguete', 'Regador grande': 'Regador caprichado', 'Regador gigante': 'Regador chuva de verão', 'Carrinho de mão': 'Carrinho pra colher mais', 'Carrinho grande': 'Carrinhão de colheita',
-  canteiroFlor: 'Florzinhas pra enfeitar', banco: 'Banco pra tirar uma soneca', espantalho: 'Espantalho espanta-mato', poste: 'Poste pra iluminar a noite', fonte: 'Chafariz de respingar', casinhaLuma: 'Casinha pra Luma dormir', carriola: 'Carriola cheia de flores', mesaPiquenique: 'Mesa pro piquenique e pro cafezinho', relogioSol: 'Relógio de sol', pergola: 'Pérgola florida', balanco: 'Balanço de pneu pros irmãos', comedouro: 'Comedouro pros passarinhos da mata', estatua: 'Estátua do Ed, o famoso!',
+  canteiroFlor: 'Florzinhas pra enfeitar', banco: 'Banco pra tirar uma soneca', espantalho: 'Espantalho espanta-mato', poste: 'Poste pra iluminar a noite', fonte: 'Chafariz de respingar', casinhaLuma: 'Casinha pra Luma dormir', carriola: 'Carriola cheia de flores', mesaPiquenique: 'Mesa pro piquenique e pro cafezinho', relogioSol: 'Relógio de sol', pergola: 'Pérgola florida', balanco: 'Balanço de pneu pros irmãos', comedouro: 'Comedouro pros passarinhos da mata', estatua: 'Estátua do Ed, o famoso!', fogueira: 'Fogueira pras noites de inverno', laguinho: 'Laguinho do sapinho', topiaria: 'Arbusto podado com jeitinho', pocoDesejos: 'Poço dos desejos', estatuaFamilia: 'Estátua da família', bandeirinhas: 'Bandeirinhas do ArraiEd',
 };
 const apelido = (chave, nome) => APELIDOS[chave] || nome;
 // a linha do tempo sai das tabelas do jogo, então o que entrar nelas aparece aqui sozinho.
@@ -16823,7 +17131,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Outro aparelho:</b> a fazenda fica salva só neste navegador. Para jogar em outro aparelho, abra os Ajustes, escolha Levar a fazenda e mande o link para você mesmo. Depois disso, cada aparelho segue sozinho.</li>
       <li><b>Cenas:</b> as cenas da história ficam guardadas e podem ser revistas nos Ajustes ou no caderno do Ed. Rever uma cena não muda nada na fazenda. De vez em quando o Ed para para um cafezinho na frente da casa, às vezes com visita. Para chamar na hora, toque na casa e escolha Tomar um lanchinho.</li>
       <li><b>Pista do Milton:</b> atrás da fazenda, o Milton, irmão do Ed, pousa de tempos em tempos o PIG-MTP. Ele traz sementes ou ração e paga uma taxa pelo uso da pista. O primeiro pouso vem depois da primeira venda ao Joli Market. No nível ${JATO_VOO.nivel} ele troca o teco-teco por um jatinho, que vem mais vezes e paga uma taxa maior. Só acontece com o jogo aberto.</li>
-      <li><b>Enfeites</b>: comprados na loja e colocados em qualquer gramado livre. Dão xp só na compra. Alguns fazem alguma coisa: com a casinha da Luma${nv(ENFEITES.casinhaLuma.nivel)}, a soneca da manhã dela é na porta da casinha; com a mesa de piquenique${nv(ENFEITES.mesaPiquenique.nivel)}, o cafezinho acontece nela; a sombra do relógio de sol${nv(ENFEITES.relogioSol.nivel)} anda com a hora; no balanço de pneu${nv(ENFEITES.balanco.nivel)} o Hud e o Dani se balançam quando estão sem tarefa; e no comedouro${nv(ENFEITES.comedouro.nivel)} o tucano e o papagaio da mata vêm comer de dia.</li>
+      <li><b>Enfeites</b>: comprados na loja e colocados em qualquer gramado livre. Dão xp só na compra. Alguns fazem alguma coisa: com a casinha da Luma${nv(ENFEITES.casinhaLuma.nivel)}, a soneca da manhã dela é na porta da casinha; com a mesa de piquenique${nv(ENFEITES.mesaPiquenique.nivel)}, o cafezinho acontece nela; a sombra do relógio de sol${nv(ENFEITES.relogioSol.nivel)} anda com a hora; no balanço de pneu${nv(ENFEITES.balanco.nivel)} o Hud e o Dani se balançam quando estão sem tarefa; no comedouro${nv(ENFEITES.comedouro.nivel)} o tucano e o papagaio da mata vêm comer de dia; a fogueira de roda${nv(ENFEITES.fogueira.nivel)} acende de noite e, nas noites de inverno, o Ed, o Hud e o Dani sentam em volta dela para se aquecer; o sapinho do laguinho${nv(ENFEITES.laguinho.nivel)} pula entre as folhas e coaxa de noite; a topiaria${nv(ENFEITES.topiaria.nivel)} e a estátua da família${nv(ENFEITES.estatuaFamilia.nivel)} trocam de forma pelo menu; no poço dos desejos${nv(ENFEITES.pocoDesejos.nivel)} o Ed joga uma moedinha e faz um pedido (${DESEJO.xp} XP uma vez por dia; de noite passa uma estrela cadente); e as bandeirinhas do ArraiEd${nv(ENFEITES.bandeirinhas.nivel)} balançam com o vento e acendem o balãozinho de noite.</li>
     </ul>`;
   const abas = `<div class="abas" role="tablist">${ABAS.map(([k, r]) => `<button class="aba" role="tab" aria-selected="${abaAjuda === k}" data-aba-ajuda="${k}" type="button">${r}</button>`).join('')}</div>`;
   abrirJanela(topo('ed', intro === true ? 'Bem-vindo à Fazenda Joli Pig!' : 'Como jogar', 'O porquinho fazendeiro') + `<div class="janela-corpo">${intro === true ? '' : abas}${corpo}
@@ -17313,7 +17621,7 @@ async function iniciar(){
     abrirMenu: (alvo, x = 300, y = 300) => abrirMenu(alvo, x, y),
     miranteVisao: { V: visaoMirante, cobre: () => miranteCobre(), topo: () => miranteTopo, MIRANTE_VISAO },
     mirante1p: { subir: subirMirante, descer: descerMirante, girar: girarMirante, zoom: zoomMirante, obj: () => miranteFP, cam: () => cameraFP, M1P: MIRANTE_1P },
-    enfeitesNovos: { aves, ave: () => { aves.prox = 0; }, AJUDA, vis: () => ENF_VIS, casinha: () => casinhaParaLuma(), piquenique: () => lugarPiquenique(), montar: e => montarEnfeite(e) },
+    enfeitesNovos: { aves, ave: () => { aves.prox = 0; }, AJUDA, vis: () => ENF_VIS, casinha: () => casinhaParaLuma(), piquenique: () => lugarPiquenique(), montar: e => montarEnfeite(e), FOGUEIRA, LAGUINHO, DESEJO, aquecer, inverno: invernoAgora, assento: assentoFogueira, frentePoco, fazerDesejo, itens: e => itensEnfeite(e), formas: formasLiberadas, grupoComForma },
     cartaoEspaco: { chegar: chegarCartaoEspaco, nomes: nomesNoEspaco, CARTAO_ESPACO },
     museu: { MUSEU, abrir: abrirMuseu, visitar: visitarMuseu, porta: portaMuseu, alvo: alvoMuseu, guardarCartao: guardarCartaoLido },
     observatorio: { OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
@@ -17448,7 +17756,7 @@ function catalogoModelos(){
     { nome: 'Automação', itens: [varios('Alimentador', [['Galinheiro', () => vAlimentador(false)], ['Curral', () => vAlimentador(true)]]), varios('Coletor', [['Ovos', () => vColetor(false)], ['Ordenhadeira', () => vColetor(true)]]), um('Esteira', vEsteira), varios('Irrigador', [['Base', vIrrigadorBase], ['Cabeça', vIrrigadorCabeca]]), um('Colmeia', vColmeia)] },
     { nome: 'Veículos', itens: [caminhao('Caminhão do Joli Market', CAMINHAO_MARKET), caminhao('Van da Joli Coffee', CAMINHAO_CAFE), { nome: 'Lambreta do Joli Bistrô', variantes: [{ nome: '', cria: () => { const c = criarLambreta(); scene.remove(c); c.position.set(0, 0, 0); c.visible = true; return c; } }] }, um('Tratorzinho', vTrator), varios('Bicicleta', CICLISTAS.map((c, i) => [['Vermelha', 'Azul', 'Amarela'][i], () => vBicicleta(c[0])])), um('Teco-teco', vTecoTeco), { nome: 'Jatinho', variantes: [['Fechado', 0], ['Com a escada', 1]].map(([n, a]) => ({ nome: n, cria: () => { const g = montarJatinho(1 / 16); g.userData.escada.rotation.x = a ? -JATO.aberta : 0; return g; } })) }, um('Hélice', vHelice), um('Biruta', vBiruta), { nome: 'Disco voador', variantes: [['Voando', false], ['Com o raio', true]].map(([n, r]) => ({ nome: n, cria: () => { const D = montarDisco(r); D.g.userData.anima = (dt, t) => animarDisco(D, t); D.g.userData.anima(0, 0); return D.g; } })) }] },
     { nome: 'Cenário', itens: [varios('Árvore', [['Maçãs', () => vArvore(0)], ['Sem fruta', () => vArvore(1)], ['Laranjas', () => vArvore(2)]]), um('Arbusto', vArbusto), um('Redemoinho', vRedemoinho), um('Fardo de feno', vFeno), um('Flores', () => vFlores(3)), um('Capim', () => vCapim(1)), um('Cova', vCova), varios('Cerca', [['Reta', () => vCerca(3)], ['Canto', () => vCerca(5)]]), varios('Portão', [['Arco da entrada', () => vPortao(true)], ['Simples', () => vPortao(false)]]), um('Placa', vPlaca), um('Correio', vCorreio)] },
-    { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), { nome: 'Varal de luzes', variantes: [{ nome: '', cria: () => { const v = vVaralTrecho(), m = malha(v.build(1 / RES_VARAL)); m.userData.cubos = v.m.size; return m; } }] }, um('Chafariz', vFonte), um('Estátua do Ed', vEstatua), um('Casinha da Luma', vCasinhaLuma), um('Carriola florida', vCarriola), um('Mesa de piquenique', vMesaPiquenique), um('Relógio de sol', vRelogioSol), um('Pérgola', vPergola), um('Balanço de pneu', VI.balanco), um('Comedouro de passarinho', vComedouro)] },
+    { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), { nome: 'Varal de luzes', variantes: [{ nome: '', cria: () => { const v = vVaralTrecho(), m = malha(v.build(1 / RES_VARAL)); m.userData.cubos = v.m.size; return m; } }] }, um('Chafariz', vFonte), um('Estátua do Ed', vEstatua), um('Casinha da Luma', vCasinhaLuma), um('Carriola florida', vCarriola), um('Mesa de piquenique', vMesaPiquenique), um('Relógio de sol', vRelogioSol), um('Pérgola', vPergola), um('Balanço de pneu', VI.balanco), um('Comedouro de passarinho', vComedouro), um('Fogueira de roda', vFogueiraRoda), varios('Laguinho com sapinho', [['Laguinho', vLaguinho], ['Sapinho', vSapinho]]), varios('Topiaria', Object.keys(FORMAS_TOPIARIA).map(k => [FORMAS_TOPIARIA[k].nome, () => vTopiaria(k)])), um('Poço dos desejos', vPocoDesejos), varios('Estátua da família', Object.keys(FORMAS_ESTATUA).map(k => [FORMAS_ESTATUA[k].nome, () => vEstatuaFamilia(k)])), varios('Bandeirinhas do ArraiEd', [['Inteiras', vBandeirinhas], ['Mastros', vBandeirinhasMastros], ['Cordão', vBandeirinhasCordao]])] },
     { nome: 'Objetos', itens: [varios('ArraiEd', [['Fogueira', vFogueira], ['Fogo', vChama], ['Mastro', vMastro], ['Barraca do milho', () => vBarraca('milho')], ['Barraca da pescaria', () => vBarraca('pescaria')], ['Bandeirinhas', vBandeirinhas]]), um('Cartão-postal', vCartaoPostal), um('Osso da Luma', vOsso), um('Biscoito da Luma', vBiscoito), um('Ponte do lago', vPonte), um('Rampa dos patos', vRampaPatos), um('Fábrica de barras', vFabBarras), um('Chocolateria', vChocolateria), um('Oficina de borracha', vOficina), um('Mirante da mata', vMirante), varios('Fogo na mata', [0, 1, 2].map(f => ['Fase ' + (f + 1), () => vFogo(f)])), varios('Lixo na mata', [['Garrafa', () => vLixo(0)], ['Latinha', () => vLixo(1)], ['Saquinho', () => vLixo(2)]]), um('Galho caído', vGalho), um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Lanterna', vLanterna), um('Lua', vLua), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Nano Hostel', vNanoHostel), um('Nano Metrô', vNanoMetro), varios('Nano pessoa', [0, 1, 2, 3, 4, 5].map(k => ['Nano ' + (k + 1), () => vNano(k * 7, k === 2)])), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
   ];
   grupos.push({ nome: 'Ícones', itens: Object.keys(VI).filter(k => !usados.has(k)).sort().map(k => um((PRODUTOS[k] && PRODUTOS[k].nome) || k, VI[k])) });
