@@ -136,6 +136,9 @@ button{font:inherit;color:inherit}
 .andamento.aberto .andamento-lista{display:flex;flex-direction:column;gap:0;padding:2px 12px;width:min(320px,calc(100vw - 40px));background:var(--papel);border:3px solid var(--borda);border-radius:14px;box-shadow:0 4px 0 var(--sombra);pointer-events:auto;animation:sobe .2s ease-out}
 .andamento.aberto .andamento-lista .fila{width:100%;max-width:none;padding:6px 0;background:none;border:0;border-bottom:2px dashed #e7d6b5;border-radius:0;box-shadow:none;font-size:14px}
 .andamento.aberto .andamento-lista .fila.ultima{border-bottom:0}
+.fila.urgente{border-color:#d8344a;background:#fff1ef}
+.fila.urgente span,.andamento.aberto .andamento-lista .fila.urgente span{color:#b8343a}
+.fila.resumo.urgente{border-color:#d8344a}
 .andamento.aberto .andamento-lista .fila img{width:28px;height:28px}
 .andamento.aberto .andamento-lista .fila > span:nth-of-type(1){flex:1}
 .andamento.aberto .fila .tp{font-size:15px;margin-left:0}
@@ -480,6 +483,7 @@ body.modelos #tela{position:absolute;top:var(--md-topo,84px);left:300px;width:ca
     <div class="fila painel" id="novaVersao" hidden><img data-icone="ed" alt=""><span>Tem novidade na fazenda!</span><button class="botao mini" id="novaVersaoBotao" type="button">atualizar</button></div>
     <div class="andamento solto" id="andamento">
       <div class="andamento-lista" id="andamentoLista">
+        <div class="fila painel urgente" id="urgentePill" hidden style="cursor:pointer" role="button" tabindex="0" title="Mandar o Ed resolver"><img id="urgenteIcone" data-icone="fogo" alt=""><span id="urgenteTexto"></span><span class="tp" id="urgenteTempo"></span></div>
         <div class="fila painel" id="macaPill" hidden><img data-icone="maca" alt=""><span id="macaTexto"></span><span class="tp" id="macaTempo"></span></div>
         <div class="fila painel" id="hudPill" hidden style="cursor:pointer" role="button" tabindex="0" title="O que o Hud faz"><img data-icone="hud" alt=""><span id="hudTexto"></span><span class="tp" id="hudTempo"></span></div>
         <div class="fila painel" id="daniPill" hidden style="cursor:pointer" role="button" tabindex="0" title="O que o Dani faz"><img data-icone="dani" alt=""><span id="daniTexto"></span><span class="tp" id="daniTempo"></span></div>
@@ -14675,7 +14679,9 @@ function gastar(v){ S.dinheiro -= v; hud(); }
 // mais, um resumo com quantas são e a que acaba primeiro, que abre a lista (a que acaba primeiro em cima, a fila por último).
 // Tocar no resumo de novo ou no mapa fecha a lista
 let andamentoAberto = false, andamentoPilha = '';
-const ANDAMENTO = [['macaPill', 'Ed veloz', 'maca', () => S.macaAte], ['hudPill', 'Hud', 'hud', () => S.hudAte], ['daniPill', 'Dani', 'dani', () => S.daniAte], ['fila', null, 'ed', null]];
+// o problema da mata com prazo (fogo ou lixo) entra como urgente: nome, ícone e fim vêm da ocorrência de agora
+const urgente = () => { const oc = ocorrencia, O = oc && OCORRENCIAS[oc.tipo]; return O && O.prazo && oc.pecas.some(q => !q.ok) ? { oc, O, resta: Math.max(0, O.prazo - oc.t) } : null; };
+const ANDAMENTO = [['urgentePill', () => (urgente() ? urgente().O.nome : 'Urgente'), () => (urgente() ? urgente().O.icone : 'fogo'), () => (urgente() ? Date.now() + urgente().resta * 1000 : 0)], ['macaPill', 'Ed veloz', 'maca', () => S.macaAte], ['hudPill', 'Hud', 'hud', () => S.hudAte], ['daniPill', 'Dani', 'dani', () => S.daniAte], ['fila', null, 'ed', null]];
 function arrumarAndamento(){
   const box = $('andamento'), vis = ANDAMENTO.filter(([id]) => !$(id).hidden), n = vis.length;
   if (n < 2) andamentoAberto = false;
@@ -14690,13 +14696,36 @@ function arrumarAndamento(){
   let ultima = null, maior = -Infinity;
   for (const v of vis){ const c = comTempo.find(x => x[0] === v), o = c ? Math.round(c[1] / 1000) : 1e6; $(v[0]).style.order = o; if (o > maior){ maior = o; ultima = v[0]; } }
   for (const [id] of ANDAMENTO) $(id).classList.toggle('ultima', id === ultima);
-  const pilha = vis.map(v => v[2]).join();
-  if (pilha !== andamentoPilha){ andamentoPilha = pilha; $('resumoPilha').innerHTML = vis.slice(0, 3).map(v => `<img src="${icone(v[2])}" alt="">`).join(''); }
+  const val = x => typeof x === 'function' ? x() : x, pilha = vis.map(v => val(v[2])).join();
+  if (pilha !== andamentoPilha){ andamentoPilha = pilha; $('resumoPilha').innerHTML = vis.slice(0, 3).map(v => `<img src="${icone(val(v[2]))}" alt="">`).join(''); }
   $('resumoQtd').textContent = `${n} em andamento`;
   const p = comTempo[0];
-  $('resumoProx').textContent = p ? `${p[0][1]} ${tempo(p[1] / 1000)}` : $('filaTexto').textContent;
+  $('resumoProx').textContent = p ? `${val(p[0][1])} ${tempo(p[1] / 1000)}` : $('filaTexto').textContent;
+  // com um urgente, o resumo fica vermelho
+  $('resumo').classList.toggle('urgente', !$('urgentePill').hidden);
 }
 function abrirAndamento(abrir){ andamentoAberto = abrir; arrumarAndamento(); }
+// fogo e lixo na mata aparecem no painel de andamento, em vermelho, com o tempo que falta (o Lucas pediu)
+function atualizarUrgente(){
+  const u = urgente(), el = $('urgentePill');
+  if (el.hidden === !!u) el.hidden = !u;
+  if (!u) return;
+  const faltam = u.oc.pecas.filter(q => !q.ok).length, txt = u.O.nome + (faltam > 1 ? ` (${faltam})` : ''), tt = tempo(u.resta);
+  if (el.dataset.tipo !== u.oc.tipo){ el.dataset.tipo = u.oc.tipo; $('urgenteIcone').src = icone(u.O.icone); }
+  if ($('urgenteTexto').textContent !== txt) $('urgenteTexto').textContent = txt;
+  if ($('urgenteTempo').textContent !== tt) $('urgenteTempo').textContent = tt;
+}
+// tocar no urgente: a câmera vai até lá e o Ed vai resolver
+function irAoUrgente(){
+  const u = urgente(); if (!u) return;
+  Som.clique();
+  const pc = u.oc.pecas.find(q => !q.ok);
+  if (pc){ cam.alvo.set(pc.x, 0.5, pc.z); }
+  let n = 0;
+  u.oc.pecas.forEach((q, j) => { if (!q.ok && enfileirar(u.O.acao, { k: 'ocorrencia', id: u.oc.id, j }, null, true)) n++; });
+  if (n) aviso(`O Ed vai ${u.oc.tipo === 'fogo' ? 'apagar o fogo' : 'recolher o lixo'}!`);
+  abrirAndamento(false);
+}
 function chipPulsa(id){ const e = $(id); e.classList.remove('pulsa'); void e.offsetWidth; e.classList.add('pulsa'); }
 
 // pedidos e oferta do dia
@@ -16287,6 +16316,7 @@ function eventos(){
   $('chipHora').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); $('chipHora').click(); } });
   $('chipRacao').addEventListener('click', () => { Som.ligar(); Som.clique(); if (!cine) abrirLoja('racao'); });
   $('hudPill').addEventListener('click', () => { Som.clique(); mostrarAjuda(false, 'ajuda'); });
+  $('urgentePill').addEventListener('click', ev => { ev.stopPropagation(); irAoUrgente(); });
   $('daniPill').addEventListener('click', () => { Som.clique(); mostrarAjuda(false, 'ajuda'); });
   $('btnAjustes').addEventListener('click', () => { Som.ligar(); Som.clique(); abrirAjustes(); });
   $('btnCaderno').addEventListener('click', () => { Som.ligar(); Som.clique(); abrirCaderno(); });
@@ -16375,6 +16405,7 @@ function quadro(agoraP){
   atualizarBichosMata(dt, t);
   atualizarCurupira(dt, t);
   atualizarGuardiao(dt, t);
+  atualizarUrgente();
   atualizarTrilha(dt, t);
   atualizarNanos(dt, t);
   if (pelucio.g.visible) pelucio.update(dt, t);
