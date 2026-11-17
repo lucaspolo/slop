@@ -3461,7 +3461,8 @@ const AVENTURAS = {
       L.passo = 1; return;
     }
     if (L.passo === 1){ if (!chegou) return; L.passo = 2; return; }
-    if (L.passo === 2) L.angAlvo = anguloPerto(Math.atan2(L.olharPara[0] - L.pos.x, L.olharPara[1] - L.pos.y), cam.azAlvo, 0.42);
+    // dançando a quadrilha do ArraiEd, quem vira a Luma é a cena
+    if (L.passo === 2 && !L.danca) L.angAlvo = anguloPerto(Math.atan2(L.olharPara[0] - L.pos.x, L.olharPara[1] - L.pos.y), cam.azAlvo, 0.42);
   },
   // no cafezinho: senta do lado da mesa pedindo biscoito; quando o Ed come, ganha um
   cafe(L, dt, t, chegou){
@@ -7357,6 +7358,8 @@ function limparVolta(){
 // ficam atrás dela, do lado do museu e do resort
 const ARRAIA = { nivel: 50, meio: [46.7, 45.3], ed: 90, roda: 2.3, fora: 4.2, perto: 3.4, inicio: 0.66, fim: 0.82, mastro: [0.75, -1.3],
   postes: [30, 90, 150, 210, 270, 330], raioPostes: 5.3, barracas: [[40.5, 42.4, 'milho'], [43.4, 39.6, 'pescaria']], disco: [3.3, 3.1, -2.6] };
+// a quadrilha: uma volta inteira da roda em tempo segundos; luma, o lugar da Luma na roda (o mesmo de lumaSaiPara)
+const ARRAIA_QUADRILHA = { tempo: 12, luma: 62 };
 const grau = g => g * Math.PI / 180;
 const naRoda = (g, r) => [ARRAIA.meio[0] + Math.cos(grau(g)) * r, ARRAIA.meio[1] + Math.sin(grau(g)) * r];
 // a fogueira: as toras em pé, encostadas no meio, e as pedras em volta (o fogo é vChama, à parte, que tremula)
@@ -7431,27 +7434,36 @@ const FALAS_ARRAIA = () => {
     ...(A && A.hud ? [['hud', 'Hud', 'Olha a cobra!']] : []),
     ['jaca', 'Jaca', 'É mentira! A cobra-coral só veio dançar.'],
     ...(A && A.dani ? [['dani', 'Dani', 'Olha a chuva! É mentira também!']] : []),
+    ['ed', 'Ed', 'Caminho da roça! Agora a roda vai pro outro lado!', 'a-quadrilha'],
+    ['pelucio', 'Pelúcio', 'Ufa! Depois dessa, tem quentão de café na barraca do milho, irmão!'],
+    ['patrinho', 'Patrinho', 'E pamonha do Joli Bistrô na pescaria, quentinha!'],
+    ['milton', 'Milton', 'Guardei os maiores fogos pro final!'],
     ['todos', 'Todos', 'Viva o ArraiEd!', 'a-viva'],
   ];
 };
-// o rojão sobe deixando rastro e estoura numa estrela colorida lá no alto
-function rojao(x, z, cor){
-  const alto = rnd(3, 3.8);
-  for (let i = 0; i < 8; i++) setTimeout(() => particula(x + rnd(-0.05, 0.05), alto * i / 8, z, 0xfff1a8, 0.3), i * 70);
+// o rojão sobe deixando rastro e estoura numa estrela colorida lá no alto. As faíscas não recebem luz (faisca), para
+// brilharem no escuro, e o estouro acende um clarão da cor dele (FOGOS) que apaga aos poucos (animarArraia)
+// lugar: os ângulos da roda onde os rojões sobem (atrás da fogueira, no meio da tela da câmera de sempre)
+const FOGOS = { alto: [4, 5], faiscas: 64, vel: [1.8, 2.8], vida: 2.4, clarao: 6, claraoVida: 1.6, lugar: [196, 266], raio: 5.6 };
+const lugarDoFogo = (i, n) => naRoda(FOGOS.lugar[0] + (FOGOS.lugar[1] - FOGOS.lugar[0]) * ((i * 7) % n) / (n - 1), FOGOS.raio);
+function rojao(x, z, cor, grande = 1){
+  const alto = rnd(...FOGOS.alto) * (grande > 1 ? 1.1 : 1);
+  for (let i = 0; i < 10; i++) setTimeout(() => { if (arraia){ const p = faisca(x + rnd(-0.05, 0.05), alto * i / 10, z, 0xfff1a8); p.vida = 0.5; } }, i * 60);
   Som.tom(500, 0.55, 'sine', 0.02, 1500);
   setTimeout(() => {
-    if (!arraia) return;
-    for (let i = 0; i < 42; i++){
-      particula(x, alto, z, i % 3 ? cor : 0xffffff, 0);
-      const p = PART[PART.length - 1], a = rnd(0, Math.PI * 2), b = rnd(-1, 1), s = rnd(1.6, 2.4), h = Math.sqrt(1 - b * b);
-      p.v.set(Math.cos(a) * h * s, b * s, Math.sin(a) * h * s); p.g = 0.5; p.vida = 1.8; p.m.scale.setScalar(1.6);
+    const A = arraia; if (!A) return;
+    for (let i = 0; i < FOGOS.faiscas * grande; i++){
+      const p = faisca(x, alto, z, i % 3 ? cor : 0xffffff), a = rnd(0, Math.PI * 2), b = rnd(-1, 1), v = rnd(...FOGOS.vel) * grande, h = Math.sqrt(1 - b * b);
+      p.v.set(Math.cos(a) * h * v, b * v, Math.sin(a) * h * v); p.g = 0.5; p.vida = FOGOS.vida * rnd(0.8, 1.1); p.m.scale.setScalar(1.8);
     }
+    const c = haloLuz(cor, FOGOS.clarao * grande); HALOS.pop();
+    c.position.set(x, alto, z); c.material.opacity = 1; A.g.add(c); A.claroes.push({ c, t: 0 });
     Som.pop();
   }, 600);
 }
 // monta o arraial e os convidados; desfaz em limparArraia
 function montarArraia(c){
-  const [mx, mz] = ARRAIA.meio, s16 = 1 / 16, g = new THREE.Group(), A = arraia = { g, convidados: [], porcos: [], hud: false, dani: false };
+  const [mx, mz] = ARRAIA.meio, s16 = 1 / 16, g = new THREE.Group(), A = arraia = { g, convidados: [], porcos: [], hud: false, dani: false, claroes: [], voltas: 0 };
   const mm = (k, f, s) => malha(geo(k, () => f().build(s, { origin: [0.5, 0, 0.5], jitter: 0.02 })));
   scene.add(g);
   const pecas = [['fogueira', vFogueira, mx, mz, 0], ['mastro', vMastro, mx + ARRAIA.mastro[0], mz + ARRAIA.mastro[1], 0]];
@@ -7482,20 +7494,34 @@ function montarArraia(c){
   convidado(vis(1), 349, ARRAIA.fora); convidado(vis(4), 358, ARRAIA.fora);
   // a família, na roda de dentro; o Saci junto dos convidados de trás
   const roda = [[irmaoHud, 125, 'hud'], [beto, 150], [pelucio, 175], [patrinho, 200], [maurinho, 228], [milton, 256], [saci, 270, 'saci'], [jaca, 290], [irmaoDani, 318, 'dani']];
+  // o Hud e o Dani que estão na rua (ajudando ou voltando para casa) largam o que fazem e vão andando para a festa, como o
+  // Ed (o Lucas pediu: antes a festa esperava os dois estarem em casa). O tempo da mesada fica parado durante a festa, e no
+  // fim quem estava ajudando volta ao trabalho de onde está (fimArraiaAjudantes)
+  A.t0 = Date.now(); A.ajuda = {};
+  const [ex, ez] = naRoda(ARRAIA.ed, ARRAIA.roda);
   for (const [p, gr, quem] of roda){
-    if (quem === 'hud' && (nivel() < HUD.nivel || hudAtivo() || irmaoHud.g.visible)) continue;
-    if (quem === 'dani' && (!S.viuCineDani || daniAtivo() || irmaoDani.g.visible)) continue;
+    if (quem === 'hud' && nivel() < HUD.nivel) continue;
+    if (quem === 'dani' && !S.viuCineDani) continue;
     if (quem === 'hud') A.hud = true; if (quem === 'dani') A.dani = true;
-    const r = quem === 'saci' ? ARRAIA.perto : ARRAIA.roda, [x, z] = naRoda(gr, r);
-    p.g.visible = true; p.estado = 'parado'; p.pontos = []; p.aoChegar = null; p.sentado = 0; p.colocar(x, z); p.olhar(mx, mz); p.ang = p.angAlvo;
-    A.porcos.push({ p, gr, r });
+    const r = quem === 'saci' ? ARRAIA.perto : ARRAIA.roda, [x, z] = naRoda(gr, r), q = { p, gr, r, chegou: true };
+    const ativo = quem === 'hud' ? hudAtivo() : quem === 'dani' ? daniAtivo() : false;
+    if ((quem === 'hud' || quem === 'dani') && (p.g.visible || ativo)){
+      A.ajuda[quem] = ativo;
+      // com mesada, mas ainda em casa (acabou de abrir o jogo): sai pela porta
+      if (!p.g.visible){ p.g.visible = true; p.colocar(...HUD_PORTA); }
+      soltarAjudante(p); p.sentado = 0; p.aceno = 0;
+      // de longe, chega pela beira do campo, do lado do museu, como o Ed
+      if (Math.hypot(p.pos.x - x, p.pos.y - z) > 14) p.colocar(ex - (quem === 'hud' ? 4.8 : 3.3), ez + (quem === 'hud' ? 1.6 : 2.2));
+      q.chegou = false; andarAte(p, x, z, () => { q.chegou = true; p.olhar(mx, mz); });
+    } else { p.g.visible = true; p.estado = 'parado'; p.pontos = []; p.aoChegar = null; p.sentado = 0; p.colocar(x, z); p.olhar(mx, mz); p.ang = p.angAlvo; }
+    A.porcos.push(q);
   }
   if (maurinhoObra.g.visible){ pararMaurinhoObra(); maurinhoObra.g.visible = false; obraVis.estado = ''; }
   // o disco do ETzinho, parado no alto, em cima das vaquinhas
   const P = discoJogo, [dx, dy, dz] = ARRAIA.disco;
   P.g.visible = true; P.t = 0; P.g.position.set(mx + dx, dy, mz + dz); P.g.scale.setScalar(DISCO_JOGO.escala);
   A.disco = P.g.position.clone();
-  lumaSaiPara('inaugura', { ponto: naRoda(62, ARRAIA.roda), olharPara: ARRAIA.meio, teleporta: true, festeja: false }, true);
+  lumaSaiPara('inaugura', { ponto: naRoda(ARRAIA_QUADRILHA.luma, ARRAIA.roda), olharPara: ARRAIA.meio, teleporta: true, festeja: false }, true);
 }
 function limparArraia(){
   const A = arraia; arraia = null;
@@ -7503,6 +7529,10 @@ function limparArraia(){
   if (!A) return;
   scene.remove(A.g);
   for (const { p } of A.porcos){ p.g.visible = false; p.pontos = []; p.aoChegar = null; p.estado = 'parado'; p.aceno = 0; p.pulo = 0; }
+  // quem estava ajudando volta ao trabalho de onde está, sem perder o tempo da festa
+  const pausa = Date.now() - A.t0;
+  if (A.ajuda.hud && S.hudAte){ S.hudAte += pausa; irmaoHud.g.visible = true; }
+  if (A.ajuda.dani && S.daniAte){ S.daniAte += pausa; irmaoDani.g.visible = true; }
   const P = discoJogo; P.g.visible = false; P.t = -1; P.g.scale.setScalar(DISCO_JOGO.escala);
   ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado';
 }
@@ -7516,6 +7546,12 @@ function animarArraia(c, dt){
     q.salto = Math.max(0, q.salto - dt);
     const ritmo = festa ? 1.6 : 1, y = Math.abs(Math.sin(t * q.vel * ritmo + q.fase)) * q.pulo * (festa ? 2 : 1) + Math.sin(Math.min(1, q.salto / 0.45) * Math.PI) * 0.25;
     q.g.position.y = y; q.g.rotation.y = q.ry + Math.sin(t * 2.2 + q.fase) * 0.18; q.g.rotation.z = Math.sin(t * q.vel * 0.5 + q.fase) * 0.06;
+  }
+  for (let i = A.claroes.length - 1; i >= 0; i--){
+    const q = A.claroes[i]; q.t += dt;
+    const k = q.t / FOGOS.claraoVida;
+    if (k >= 1){ A.g.remove(q.c); q.c.material.dispose(); A.claroes.splice(i, 1); continue; }
+    q.c.material.opacity = (1 - k) * (1 - k);
   }
   const P = discoJogo; if (P.g.visible && A.disco){ P.g.position.set(A.disco.x + Math.sin(t) * 0.15, A.disco.y + Math.sin(t * 1.7) * 0.08, A.disco.z + Math.cos(t) * 0.15); animarDisco(P.D, t); }
 }
@@ -13067,18 +13103,20 @@ const CENAS = {
     flag: 'viuCineArraied', nivel: () => ARRAIA.nivel, musica: 'arraied', icone: 'festa', abducao: true,
     titulo: 'ArraiEd', desc: 'O Arraiá do Ed: a maior festa de todas, com a família, a mata, o espaço e o resort em volta da fogueira.',
     trancada: `acontece no nível ${ARRAIA.nivel}, no fim da tarde, no canto do terreno novo, ao lado do resort`,
-    // no fim da tarde ou de noite (antes da hora de nanar), com o terreno novo limpo, o Milton sem visita, o Hud e o Dani em casa
-    // e o disco longe (o ETzinho vem com ele para a festa)
-    pronta: () => nivel() >= ARRAIA.nivel && S.canto === 2 && (S.relogio || 0) >= ARRAIA.inicio && (S.relogio || 0) < ARRAIA.fim && aviaoLivre() && !hudAtivo() && !irmaoHud.g.visible && !daniAtivo() && !irmaoDani.g.visible && !(discoJogo && discoJogo.t >= 0),
-    podeRever: () => (!aviaoLivre() ? 'Dá para rever quando o Milton decolar.' : hudAtivo() || irmaoHud.g.visible || daniAtivo() || irmaoDani.g.visible ? 'Dá para rever quando o Hud e o Dani terminarem a ajuda.' : discoJogo && discoJogo.t >= 0 ? 'Dá para rever quando o disco voador for embora.' : null),
+    // no fim da tarde ou de noite (antes da hora de nanar), com o terreno novo limpo, o Milton sem visita e o disco longe (o
+    // ETzinho vem com ele para a festa)
+    // o Hud e o Dani na rua largam o que fazem e vão para a festa (montarArraia)
+    pronta: () => nivel() >= ARRAIA.nivel && S.canto === 2 && (S.relogio || 0) >= ARRAIA.inicio && (S.relogio || 0) < ARRAIA.fim && aviaoLivre() && !(discoJogo && discoJogo.t >= 0),
+    podeRever: () => (!aviaoLivre() ? 'Dá para rever quando o Milton decolar.' : discoJogo && discoJogo.t >= 0 ? 'Dá para rever quando o disco voador for embora.' : null),
     get falas(){ return arraia && arraia.falas ? arraia.falas : FALAS_ARRAIA(); },
     foco(c){
       const [mx, mz] = ARRAIA.meio, [ex, ez] = naRoda(ARRAIA.ed, ARRAIA.roda);
       if (c.passo === 'a-indo' && Math.hypot(ed.pos.x - ex, ed.pos.y - ez) > 4) return new THREE.Vector3(ed.pos.x, 0.4, ed.pos.y);
-      if (c.passo === 'a-fogos' || c.passo === 'a-viva') return new THREE.Vector3(mx - 0.4, 2.4, mz - 0.8);
+      if (c.passo === 'a-fogos' || c.passo === 'a-viva') return new THREE.Vector3(mx - 0.4, 2.8, mz - 0.8);
       return new THREE.Vector3(mx - 0.3, 0.6, mz + 0.2);
     },
-    vista: c => (telaEstreita() ? 1.45 : 1) * (c.passo === 'a-indo' ? 7.5 : c.passo === 'a-fogos' || c.passo === 'a-viva' ? 12 : 9.5),
+    // um pouco mais longe que o normal das cenas, para a festa aparecer inteira (o Lucas pediu); nos fogos, mais ainda
+    vista: c => (telaEstreita() ? 1.45 : 1) * (c.passo === 'a-indo' ? 8.5 : c.passo === 'a-fogos' || c.passo === 'a-viva' ? 15 : 11.5),
     cameraRapida: c => c.passo === 'a-indo',
     iniciar(c){
       caminhaoE.estado = 'cine';
@@ -13103,25 +13141,32 @@ const CENAS = {
         case 'a-indo':
           if (Math.hypot(ed.pos.x - naRoda(ARRAIA.ed, ARRAIA.roda)[0], ed.pos.y - naRoda(ARRAIA.ed, ARRAIA.roda)[1]) > 3) ed.pressa = 0.3;
           if (!c.edOk && c.t > 30){ ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; ed.colocar(...naRoda(ARRAIA.ed, ARRAIA.roda)); c.edOk = true; }
-          if (c.edOk && ed.estado === 'parado' && c.t > 1){ this.posicionar(); c.passo = 'dialogo'; mostrarFalaCine(0); }
+          // o Hud e o Dani que vêm andando: a festa espera eles também (e põe no lugar depois de 30 s)
+          for (const q of A.porcos) if (!q.chegou && c.t > 30){ q.p.pontos = []; q.p.aoChegar = null; q.p.estado = 'parado'; q.p.colocar(...naRoda(q.gr, q.r)); q.chegou = true; }
+          if (c.edOk && ed.estado === 'parado' && A.porcos.every(q => q.chegou) && c.t > 1){ this.posicionar(); c.passo = 'dialogo'; mostrarFalaCine(0); }
           break;
         // o Milton solta os fogos atrás do mastro, um depois do outro
         case 'a-fogos':
           if (!c.ini){ c.ini = true; c.n = 0; milton.pulo = 0.45; milton.aceno = 2; }
-          if (c.n < 6 && c.t > 0.3 + c.n * 0.7){ const [x, z] = naRoda(235 + c.n * 15, 5.6); rojao(x, z, CORES_FESTA[c.n % CORES_FESTA.length]); c.n++; }
-          if (c.t > 5.6){ this.posicionar(); c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
+          if (c.n < 12 && c.t > 0.3 + c.n * 0.75){ const [x, z] = lugarDoFogo(c.n, 12); rojao(x, z, CORES_FESTA[c.n % CORES_FESTA.length]); c.n++; }
+          if (c.t > 11){ this.posicionar(); c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
           break;
-        // a quadrilha: a roda da família gira em volta da fogueira, pulando no ritmo; o Ed dança no lugar
+        // a quadrilha: a roda da família gira em volta da fogueira, pulando no ritmo, com o Ed e a Luma junto na roda (antes
+        // eles dançavam parados e a roda passava por cima deles). Uma volta inteira em ARRAIA_QUADRILHA.tempo segundos, então
+        // todo mundo volta para o lugar; na segunda vez, para o outro lado. O Saci, na roda de fora, pula no lugar
         case 'a-quadrilha': {
-          if (!c.ini){ c.ini = true; Som.nivel(); }
-          const passo = Math.floor(c.t / 0.55);
+          const Q = ARRAIA_QUADRILHA, L = luma && luma.acao === 'inaugura' ? luma : null;
+          if (!c.ini){ c.ini = true; Som.nivel(); c.sentido = A.voltas++ % 2 ? -1 : 1; if (L){ L.pontos = []; L.passo = 2; L.danca = true; } }
+          const passo = Math.floor(c.t / 0.55), giro = Math.min(c.t / Q.tempo, 1) * 360 * c.sentido;
+          const naRodaDanca = (gr, r) => { const g = gr + giro, [x, z] = naRoda(g, r), a = grau(g) + (c.sentido > 0 ? 0 : Math.PI); return [x, z, Math.atan2(-Math.sin(a), Math.cos(a))]; };
           for (const q of A.porcos){
-            const g = q.gr + c.t * 30, [x, z] = naRoda(g, q.r), a = grau(g);
-            q.p.colocar(x, z); q.p.ang = q.p.angAlvo = Math.atan2(-Math.sin(a), Math.cos(a));
+            if (q.p !== saci){ const [x, z, ang] = naRodaDanca(q.gr, q.r); q.p.colocar(x, z); q.p.ang = q.p.angAlvo = ang; }
             if (q.k !== passo){ q.k = passo; q.p.pulo = 0.32; }
           }
-          if (c.k !== passo){ c.k = passo; ed.pulo = 0.3; if (luma && luma.acao === 'inaugura') luma.salto = 0.35; }
-          if (c.t > 7){ for (const q of A.porcos) q.gr += c.t * 30; this.posicionar(); c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
+          { const [x, z, ang] = naRodaDanca(ARRAIA.ed, ARRAIA.roda); ed.colocar(x, z); ed.ang = ed.angAlvo = ang; }
+          if (L){ const [x, z, ang] = naRodaDanca(Q.luma, ARRAIA.roda); L.pos.set(x, z); L.ang = L.angAlvo = ang; }
+          if (c.k !== passo){ c.k = passo; ed.pulo = 0.3; if (L) L.salto = 0.35; }
+          if (c.t > Q.tempo + 0.4){ ed.colocar(...naRoda(ARRAIA.ed, ARRAIA.roda)); if (L){ L.danca = false; L.pos.set(...naRoda(Q.luma, ARRAIA.roda)); } this.posicionar(); c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
           break;
         }
         // viva! confete, mais fogos, todo mundo pula, e a câmera volta
@@ -13131,10 +13176,12 @@ const CENAS = {
             for (const p of [ed, ...A.porcos.map(q => q.p)]){ p.pulo = 0.45; p.aceno = 1.6; }
             for (const q of A.convidados) q.salto = 0.45;
             if (luma && luma.acao === 'inaugura'){ luma.festeja = true; luma.salto = 0.45; }
-            for (let i = 0; i < 5; i++) setTimeout(() => { if (arraia){ const [x, z] = naRoda(220 + i * 28, 5.8); rojao(x, z, CORES_FESTA[(i + 2) % CORES_FESTA.length]); } }, 500 + i * 450);
+            // o grande final: rojões de dois em dois, e os três últimos maiores
+            for (let i = 0; i < 12; i++) setTimeout(() => { if (arraia){ const [x, z] = lugarDoFogo(i, 12); rojao(x, z, CORES_FESTA[(i + 2) % CORES_FESTA.length], i >= 9 ? 1.4 : 1); } }, 500 + i * 520);
           }
           if (c.t > 1.8 && !c.pulo2){ c.pulo2 = true; for (const q of A.convidados) q.salto = 0.45; for (const p of [ed, ...A.porcos.map(q => q.p)]) p.pulo = 0.45; }
-          if (c.t > 5.5){ c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
+          if (c.t > 5 && !c.pulo3){ c.pulo3 = true; for (const q of A.convidados) q.salto = 0.45; for (const p of [ed, ...A.porcos.map(q => q.p)]){ p.pulo = 0.45; p.aceno = 1.6; } }
+          if (c.t > 10.5){ c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
           break;
       }
     },
@@ -17067,11 +17114,10 @@ const PART = [];
 const geoPart = new THREE.BoxGeometry(0.06, 0.06, 0.06);
 const matsPart = {};
 const PART_DES = { im: null, cap: 0, mat: new THREE.MeshLambertMaterial({ color: 0xffffff }) };
+// as faíscas dos fogos (faisca) não recebem luz, para brilhar mesmo de noite: vão numa malha à parte, de material sem luz
+const PART_BRILHO = { im: null, cap: 0, mat: new THREE.MeshBasicMaterial({ color: 0xffffff }) };
 const soltar = m => { if (!OTIM.part) scene.add(m); return m; };
-function juntarParticulas(){
-  const D = PART_DES;
-  if (!OTIM.part){ if (D.im) D.im.count = 0; return; }
-  const n = PART.length + ABELHAS.length;
+function encherParticulas(D, n, lista){
   if (!D.im || n > D.cap){
     // a malha fica sempre na cena, mesmo vazia: assim o programa de desenho dela é montado na abertura, com os outros
     if (D.im){ scene.remove(D.im); D.im.dispose(); }
@@ -17085,8 +17131,8 @@ function juntarParticulas(){
   if (!n){ im.count = 0; return; }
   const mats = im.instanceMatrix.array, cores = im.instanceColor.array;
   let i = 0;
-  for (let l = 0; l < 2; l++) for (const p of l ? ABELHAS : PART){
-    const m = p.m, c = m.material.color;
+  for (const m of lista){
+    const c = m.material.color;
     m.updateMatrix(); mats.set(m.matrix.elements, i * 16);
     cores[i * 3] = c.r; cores[i * 3 + 1] = c.g; cores[i * 3 + 2] = c.b;
     i++;
@@ -17095,6 +17141,15 @@ function juntarParticulas(){
   // só a parte usada vai para a placa de vídeo
   im.instanceMatrix.updateRange.count = n * 16; im.instanceMatrix.needsUpdate = true;
   im.instanceColor.updateRange.count = n * 3; im.instanceColor.needsUpdate = true;
+}
+const listaComum = [], listaBrilho = [];
+function juntarParticulas(){
+  if (!OTIM.part){ for (const D of [PART_DES, PART_BRILHO]) if (D.im) D.im.count = 0; return; }
+  listaComum.length = listaBrilho.length = 0;
+  for (const p of PART) (p.m.userData.brilho ? listaBrilho : listaComum).push(p.m);
+  for (const a of ABELHAS) listaComum.push(a.m);
+  encherParticulas(PART_DES, listaComum.length, listaComum);
+  encherParticulas(PART_BRILHO, listaBrilho.length, listaBrilho);
 }
 // os testes trocam OTIM.part com o jogo aberto, para comparar a imagem
 function particulasJuntas(v){
@@ -17107,6 +17162,15 @@ function particula(x, y, z, cor, sobe = 1){
   const m = new THREE.Mesh(geoPart, mat);
   m.position.set(x, y, z); soltar(m);
   PART.push({ m, v: new THREE.Vector3(rnd(-0.6, 0.6), sobe > 0 ? rnd(1.2, 2.4) * sobe : rnd(-0.3, 0.2), rnd(-0.6, 0.6)), vida: 0.7 });
+}
+// partícula que brilha (não recebe luz): as faíscas dos fogos
+const matsBrilho = {};
+function faisca(x, y, z, cor){
+  particula(x, y, z, cor, 0);
+  const p = PART[PART.length - 1];
+  p.m.material = matsBrilho[cor] || (matsBrilho[cor] = new THREE.MeshBasicMaterial({ color: cor }));
+  p.m.userData.brilho = true;
+  return p;
 }
 function atualizarParticulas(dt){
   for (let i = PART.length - 1; i >= 0; i--){
