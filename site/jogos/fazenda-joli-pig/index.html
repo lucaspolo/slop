@@ -280,6 +280,15 @@ button{font:inherit;color:inherit}
 .dialogo .seguir{display:block;text-align:right;font-size:12px;font-weight:800;color:var(--tinta-suave);margin-top:2px;visibility:hidden}
 .dialogo .seguir.pode{visibility:visible;animation:pisca 1s ease-in-out infinite}
 @keyframes pisca{50%{opacity:.35}}
+/* cartela: tela escura com um texto no meio, entre as faixas (o fim do ArraiEd); a festa continua aparecendo atrás */
+.cartela{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:12vh max(28px,env(safe-area-inset-right,0px)) 12vh max(28px,env(safe-area-inset-left,0px));background:rgba(22,15,11,.84);color:#fff6e2;text-align:center;pointer-events:auto;cursor:pointer;opacity:0;transition:opacity .9s ease}
+.cartela.on{opacity:1}
+.cartela .frase{margin:0;max-width:30ch;font-family:var(--f-titulo);font-size:clamp(24px,6.4vw,38px);line-height:1.2;text-wrap:balance;transition:opacity .6s ease}
+.cartela .frase.texto{font-family:inherit;font-weight:700;font-size:clamp(18px,4.6vw,24px);line-height:1.5;max-width:34ch}
+.cartela .assina{margin:0;font-weight:800;font-size:clamp(16px,4.2vw,20px);color:#f7c3d6;letter-spacing:.02em}
+.cartela .assina:empty{display:none}
+.cartela .seguir{font-size:12px;font-weight:800;color:#d9c9ad;margin-top:18px;visibility:hidden}
+.cartela .seguir.pode{visibility:visible;animation:pisca 1s ease-in-out infinite}
 /* o pular fica fora da caixa de diálogo, visível a cena toda (também nos trechos sem fala) */
 .cine .pular{position:absolute;top:calc(10vh + 12px);right:calc(16px + env(safe-area-inset-right,0px));pointer-events:auto}
 #jogo.cinema .hud-topo,#jogo.cinema .hud-base,#jogo.cinema .camera-ctl,#jogo.cinema .menu{display:none !important}
@@ -532,6 +541,7 @@ body.modelos #tela{position:absolute;top:var(--md-topo,84px);left:300px;width:ca
   <div class="cine" id="cine" hidden>
     <div class="faixa topo"></div><div class="faixa base"></div>
     <div class="dialogo painel" id="cineDialogo" hidden><img id="cineRosto" alt=""><div style="flex:1;min-width:0"><div class="quem" id="cineNome"></div><p id="cineTexto" aria-live="polite"></p><span class="seguir" id="cineSeguir">toque para continuar ▸</span></div></div>
+    <div class="cartela" id="cineCartela" hidden><p class="frase" id="cineFrase"></p><p class="assina" id="cineAssina"></p><span class="seguir" id="cineCartelaSeguir">toque para continuar ▸</span></div>
     <button class="botao mini claro pular" id="cinePular" type="button">pular</button>
   </div>
   <div class="modal" id="modal" hidden><div class="janela painel" id="janela" role="dialog" aria-modal="true"></div></div>
@@ -7363,6 +7373,12 @@ const ARRAIA = { nivel: 50, meio: [46.7, 45.3], ed: 90, roda: 2.3, fora: 4.2, pe
   postes: [30, 90, 150, 210, 270, 330], raioPostes: 5.3, barracas: [[40.5, 42.4, 'milho'], [43.4, 39.6, 'pescaria']], disco: [3.3, 3.1, -2.6] };
 // a quadrilha: uma volta inteira da roda em tempo segundos; luma, o lugar da Luma na roda (o mesmo de lumaSaiPara)
 const ARRAIA_QUADRILHA = { tempo: 12, luma: 62 };
+// as cartelas do fim da festa: [frase, assinatura, texto corrido]; espera, os segundos antes de aceitar o toque
+const ARRAIA_CARTELAS = { espera: 1.8, lista: [
+  ['“Obrigado por jogar até aqui conosco”', 'Carol e Lucas'],
+  ['A festa rolou a noite inteira, e no dia seguinte todos descansaram. Mas logo voltaram ao trabalho, amar e cuidar dos próximos.', '', true],
+  ['Continue conosco, tem mais novidades à frente.'],
+] };
 const grau = g => g * Math.PI / 180;
 const naRoda = (g, r) => [ARRAIA.meio[0] + Math.cos(grau(g)) * r, ARRAIA.meio[1] + Math.sin(grau(g)) * r];
 // a fogueira: as toras em pé, encostadas no meio, e as pedras em volta (o fogo é vChama, à parte, que tremula)
@@ -13184,9 +13200,24 @@ const CENAS = {
           }
           if (c.t > 1.8 && !c.pulo2){ c.pulo2 = true; for (const q of A.convidados) q.salto = 0.45; for (const p of [ed, ...A.porcos.map(q => q.p)]) p.pulo = 0.45; }
           if (c.t > 5 && !c.pulo3){ c.pulo3 = true; for (const q of A.convidados) q.salto = 0.45; for (const p of [ed, ...A.porcos.map(q => q.p)]){ p.pulo = 0.45; p.aceno = 1.6; } }
-          if (c.t > 10.5){ c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
+          if (c.t > 10.5){ c.passo = 'a-cartela'; c.t = 0; c.cartela = -1; this.tocar(c); }
+          break;
+        // as cartelas do fim (o Lucas pediu): o agradecimento da Carol e do Lucas e o que veio depois da festa. Cada uma
+        // espera ARRAIA_CARTELAS.espera segundos e um toque; a festa continua atrás
+        case 'a-cartela':
+          if (c.cartela < ARRAIA_CARTELAS.lista.length && c.t > ARRAIA_CARTELAS.espera) $('cineCartelaSeguir').classList.add('pode');
+          if (c.cartela >= ARRAIA_CARTELAS.lista.length && c.t > 0.9){ $('cineCartela').hidden = true; c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
           break;
       }
+    },
+    tocar(c){
+      if (c.passo !== 'a-cartela' || (c.cartela >= 0 && c.t <= ARRAIA_CARTELAS.espera)) return;
+      const el = $('cineCartela'), L = ARRAIA_CARTELAS.lista;
+      c.cartela++; c.t = 0; $('cineCartelaSeguir').classList.remove('pode');
+      if (c.cartela >= L.length){ el.classList.remove('on'); return; }
+      const [frase, assina, texto] = L[c.cartela];
+      $('cineFrase').textContent = frase; $('cineFrase').classList.toggle('texto', !!texto); $('cineAssina').textContent = assina || '';
+      el.hidden = false; requestAnimationFrame(() => el.classList.add('on'));
     },
     fimDasFalas(c){ $('cineDialogo').hidden = true; c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; },
     pular(){ ed.trab = null; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; },
@@ -13929,7 +13960,7 @@ function atualizarCine(dt){
     // cena da aposentadoria
     case 'ap-indo': case 'ap-paga': case 'ap-galo': case 'ap-vai': cena.trecho(c, dt); break;
     // ArraiEd
-    case 'a-indo': case 'a-fogos': case 'a-quadrilha': case 'a-viva': cena.trecho(c, dt); break;
+    case 'a-indo': case 'a-fogos': case 'a-quadrilha': case 'a-viva': case 'a-cartela': cena.trecho(c, dt); break;
     // cena da volta das férias no espaço
     case 'v-vem': case 'v-desce': case 'v-raio': case 'v-vai': cena.trecho(c, dt); break;
     // cena da inauguração do resort
@@ -14005,6 +14036,8 @@ function mostrarFalaCine(i){
 }
 function avancarCine(){
   const c = cine;
+  // um trecho que espera o toque (a cartela do fim do ArraiEd)
+  if (c && c.passo !== 'dialogo' && c.cena.tocar){ c.cena.tocar(c); return; }
   if (!c || c.passo !== 'dialogo') return;
   const fala = c.cena.falas[c.linha], txt = fala[2];
   if (c.letras < txt.length){ c.letras = txt.length; $('cineTexto').textContent = txt; if (!(c.cena.segurar && c.cena.segurar(c))) $('cineSeguir').classList.add('pode'); return; }
@@ -14050,6 +14083,7 @@ function encerrarCine(){
   const cena = cine.cena, reprise = cine.reprise;
   cam.alvo.copy(cine.cam0.alvo); cam.vista = cine.cam0.vista; cam.azAlvo = cine.cam0.az;
   $('cine').classList.remove('on'); $('cine').hidden = true; $('cineDialogo').hidden = true;
+  $('cineCartela').hidden = true; $('cineCartela').classList.remove('on');
   $('jogo').classList.remove('cinema');
   caminhao = caminhaoMarket; caminhaoE.estado = 'longe';
   cine = null;
@@ -18605,6 +18639,7 @@ function eventos(){
   canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') marcaHover.visible = false; });
   canvas.addEventListener('wheel', e => { e.preventDefault(); if (cine || vistaEd) return; if (miranteFP){ zoomMirante(Math.exp(e.deltaY * 0.001)); return; } zoom(Math.exp(e.deltaY * 0.0012)); fecharMenu(); }, { passive: false });
   $('cineDialogo').addEventListener('click', avancarCine);
+  $('cineCartela').addEventListener('click', e => { e.stopPropagation(); avancarCine(); });
   $('cinePular').addEventListener('click', e => { e.stopPropagation(); pularCine(); });
   addEventListener('resize', () => { redimensionar(); fecharMenu(); ajustarCameraCtl(); });
   $('girarE').addEventListener('click', () => girar(-1));
