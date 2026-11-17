@@ -1371,6 +1371,21 @@ function corpoSueter(v, frenteZ, SUETER_ = SUETER){
   ponto(0, 17, SUETER.tinta);
   for (const x of [-5, 5]) ponto(x, 25, SUETER.sombra);
 }
+// de toalha, no spa (o Lucas pediu: a família entrava de roupa na lama): pernas e peito de pelúcia e a toalha enrolada na
+// cintura, na cor de cada um (TOALHA_SPA), com duas listras, a barra mais escura, a dobra em cima e a ponta presa na frente
+function corpoToalha(v, frenteZ, cor, listra){
+  const tom = (c, k) => new THREE.Color(c).multiplyScalar(k).getHex(), dobra = tom(cor, 0.9), ponta = tom(cor, 0.82);
+  for (const lx of [-7, 7]) for (let y = 2; y <= 8; y++) for (let x = lx - 5; x <= lx + 5; x++) for (let z = -5; z <= 5; z++)
+    if ((x - lx) ** 2 + z * z <= 27) v.set(x, y, z, COR.pele);
+  v.ell(0, 15, 0, 16.8, 14.2, 14.1, COR.pele, (x, y) => y >= 5);
+  v.ell(0, 27, 0, 15.3, 7.6, 12.9, COR.pele);
+  v.ell(0, 15, 0, 17.8, 15.2, 15.1, (x, y) => y === 6 || y === 19 ? dobra : y === 9 || y === 10 || y === 16 ? listra : cor, (x, y) => y >= 6 && y <= 19);
+  // embaixo a toalha fica solta, uma saia aberta até o alto das pernas (senão parece um calção)
+  for (let y = 3; y <= 5; y++) for (let x = -15; x <= 15; x++) for (let z = -13; z <= 13; z++){ const d = (x / 14.6) ** 2 + (z / 12.6) ** 2; if (d >= 0.78 && d <= 1) v.set(x, y, z, y === 3 ? dobra : cor); }
+  // a ponta presa na frente, um pouco para o lado, e o rabinho para fora
+  for (let y = 4; y <= 20; y++) for (const x of [5, 6]){ const z = frenteZ(x, y); if (z != null) v.set(x, y, z + 1, x === 6 || y === 20 ? ponta : cor); }
+  for (const [x, y, z] of [[0, 13, -16], [0, 14, -17], [1, 15, -17], [2, 15, -16], [2, 14, -16], [1, 13, -16]]) v.set(x, y, z, COR.focinho);
+}
 function vBracoMoletom(){
   const v = new Vox();
   v.ell(0, -7, 0, 5.2, 8.6, 5.2, (x, y, z) => y <= -13 ? MOLETOM.punho : panoMoletom(x, y, z));
@@ -1386,6 +1401,7 @@ function vPorco(cor, bolso, soCabeca, roupa, oculos){
   if (!soCabeca && roupa === 'moletom') corpoMoletom(v, frenteZ);
   else if (!soCabeca && roupa === 'sueter') corpoSueter(v, frenteZ);
   else if (!soCabeca && roupa === 'sueterBranco') corpoSueter(v, frenteZ, SUETER_BRANCO);
+  else if (!soCabeca && roupa === 'toalha') corpoToalha(v, frenteZ, cor, bolso);
   else if (!soCabeca){
     for (const lx of [-7, 7]) for (let y = 2; y <= 8; y++) for (let x = lx - 5; x <= lx + 5; x++) for (let z = -5; z <= 5; z++)
       if ((x - lx) ** 2 + z * z <= 27) v.set(x, y, z, y <= 3 ? barra : cor);
@@ -11203,13 +11219,15 @@ function atualizarCampo(x, z){
 const BOLHAS = [];
 
 // ================= personagens
+// como os porquinhos viram cubinhos (o mesmo para a roupa e para a toalha do spa, que dividem a geometria dos braços)
+const OP_PORCO = { origin: [0.5, 0, 0.5], jitter: 0.015, ao: AO_SUAVE };
 class Porco {
   // modelo: { corpo, braco, pe, ombro: [x, y, z], quadril: [x, y], mao: [y, z], altura } em cubinhos; sem ele, é um porquinho
   constructor(cor, bolso, nome, modelo){
     this.nome = nome;
     const s = 1 / 57;
     const M = modelo || { corpo: () => vPorco(cor, bolso), braco: vBraco, pe: vPe, ombro: [15.5, 28.5, 1], quadril: [7, 9], mao: [-16, 1.5], altura: 1.32 };
-    const op = { origin: [0.5, 0, 0.5], jitter: 0.015, ao: AO_SUAVE };
+    const op = OP_PORCO;
     this.g = new THREE.Group(); this.corpo = new THREE.Group(); this.g.add(this.corpo);
     const m = malha(geo('corpo' + nome, () => M.corpo().build(s, op)));
     this.corpo.add(m);
@@ -11228,6 +11246,16 @@ class Porco {
     if (nome !== 'ed'){ this.g.traverse(o => { o.userData.alvo = { k: nome }; }); pickaveis.push(this.g); }
   }
   colocar(x, z){ this.pos.set(x, z); this.g.position.set(x, 0, z); }
+  // no spa, de toalha: o corpo de toalha na cor de cada um e os braços sem manga; toalha() sem cor volta para a roupa
+  toalha(quem){
+    const mc = this.corpo.children[0], mb = [this.bE.children[0], this.bD.children[0]], s = this.escala, op = OP_PORCO;
+    if (!this.roupa) this.roupa = { c: mc.geometry, b: mb[0].geometry };
+    const T = quem && TOALHA_SPA[quem];
+    this.deToalha = !!T;
+    if (!T){ mc.geometry = this.roupa.c; for (const m of mb) m.geometry = this.roupa.b; return; }
+    mc.geometry = geo('corpoToalha' + quem, () => vPorco(T[0], T[1], false, 'toalha').build(s, op));
+    for (const m of mb) m.geometry = geo('braco', () => vBraco().build(s, op));
+  }
   ir(pontos, aoChegar){ this.pontos = pontos.slice(); this.aoChegar = aoChegar; this.estado = this.pontos.length ? 'andando' : 'parado'; if (!this.pontos.length && aoChegar) aoChegar(); }
   olhar(x, z){ if (Math.hypot(x - this.pos.x, z - this.pos.y) > 0.01) this.angAlvo = Math.atan2(x - this.pos.x, z - this.pos.y); }
   ferramenta(n){
@@ -11813,11 +11841,18 @@ const FAMILIA_SPA = {
   dani: { nome: 'Dani', pode: () => !!S.viuCineDani && !daniAtivo(), orig: () => irmaoDani, escala: ESCALA_DANI, cria: () => new Porco(COR.dani, COR.daniBolso, 'dani', MODELO_DANI) },
 };
 const COPIA_SPA = {};
+// a toalha de cada um: [cor, listra], nas cores de cada personagem (o Milton na laranja do PIG-MTP)
+const TOALHA_SPA = { ed: [COR.ed, 0xfdf8ef], hud: [COR.ed, 0xfdf8ef], beto: [COR.beto, 0xfdf8ef], dani: [COR.dani, 0xfdf8ef], pelucio: [MOLETOM.rosa, MOLETOM.p], milton: [0xff7a3a, 0xfdf8ef], patrinho: [SUETER.claro, 0xfdf8ef], maurinho: [SUETER_BRANCO.claro, SUETER.base] };
+// troca de roupa no spa (pela toalha depois do balcão, de volta para a roupa antes de sair): uma nuvenzinha de vapor
+function trocaDeRoupaSpa(p, quem, x, z){
+  p.toalha(quem);
+  if (naTelaSpa(x, z)){ for (let i = 0; i < 7; i++) vaporSpa(x + rnd(-0.22, 0.22), rnd(0.2, 0.8), z + rnd(-0.22, 0.22)); Som.tom(900, 0.12, 'sine', 0.025, 1300); }
+}
 function criarFamiliaSpa(quem){
   const F = FAMILIA_SPA[quem];
   let p = COPIA_SPA[quem];
   if (!p){ p = COPIA_SPA[quem] = F.cria(); if (F.escala) p.g.scale.setScalar(F.escala); }
-  p.sentado = 0; p.alt = 0; p.estado = 'parado'; p.pontos = []; p.aceno = 0; p.pulo = 0; p.g.visible = false; scene.add(p.g);
+  p.sentado = 0; p.alt = 0; p.estado = 'parado'; p.pontos = []; p.aceno = 0; p.pulo = 0; p.g.visible = false; p.toalha(null); scene.add(p.g);
   const v = { tipo: 'familia', quem, p, g: p.g, nome: quem, apelido: F.nome, topo(){ return new THREE.Vector3(this.x, this.y + this.p.altura * (F.escala || 1), this.z); } };
   p.g.traverse(o => { o.userData.alvo = { k: 'spaVisitante', v }; });
   if (!pickaveis.includes(p.g)) pickaveis.push(p.g);
@@ -11883,6 +11918,7 @@ function andarNoSpa(v, cel){
 }
 function sairDoSpa(v){
   v.vai = 'sair'; v.lugar = null;
+  if (v.tipo === 'familia' && v.p.deToalha) trocaDeRoupaSpa(v.p, null, v.x, v.z);
   const dentro = caminhoSpa(celulaDe(v), SPA.porta) || [];
   v.pts = [...dentro, ...estradaDoSpa().reverse(), [X_CURVA, H + 1]]; v.estado = 'saindo';
 }
@@ -11938,7 +11974,7 @@ function passoSpa(v, dt, t, noite){
         if (v.tipo === 'porco') pagarSpa(v);
         else { const f = variar(FALAS_SPA_FAMILIA_ENTRADA); falar(v, f, tempoDeLeitura(f)); v.p.aceno = 1.2; }
       }
-      if (v.t <= 0){ v.estado = 'parado'; v.t = rnd(0.3, 0.8); }
+      if (v.t <= 0){ v.estado = 'parado'; v.t = rnd(0.3, 0.8); if (v.tipo === 'familia') trocaDeRoupaSpa(v.p, v.quem, v.x, v.z); }
       break;
     case 'parado': v.t -= dt; if (v.t <= 0) proximaNoSpa(v); break;
     case 'chegou':
@@ -12109,6 +12145,7 @@ function comecarBanhoEd(tarefa){
     if (!banhoEd) return;
     const [x, z] = mundoSpa(q.x, q.z);
     banhoEd.fase = 'pula'; banhoEd.t = 0; banhoEd.de = [ed.pos.x, ed.pos.y]; banhoEd.ate = [x, z];
+    trocaDeRoupaSpa(ed, 'ed', ed.pos.x, ed.pos.y);
   });
 }
 function atualizarBanhoEd(dt, t){
@@ -12148,6 +12185,7 @@ function atualizarBanhoEd(dt, t){
     ed.bE.rotation.set(-2.6 + Math.sin(t * 9) * 0.25, 0, -0.4); ed.bD.rotation.set(-2.6 - Math.sin(t * 9) * 0.25, 0, 0.4);
     if (B.t >= BANHO_ED.ducha){
       B.fase = 'saindo';
+      trocaDeRoupaSpa(ed, null, ed.pos.x, ed.pos.y);
       const f = variar(FALAS_ED_DUCHA); falar(ed, f, tempoDeLeitura(f));
       if (S.spaDia !== diaAtual()){ S.spaDia = diaAtual(); ganharXP(SPA.xp, new THREE.Vector3(ed.pos.x, 1.3, ed.pos.y)); }
       ed.ir([...(caminhoSpa(celulaDe({ x: ed.pos.x, z: ed.pos.y }), SPA.porta) || []), mundoSpa(SPA.porta[0] + 0.5, SPA.fundo - 0.4), portaSpaMundo()], () => terminarBanhoEd(false));
@@ -12158,6 +12196,7 @@ function terminarBanhoEd(cancelado){
   const B = banhoEd; if (!B) return;
   banhoEd = null;
   ed.sentado = 0; ed.alt = 0; ed.corpo.rotation.z = 0;
+  if (ed.deToalha) ed.toalha(null);
   if (cancelado){ ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; ed.colocar(...portaSpaMundo()); return; }
   const tarefa = B.tarefa;
   if (fila[0] === tarefa) fila.shift();
@@ -19728,7 +19767,11 @@ function catalogoModelos(){
         const p = new Porco(...args); p.update(0, 0); p.g.position.set(x, 0, 0); p.g.scale.setScalar(esc); g.add(p.g);
       }
       return g;
-    } }] }, porco('Pelúcio', 0, 0, 'pelucio', modeloMoletom(1.32)), porco('Milton', 0, 0, 'milton', modeloMoletom(0.7)), porco('Jaca', 0, 0, 'jaca', MODELO_JACA), porco('Patrinho', 0, 0, 'patrinho', MODELO_PATRINHO), porco('Maurinho', 0, 0, 'maurinho', MODELO_MAURINHO), { nome: 'Maurinho nas obras', variantes: [['Parado', null], ['Andando', 'andar'], ['Medindo', 'trena'], ['Martelando', 'martelo'], ['Lendo a planta', 'prancheta'], ['Apontando', 'apontar']].map(([n, acao]) => ({ nome: n, cria: () => {
+    } }] }, porco('Pelúcio', 0, 0, 'pelucio', modeloMoletom(1.32)), porco('Milton', 0, 0, 'milton', modeloMoletom(0.7)), porco('Jaca', 0, 0, 'jaca', MODELO_JACA), porco('Patrinho', 0, 0, 'patrinho', MODELO_PATRINHO), porco('Maurinho', 0, 0, 'maurinho', MODELO_MAURINHO), { nome: 'De toalha no spa', variantes: [['Ed', [COR.ed, COR.edBolso, 'ed']], ['Beto', [COR.beto, COR.betoBolso, 'beto']], ['Hud', [COR.ed, COR.edBolso, 'hud', MODELO_HUD]], ['Dani', [COR.dani, COR.daniBolso, 'dani', MODELO_DANI]], ['Pelúcio', [0, 0, 'pelucio', modeloMoletom(1.32)]], ['Milton', [0, 0, 'milton', modeloMoletom(0.7)]], ['Patrinho', [0, 0, 'patrinho', MODELO_PATRINHO]], ['Maurinho', [0, 0, 'maurinho', MODELO_MAURINHO]]].map(([n, args]) => ({ nome: n, cria: () => {
+      const p = new Porco(...args); p.toalha(args[2]);
+      p.g.userData.anima = (dt, t) => { p.update(dt, t); p.pos.set(0, 0); p.g.position.set(0, 0, 0); p.g.rotation.y = 0; };
+      p.g.userData.anima(0, 0); return p.g;
+    } })) }, { nome: 'Maurinho nas obras', variantes: [['Parado', null], ['Andando', 'andar'], ['Medindo', 'trena'], ['Martelando', 'martelo'], ['Lendo a planta', 'prancheta'], ['Apontando', 'apontar']].map(([n, acao]) => ({ nome: n, cria: () => {
       const p = new Porco(0, 0, 'maurinhoObra', MODELO_MAURINHO_OCULOS); p.ferramenta('prancheta');
       const anda = acao === 'andar';
       if (acao && !anda){ p.trabalhar(1e9, acao); if (acao === 'apontar') p.ferramenta('prancheta'); }
