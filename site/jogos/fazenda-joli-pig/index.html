@@ -896,7 +896,8 @@ const COLMEIA = { nivel: 10, preco: 800, tempo: 720, rend: 2, xp: 4, ajuda: 0.1 
 // Canteiro de flores perto da colmeia (o Lucas pediu): com um canteiro de flores a até FLOR_COLMEIA.raio ladrilhos (contados
 // como os do espantalho, em quadrado), a colmeia dá o dobro de mel por coleta. O canteiro que ajuda ganha abelhas voando em volta
 const FLOR_COLMEIA = { raio: 3, vezes: 2, abelhas: 3 };
-// construções de processamento: cada uma faz uma receita por vez, com até três na fila
+// construções de processamento: cada vaga produz ao mesmo tempo (o Lucas pediu: em paralelo, sem somar os tempos); são
+// três vagas, mais uma por reforma (vagasFab)
 const FABRICAS = {
   moinho:    { nome: 'Moinho', nivel: 7, preco: 1500, alto: 4.3, desc: 'Mói milho em fubá e em ração para os bichos.', receitas: ['fuba', 'racaoMilho'] },
   queijaria: { nome: 'Queijaria', fem: true, nivel: 9, preco: 2500, alto: 2.3, desc: 'Transforma leite em queijo.', receitas: ['queijo'] },
@@ -9233,6 +9234,13 @@ function migrar(){
     if (Array.isArray(t.feitos)) t.feitos = t.feitos.map(r => r === 'secar' ? 'secarAntigo' : r);
   }
   S.versao = 3;
+  // as fábricas passaram a produzir em paralelo: o que estava esperando na fila em cadeia termina no máximo no tempo
+  // de uma receita a partir de agora (não faz nada nos saves novos, onde isso já vale sempre)
+  for (const st of Object.values(S.fabricas || {})) if (st && Array.isArray(st.fila)){
+    const agora = Date.now();
+    for (const f of st.fila) if (f && RECEITAS[f.r]) f.fim = Math.min(f.fim, agora + RECEITAS[f.r].tempo * 1000);
+    st.fila.sort((a, b) => a.fim - b.fim);
+  }
   if (!(S.mapa >= 2)) migrarMapa();
   if (!(S.mapa >= 3)) migrarHorta();
 }
@@ -10705,7 +10713,8 @@ function construirFabrica(id){
 }
 // termina as receitas cujo tempo passou (funciona com o jogo fechado, pelo relógio)
 // termina o que passou do tempo; com esteira, entrega direto no celeiro; com repetidor, recomeça a receita escolhida
-// a partir do momento em que a anterior terminou, então com o jogo fechado a produção segue em cadeia
+// a partir do momento em que a anterior terminou, então com o jogo fechado a produção continua. As vagas trabalham ao
+// mesmo tempo: cada receita termina tempo depois de entrar (fim), e st.fila fica em ordem de fim, a primeira acaba antes
 function simularFabricas(){
   const agora = Date.now();
   let xpTotal = 0, entregou = false;
@@ -10725,6 +10734,7 @@ function simularFabricas(){
   if (xpTotal) ganharXP(xpTotal);
   if (entregou) hud();
 }
+const ordenarFilaFab = st => st.fila.sort((a, b) => a.fim - b.fim);
 function repor(id, quando){
   const st = estFab(id);
   if (!st.repetir || !st.esteira) return false;
@@ -10732,10 +10742,10 @@ function repor(id, quando){
   let pos = false;
   while (st.fila.length + naFila < vagasFab(id) && temItens(R.entra)){
     for (const [k, q] of Object.entries(R.entra)){ S.celeiro[k] -= q; if (!S.celeiro[k]) delete S.celeiro[k]; }
-    const ini = st.fila.length ? st.fila[st.fila.length - 1].fim : quando;
-    st.fila.push({ r: st.repetir, fim: ini + R.tempo * 1000 });
+    st.fila.push({ r: st.repetir, fim: quando + R.tempo * 1000 });
     pos = true;
   }
+  if (pos) ordenarFilaFab(st);
   return pos;
 }
 function entregarReceita(rid){
@@ -10788,21 +10798,19 @@ function itensFabrica(id){
   }
   const agora = Date.now(), levando = fila.filter(t => t.tipo === 'produzir' && t.alvo.id === id), naFila = levando.length;
   const ocupadas = st.fila.length + naFila;
-  if (st.fila.length) r.estado = `Fazendo ${RECEITAS[st.fila[0].r].nome.toLowerCase()}.`;
+  if (st.fila.length) r.estado = st.fila.length > 1 ? `Fazendo ${st.fila.length} receitas ao mesmo tempo.` : `Fazendo ${RECEITAS[st.fila[0].r].nome.toLowerCase()}.`;
   else r.estado = st.feitos.length ? 'Terminou! Recolha o que ficou pronto.' : naFila ? 'O Ed está levando os ingredientes.' : (st.repetir ? `Esperando ingredientes para ${RECEITAS[st.repetir].nome.toLowerCase()}.` : 'Parado. Escolha o que fazer:');
   if (st.repetir) r.estado += ` Repete ${RECEITAS[st.repetir].nome.toLowerCase()}.`;
   if (st.esteira) r.estado += ' Esteira para o celeiro.';
-  // as três vagas: fazendo agora, esperando na fila, o Ed levando os ingredientes, ou livre
+  // as vagas: fazendo (todas ao mesmo tempo), o Ed levando os ingredientes, ou livre
   const icReceita = rid => { const sai = Object.keys(RECEITAS[rid].sai)[0]; return icone(sai === 'racao' ? 'racao' : sai); };
   let vagas = '';
   for (let i = 0; i < vagasFab(id); i++){
     const f = st.fila[i];
     if (f){
       const R = RECEITAS[f.r], falta = Math.max(0, (f.fim - agora) / 1000);
-      if (i === 0){
-        const prog = clamp(1 - falta / R.tempo, 0, 1);
-        vagas += `<div class="vaga fazendo"><img src="${icReceita(f.r)}" alt=""><span class="n">${R.nome}</span><span class="t">faltam ${tempo(falta)}</span><div class="barra"><i style="width:${Math.round(prog * 100)}%"></i></div></div>`;
-      } else vagas += `<div class="vaga"><img src="${icReceita(f.r)}" alt=""><span class="n">${R.nome}</span><span class="t">fila · ${tempo(falta)}</span></div>`;
+      const prog = clamp(1 - falta / R.tempo, 0, 1);
+      vagas += `<div class="vaga fazendo"><img src="${icReceita(f.r)}" alt=""><span class="n">${R.nome}</span><span class="t">faltam ${tempo(falta)}</span><div class="barra"><i style="width:${Math.round(prog * 100)}%"></i></div></div>`;
     } else if (i < ocupadas){
       const t = levando[i - st.fila.length];
       vagas += `<div class="vaga levando"><img src="${icReceita(t.param)}" alt=""><span class="n">${RECEITAS[t.param].nome}</span><span class="t">Ed levando</span></div>`;
@@ -10827,7 +10835,7 @@ function itensFabrica(id){
     const faltam = trava ? [] : faltamItens(R.entra), resto = ` → ${textoItens(R.sai)} · ${tempo(R.tempo)}${extra}${textoFalta(f)}`;
     r.itens.push({ rotulo: R.nome, sub: trava || `${textoItens(R.entra)}${resto}`, subHTML: trava ? null : htmlItens(R.entra, faltam) + esc(resto), faltam: faltam.join(','), icone: sai === 'racao' ? 'racao' : sai, encomenda: f > 0, off: !!trava || cheia || !temItens(R.entra), fn: () => enfileirar('produzir', { k: 'fabrica', id }, rid) });
   }
-  if (cheia) r.itens.push({ rotulo: 'Fila cheia', sub: `até ${vagasFab(id)} receitas por vez`, icone: id, off: true, leve: true, fn: () => {} });
+  if (cheia) r.itens.push({ rotulo: 'Vagas cheias', sub: `até ${vagasFab(id)} receitas ao mesmo tempo`, icone: id, off: true, leve: true, fn: () => {} });
   {
     if (!st.esteira) r.itens.push({ rotulo: 'Esteira de saída', sub: 'o que fica pronto vai sozinho para o celeiro', icone: 'esteira', preco: reais(ESTEIRA.preco), leve: true, off: S.dinheiro < ESTEIRA.preco, fn: () => comprarAutomacao(id, 'esteira') });
     else if (!st.repetidor) r.itens.push({ rotulo: 'Repetidor de receita', sub: 'recomeça sozinho uma receita escolhida', icone: 'repetir', preco: reais(REPETIDOR.preco), leve: true, off: S.dinheiro < REPETIDOR.preco, fn: () => comprarAutomacao(id, 'repetidor') });
@@ -10843,8 +10851,8 @@ function itensFabrica(id){
 function executarFabrica(tarefa){
   const id = tarefa.alvo.id, st = estFab(id), [cx, cz] = centroPredio(PREDIO[id]);
   if (tarefa.tipo === 'produzir'){
-    const R = RECEITAS[tarefa.param], ini = st.fila.length ? st.fila[st.fila.length - 1].fim : Date.now();
-    st.fila.push({ r: tarefa.param, fim: ini + R.tempo * 1000 });
+    const R = RECEITAS[tarefa.param];
+    st.fila.push({ r: tarefa.param, fim: Date.now() + R.tempo * 1000 }); ordenarFilaFab(st);
     Som.plantar();
   }
   if (tarefa.tipo === 'recolher'){
@@ -17295,7 +17303,7 @@ function checar(tipoA, alvo, param){
       if (trava) return { ok: false, motivo: `${R.nome}: ${trava}` };
       if (!temItens(R.entra)) return { ok: false, motivo: `Falta ${textoItens(R.entra)}` };
       const naFila = fila.filter(t => t.tipo === 'produzir' && t.alvo.id === alvo.id).length;
-      if (st.fila.length + naFila >= vagasFab(alvo.id)) return { ok: false, motivo: `${FABRICAS[alvo.id].nome}: a fila está cheia` };
+      if (st.fila.length + naFila >= vagasFab(alvo.id)) return { ok: false, motivo: `${FABRICAS[alvo.id].nome}: as vagas estão cheias` };
       return { ok: true, custo: { itens: { ...R.entra } } };
     }
     return { ok: false };
