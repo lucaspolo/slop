@@ -7371,7 +7371,7 @@ function limparVolta(){
 // origem no meio da roda (ARRAIA.meio); os ângulos da roda contam a partir de +x, com 90° para o sul (a frente da câmera)
 // A roda (11 ladrilhos de largura, contando os postes) encosta na beira de baixo e na da direita do mapa; as duas barracas
 // ficam atrás dela, do lado do museu e do resort
-const ARRAIA = { nivel: 50, meio: [46.7, 45.3], ed: 90, roda: 2.3, fora: 4.2, perto: 3.4, inicio: 0.66, fim: 0.82, mastro: [0.75, -1.3],
+const ARRAIA = { nivel: 50, meio: [46.7, 45.3], ed: 90, roda: 2.3, fora: 4.2, perto: 3.4, inicio: 0.66, fim: 0.82, noite: 0.78, mastro: [0.75, -1.3],
   postes: [30, 90, 150, 210, 270, 330], raioPostes: 5.3, barracas: [[40.5, 42.4, 'milho'], [43.4, 39.6, 'pescaria']], disco: [3.3, 3.1, -2.6] };
 // a quadrilha: uma volta inteira da roda em tempo segundos; luma, o lugar da Luma na roda (o mesmo de lumaSaiPara)
 const ARRAIA_QUADRILHA = { tempo: 12, luma: 62 };
@@ -7485,6 +7485,16 @@ function rojao(x, z, cor, grande = 1){
 }
 // a festa rolou a noite inteira (o Lucas pediu): no fim, a fazenda vira a manhã do dia seguinte, na hora em que o Ed acorda
 // depois da hora de nanar. Na reprise o relógio não muda
+// Revendo o ArraiEd pela janela Cenas, a festa é de noite (o Lucas pediu): o relógio fica parado em ARRAIA.noite durante a
+// reprise e volta para a hora de verdade quando a tela escurece no fim (ou se a reprise é pulada). O save guarda a hora de
+// verdade (salvar)
+let reprisaNoite = null;
+function noiteDaReprise(c){
+  if (!c || !c.reprise) return;
+  if (!reprisaNoite) reprisaNoite = { relogio: S.relogio };
+  S.relogio = ARRAIA.noite;
+}
+function fimDaNoiteDaReprise(){ if (reprisaNoite){ S.relogio = reprisaNoite.relogio; reprisaNoite = null; } }
 function novoDiaArraia(c){
   if (!c || c.reprise || c.novoDia) return;
   c.novoDia = true;
@@ -8536,6 +8546,8 @@ function salvar(){
   try {
     const copia = JSON.parse(JSON.stringify(S, (k, v) => k === 'res' ? undefined : v));
     for (const t of fila){ if (t.custo){ copia.dinheiro += t.custo.dinheiro || 0; copia.racao += t.custo.racao || 0; if (t.custo.semente) copia.bolsa[t.custo.semente] = (copia.bolsa[t.custo.semente] || 0) + 1; if (t.custo.adubo) copia.adubo = (copia.adubo || 0) + t.custo.adubo; if (t.custo.itens) for (const [k, q] of Object.entries(t.custo.itens)) copia.celeiro[k] = (copia.celeiro[k] || 0) + q; } }
+    // revendo o ArraiEd, o relógio fica parado na noite da festa; o save guarda a hora de verdade
+    if (reprisaNoite) copia.relogio = reprisaNoite.relogio;
     copia.salvoEm = Date.now();
     localStorage.setItem(CHAVE_SALVO, JSON.stringify(copia));
   } catch (e){}
@@ -13197,6 +13209,7 @@ const CENAS = {
     iniciar(c){
       caminhaoE.estado = 'cine';
       cam.azAlvo = azPerto(Math.PI / 4);
+      noiteDaReprise(c);
       montarArraia(c);
       arraia.falas = FALAS_ARRAIA();
       const [ex, ez] = naRoda(ARRAIA.ed, ARRAIA.roda);
@@ -13207,7 +13220,7 @@ const CENAS = {
       return 'a-indo';
     },
     // a fogueira tremula e os convidados dançam a cena inteira, também durante as falas
-    ambiente(dt){ animarArraia(cine, dt); },
+    ambiente(dt){ if (reprisaNoite) S.relogio = ARRAIA.noite; animarArraia(cine, dt); },
     // quem fala sem ser um porquinho (a Lúcia, o Curupira, a aposentada) dá um pulinho
     aoFalar(f){ const A = arraia; if (A) for (const q of A.convidados) if (q.quem === f[0]) q.salto = 0.45; },
     posicionar(){ const [mx, mz] = ARRAIA.meio; virarNaCena(ed, mx, mz); if (arraia) for (const { p } of arraia.porcos) virarNaCena(p, mx, mz); },
@@ -13266,7 +13279,7 @@ const CENAS = {
           // depois da última: escurece de todo com a festa ainda atrás, vira a manhã seguinte e clareia na fazenda
           if (c.cartela >= ARRAIA_CARTELAS.lista.length){
             const K = ARRAIA_CARTELAS, el = $('cineCartela');
-            if (!c.virou && c.t > K.escuro){ c.virou = true; novoDiaArraia(c); limparArraia(); cam.alvo.copy(c.cam0.alvo); cam.vista = c.cam0.vista; cam.az = cam.azAlvo = c.cam0.az; }
+            if (!c.virou && c.t > K.escuro){ c.virou = true; novoDiaArraia(c); fimDaNoiteDaReprise(); limparArraia(); cam.alvo.copy(c.cam0.alvo); cam.vista = c.cam0.vista; cam.az = cam.azAlvo = c.cam0.az; }
             if (c.virou && !c.clareando && c.t > K.escuro + K.parado){ c.clareando = true; el.classList.remove('on'); $('cine').classList.remove('on'); }
             if (c.t > K.escuro + K.parado + K.claro){ el.hidden = true; el.classList.remove('preto'); encerrarCine(); }
           }
@@ -13287,7 +13300,7 @@ const CENAS = {
     pular(c){ ed.trab = null; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; novoDiaArraia(c); },
     // o arraial desmonta no fim (pular vale como assistir)
     fim(){ limparArraia(); S.viuCineArraied = true; aviso('Que festa! O ArraiEd entrou para a história da fazenda.', 'grande', 5); salvar(); },
-    restaurar(){ limparArraia(); },
+    restaurar(){ fimDaNoiteDaReprise(); limparArraia(); },
   },
   volta: {
     flag: 'viuVoltaFerias', nivel: () => OBRAS.observatorio.nivel, repete: true, abducao: true, musica: 'volta', icone: 'vacaEspaco',
