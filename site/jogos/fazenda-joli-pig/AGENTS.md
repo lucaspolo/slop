@@ -317,6 +317,7 @@ O Lucas pediu otimizações sem mexer na imagem nem no jogo. O que foi medido e 
 
 - Cada enfeite ocupa um ladrilho de gramado (`ENFEITES`, `montarEnfeite`, `livreParaEnfeite`), em cubinhos de 1/16 com a frente para +z; "Girar" muda `e.rot` de 90 em 90 graus. O ladrilho vira `feno` (ninguém passa).
 - Os do nível 7 em diante, menos o chafariz e a estátua, vieram depois (o Lucas pediu mais enfeites). Os que fazem alguma coisa (`atualizarEnfeites`, chamado todo quadro):
+  - Canteiro de flores (2): a até `FLOR_COLMEIA.raio` (3) ladrilhos de uma colmeia comprada, contados em quadrado como no espantalho, ela dá o dobro de mel por coleta (`rendColmeia`, `floresDaColmeia`; o Lucas pediu). O canteiro que ajuda ganha três abelhas voando em volta, um pouco acima das flores (`criarAbelhas`, que `atualizarAbelhas` refaz quando um canteiro de flores perto de colmeia é posto, guardado ou mudado de lugar). O menu da colmeia e o do canteiro dizem se as flores estão ajudando.
   - Casinha da Luma (7): de manhã, 3 em 4 sonecas da Luma são deitada na porta da casinha mais perto (`casinhaParaLuma`, na aventura `soneca`), virada para fora.
   - Mesa de piquenique (12): redonda, com toalha xadrez. Quando os banquinhos cabem em volta (`lugarPiquenique`), o cafezinho acontece nela: `lugarCafe` devolve o meio dela com `true`, a mesinha do cafezinho não aparece e o prato e a caneca ficam no tampo dela (9/16).
   - Relógio de sol (15): a sombra do ponteiro é uma malha à parte (`userData.relogio`) que gira de -75° de manhã a +75° no fim da tarde e some de noite.

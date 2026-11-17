@@ -890,6 +890,9 @@ const COLMEIA_SLOTS = [[39, 11], [41, 11], [43, 11], [32, 39], [34, 39], [36, 39
 const COLMEIA_CANTO = 3;
 const colmeiaAberta = i => i < COLMEIA_CANTO || (S && S.canto === 2);
 const COLMEIA = { nivel: 10, preco: 800, tempo: 720, rend: 2, xp: 4, ajuda: 0.1 };
+// Canteiro de flores perto da colmeia (o Lucas pediu): com um canteiro de flores a até FLOR_COLMEIA.raio ladrilhos (contados
+// como os do espantalho, em quadrado), a colmeia dá o dobro de mel por coleta. O canteiro que ajuda ganha abelhas voando em volta
+const FLOR_COLMEIA = { raio: 3, vezes: 2, abelhas: 3 };
 // construções de processamento: cada uma faz uma receita por vez, com até três na fila
 const FABRICAS = {
   moinho:    { nome: 'Moinho', nivel: 7, preco: 1500, alto: 4.3, desc: 'Mói milho em fubá e em ração para os bichos.', receitas: ['fuba', 'racaoMilho'] },
@@ -10139,16 +10142,29 @@ function comprarColmeia(i){
   aviso('Colmeia nova! As abelhas fazem mel e ajudam o pomar a dar fruta mais rápido.', 'grande', 3.5);
   hud(); salvar();
 }
+// os canteiros de flores perto de uma colmeia comprada
+const pertoDaColmeia = (e, i) => Math.max(Math.abs(e.x - COLMEIA_SLOTS[i][0]), Math.abs(e.z - COLMEIA_SLOTS[i][1])) <= FLOR_COLMEIA.raio;
+const floresDaColmeia = i => (S.enfeites || []).filter(e => e.tipo === 'canteiroFlor' && pertoDaColmeia(e, i));
+const floresComAbelha = () => (S.enfeites || []).filter(e => e.tipo === 'canteiroFlor' && S.colmeias.some((d, i) => d && colmeiaAberta(i) && pertoDaColmeia(e, i)));
+const rendColmeia = i => COLMEIA.rend * (floresDaColmeia(i).length ? FLOR_COLMEIA.vezes : 1);
+let assinaturaAbelhas = '', abelhasEm = 0;
 function criarAbelhas(){
   for (const a of ABELHAS) scene.remove(a.m);
   ABELHAS.length = 0;
   const mat = new THREE.MeshLambertMaterial({ color: 0xf5d142 });
-  S.colmeias.forEach((d, i) => { if (!d) return; for (let k = 0; k < 3; k++){ const m = new THREE.Mesh(geoPart, mat); m.scale.setScalar(0.7); soltar(m); ABELHAS.push({ m, i, fase: rnd(0, 6), raio: rnd(0.35, 0.8), vel: rnd(2, 3.5) }); } });
+  const nova = (x, z, alto, raio) => { const m = new THREE.Mesh(geoPart, mat); m.scale.setScalar(0.7); soltar(m); ABELHAS.push({ m, x, z, alto, fase: rnd(0, 6), raio: rnd(...raio), vel: rnd(2, 3.5) }); };
+  S.colmeias.forEach((d, i) => { if (!d) return; const [x, z] = COLMEIA_SLOTS[i]; for (let k = 0; k < 3; k++) nova(x, z, 0.75, [0.35, 0.8]); });
+  const flores = floresComAbelha();
+  // um pouco acima das flores e mais largas, para não se confundirem com as flores amarelas
+  for (const e of flores) for (let k = 0; k < FLOR_COLMEIA.abelhas; k++){ nova(e.x, e.z, 0.62, [0.38, 0.68]); ABELHAS[ABELHAS.length - 1].m.scale.setScalar(0.85); }
+  assinaturaAbelhas = flores.map(e => e.x + ',' + e.z).join(';');
 }
 function atualizarAbelhas(t){
+  // canteiro de flores posto, guardado ou mudado de lugar: as abelhas dele aparecem ou somem (conferido duas vezes por segundo)
+  if (t - abelhasEm > 0.5){ abelhasEm = t; if (floresComAbelha().map(e => e.x + ',' + e.z).join(';') !== assinaturaAbelhas) criarAbelhas(); }
   for (const a of ABELHAS){
-    const [x, z] = COLMEIA_SLOTS[a.i], ang = t * a.vel + a.fase;
-    a.m.position.set(x + 0.5 + Math.cos(ang) * a.raio, 0.75 + Math.sin(ang * 2.3) * 0.15, z + 0.5 + Math.sin(ang) * a.raio * 0.8);
+    const ang = t * a.vel + a.fase;
+    a.m.position.set(a.x + 0.5 + Math.cos(ang) * a.raio, a.alto + Math.sin(ang * 2.3) * 0.12, a.z + 0.5 + Math.sin(ang) * a.raio * 0.8);
   }
 }
 function itensPomar(i){
@@ -10235,18 +10251,19 @@ function itensColmeia(i){
   if (!d){
     const bloq = nivel() < COLMEIA.nivel;
     r.titulo = 'Lugar para colmeia'; r.icone = 'colmeia';
-    r.estado = `As abelhas fazem mel e cada colmeia deixa o pomar ${i >= COLMEIA_CANTO ? 'do canto Sul' : 'da frente'} ${Math.round(COLMEIA.ajuda * 100)}% mais rápido.`;
+    r.estado = `As abelhas fazem mel e cada colmeia deixa o pomar ${i >= COLMEIA_CANTO ? 'do canto Sul' : 'da frente'} ${Math.round(COLMEIA.ajuda * 100)}% mais rápido. Com um canteiro de flores a até ${FLOR_COLMEIA.raio} passos, ela dá o dobro de mel.`;
     r.itens.push({ rotulo: 'Comprar colmeia', sub: bloq ? `nível ${COLMEIA.nivel}` : `${COLMEIA.rend} potes de mel a cada ${tempo(COLMEIA.tempo)}`, icone: 'colmeia', preco: reais(COLMEIA.preco), off: bloq || S.dinheiro < COLMEIA.preco, fn: () => comprarColmeia(i) });
     return r;
   }
   r.titulo = 'Colmeia'; r.icone = 'colmeia';
   if (d.pronto){
     r.estado = 'Mel pronto!'; r.classe = 'bom';
-    r.itens.push({ rotulo: 'Coletar mel', sub: `+${COLMEIA.rend} potes · +${COLMEIA.xp} xp`, icone: 'mel', fn: () => enfileirar('coletarMel', { k: 'colmeia', i }) });
+    r.itens.push({ rotulo: 'Coletar mel', sub: `+${rendColmeia(i)} potes · +${COLMEIA.xp} xp`, icone: 'mel', fn: () => enfileirar('coletarMel', { k: 'colmeia', i }) });
   } else {
     r.estado = `Mel em ${tempo((d.fim - Date.now()) / 1000)}`;
     r.prog = 1 - (d.fim - Date.now()) / (COLMEIA.tempo * 1000);
   }
+  r.estado += floresDaColmeia(i).length ? ` · ${rendColmeia(i)} potes por coleta, com as flores por perto` : ` · Um canteiro de flores a até ${FLOR_COLMEIA.raio} passos dobra o mel.`;
   return r;
 }
 function executarPomar(tarefa){
@@ -10261,8 +10278,9 @@ function executarPomar(tarefa){
   } else {
     const d = S.colmeias[i];
     if (!d.pronto) return;
-    S.celeiro.mel = (S.celeiro.mel || 0) + COLMEIA.rend; contar('colhido', 'mel', COLMEIA.rend);
-    flutuar(pos, '+' + COLMEIA.rend, '', 'mel'); ganharXP(COLMEIA.xp, pos.clone().add(new THREE.Vector3(0, 0.3, 0)));
+    const rend = rendColmeia(i);
+    S.celeiro.mel = (S.celeiro.mel || 0) + rend; contar('colhido', 'mel', rend);
+    flutuar(pos, '+' + rend, '', 'mel'); ganharXP(COLMEIA.xp, pos.clone().add(new THREE.Vector3(0, 0.3, 0)));
     d.pronto = false; d.fim = Date.now() + COLMEIA.tempo * 1000;
     montarColmeia(i);
   }
@@ -14474,7 +14492,7 @@ function lembretesComposteira(){
 // o espantalho espanta o mato dos canteiros em volta; os outros só deixam a fazenda bonita (e dão um pouquinho de xp, só na compra)
 // os do nível 7 em diante, menos o chafariz e a estátua, vieram depois (o Lucas pediu mais enfeites)
 const ENFEITES = {
-  canteiroFlor: { nome: 'Canteiro de flores', art: 'o', preco: 60, nivel: 2, xp: 1 },
+  canteiroFlor: { nome: 'Canteiro de flores', art: 'o', preco: 60, nivel: 2, xp: 1, desc: 'A até 3 passos de uma colmeia, ela dá o dobro de mel, e as abelhas vêm voar em volta das flores.' },
   banco:        { nome: 'Banco de praça', art: 'o', preco: 150, nivel: 3, xp: 2 },
   espantalho:   { nome: 'Espantalho', art: 'o', preco: 400, nivel: 5, xp: 3, desc: 'Os canteiros a até 3 passos dele não dão mato.' },
   poste:        { nome: 'Poste de luz', art: 'o', preco: 300, nivel: 6, xp: 2 },
@@ -14627,6 +14645,7 @@ function colocarEnfeite(id, x, z){
 function itensEnfeite(e){
   const E = ENFEITES[e.tipo], r = { titulo: E.nome, icone: e.tipo === 'canteiroFlor' ? 'flores' : e.tipo, itens: [] };
   r.estado = E.desc || 'Deixa a fazenda mais bonita.';
+  if (e.tipo === 'canteiroFlor' && S.colmeias.some((d, i) => d && colmeiaAberta(i) && pertoDaColmeia(e, i))) r.estado = 'As abelhas da colmeia aqui perto vêm buscar néctar: ela dá o dobro de mel.';
   if (e.tipo === 'pocoDesejos'){
     const ja = S.desejoDia === diaAtual();
     r.itens.push({ rotulo: 'Fazer um pedido', sub: `R$ ${DESEJO.preco} na água; ${ja ? 'o XP de hoje já veio' : DESEJO.xp + ' XP, uma vez por dia'}`, icone: 'ed', fn: () => enfileirar('desejo', { k: 'poco', x: e.x, z: e.z }) });
@@ -18471,6 +18490,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Alimentador automático</b>${nv(ALIMENTADOR.galinha.nivel)}: um no galinheiro e um no curral. Dá ração sozinho, usando a ração do estoque.</li>
       <li><b>Chuva:</b> de tempos em tempos chove e todos os canteiros ficam regados, sem dar xp.</li>
       <li><b>Espantalho</b>${nv(ENFEITES.espantalho.nivel)}: os canteiros a até ${RAIO_ESPANTALHO} passos dele não dão mato.</li>
+      <li><b>Canteiro de flores</b>${nv(ENFEITES.canteiroFlor.nivel)}: a até ${FLOR_COLMEIA.raio} passos de uma colmeia, ela dá o dobro de mel. As abelhas voam em volta das flores que estão ajudando.</li>
       <li><b>Ferramentas do Ed</b>, na loja: enxada, botas, regador e carrinho fazem o Ed render mais.</li>
     </ul>`;
   if (abaAjuda === 'producao') corpo = `
@@ -19092,7 +19112,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
+  window.__fazenda = { flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
     galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(FAB_NOVAS).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
