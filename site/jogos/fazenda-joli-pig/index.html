@@ -229,12 +229,14 @@ button{font:inherit;color:inherit}
 .fala.beto{background:#e6f1fb}
 .fala.jaca{background:#e8f6dc}
 .fala.pelucio{background:#fde4e1}
+.fala.picoca{background:#f6efdf}
 .fala.milton{background:#ffe3d2}
 .fala.luma{background:#ffeedd}
 .fala.minhoquinha{background:#fde0e8}
 .dialogo .quem.minhoquinha{color:#d4607f}
 .dialogo .quem.beto{color:#2f6fb3}
 .dialogo .quem.jaca{color:#3e8f2c}
+.dialogo .quem.picoca{color:#a0763a}
 .dialogo .quem.milton{color:#d9531e}
 .dialogo .quem.lucia{color:#b8860b}
 .dialogo .quem.hud{color:#b58a12}
@@ -4827,8 +4829,10 @@ const LUCIA = { pele: 0xe8bb94, cabelo: 0x1a1414, vestido: 0xf2c230, barra: 0xff
 // Pelúcio na Joli Coffee. Por enquanto só no visualizador, fora da história. Pelúcia creme de pescoço comprido, focinho
 // branco com o sorriso e o nariz bordados em preto, olhos pretos, orelhas com o miolo marrom, cascos marrom-escuros, o
 // rabinho redondo e o colar de cordão branco trançado com pompons coloridos. De frente para +z, os cascos em y 0; no
-// jogo, mais ou menos da altura do Ed (as orelhas dela no nível das dele)
-const PICOCA = { escala: 1 / 42, pescoco: y => 6 + (y - 24) * 0.12 };
+// jogo, 25% mais alta que o Ed e o Pelúcio (o Lucas pediu)
+// entra na cena "A mana da Joli Coffee" (nível 16, na primeira vez que o Ed liga para o Pelúcio): pivôs do pescoço e das
+// pernas, em cubinhos, para ela andar, dar os pulinhos de alpaca e esticar o pescoço
+const PICOCA = { escala: 1 / 37.3, pescoco: y => 6 + (y - 24) * 0.12, nivel: 16, pivoPescoco: [0, 22, 3], pernas: [[-6, 11, 7], [6, 11, 7], [-6, 11, -9], [6, 11, -9]], altura: 1.7 };
 function vPicoca(){
   const v = new Vox(), PC = PICOCA;
   const pelo = (x, y, z) => hash(x, y >> 1, z) > 0.78 ? 0xe4d6b8 : hash(x + 7, y, z) > 0.9 ? 0xf6eedc : 0xefe3c8;
@@ -4891,6 +4895,77 @@ function vPicoca(){
     const escuro = new THREE.Color(c).multiplyScalar(0.85).getHex(), claro = new THREE.Color(c).lerp(new THREE.Color(0xffffff), 0.18).getHex();
     v.ell(ox + x / d * 0.8, y - n - 1.6, oz + (z - cz) / d * 0.8, 1.7, 1.7, 1.7, (xx, yy, zz) => { const h = hash(xx, yy, zz); return h > 0.75 ? escuro : h < 0.15 ? claro : c; });
   });
+  return v;
+}
+// a Picoça em partes (tronco, pescoço com a cabeça e o colar, e as quatro pernas), cada uma em volta do próprio pivô
+let partesPicocaCache = null;
+function partesPicoca(){
+  if (partesPicocaCache) return partesPicocaCache;
+  const P = PICOCA, tronco = new Vox(), pescoco = new Vox(), pernas = P.pernas.map(() => new Vox());
+  for (const e of vPicoca().m.values()){
+    const k = e.y <= 11 ? P.pernas.findIndex(([x, , z]) => Math.hypot(e.x - x, e.z - z) <= 5.6) : -1;
+    if (k >= 0){ const [px, py, pz] = P.pernas[k]; pernas[k].set(e.x - px, e.y - py, e.z - pz, e.c); }
+    else if ((e.y >= 22 && e.z >= -3) || e.y >= 30){ const [px, py, pz] = P.pivoPescoco; pescoco.set(e.x - px, e.y - py, e.z - pz, e.c); }
+    else tronco.set(e.x, e.y, e.z, e.c);
+  }
+  return (partesPicocaCache = { tronco, pescoco, pernas });
+}
+// a Picoça no mundo: anda como os porquinhos (ir, olhar, colocar) e tem os gestos dela. aceno: balança a cabeça
+// (quando fala); pulo: um pulinho de alpaca, com as quatro patas juntas; pulinhos: quantos pulinhos dar andando;
+// esticaAlvo (0 a 1): estica o pescoço para a frente; olhando: segundos olhando em volta, girando o pescoço
+class Picoca {
+  constructor(){
+    const s = PICOCA.escala, op = OP_PORCO, P = partesPicoca(), V = a => new THREE.Vector3(a[0] * s, a[1] * s, a[2] * s);
+    this.nome = 'picoca'; this.escala = s; this.altura = PICOCA.altura;
+    this.g = new THREE.Group(); this.corpo = new THREE.Group(); this.g.add(this.corpo);
+    this.corpo.add(malha(geo('picocaTronco', () => P.tronco.build(s, op))));
+    this.pesc = new THREE.Group(); this.pesc.position.copy(V(PICOCA.pivoPescoco)); this.pesc.add(malha(geo('picocaPescoco', () => P.pescoco.build(s, op)))); this.corpo.add(this.pesc);
+    this.pernas = PICOCA.pernas.map((q, i) => { const g = new THREE.Group(); g.position.copy(V(q)); g.add(malha(geo('picocaPerna' + i, () => P.pernas[i].build(s, op)))); this.corpo.add(g); return g; });
+    // a caneca do presente, na boca (só aparece na cena)
+    this.caneca = malha(geo('canecaJoli', () => vCanecaJoli().build(1 / 19, { origin: [0.5, 0, 0.5] })));
+    this.caneca.position.set(0, 13.5 * s, 17 * s); this.caneca.visible = false; this.pesc.add(this.caneca);
+    this.pos = new THREE.Vector2(); this.pontos = []; this.vel = 2.2; this.ang = 0; this.angAlvo = 0; this.fase = 0; this.estado = 'parado'; this.aoChegar = null;
+    this.aceno = 0; this.pulo = 0; this.pulinhos = 0; this.estica = 0; this.esticaAlvo = 0; this.olhando = 0; this.alt = 0;
+  }
+  colocar(x, z){ this.pos.set(x, z); this.g.position.set(x, this.alt, z); }
+  ir(pontos, aoChegar){ this.pontos = pontos.slice(); this.aoChegar = aoChegar; this.estado = this.pontos.length ? 'andando' : 'parado'; if (!this.pontos.length && aoChegar) aoChegar(); }
+  olhar(x, z){ if (Math.hypot(x - this.pos.x, z - this.pos.y) > 0.01) this.angAlvo = Math.atan2(x - this.pos.x, z - this.pos.y); }
+  topo(){ return new THREE.Vector3(this.pos.x, this.altura, this.pos.y); }
+  update(dt, t){
+    if (this.estado === 'andando'){
+      const p = this.pontos[0], dx = p[0] - this.pos.x, dz = p[1] - this.pos.y, d = Math.hypot(dx, dz), passo = this.vel * dt;
+      if (d <= passo){ this.pos.set(p[0], p[1]); this.pontos.shift(); if (!this.pontos.length){ this.estado = 'parado'; const cb = this.aoChegar; this.aoChegar = null; if (cb) cb(); } }
+      else { this.pos.x += dx / d * passo; this.pos.y += dz / d * passo; this.angAlvo = Math.atan2(dx, dz); }
+      this.fase += dt * 10;
+    }
+    this.ang = anguloPerto(this.ang, this.angAlvo, Math.min(1, dt * 10));
+    this.g.position.set(this.pos.x, this.alt, this.pos.y); this.g.rotation.y = this.ang;
+    const andando = this.estado === 'andando';
+    // os pulinhos andando: um atrás do outro, até acabarem
+    if (this.pulo <= 0 && this.pulinhos > 0 && andando){ this.pulinhos--; this.pulo = 0.5; if (this.g.visible) Som.tom(700, 0.07, 'sine', 0.025, 1000); }
+    // andando, as patas em diagonal vão juntas; no pulinho, as quatro esticam juntas
+    const sw = andando && this.pulo <= 0 ? Math.sin(this.fase) * 0.5 : 0;
+    this.pernas.forEach((g, i) => { g.rotation.x = (i === 0 || i === 3 ? sw : -sw); });
+    this.corpo.position.y = andando && this.pulo <= 0 ? Math.abs(Math.sin(this.fase)) * 0.025 : 0;
+    if (this.pulo > 0){
+      this.pulo -= dt; const k = 1 - Math.max(0, this.pulo) / 0.5;
+      this.corpo.position.y = Math.sin(k * Math.PI) * 0.28;
+      this.pernas.forEach((g, i) => { g.rotation.x = (i < 2 ? -1 : 1) * Math.sin(k * Math.PI) * 0.25; });
+    }
+    // o pescoço: respira, balança a cabeça falando, olha em volta e estica para a frente
+    this.estica += (this.esticaAlvo - this.estica) * Math.min(1, dt * 4);
+    let rx = Math.sin(t * 1.3) * 0.02 + this.estica * 0.85 + (andando ? Math.sin(this.fase * 2) * 0.05 : 0), ry = Math.sin(t * 0.7) * 0.08;
+    if (this.aceno > 0){ this.aceno -= dt; rx += Math.sin(t * 9) * 0.07; }
+    if (this.olhando > 0){ this.olhando -= dt; ry = Math.sin(t * 1.6) * 0.7; }
+    this.pesc.rotation.set(rx, ry, 0);
+  }
+}
+// a caneca da Joli Coffee, presente da Picoça: rosa do moletom do Pelúcio, com o P vermelho e a asa
+function vCanecaJoli(){
+  const v = new Vox(), R = MOLETOM.rosa;
+  v.box(-2, 0, -2, 2, 4, 2, R); v.box(-2, 0, -2, 2, 0, 2, MOLETOM.punho);
+  for (const [x, y] of [[-1, 1], [-1, 2], [-1, 3], [0, 3], [1, 3], [1, 2], [0, 2]]) v.set(x, y, 3, MOLETOM.p);
+  v.box(-1, 4, -1, 1, 4, 1, 0x5a3320); v.box(3, 1, 0, 3, 3, 0, R); v.set(0, 5, 0, 0xfdfcf8); v.set(1, 5, 0, 0xfdfcf8);
   return v;
 }
 function vLucia(){
@@ -8511,6 +8586,7 @@ const VI = {
   ovopata(){ const v = new Vox(); v.ell(0, 4.4, 0, 3, 4.2, 3, (x, y) => y > 6 ? 0xf6f8ef : 0xe4ead8); return v; },
   milton(){ return vPorco(0, 0, false, 'moletom'); }, aviao(){ return vTecoTeco(); }, jato(){ return vJatinho(); },
   saci(){ return vSaci(); },
+  picoca(){ return vPicoca(); }, canecaJoli(){ return vCanecaJoli(); },
   ed(){ return vPorco(COR.ed, COR.edBolso); }, hud(){ return vPorco(COR.ed, COR.edBolso); }, dani(){ return vPorco(COR.dani, COR.daniBolso); }, beto(){ return vPorco(COR.beto, COR.betoBolso); }, pelucio(){ return vPorco(0, 0, false, 'moletom'); },
   cafe(){ const v = new Vox(); v.ell(-2.4, 2, 0, 2.3, 1.7, 3.3, 0x6b4226); v.ell(2.6, 2, 0.6, 2.3, 1.7, 3.3, 0x7d4e2c); for (let z = -2; z <= 2; z++){ v.set(-2, 3, z, 0x3f2616); v.set(3, 3, z + 1, 0x3f2616); } v.ell(0, 1.4, -4.5, 1.8, 1.2, 1.8, 0xc8323a); return v; },
   xicara(){ const v = new Vox(); for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++) if (x * x + z * z <= 17) v.box(x, 0, z, x, 6, z, (X, Y) => Y === 3 ? 0xf28fac : 0xfdf8ef); for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) if (x * x + z * z <= 10) v.set(x, 6, z, 0x6b4226); v.box(5, 2, 0, 6, 2, 0, 0xfdf8ef); v.box(5, 5, 0, 6, 5, 0, 0xfdf8ef); v.box(6, 2, 0, 6, 5, 0, 0xfdf8ef); return v; },
@@ -8669,6 +8745,12 @@ const TEMAS = {
     { tipo: 'sine', vol: 0.018, notas: 'D4+F#4+A4+C#5:4 E4+G4+B4+D5:4 C#4+E4+G4+A4:4 D4+F#4+A4+C#5:4' },
     { tipo: 'square', vol: 0.012, leg: 0.6, notas: 'D3:1.5 A2:.5 D3:2 E3:1.5 B2:.5 E3:2 A2:1.5 E3:.5 A2:2 D3:1.5 A2:.5 D3:2' },
     { tipo: 'x', vol: 0.025, notas: 'x:.75 x:.75 x:.5 x:1 x:1 x:.75 x:.75 x:.5 x:1 x:1 x:.75 x:.75 x:.5 x:1 x:1 x:.75 x:.75 x:.5 x:1 x:1' } ] },
+  // A mana da Joli Coffee: flautinha de estilo andino (original), em lá menor pentatônico, no passo saltitado de um huayno
+  picoca: { bpm: 104, ganho: 1.0, loop: true, faixas: [
+    { tipo: 'sine', vol: 0.05, notas: 'A5:.5 C6:.5 A5:.5 G5:.5 E5:1 G5:.5 A5:.5 C6:1 D6:.5 C6:.5 A5:2 G5:.5 A5:.5 G5:.5 E5:.5 D5:1 E5:.5 G5:.5 A5:1 E5:.5 D5:.5 C5:.5 A4:1.5' },
+    { tipo: 'sine', vol: 0.016, notas: 'A3+C4+E4:4 G3+B3+D4:4 F3+A3+C4:4 G3+B3+D4:4' },
+    { tipo: 'triangle', vol: 0.04, leg: 0.7, notas: 'A2:.75 A2:.25 E3:.5 A2:.5 A2:.75 A2:.25 E3:.5 C3:.5 G2:.75 G2:.25 D3:.5 G2:.5 G2:.75 G2:.25 D3:.5 B2:.5 F2:.75 F2:.25 C3:.5 F2:.5 F2:.75 F2:.25 C3:.5 A2:.5 G2:.75 G2:.25 D3:.5 G2:.5 G2:.75 G2:.25 D3:.5 B2:.5' },
+    { tipo: 'x', vol: 0.025, notas: 'x:.75 x:.25 x:.5 x:.5 x:.75 x:.25 x:.5 x:.5 x:.75 x:.25 x:.5 x:.5 x:.75 x:.25 x:.5 x:.5 x:.75 x:.25 x:.5 x:.5 x:.75 x:.25 x:.5 x:.5 x:.75 x:.25 x:.5 x:.5 x:.75 x:.25 x:.5 x:.5' } ] },
   // Sócias da terra: notinhas curtas que pulam, em dó maior
   minhocas: { bpm: 126, ganho: 1.7, loop: true, faixas: [
     { tipo: 'square', vol: 0.022, leg: 0.4, notas: 'C5:.5 r:.5 E5:.5 r:.5 G5:.5 E5:.5 C5:1 D5:.5 r:.5 F5:.5 r:.5 A5:.5 F5:.5 D5:1 E5:.5 G5:.5 C6:.5 G5:.5 F5:.5 D5:.5 B4:.5 G4:.5 C5:1 G4:1 C5:2' },
@@ -11331,8 +11413,10 @@ class Porco {
   ferramenta(n){
     for (const k in this.ferramentas) this.ferramentas[k].visible = false;
     if (!n) return;
+    // depois do presente da Picoça, o Ed toma o lanchinho na caneca da Joli Coffee
+    if (n === 'caneca' && this.nome === 'ed' && S.canecaJoli) n = 'canecaJoli';
     if (!this.ferramentas[n]){
-      const fn = { enxada: vEnxada, regador: vRegador, cesta: vCesta, saco: vSaco, caneca: vCaneca, maca: VI.maca, prancheta: vPrancheta, trena: vTrena, martelo: vMartelo }[n];
+      const fn = { enxada: vEnxada, regador: vRegador, cesta: vCesta, saco: vSaco, caneca: vCaneca, canecaJoli: vCanecaJoli, maca: VI.maca, prancheta: vPrancheta, trena: vTrena, martelo: vMartelo }[n];
       if (!fn) return; // 'comer' e afins: só o gesto, sem ferramenta
       const mm = malha(geo('ferr' + n, () => fn().build(1 / 19, { origin: [0.5, 0, 0.5] })));
       this.mao.add(mm); this.ferramentas[n] = mm;
@@ -11737,7 +11821,7 @@ function comprarAlimentador(tp){
 }
 
 // ================= Ed, os visitantes do Joli Market e o caminhão
-let milton, irmaoHud, irmaoDani, ed, beto, jaca, pelucio, patrinho, maurinho, garupa, maurinhoObra, saci, pilotoBistro, visita, caminhao, caminhaoMarket, caminhaoCafe, caminhaoBistro, mochilaChao;
+let picoca, milton, irmaoHud, irmaoDani, ed, beto, jaca, pelucio, patrinho, maurinho, garupa, maurinhoObra, saci, pilotoBistro, visita, caminhao, caminhaoMarket, caminhaoCafe, caminhaoBistro, mochilaChao;
 // quem vem no caminhão: quase sempre o Beto, às vezes o Jaca (nunca na primeira visita)
 const VISITA = {
   beto: {
@@ -12285,6 +12369,7 @@ function construirPersonagens(){
   jaca.g.visible = false; jaca.vel = 2.3; scene.add(jaca.g);
   pelucio = new Porco(0, 0, 'pelucio', modeloMoletom(1.32));
   pelucio.g.visible = false; scene.add(pelucio.g);
+  picoca = new Picoca(); picoca.g.visible = false; scene.add(picoca.g);
   // o Milton é igual ao Pelúcio, com metade do tamanho
   milton = new Porco(0, 0, 'milton', modeloMoletom(0.7));
   milton.g.scale.setScalar(0.5); milton.g.visible = false; milton.vel = 1.8; scene.add(milton.g);
@@ -12386,6 +12471,8 @@ function chamarPelucio(){
   if (caminhaoE.estado === 'aqui' && visita === pelucio){ abrirBeto(); return; }
   if (caminhaoE.estado !== 'longe'){ aviso(`${dadosVisita().nome} ainda está por aqui. Espere ele ir embora.`); return; }
   if (cenaPedida){ aviso('Uma cena vai começar. Espere um pouquinho.'); return; }
+  // a partir do nível 16, na primeira vez, a Picoça vem junto (a cena dela; a visita continua depois)
+  if (nivel() >= PICOCA.nivel && !S.viuCinePicoca && S.viuCinePelucio && !cine && ed.estado === 'parado' && !tarefaAtual && !algumaJanela() && !menuAberto){ iniciarCine('picoca'); hud(); return; }
   visita = pelucio; caminhao = caminhaoCafe;
   caminhaoE.estado = 'chegando'; caminhaoE.t = 0; caminhao.visible = true; naEstrada(caminhao, -5);
   Som.buzina(); aviso('Você ligou pro Pelúcio. A van da Joli Coffee já vem!'); hud();
@@ -12425,6 +12512,8 @@ function atualizarCaminhao(dt){
     if (c.t <= 0){
       c.estado = 'voltando';
       const v = visita;
+      // a Picoça, se veio junto, volta para a van também
+      if (picoca.acompanha) picoca.ir([[PARADA + 0.55, Z_CERCA + 0.4], [PARADA + 0.55, Z_CERCA + 0.85]], () => { picoca.g.visible = false; picoca.acompanha = false; });
       v.ir([[PARADA, Z_CERCA + 0.4], [PARADA, Z_CERCA + 0.85]], () => { v.g.visible = false; caminhaoE.estado = 'saindo'; caminhaoE.t = 0; Som.buzina(); });
     }
   } else if (c.estado === 'saindo'){
@@ -12432,7 +12521,7 @@ function atualizarCaminhao(dt){
     const e = Math.pow(Math.min(1, c.t), 2);
     naEstrada(caminhao, lerp(PARADA, FIM_ESTRADA, e));
     caminhao.position.y = Math.abs(Math.sin(c.t * 40)) * 0.015;
-    if (c.t >= 1){ c.estado = 'longe'; caminhao.visible = false; hud(); }
+    if (c.t >= 1){ c.estado = 'longe'; caminhao.visible = false; picoca.g.visible = false; picoca.acompanha = false; hud(); }
   }
 }
 // segundos para ler um balão: uns 15 caracteres por segundo, entre 3 e 5,5 s
@@ -12539,6 +12628,41 @@ const falasFesta = () => [
 const PONTO_ED = [18.5, 18.5], PONTO_PELUCIO = [17.5, 19.5];
 // cena do Jaca: conversa no mesmo lugar da do Pelúcio; no fim ele anda até o lugar de espera das visitas
 const JACA_ESPERA = [PARADA, Z_CERCA - 0.6], JACA_CENA = PONTO_PELUCIO, JACA_ED = PONTO_ED;
+// A mana da Joli Coffee: o quarto item dispara um trecho da cena; o quinto, um gesto da Picoça (CENAS.picoca.aoFalar)
+const FALAS_PICOCA = [
+  ['pelucio', 'Pelúcio', 'Irmão, alguém insistiu muito para vir junto hoje.', 'pc-surge'],
+  ['ed', 'Ed', 'Picoça! Você veio mesmo!'],
+  ['picoca', 'Picoça', 'Edinho! Eu falei que um dia vinha ver essa fazenda de perto, não falei?'],
+  ['picoca', 'Picoça', 'Nossa... pelo telefone não parecia tão grande!', null, 'olha'],
+  ['ed', 'Ed', 'E isso porque você ainda nem viu tudo!'],
+  ['picoca', 'Picoça', 'Tá comendo direito? Tá dormindo cedo? Tá passando protetor no sol?'],
+  ['ed', 'Ed', 'Ai, Picoça... tô sim!'],
+  ['pelucio', 'Pelúcio', 'Ela me pergunta a mesma coisa toda manhã na Joli Coffee.'],
+  ['picoca', 'Picoça', 'Alguém tem que cuidar de vocês dois! Sou a mais velha, ué.'],
+  ['picoca', 'Picoça', 'E agora, falando como sócia: provei o café que você mandou para o Pelúcio.'],
+  ['ed', 'Ed', 'E aí?'],
+  ['picoca', 'Picoça', 'Se estivesse ruim, eu cuspia...', null, 'estica'],
+  ['picoca', 'Picoça', 'Mas está uma delícia. Estou orgulhosa de você, Edinho.', null, 'volta'],
+  ['ed', 'Ed', 'Aoooa! Valeu, mana!'],
+  ['picoca', 'Picoça', 'Trouxe uma coisinha, como sempre...', 'pc-presente'],
+  ['picoca', 'Picoça', 'Uma caneca da Joli Coffee, para o seu lanchinho.'],
+  ['ed', 'Ed', 'Você nunca vem de mãos vazias!'],
+  ['picoca', 'Picoça', 'Nem de pescoço vazio. Agora, vamos ver esse café?'],
+];
+// onde a Picoça fica na conversa e esperando a venda, do ladinho do Pelúcio
+const PONTO_PICOCA = [19.7, 19.1], ESPERA_PICOCA = [PARADA + 1, Z_CERCA - 0.45];
+// a caneca da Joli Coffee vai para o Ed, uma vez só (na reprise só a festinha)
+function presenteDaPicoca(){
+  if (cine.presente || cine.reprise) return;
+  cine.presente = true; S.canecaJoli = true;
+  flutuar(ed.topo(), 'Caneca', '', 'canecaJoli');
+}
+// tira a Picoça, o Pelúcio e a van de cena (reprise)
+function limparPicoca(){
+  for (const p of [picoca, pelucio]){ p.g.visible = false; p.pontos = []; p.estado = 'parado'; p.aceno = 0; p.aoChegar = null; }
+  picoca.alt = 0; picoca.esticaAlvo = picoca.estica = 0; picoca.caneca.visible = false; picoca.acompanha = false;
+  caminhao.visible = false;
+}
 // cena do Hud: a porta da casa, onde o Ed espera, onde o Hud para e o canteiro da demonstração (no primeiro terreno)
 const HUD_PORTA = [5.5, 5.6], HUD_ED = [9.5, 6.5], HUD_PARA = [8.5, 6.5];
 // cena do Dani: o Ed e o Hud conversam na frente da casa e o Dani chega pela estradinha de cima, vindo do leste.
@@ -12730,7 +12854,7 @@ function montarCafe(){
   const prato = malha(geo('cafePrato', () => vPratoCafe().build(1 / 19))); prato.position.set(CAFE_PRATO[0], topo, CAFE_PRATO[1]); g.add(prato);
   const comida = malha(geo('cafe_' + plano.comida, () => (plano.comida === 'bolo' ? vFatia() : VI[plano.comida]()).build(1 / 19)));
   comida.position.set(CAFE_PRATO[0], topo + 1 / 19, CAFE_PRATO[1]); g.add(comida);
-  const caneca = malha(geo('cafeCaneca', () => vCaneca().build(1 / 19)));
+  const caneca = S.canecaJoli ? malha(geo('cafeCanecaJoli', () => vCanecaJoli().build(1 / 19))) : malha(geo('cafeCaneca', () => vCaneca().build(1 / 19)));
   caneca.position.set(CAFE_CANECA[0], topo, CAFE_CANECA[1]); g.add(caneca);
   scene.add(g);
   Object.assign(cafe, { g, comida, caneca });
@@ -13151,6 +13275,110 @@ const CENAS = {
       if (!estFab('terreiro').feita){ estFab('terreiro').feita = true; montarFabrica('terreiro'); }
       aviso('Café liberado! O Pelúcio compra o café seco para a Joli Coffee.', 'grande', 4.5);
     },
+  },
+  // A mana da Joli Coffee (o Lucas pediu): nível 16, na primeira vez que o Ed liga para o Pelúcio. A Picoça, irmã mais velha,
+  // vem junto na van para ver a fazenda de perto pela primeira vez; no fim a visita do Pelúcio continua, como a do Jaca
+  picoca: {
+    flag: 'viuCinePicoca', nivel: () => PICOCA.nivel, musica: 'pelucio', falas: FALAS_PICOCA, icone: 'picoca',
+    titulo: 'A mana da Joli Coffee', desc: 'A Picoça, a irmã mais velha, vem ver a fazenda com o Pelúcio.', trancada: `quando o Ed liga para o Pelúcio, a partir do nível ${PICOCA.nivel}`,
+    // começa por chamarPelucio, nunca sozinha
+    pronta: () => false,
+    visitante: () => pelucio,
+    foco(c){
+      if (c.passo === 'chegando' || c.passo === 'descendo' || (c.passo === 'pc-surge' && c.t < 1.6)) return new THREE.Vector3(PARADA - 0.1, 0.45, (PONTO_ED[1] + Z_CERCA + 1.2) / 2 + 0.4);
+      return new THREE.Vector3((PONTO_ED[0] + PONTO_PELUCIO[0] + PONTO_PICOCA[0]) / 3 + 0.2, 0.45, (PONTO_ED[1] + PONTO_PELUCIO[1] + PONTO_PICOCA[1]) / 3 + 0.5);
+    },
+    vista(c){
+      const p = c.passo, f = telaEstreita() ? 1.5 : 1;
+      if (p === 'chegando' || p === 'descendo' || p === 'partindo' || (p === 'pc-surge' && c.t < 1.6)) return 6 * f;
+      return 4.6 * (telaEstreita() ? 1.8 : 1);
+    },
+    iniciar(c){
+      caminhao = caminhaoCafe; caminhao.visible = true; naEstrada(caminhao, -5);
+      caminhaoE.estado = 'cine';
+      const pts = rota(clamp(Math.floor(ed.pos.x), 0, W - 1), clamp(Math.floor(ed.pos.y), 0, H - 1), Math.floor(PONTO_ED[0]), Math.floor(PONTO_ED[1]));
+      if (pts) ed.ir(pts, () => ed.olhar(...PONTO_PELUCIO)); else { ed.colocar(...PONTO_ED); ed.olhar(...PONTO_PELUCIO); }
+      // a buzina da van com dois toquinhos
+      Som.buzina(); setTimeout(() => Som.tom(523, 0.12, 'square', 0.04), 520);
+      return 'chegando';
+    },
+    desce(c){
+      pelucio.g.visible = true; pelucio.colocar(PARADA, Z_CERCA + 0.85); pelucio.ang = pelucio.angAlvo = Math.PI;
+      pelucio.ir([[PARADA, Z_CERCA + 0.4], PONTO_PELUCIO], () => { c.chegou = true; pelucio.olhar(...PONTO_ED); });
+    },
+    posicionar(){ virarNaCena(ed, ...PONTO_PELUCIO); virarNaCena(pelucio, ...PONTO_ED); },
+    // gestos de algumas falas (o quinto item): olhar em volta, esticar o pescoço até o Ed, voltar
+    aoFalar(f){
+      const g = f[4];
+      if (g === 'olha') picoca.olhando = 3.5;
+      if (g === 'estica'){ picoca.esticaAlvo = 1; setTimeout(() => { if (cine && cine.cena === CENAS.picoca){ ed.pulo = 0.45; Som.tom(330, 0.14, 'triangle', 0.04, 260); } }, 450); }
+      if (g === 'volta') picoca.esticaAlvo = 0;
+    },
+    trecho(c, dt){
+      const P = picoca;
+      if (c.passo === 'pc-surge'){
+        // atrás da van: primeiro as orelhas e o topete aparecem por cima dela, o Ed reconhece e ela desce aos pulinhos
+        if (!c.ini){
+          c.ini = true; c.ok = false; c.foi = false; c.viu = false;
+          P.alt = -0.7; P.g.visible = true; P.pontos = []; P.estado = 'parado'; P.esticaAlvo = P.estica = 0; P.olhando = 0;
+          P.colocar(PARADA + 0.45, Z_CERCA + 0.95); P.ang = P.angAlvo = Math.PI;
+          Musica.tocar('picoca');
+        }
+        P.alt = c.t < 1.1 ? -0.7 * (1 - (1 - Math.pow(1 - c.t / 1.1, 3))) : 0;
+        if (!c.viu && c.t >= 1.3){ c.viu = true; ed.pulo = 0.45; ed.aceno = 1.2; Som.oinc(); }
+        if (!c.foi && c.t >= 1.9){
+          c.foi = true; P.pulinhos = 3;
+          P.ir([[PARADA + 0.45, Z_CERCA + 0.4], [PARADA + 0.45, Z_CERCA - 0.6], PONTO_PICOCA], () => { c.ok = true; });
+        }
+        if (P.pulo > 0 && P.pulo > 0.45) Som.tom(700, 0.06, 'sine', 0.02, 900);
+        if (c.ok && P.pulo <= 0){ virarNaCena(P, ...PONTO_ED); c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
+        return;
+      }
+      if (c.passo === 'pc-presente'){
+        // estica o pescoço até o Ed com a caneca na boca; a caneca passa para o Ed
+        if (!c.ini){ c.ini = true; c.deu = false; P.esticaAlvo = 1; P.caneca.visible = true; }
+        if (!c.deu && c.t >= 1.1){
+          c.deu = true; P.caneca.visible = false; P.esticaAlvo = 0;
+          presenteDaPicoca();
+          Som.moeda(); Musica.vinheta('tchan');
+          for (let i = 0; i < 14; i++) particula(ed.pos.x + rnd(-0.4, 0.4), 0.9, ed.pos.y + rnd(-0.4, 0.4), [0xf8c2ba, 0xc8303a, 0xffffff][i % 3], 1.2);
+          ed.trabalhar(2.2, 'caneca', null);
+        }
+        if (c.t >= 2.6){ c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
+        return;
+      }
+      if (c.passo === 'pc-espera'){
+        // os dois vão para o lugar de espera das visitas, a Picoça do ladinho do Pelúcio
+        if (!c.ini){ c.ini = true; c.n = 0; pelucio.ir([JACA_ESPERA], () => c.n++); P.ir([ESPERA_PICOCA], () => c.n++); }
+        if (c.n >= 2){ pelucio.olhar(...PONTO_ED); P.angAlvo = Math.PI; c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
+      }
+    },
+    // na primeira vez a visita continua (a janela de venda abre); na reprise os dois acenam e vão embora na van
+    fimDasFalas(c){
+      $('cineDialogo').hidden = true;
+      if (c.reprise){
+        pelucio.aceno = 1.6; picoca.aceno = 1.6; c.passo = 'despedida'; c.t = 0;
+        picoca.ir([[PARADA + 0.45, Z_CERCA - 0.6], [PARADA + 0.45, Z_CERCA + 0.4], [PARADA + 0.45, Z_CERCA + 0.85]], () => { picoca.g.visible = false; });
+        return;
+      }
+      c.passo = 'pc-espera'; c.t = 0; c.ini = false;
+    },
+    pular(c){
+      ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; ed.trab = null; ed.ferramenta(null);
+      if (c.reprise){ limparPicoca(); return; }
+      presenteDaPicoca();
+      ed.colocar(...PONTO_ED); ed.olhar(...JACA_ESPERA);
+    },
+    fim(){
+      S.viuCinePicoca = true; S.visitas = (S.visitas || 0) + 1;
+      visita = pelucio; caminhao = caminhaoCafe; caminhao.visible = true; naEstrada(caminhao, PARADA);
+      caminhaoE.estado = 'aqui';
+      pelucio.g.visible = true; pelucio.pontos = []; pelucio.estado = 'parado'; pelucio.colocar(...JACA_ESPERA); pelucio.ang = pelucio.angAlvo = Math.PI;
+      const P = picoca; P.g.visible = true; P.pontos = []; P.estado = 'parado'; P.alt = 0; P.esticaAlvo = P.estica = 0; P.caneca.visible = false; P.colocar(...ESPERA_PICOCA); P.ang = P.angAlvo = Math.PI; P.acompanha = true;
+      aviso('A Picoça deu uma caneca da Joli Coffee: o lanchinho do Ed agora é nela.', 'grande', 4.5);
+      setTimeout(() => { if (caminhaoE.estado === 'aqui' && visita === pelucio && !algumaJanela() && !cine) abrirBeto(); }, 500);
+    },
+    restaurar(){ limparPicoca(); },
   },
   jaca: {
     flag: 'conheceuJaca', nivel: () => 1, musica: 'jaca', falas: FALAS_JACA, icone: 'jaca',
@@ -14553,7 +14781,7 @@ const CENAS = {
   },
 };
 // a ordem da história; uma cena que ainda não existe em CENAS fica de fora
-const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'patrinho', 'lucia', 'pelucio', 'minhocas', 'mata', 'festa', 'curupira', 'jato', 'dani', 'maurinho', 'abducao', 'aposentadoria', 'nanar', 'cafezinho', 'resort', 'arraied', 'volta'];
+const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'patrinho', 'lucia', 'pelucio', 'minhocas', 'picoca', 'mata', 'festa', 'curupira', 'jato', 'dani', 'maurinho', 'abducao', 'aposentadoria', 'nanar', 'cafezinho', 'resort', 'arraied', 'volta'];
 const ordemCenas = () => ORDEM_CENAS.filter(id => CENAS[id]);
 // uma cena começa sozinha quando ainda não foi vista e está pronta (pelo nível, ou pela regra própria dela)
 const cenaPronta = id => { const C = CENAS[id]; return (!S[C.flag] || C.repete) && (C.pronta ? C.pronta() : nivel() >= C.nivel()); };
@@ -14647,6 +14875,8 @@ function atualizarCine(dt){
     }
     // cena do Jaca: o presente; cena do Hud: sai de casa, mostra o que faz e volta
     case 'presente': cena.presente(c); break;
+    // cena da Picoça
+    case 'pc-surge': case 'pc-presente': case 'pc-espera': cena.trecho(c, dt); break;
     case 'jacaesp': cena.espera(c); break;
     case 'hudsai': cena.sai(c); break;
     // cena do Dani
@@ -14721,7 +14951,7 @@ function atualizarCine(dt){
 // rosto na caixa de diálogo de quem não tem ícone próprio, e quem acena quando fala
 const ROSTO_CINE = { todos: 'festa', galinha: 'aposentada', vaca: 'vacaEspaco', et: 'disco' };
 function guardarPranchetaCena(){ const M = maurinho; M.trab = null; M.estado = 'parado'; M.mao.rotation.x = 0; M.ferramenta(null); }
-const FALANTES = { beto: () => beto, jaca: () => jaca, pelucio: () => pelucio, milton: () => milton, hud: () => irmaoHud, dani: () => irmaoDani, maurinho: () => maurinho, curupira: () => curupira, saci: () => saci };
+const FALANTES = { picoca: () => picoca, beto: () => beto, jaca: () => jaca, pelucio: () => pelucio, milton: () => milton, hud: () => irmaoHud, dani: () => irmaoDani, maurinho: () => maurinho, curupira: () => curupira, saci: () => saci };
 function mostrarFalaCine(i){
   const c = cine, [quem, nome, txt] = c.cena.falas[i];
   c.linha = i; c.letras = 0; c.tfala = c.t;
@@ -14738,7 +14968,7 @@ function mostrarFalaCine(i){
   }
   else if (FALANTES[quem]){ const f = FALANTES[quem](); if (f) f.aceno = 2; }
   if (c.cena.aoFalar) c.cena.aoFalar(c.cena.falas[i]);
-  if (quem === 'minhoquinha') Som.pop(); else if (quem === 'luma') Som.au(); else if (quem === 'galinha') Som.co(); else if (quem === 'vaca') Som.muu(); else if (quem === 'et') Som.tom(900, 0.25, 'sine', 0.03, 1400); else Som.oinc();
+  if (quem === 'minhoquinha') Som.pop(); else if (quem === 'picoca') Som.tom(620, 0.16, 'sine', 0.03, 760); else if (quem === 'luma') Som.au(); else if (quem === 'galinha') Som.co(); else if (quem === 'vaca') Som.muu(); else if (quem === 'et') Som.tom(900, 0.25, 'sine', 0.03, 1400); else Som.oinc();
 }
 function avancarCine(){
   const c = cine;
@@ -16175,6 +16405,7 @@ const FIGURINHAS = [
   { id: 'hud', nome: 'Irmãos unidos', desc: 'chamar o Hud 5 vezes', icone: 'hud', xp: 20, cond: () => conta('acoes', 'hud') >= 5 },
   { id: 'milton', nome: 'Milton na área!', desc: 'receber o Milton na pista', icone: 'milton', xp: 15, cond: () => !!S.conheceuMilton },
   { id: 'pelucio', nome: 'Café com o Pelúcio', desc: 'conhecer a Joli Coffee', icone: 'pelucio', xp: 20, cond: () => !!S.viuCinePelucio },
+  { id: 'picoca', nome: 'A mana da Joli Coffee', desc: 'receber a visita da Picoça', icone: 'picoca', xp: 20, cond: () => !!S.viuCinePicoca },
   { id: 'socias', nome: 'Sócias da terra', desc: 'conhecer as Minhoquinhas', icone: 'minhoquinha', xp: 20, cond: () => !!S.viuCineMinhocas },
   { id: 'festa', nome: 'Festa na fazenda', desc: 'comemorar o nível 25 com a família', icone: 'festa', xp: 20, cond: () => !!S.viuCineFesta },
   { id: 'barista', nome: 'Barista', desc: 'secar 100 cafés', icone: 'cafe', xp: 50, cond: () => conta('feitos', 'cafe') >= 100 },
@@ -19513,6 +19744,7 @@ function quadro(agoraP){
   atualizarTrilha(dt, t);
   atualizarNanos(dt, t);
   if (pelucio.g.visible) pelucio.update(dt, t);
+  if (picoca.g.visible) picoca.update(dt, t);
   if (patrinho.g.visible) patrinho.update(dt, t);
   if (maurinho.g.visible) maurinho.update(dt, t);
   if (saci.g.visible) saci.update(dt, t);
@@ -19747,7 +19979,7 @@ async function iniciar(){
       noLugar: (v, tipo, i = 0, t = 999) => { if (!gradeSpa) montarGradeSpa(); const q = lugaresSpa.filter(l => l.tipo === tipo)[i], [x, z] = mundoSpa(q.x, q.z); Object.assign(v, { x, z, y: q.y, lugar: q, vai: 'lugar', estado: 'atividade', t, ang: q.ang, pagou: true, pts: [] }); v.g.visible = true; if (tipo === 'cadeira' && v.pep) v.pep.visible = true; } },
     observatorio: { OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
-    luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
+    luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
     // auditoria de colisões: o que o desenho de uma construção (n = nível da reforma, ou 'andaime') põe fora do terreno dela
     fora(id, n){
       const p = PREDIO[id], fab = !!FABRICAS[id], v = n === 'andaime' ? vAndaime(id) : vReforma(id, n), s = 1 / 8, h = s / 2;
@@ -19850,8 +20082,12 @@ function catalogoModelos(){
     } })) }, luma('Luma'), { nome: 'Picoça', variantes: [{ nome: 'Sozinha', cria: vox(vPicoca) }, { nome: 'Com o Ed', cria: () => {
       // lado a lado, na escala do jogo, para comparar o tamanho
       const g = new THREE.Group(), p = new Porco(COR.ed, COR.edBolso, 'ed'), m = malha(geo('picoca', () => vPicoca().build(PICOCA.escala, OP_PORCO)));
-      p.update(0, 0); p.g.position.set(-0.45, 0, 0); m.position.set(0.45, 0, 0); g.add(p.g, m);
+      p.update(0, 0); p.g.position.set(-0.55, 0, 0); m.position.set(0.55, 0, 0); g.add(p.g, m);
       return g;
+    } }, { nome: 'Andando', cria: () => {
+      const p = new Picoca();
+      p.g.userData.anima = (dt, t) => { p.estado = 'andando'; p.pontos = [[1e6, 0]]; if (p.pulo <= 0 && Math.sin(t * 0.8) > 0.97) p.pulo = 0.5; p.update(dt, t); p.pos.set(0, 0); p.g.position.set(0, 0, 0); p.g.rotation.y = 0; };
+      p.g.userData.anima(0, 0); return p.g;
     } }] }, um('Lúcia', vLucia), varios('Nano do hostel', [0, 1, 2, 3, 4].map(k => [`Nano ${k + 1}`, () => vNano(k)])), um('Carolina', vCarolina), um('Lucas', vLucas), varios('Visitante da trilha', [0, 1, 2, 3, 4, 5].map(k => ['Visitante ' + (k + 1), () => vVisitante(k)])), { nome: 'Saci Pererê', variantes: [{ nome: '', cria: () => {
       const p = new Porco(0, 0, 'saci', MODELO_SACI);
       p.pE.visible = false;
