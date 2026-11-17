@@ -394,6 +394,7 @@ O Lucas pediu otimizações sem mexer na imagem nem no jogo. O que foi medido e 
   - o tamanho dos pedidos conta só os seis terrenos da horta (os do canto não fazem os pedidos crescerem);
   - o grosso do equilíbrio fica com as obras grandes do Maurinho (seção Obras novas).
 - "Vender a sobra" (a janela do Beto e do Jaca) guarda o que os pedidos abertos pedem e também os ingredientes do que ainda falta fazer (`reservaPedidos`, `separadoPedidos`): do que falta, primeiro conta o que já está na fila das fábricas ou pronto para recolher (`aCaminhoDasFabricas`); o resto vira receitas de uma fábrica construída e liberada (`receitaQueFaz`), e os ingredientes delas ficam guardados, descendo de nível quando falta um ingrediente (o milho do fubá do bolo). Antes ele vendia esses ingredientes e atrapalhava o progresso (o Lucas notou). Só o celeiro é guardado, até o que tem; os botões de vender um produto continuam vendendo tudo. A janela diz o que ficou separado para os pedidos e o que ficou para fazer o que falta.
+- A padaria e a cozinha de doces (e as cópias delas) fazem tudo 25% mais rápido que o tempo escrito em `RECEITAS` (`RAPIDAS`, o Lucas pediu): o bolo de fubá leva 2:15, o doce de abóbora 1:30. O que já estava na fila termina no tempo antigo.
 - O contador de ração fica amarelo quando o estoque dá para menos de 10 minutos e vermelho quando não dá para alimentar nem um bicho. Tocar nele abre a loja na ração.
 
 ## Pomar
