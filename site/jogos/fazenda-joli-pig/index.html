@@ -283,6 +283,8 @@ button{font:inherit;color:inherit}
 /* cartela: tela escura com um texto no meio, entre as faixas (o fim do ArraiEd); a festa continua aparecendo atrás */
 .cartela{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:12vh max(28px,env(safe-area-inset-right,0px)) 12vh max(28px,env(safe-area-inset-left,0px));background:rgba(22,15,11,.84);color:#fff6e2;text-align:center;pointer-events:auto;cursor:pointer;opacity:0;transition:opacity .9s ease}
 .cartela.on{opacity:1}
+.cartela.preto{background:#0e0a07;transition:opacity .9s ease,background-color 1.2s ease}
+.cartela.preto .frase,.cartela.preto .assina,.cartela.preto .seguir{opacity:0;transition:opacity .6s ease}
 .cartela .frase{margin:0;max-width:30ch;font-family:var(--f-titulo);font-size:clamp(24px,6.4vw,38px);line-height:1.2;text-wrap:balance;transition:opacity .6s ease}
 .cartela .frase.texto{font-family:inherit;font-weight:700;font-size:clamp(18px,4.6vw,24px);line-height:1.5;max-width:34ch}
 .cartela .assina{margin:0;font-weight:800;font-size:clamp(16px,4.2vw,20px);color:#f7c3d6;letter-spacing:.02em}
@@ -7373,11 +7375,12 @@ const ARRAIA = { nivel: 50, meio: [46.7, 45.3], ed: 90, roda: 2.3, fora: 4.2, pe
   postes: [30, 90, 150, 210, 270, 330], raioPostes: 5.3, barracas: [[40.5, 42.4, 'milho'], [43.4, 39.6, 'pescaria']], disco: [3.3, 3.1, -2.6] };
 // a quadrilha: uma volta inteira da roda em tempo segundos; luma, o lugar da Luma na roda (o mesmo de lumaSaiPara)
 const ARRAIA_QUADRILHA = { tempo: 12, luma: 62 };
-// as cartelas do fim da festa: [frase, assinatura, texto corrido]; espera, os segundos antes de aceitar o toque
-const ARRAIA_CARTELAS = { espera: 1.8, lista: [
-  ['“Obrigado por jogar até aqui conosco”', 'Carol e Lucas'],
-  ['A festa rolou a noite inteira, e no dia seguinte todos descansaram. Mas logo voltaram ao trabalho, amar e cuidar dos próximos.', '', true],
-  ['Continue conosco, tem mais novidades à frente.'],
+// as cartelas do fim da festa: [frase, assinatura, texto corrido]; espera, os segundos antes de aceitar o toque. Depois da
+// última a tela escurece de todo (escuro), a fazenda vira a manhã do dia seguinte e clareia de novo (claro)
+const ARRAIA_CARTELAS = { espera: 1.8, escuro: 1.4, parado: 0.8, claro: 1.1, lista: [
+  ['“Obrigado por jogar conosco”', 'Carol e Lucas'],
+  ['A festa rolou a noite inteira e, no dia seguinte, todos descansaram. Mas logo voltaram a trabalhar, a amar e a cuidar do próximo.', '', true],
+  ['Continue conosco: tem mais novidades pela frente.'],
 ] };
 const grau = g => g * Math.PI / 180;
 const naRoda = (g, r) => [ARRAIA.meio[0] + Math.cos(grau(g)) * r, ARRAIA.meio[1] + Math.sin(grau(g)) * r];
@@ -7480,6 +7483,14 @@ function rojao(x, z, cor, grande = 1){
     Som.pop();
   }, 600);
 }
+// a festa rolou a noite inteira (o Lucas pediu): no fim, a fazenda vira a manhã do dia seguinte, na hora em que o Ed acorda
+// depois da hora de nanar. Na reprise o relógio não muda
+function novoDiaArraia(c){
+  if (!c || c.reprise || c.novoDia) return;
+  c.novoDia = true;
+  if (S.relogio > 0.5) S.dia = diaAtual() + 1;
+  S.relogio = NANAR.acorda;
+}
 // monta o arraial e os convidados; desfaz em limparArraia
 function montarArraia(c){
   const [mx, mz] = ARRAIA.meio, s16 = 1 / 16, g = new THREE.Group(), A = arraia = { g, convidados: [], porcos: [], hud: false, dani: false, claroes: [], voltas: 0 };
@@ -7554,6 +7565,33 @@ function limparArraia(){
   if (A.ajuda.dani && S.daniAte){ S.daniAte += pausa; irmaoDani.g.visible = true; }
   const P = discoJogo; P.g.visible = false; P.t = -1; P.g.scale.setScalar(DISCO_JOGO.escala);
   ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado';
+}
+// A luz do ArraiEd (o Lucas pediu a festa bem iluminada pela fogueira e pelos fogos): durante a festa as quatro luzes da noite
+// saem dos postes e vão para a festa. Uma na fogueira, quente e tremendo, outra mais alta e larga em cima da roda (a festa
+// toda clara, também no fim da tarde) e as outras duas nos dois últimos estouros, da cor do rojão, apagando com o clarão.
+// São as mesmas quatro luzes, então o three.js não monta programa novo
+const LUZ_FESTA = { fogo: [2.6, 11, 1.4, 0xffa246], alto: [1.05, 15, 1.2, 0xffd9a0], fogos: [6, 16, 1.4], padrao: null };
+function luzesDaFesta(){
+  const L = LUZES_NOITE, A = arraia;
+  if (!L.length) return;
+  if (!LUZ_FESTA.padrao) LUZ_FESTA.padrao = L.map(l => [l.distance, l.decay, l.color.getHex()]);
+  if (!A){
+    // fora da festa, as luzes voltam a ser as dos postes
+    if (LUZ_FESTA.mexeu){ LUZ_FESTA.mexeu = false; L.forEach((l, j) => { const [d, k, c] = LUZ_FESTA.padrao[j]; l.distance = d; l.decay = k; l.color.setHex(c); }); }
+    return;
+  }
+  LUZ_FESTA.mexeu = true;
+  const [mx, mz] = ARRAIA.meio, t = performance.now() / 1000, F = LUZ_FESTA;
+  const por = (l, [forca, dist, decai, cor], x, y, z) => { l.intensity = forca; l.distance = dist; l.decay = decai; if (cor != null) l.color.setHex(cor); l.position.set(x, y, z); };
+  por(L[0], F.fogo, mx, 1.1, mz); L[0].intensity *= 0.85 + Math.sin(t * 11) * 0.08 + Math.sin(t * 17.3) * 0.07;
+  por(L[1], F.alto, mx - 0.3, 3.4, mz + 0.4);
+  const ult = A.claroes.slice(-2);
+  for (let j = 2; j < 4; j++){
+    const q = ult[j - 2], l = L[j];
+    if (!q){ l.intensity = 0; continue; }
+    const k = Math.min(1, q.t / FOGOS.claraoVida), p = q.c.position;
+    por(l, [F.fogos[0] * (1 - k) * (1 - k), F.fogos[1], F.fogos[2], null], p.x, p.y, p.z); l.color.copy(q.c.material.color);
+  }
 }
 // a cada quadro: o fogo tremula e solta faísca, os convidados dançam, o disco balança
 function animarArraia(c, dt){
@@ -11939,10 +11977,20 @@ function confete(x, y, z, n = 1, espalha = 0.8){
   }
 }
 // tudo o que a festa deixa para trás: a família, o Hud, os veículos e o avião
+// quem estava ajudando antes da festa do nível 25 volta ao trabalho de onde está, sem perder o tempo da festa
+let festaAjuda = null;
+function soltarFestaAjuda(){
+  const F = festaAjuda; festaAjuda = null;
+  if (!F) return;
+  const pausa = Date.now() - F.t0;
+  if (F.hud && S.hudAte){ S.hudAte += pausa; irmaoHud.g.visible = true; irmaoHud.estado = 'parado'; irmaoHud.pontos = []; }
+  if (F.dani && S.daniAte) S.daniAte += pausa;
+}
 function limparFesta(){
   if (tarefaHud){ setReserva(tarefaHud.alvo, null); tarefaHud = null; }
   for (const p of [beto, jaca, pelucio, patrinho, irmaoHud]){ p.g.visible = false; p.pontos = []; p.aoChegar = null; p.estado = 'parado'; p.aceno = 0; p.pulo = 0; }
   irmaoHud.saindo = false;
+  soltarFestaAjuda();
   caminhaoMarket.visible = false; caminhaoCafe.visible = false; caminhaoBistro.visible = false;
   if (voo.estado === 'festa') aviaoFora();
 }
@@ -12833,9 +12881,10 @@ const CENAS = {
     flag: 'viuCineFesta', nivel: () => 25, musica: 'festa', icone: 'festa',
     get falas(){ return falasFesta(); },
     titulo: 'Festa na fazenda', desc: 'A família toda vem comemorar o nível 25.', trancada: 'libera no nível 25',
-    // o Hud entra na roda: a festa espera ele terminar a ajuda e sumir da fazenda (pode estar acabando uma tarefa ou indo para casa)
-    pronta: () => nivel() >= 25 && !!S.conheceuMilton && voo.estado === 'fora' && caminhaoE.estado === 'longe' && !hudAtivo() && !irmaoHud.g.visible,
-    podeRever: () => (voo.estado !== 'fora' ? 'Dá para rever quando o Milton decolar.' : hudAtivo() || irmaoHud.g.visible || daniAtivo() || irmaoDani.g.visible ? 'Dá para rever quando o Hud e o Dani terminarem a ajuda.' : null),
+    // o Hud entra na roda: se está ajudando, larga o trabalho e vem de onde está, e no fim volta a ajudar (festaAjuda); o Lucas
+    // pediu para as festas não esperarem o Hud e o Dani terminarem a ajuda
+    pronta: () => nivel() >= 25 && !!S.conheceuMilton && voo.estado === 'fora' && caminhaoE.estado === 'longe',
+    podeRever: () => (voo.estado !== 'fora' ? 'Dá para rever quando o Milton decolar.' : null),
     foco(c){
       const p = c.passo, v = (x, z) => new THREE.Vector3(x, 0.4, z);
       const dx = telaEstreita() ? -2.4 : 0; // em tela estreita a câmera abre mais para a esquerda, onde a van para
@@ -12850,6 +12899,9 @@ const CENAS = {
     },
     iniciar(c){
       caminhaoE.estado = 'cine';
+      // o Hud e o Dani na rua largam o que fazem; a mesada deles fica parada durante a festa
+      festaAjuda = { hud: hudAtivo(), dani: daniAtivo(), t0: Date.now() };
+      for (const P of [irmaoHud, irmaoDani]) if (P.g.visible){ soltarAjudante(P); P.sentado = 0; }
       caminhaoMarket.visible = true; naEstrada(caminhaoMarket, -5);
       caminhaoCafe.visible = true; naEstrada(caminhaoCafe, -8.6);
       caminhaoBistro.visible = true; naEstrada(caminhaoBistro, -1.6);
@@ -12880,9 +12932,12 @@ const CENAS = {
           const chegou = p => { c.n++; p.pulo = 0.3; };
           if (!c.hud && c.t > 0.2){
             c.hud = true;
-            const H0 = irmaoHud, [hx, hz] = lugar('hud');
-            H0.saindo = false; H0.g.visible = true; H0.estado = 'parado'; H0.pontos = []; H0.colocar(5.5, 5.6); H0.ang = H0.angAlvo = 0.3; H0.pulo = 0.45; Som.oinc();
-            const pts = rota(5, 5, Math.floor(hx), Math.floor(hz)) || [];
+            const H0 = irmaoHud, [hx, hz] = lugar('hud'), naRua = H0.g.visible;
+            H0.saindo = false; H0.g.visible = true; H0.estado = 'parado'; H0.pontos = [];
+            // em casa, sai pela porta; na rua (estava ajudando), vem de onde está
+            if (!naRua){ H0.colocar(5.5, 5.6); H0.ang = H0.angAlvo = 0.3; }
+            H0.pulo = 0.45; Som.oinc();
+            const pts = rota(clamp(Math.floor(H0.pos.x), 0, W - 1), clamp(Math.floor(H0.pos.y), 0, H - 1), Math.floor(hx), Math.floor(hz)) || [];
             pts.push([hx, hz]); H0.ir(pts, () => chegou(H0));
           }
           for (const it of c.fila){
@@ -12932,8 +12987,10 @@ const CENAS = {
               const volta = [[Ex, 9.6], [PARADA, Z_CERCA - 0.6], [PARADA, Z_CERCA + 0.4], ...(veic !== 'caminhao' ? [[xv + (veic === 'van' ? 1.9 : -1.9), Z_CERCA + 0.85]] : []), [xv, Z_CERCA + 0.85]];
               p.ir(volta, () => { p.g.visible = false; c.vagas[veic]--; if (!c.vagas[veic]){ c.saida[veic] = c.t; Som.buzina(); } });
             }
-            const hpts = rota(clamp(Math.floor(irmaoHud.pos.x), 0, W - 1), clamp(Math.floor(irmaoHud.pos.y), 0, H - 1), 5, 5) || [];
-            irmaoHud.ir(hpts, () => { irmaoHud.g.visible = false; c.hudFora = true; });
+            // quem estava ajudando fica na rua e volta ao trabalho no fim; senão, vai para casa
+            if (festaAjuda && festaAjuda.hud) c.hudFora = true;
+            else { const hpts = rota(clamp(Math.floor(irmaoHud.pos.x), 0, W - 1), clamp(Math.floor(irmaoHud.pos.y), 0, H - 1), 5, 5) || [];
+              irmaoHud.ir(hpts, () => { irmaoHud.g.visible = false; c.hudFora = true; }); }
           }
           let vivos = 0;
           for (const [veic, v, x0] of [['caminhao', caminhaoMarket, PARADA], ['van', caminhaoCafe, FESTA_VAN], ['lambreta', caminhaoBistro, FESTA_LAMBRETA]]){
@@ -12956,7 +13013,7 @@ const CENAS = {
       ed.trab = null; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado';
       limparFesta();
     },
-    fim(){ S.viuCineFesta = true; },
+    fim(){ S.viuCineFesta = true; soltarFestaAjuda(); },
     restaurar(){ limparFesta(); },
   },
   mata: {
@@ -13206,7 +13263,13 @@ const CENAS = {
         // espera ARRAIA_CARTELAS.espera segundos e um toque; a festa continua atrás
         case 'a-cartela':
           if (c.cartela < ARRAIA_CARTELAS.lista.length && c.t > ARRAIA_CARTELAS.espera) $('cineCartelaSeguir').classList.add('pode');
-          if (c.cartela >= ARRAIA_CARTELAS.lista.length && c.t > 0.9){ $('cineCartela').hidden = true; c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
+          // depois da última: escurece de todo com a festa ainda atrás, vira a manhã seguinte e clareia na fazenda
+          if (c.cartela >= ARRAIA_CARTELAS.lista.length){
+            const K = ARRAIA_CARTELAS, el = $('cineCartela');
+            if (!c.virou && c.t > K.escuro){ c.virou = true; novoDiaArraia(c); limparArraia(); cam.alvo.copy(c.cam0.alvo); cam.vista = c.cam0.vista; cam.az = cam.azAlvo = c.cam0.az; }
+            if (c.virou && !c.clareando && c.t > K.escuro + K.parado){ c.clareando = true; el.classList.remove('on'); $('cine').classList.remove('on'); }
+            if (c.t > K.escuro + K.parado + K.claro){ el.hidden = true; el.classList.remove('preto'); encerrarCine(); }
+          }
           break;
       }
     },
@@ -13214,13 +13277,14 @@ const CENAS = {
       if (c.passo !== 'a-cartela' || (c.cartela >= 0 && c.t <= ARRAIA_CARTELAS.espera)) return;
       const el = $('cineCartela'), L = ARRAIA_CARTELAS.lista;
       c.cartela++; c.t = 0; $('cineCartelaSeguir').classList.remove('pode');
-      if (c.cartela >= L.length){ el.classList.remove('on'); return; }
+      if (c.cartela >= L.length){ el.classList.add('preto'); return; }
       const [frase, assina, texto] = L[c.cartela];
       $('cineFrase').textContent = frase; $('cineFrase').classList.toggle('texto', !!texto); $('cineAssina').textContent = assina || '';
       el.hidden = false; requestAnimationFrame(() => el.classList.add('on'));
     },
     fimDasFalas(c){ $('cineDialogo').hidden = true; c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; },
-    pular(){ ed.trab = null; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; },
+    // pular vale como assistir: a fazenda também acorda no dia seguinte
+    pular(c){ ed.trab = null; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; novoDiaArraia(c); },
     // o arraial desmonta no fim (pular vale como assistir)
     fim(){ limparArraia(); S.viuCineArraied = true; aviso('Que festa! O ArraiEd entrou para a história da fazenda.', 'grande', 5); salvar(); },
     restaurar(){ limparArraia(); },
@@ -15042,7 +15106,8 @@ function criarLanternas(){
 }
 function atualizarLanternas(dt){
   for (const L of LANTERNAS){
-    const p = L.p, quer = p.g.visible && LUZ.noite > LANTERNA.noite && p.pos.y >= LANTERNA.zMata;
+    // só na mata, do lado de lá da estrada (o terreno novo também fica abaixo de zMata), e nunca no ArraiEd, que tem a luz dele
+    const p = L.p, quer = p.g.visible && !arraia && LUZ.noite > LANTERNA.noite && p.pos.y >= LANTERNA.zMata && p.pos.x < X_CURVA;
     L.f = clamp(L.f + (quer ? dt * 2.5 : -dt * 2.5), 0, 1);
     const on = L.f > 0.02;
     L.modelo.visible = on; L.facho.visible = on;
@@ -15369,6 +15434,7 @@ function atualizarCiclo(dt){
   if (!LUZES_NOITE.length) criarLuzesNoite();
   const pts = n > 0.02 ? pontosDeLuz().sort((q, r) => Math.hypot(q[0] - cam.alvo.x, q[2] - cam.alvo.z) - Math.hypot(r[0] - cam.alvo.x, r[2] - cam.alvo.z)) : [];
   LUZES_NOITE.forEach((l, j) => { const q = pts[j]; l.intensity = q ? n * 1.3 : 0; if (q) l.position.set(q[0], q[1], q[2]); });
+  luzesDaFesta();
   luzesPontuais();
   // céu do fundo e estrelas (só mexe no CSS quando a cor muda de verdade)
   const css = `linear-gradient(180deg,#${LUZ.ceu1.getHexString()},#${LUZ.ceu2.getHexString()})`;
