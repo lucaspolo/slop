@@ -1205,8 +1205,9 @@ const PREDIOS = [
   // as obras novas do Maurinho (OBRAS): o lugar fica gramado até a obra começar
   { id:'resort',     nome:'Resort das Aposentadas', x0:45, z0:32, x1:51, z1:37, porta:[48, 38], obra: 'resort' },
   { id:'observatorio', nome:'Observatório',      x0:24, z0:35, x1:28, z1:38, porta:[27, 39], obra: 'observatorio' },
-  // o museu, de frente para a câmera, entre o spa e o campo da festa do ArraiEd (no canto, à direita), perto dela
-  { id:'museu',      nome:'Museu da fazenda',    x0:37, z0:45, x1:40, z1:47, porta:[38, 48], obra: 'museu' },
+  // o museu, de frente para a câmera, no campo da festa do ArraiEd, perto da fogueira (o Lucas pediu): na festa ele some
+  // para abrir espaço para a roda (museuNaFesta)
+  { id:'museu',      nome:'Museu da fazenda',    x0:45, z0:44, x1:48, z1:46, porta:[46, 47], obra: 'museu' },
   // o spa dos pigs, no canto de baixo encostado na estrada (o Lucas pediu ali; o observatório subiu para trás dele), deitado
   // (9 × 6) para ficar mais longe do observatório e girado 180° (ry), com a entrada virada para dentro do mapa: virada para
   // o sul ela dava para fora (o Lucas pediu). A porta fica no norte, do lado direito, e o caminho vem da estrada até ela
@@ -8400,7 +8401,18 @@ function novoDiaArraia(c){
   S.relogio = NANAR.acorda;
 }
 // monta o arraial e os convidados; desfaz em limparArraia
+// o museu fica no campo da festa (o Lucas pediu): enquanto o arraial está montado ele some (o desenho, a obra, o andaime e
+// as estacas do lote), e os ladrilhos dele viram grama para a roda passar; no fim volta tudo
+function museuNaFesta(sumir){
+  const P = PREDIO.museu, m = PREDIO_VIS.museu, lote = LOTE_OBRA_VIS.museu;
+  if (m) m.visible = !sumir;
+  if (lote) lote.visible = !sumir;
+  if (andaimeVis && S.obra && S.obra.id === 'museu') andaimeVis.visible = !sumir;
+  if (!loteObraAberto('museu')) return;
+  for (let x = P.x0; x <= P.x1; x++) for (let z = P.z0; z <= P.z1; z++){ setT(x, z, sumir ? 'grama' : 'predio'); PREDIO_EM[iT(x, z)] = sumir ? null : P; }
+}
 function montarArraia(c){
+  museuNaFesta(true);
   const [mx, mz] = ARRAIA.meio, s16 = 1 / 16, g = new THREE.Group(), A = arraia = { g, convidados: [], porcos: [], hud: false, dani: false, claroes: [], voltas: 0 };
   const mm = (k, f, s) => malha(geo(k, () => f().build(s, { origin: [0.5, 0, 0.5], jitter: 0.02 })));
   scene.add(g);
@@ -8463,6 +8475,7 @@ function montarArraia(c){
 }
 function limparArraia(){
   const A = arraia; arraia = null;
+  museuNaFesta(false);
   lumaFimCena('inaugura');
   if (!A) return;
   scene.remove(A.g);
@@ -10377,6 +10390,7 @@ function montarPredio(p){
   if (k && OBRAS[k].vestir && !obraEmAndamento(k) && etapasObra(k) > 0) OBRAS[k].vestir(m, etapasObra(k));
   m.traverse(o => { o.userData.alvo = { k: 'predio', p }; });
   pickaveis.push(m); PREDIO_VIS[p.id] = m;
+  if (p.id === 'museu' && arraia) m.visible = false;
 }
 // a obra nova que mexe nessa construção (o casarão mexe na casa)
 const OBRA_DO_PREDIO = {}; for (const k in OBRAS) if (OBRAS[k].predio) OBRA_DO_PREDIO[OBRAS[k].predio] = k;
@@ -20452,6 +20466,12 @@ async function iniciar(){
       if (loteObraAberto(k) && Array.isArray(S.enfeites)){ if (!S.guardados) S.guardados = {}; devolverEnfeites((x, z) => (x >= P.x0 && x <= P.x1 && z >= P.z0 && z <= P.z1) || (x === P.porta[0] && z === P.porta[1]), `novo ${OBRAS[k].de || 'do'} ${OBRAS[k].nome.toLowerCase()}`); }
     }
     S.spaDeitado = true;
+  }
+  // o museu foi para o campo da festa: o enfeite que estava no lugar novo dele volta para a loja, uma vez
+  if (!S.museuNaFesta){
+    const P = PREDIO.museu;
+    if (loteObraAberto('museu') && Array.isArray(S.enfeites)){ if (!S.guardados) S.guardados = {}; devolverEnfeites((x, z) => (x >= P.x0 && x <= P.x1 && z >= P.z0 && z <= P.z1) || (x === P.porta[0] && z === P.porta[1]), 'novo do museu'); }
+    S.museuNaFesta = true;
   }
   // os lotes das obras novas que já começaram viram construção
   for (const k in OBRAS) if (loteObraAberto(k)) abrirLoteObra(k, false);
