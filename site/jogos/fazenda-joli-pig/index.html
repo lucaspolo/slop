@@ -1235,6 +1235,10 @@ const PARCELAS = [
   { nivel: 22, preco: 20000, x0: 0, z0: 27, x1: 8, z1: 34, col: 4, arvores: ['acaizeiro', 'cupuacuzeiro', 'cupuacuzeiro', 'acaizeiro', 'acaizeiro', 'cupuacuzeiro'] },
   { nivel: 24, preco: 28000, x0: 9, z0: 35, x1: 17, z1: 42, col: 14, arvores: ['guaranazeiro', 'guaranazeiro', 'cacaueiro', 'guaranazeiro', 'guaranazeiro', 'cacaueiro'] },
   { nivel: 26, preco: 40000, x0: 0, z0: 35, x1: 8, z1: 42, col: 4, arvores: ['castanheira', 'seringueira', 'acaizeiro', 'castanheira', 'castanheira', 'seringueira'] },
+  // as duas do fundo, no sul da mata (o Lucas pediu níveis com pouca novidade: 44 e 46); cada uma continua a trilha da
+  // parcela da frente dela, na mesma coluna
+  { nivel: 44, preco: 120000, x0: 9, z0: 43, x1: 17, z1: 50, col: 14, arvores: ['castanheira', 'guaranazeiro', 'cupuacuzeiro', 'castanheira', 'guaranazeiro', 'cupuacuzeiro'] },
+  { nivel: 46, preco: 160000, x0: 0, z0: 43, x1: 8, z1: 50, col: 4, arvores: ['cacaueiro', 'castanheira', 'acaizeiro', 'guaranazeiro', 'castanheira', 'seringueira'] },
 ];
 // duas árvores por fileira, uma de cada lado da trilha; o Ed colhe em pé na trilha
 const MATA_SLOTS = PARCELAS.flatMap((P, p) => P.arvores.map((tipo, k) => { const z = P.z0 + 1 + (k >> 1) * 2; return { x: P.col + (k % 2 ? 1 : -1), z, pe: [P.col, z], tipo, p }; }));
@@ -5954,8 +5958,8 @@ function criarOcorrencia(tipo){
   if (tipo === 'fogo') Som.ruido(0.5, 0.06, 900);
   return true;
 }
-// o galho fecha a trilha da parcela dele e da de trás, que passa por ela
-const galhoFecha = p => !!(ocorrencia && ocorrencia.tipo === 'galho' && !ocorrencia.pecas[0].ok && (ocorrencia.p === p || ocorrencia.p === p - 2));
+// o galho fecha a trilha da parcela dele e das de trás, que passam por ela (as da mesma coluna)
+const galhoFecha = p => !!(ocorrencia && ocorrencia.tipo === 'galho' && !ocorrencia.pecas[0].ok && ocorrencia.p <= p && PARCELAS[ocorrencia.p].col === PARCELAS[p].col);
 function falharOcorrencia(){
   const oc = ocorrencia, O = OCORRENCIAS[oc.tipo];
   mudarSaude(-O.perda);
@@ -6304,7 +6308,8 @@ function atualizarVisaoMirante(dt){
 // parte comprada, volta, deixa a contribuição na caixinha e vai embora; pontos [x, y, z] com pausa e fala opcionais
 function caminhoTrilha(){
   const [cx, cz] = centroMirante(), lado = cx + 1.3, pe = [lado, 0, cz], topo = [cx + 1.1, MIRANTE_1P.deque, cz];
-  const fim = parcelaComprada(2) ? PARCELAS[2].z1 + 0.4 : PARCELAS[0].z1 + 0.4, col = PARCELAS[0].col + 0.5, beira = Z_ORLA + 0.35;
+  const ult = PARCELAS.reduce((u, P, p) => P.col === PARCELAS[0].col && parcelaComprada(p) ? p : u, 0);
+  const fim = Math.min(PARCELAS[ult].z1 + 0.4, H - 0.6), col = PARCELAS[0].col + 0.5, beira = Z_ORLA + 0.35;
   return [
     { p: [-1.5, 0, beira] }, { p: [lado, 0, beira] }, { p: pe }, { p: topo, escada: true },
     { p: [cx + 0.7, MIRANTE_1P.deque, cz + 0.72], pausa: 4, fala: FALAS_VISITANTE, olhar: [cx + 0.7, cz + 3] },
@@ -18399,7 +18404,7 @@ function subiuNivel(n){
   if (n === COLMEIA.nivel) libs.push('colmeias');
   if (n === ADUBO.nivel) libs.push('adubo na loja');
   if (POMAR_BLOCOS.some(B => B.nivel === n && !B.canto)) libs.push('mais um terreno de pomar');
-  if (PARCELAS.some(P => P.nivel === n)){ libs.push('mata nativa do outro lado da estrada'); montarPlacasMata(); }
+  if (PARCELAS.some(P => P.nivel === n)){ libs.push(n === PARCELAS[0].nivel ? 'mata nativa do outro lado da estrada' : 'mais uma parcela de mata'); montarPlacasMata(); }
   if (n === MIRANTE.nivel && parcelaComprada(0)){ libs.push('mirante da mata'); montarPlacaMirante(); }
   if (n === ARRENDAMENTO.nivel){ libs.push('o terreno abandonado, para arrendar'); montarPlacaCanto(); }
   if (n === HUD.nivel){ libs.push('a ajuda do Hud'); setTimeout(() => aviso('O Hud, irmão pequenino do Ed, pode regar, tirar o mato e colher por você. Toque na casa para chamar.', '', 6), 4200); }
