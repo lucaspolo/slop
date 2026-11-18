@@ -1235,11 +1235,30 @@ const PARCELAS = [
   { nivel: 22, preco: 20000, x0: 0, z0: 27, x1: 8, z1: 34, col: 4, arvores: ['acaizeiro', 'cupuacuzeiro', 'cupuacuzeiro', 'acaizeiro', 'acaizeiro', 'cupuacuzeiro'] },
   { nivel: 24, preco: 28000, x0: 9, z0: 35, x1: 17, z1: 42, col: 14, arvores: ['guaranazeiro', 'guaranazeiro', 'cacaueiro', 'guaranazeiro', 'guaranazeiro', 'cacaueiro'] },
   { nivel: 26, preco: 40000, x0: 0, z0: 35, x1: 8, z1: 42, col: 4, arvores: ['castanheira', 'seringueira', 'acaizeiro', 'castanheira', 'castanheira', 'seringueira'] },
-  // as duas do fundo, no sul da mata (o Lucas pediu níveis com pouca novidade: 44 e 46); cada uma continua a trilha da
-  // parcela da frente dela, na mesma coluna
+  // a do fundo, no sul da mata (o Lucas pediu um nível com pouca novidade), continua a trilha da parcela da frente, na
+  // mesma coluna. A sexta, a oeste dela (nível 46), virou a cachoeira (CACHOEIRA)
   { nivel: 44, preco: 120000, x0: 9, z0: 43, x1: 17, z1: 50, col: 14, arvores: ['castanheira', 'guaranazeiro', 'cupuacuzeiro', 'castanheira', 'guaranazeiro', 'cupuacuzeiro'] },
-  { nivel: 46, preco: 160000, x0: 0, z0: 43, x1: 8, z1: 50, col: 4, arvores: ['cacaueiro', 'castanheira', 'acaizeiro', 'guaranazeiro', 'castanheira', 'seringueira'] },
 ];
+// a sexta parcela (nível 46, R$ 160 mil) existiu por um tempo; quem comprou recebe o dinheiro de volta (migrar)
+const PARCELA_SEXTA = { preco: 160000 };
+// a cachoeira no canto oeste do fundo da mata (o Lucas pediu; ficou no lugar da sexta parcela): o paredão de pedra na beira
+// do mapa, a queda d'água e o lago embaixo, onde os bichos da mata vêm beber. mapa: uma linha por z, a partir de x0 e z0:
+// P paredão (ladrilho 'pedra'), L lago ('lago', a mesma água do lago da fazenda), m margem de areia e pedrinhas ('margem',
+// sem árvore), . mata. queda: o centro da queda em z e a largura; pedras: as pedras da beira [x, z, raio, altura], onde os
+// pássaros pousam. Ninguém da fazenda anda por lá
+const CACHOEIRA = { x0: 0, z0: 43, x1: 8, z1: 50,
+  mapa: [
+    'PPmmmmm..',
+    'PPmLLLLm.',
+    'PPLLLLLLm',
+    'PPLLLLLLm',
+    'PPLLLLLLm',
+    'PPmLLLLLm',
+    'PPmmLLLm.',
+    'PP.mmmm..'],
+  queda: { z: 46.35, larg: 0.8 }, alto: 21,
+  pedras: [[2.55, 44.7, 0.32, 0.3], [7.35, 44.45, 0.3, 0.26], [6.75, 49.25, 0.34, 0.28], [2.55, 48.45, 0.3, 0.3], [5.7, 43.45, 0.24, 0.2]] };
+const naCachoeira = (x, z) => x >= CACHOEIRA.x0 && x <= CACHOEIRA.x1 && z >= CACHOEIRA.z0 && z <= CACHOEIRA.z1;
 // duas árvores por fileira, uma de cada lado da trilha; o Ed colhe em pé na trilha
 const MATA_SLOTS = PARCELAS.flatMap((P, p) => P.arvores.map((tipo, k) => { const z = P.z0 + 1 + (k >> 1) * 2; return { x: P.col + (k % 2 ? 1 : -1), z, pe: [P.col, z], tipo, p }; }));
 const MATA_XZ = MATA_SLOTS.map(s => [s.x, s.z]);
@@ -1260,6 +1279,7 @@ function montarMapa(){
   for (let x = COL_CURVA + 2; x <= COL_CURVA + 7; x++) for (let z = Z_CERCA + 1; z <= CLAREIRA_ATE; z++) setT(x, z, 'grama');
   for (const id of ['chocolateria', 'oficina', 'chocobarra']){ const pt = PREDIOS.find(q => q.id === id).porta; setT(COL_CURVA + 1, pt[1], 'caminho'); }
   for (const z in LAGO){ const [a, b] = LAGO[z]; for (let x = a; x <= b; x++) setT(x, +z, 'lago'); }
+  CACHOEIRA.mapa.forEach((l, k) => [...l].forEach((c, i) => { const t = { P: 'pedra', L: 'lago', m: 'margem' }[c]; if (t) setT(CACHOEIRA.x0 + i, CACHOEIRA.z0 + k, t); }));
   for (let z = PONTE.z0; z <= PONTE.z1; z++) setT(PONTE.x, z, 'ponte');
   for (let z = 5; z < Z_CERCA; z++) setT(X_PORTEIRA, z, 'caminho');
   for (let x = 4; x <= W - 1; x++) setT(x, 5, 'caminho');
@@ -1281,7 +1301,7 @@ function montarMapa(){
 }
 // beiradas: ladrilhos onde uma construção avança mais de um cubinho (ver ladrilhoDeBeirada); ninguém passa por eles
 let beiradas = null;
-const andavel = (x, z) => { const t = tipo(x, z); return !!t && t !== 'cerca' && t !== 'predio' && t !== 'arvore' && t !== 'feno' && t !== 'mata' && t !== 'orlaF' && t !== 'canto' && t !== 'mirante' && t !== 'lago' && !(beiradas && beiradas.has(x + ',' + z)); };
+const andavel = (x, z) => { const t = tipo(x, z); return !!t && t !== 'cerca' && t !== 'predio' && t !== 'arvore' && t !== 'feno' && t !== 'mata' && t !== 'orlaF' && t !== 'canto' && t !== 'mirante' && t !== 'lago' && t !== 'pedra' && t !== 'margem' && !(beiradas && beiradas.has(x + ',' + z)); };
 
 // A* em 8 direções sobre os ladrilhos, com a lista aberta num heap binário (o mapa tem uns 2.600 ladrilhos)
 const ROTA_G = new Float32Array(W * H), ROTA_DE = new Int32Array(W * H), ROTA_FECHADO = new Uint8Array(W * H);
@@ -4651,11 +4671,15 @@ function soltarBichoMata(tipo){
   tipo = tipo || sorteiaBicho();
   const pts = caminhoBicho(tipo);
   if (!pts) return false;
+  bichoMata = criarBicho(tipo, pts);
+  return true;
+}
+// o bicho (ou o bando) que anda pelos pontos de um caminho (caminhoBicho, caminhoCachoeira)
+function criarBicho(tipo, pts){
   const [fn, esc] = BICHOS_MATA.modelos[tipo], g = new THREE.Group(), gm = geo('bichoMata' + tipo, () => fn().build(esc, { origin: [0.5, 0, 0.5], jitter: 0.03 }));
   const ms = (BICHOS_MATA.bando[tipo] || [[0, 0, 0]]).map(([x, y, z]) => { const m = malha(gm); m.position.set(x, y, z); g.add(m); return m; });
   g.position.copy(pts[0].p); g.rotation.y = cam.az; scene.add(g);
-  bichoMata = { tipo, g, m: ms[0], ms, pts, i: 1, tt: 0, falou: false, nome: 'bicho', topo(){ return this.g.position.clone().add(new THREE.Vector3(0, 1.1, 0)); } };
-  return true;
+  return { tipo, g, m: ms[0], ms, pts, i: 1, tt: 0, falou: false, nome: 'bicho', topo(){ return this.g.position.clone().add(new THREE.Vector3(0, 1.1, 0)); } };
 }
 function sumirBichoMata(){ if (bichoMata){ scene.remove(bichoMata.g); bichoMata = null; } proxBichoMata = rnd(...BICHOS_MATA.intervalo) * (parcelaComprada(0) ? estadoMata().bichos : 1); }
 // o tatu cavando na orla (para a Luma ir cavar junto)
@@ -4767,9 +4791,14 @@ function atualizarBichosMata(dt, t){
     if (!cine && S.viuCineInicio){ proxBichoMata -= dt; if (proxBichoMata <= 0 && !soltarBichoMata()) proxBichoMata = rnd(10, 25); }
     return;
   }
-  if (cine){ sumirBichoMata(); return; }
-  const B = bichoMata, P = B.pts[B.i], BM = BICHOS_MATA;
-  if (!P){ sumirBichoMata(); return; }
+  if (cine || passoBicho(bichoMata, dt, t)) sumirBichoMata();
+}
+// um quadro do bicho pelo caminho: anda até o próximo ponto e fica parado o tempo do ponto. Nos pontos: voa, pula, para,
+// fala, fareja, cava (o tatu), castanha (a cutia), bebe (de cabeça baixa, na beira da água) e olha (o ângulo em que fica
+// parado; sem ele, vira para a câmera). Na água (abaixo do chão) solta ondinhas. Devolve true quando o caminho acaba
+function passoBicho(B, dt, t){
+  const P = B.pts[B.i], BM = BICHOS_MATA;
+  if (!P) return true;
   B.tt += dt;
   const de = B.pts[B.i - 1].p, g = B.g, m = B.m, borb = B.tipo === 'borboletas';
   m.rotation.set(0, 0, 0);
@@ -4785,6 +4814,7 @@ function atualizarBichosMata(dt, t){
     else if (borb) g.position.y += Math.sin(t * 3) * 0.12;
     else if (BM.anda[B.tipo]){ const [r, h] = BM.anda[B.tipo]; g.position.y += Math.abs(Math.sin(t * r)) * h; }
     else if (B.tipo === 'cobra') g.rotation.y += Math.sin(t * 7) * 0.012;
+    if (g.position.y < -0.1 && (B.tOnda = (B.tOnda || 0) - dt) <= 0){ B.tOnda = 0.35; soltarOnda(g.position.x, g.position.z, true); }
   } else {
     // parado: vira para a câmera e se mexe um pouquinho
     const q = B.tt - P.dur;
@@ -4795,7 +4825,14 @@ function atualizarBichosMata(dt, t){
       g.rotation.y = anguloPerto(g.rotation.y, cam.az + Math.PI / 2, Math.min(1, dt * 3));
       m.rotation.x = 0.28 + Math.sin(q * 16) * 0.06;
       if ((B.tPo = (B.tPo || 0) - dt) <= 0){ B.tPo = 0.12; const a = g.rotation.y; particula(g.position.x + Math.sin(a) * 0.28, 0.06, g.position.z + Math.cos(a) * 0.28, [0x8a5c3a, 0xa47448, 0x6e472c][(Math.random() * 3) | 0], 0.55); }
-    } else g.rotation.y = anguloPerto(g.rotation.y, cam.az + Math.sin(q * 0.9) * 0.5, Math.min(1, dt * 3));
+    } else if (P.olha != null) g.rotation.y = anguloPerto(g.rotation.y, P.olha, Math.min(1, dt * 5));
+    else if (P.para) g.rotation.y = anguloPerto(g.rotation.y, cam.az + Math.sin(q * 0.9) * 0.5, Math.min(1, dt * 3));
+    // bebendo: abaixa a cabeça até a água, dá umas lambidas e às vezes faz uma ondinha na frente do focinho
+    if (P.bebe && q < (P.para || 0) - 0.4){
+      m.rotation.x = Math.min(1, q * 2) * 0.3 + (q > 0.5 ? Math.sin(q * 6) * 0.05 : 0);
+      if (q > 0.6 && g.position.y < 0.05 && (B.tOnda = (B.tOnda || 0) - dt) <= 0){ B.tOnda = 1.1; const a = g.rotation.y; soltarOnda(g.position.x + Math.sin(a) * 0.32, g.position.z + Math.cos(a) * 0.32); }
+    }
+    if (g.position.y < -0.1 && (B.tOnda = (B.tOnda || 0) - dt) <= 0){ B.tOnda = 0.9; soltarOnda(g.position.x, g.position.z); }
     if (B.tipo === 'tucano' || B.tipo === 'papagaio' || B.tipo === 'arara') g.position.y += Math.max(0, Math.sin(q * 5)) * 0.03;
     if (borb) g.position.y += Math.sin(q * 2) * 0.08;
     if (B.tipo === 'preguica') m.rotation.z = Math.sin(q * 0.5) * 0.08;
@@ -4815,8 +4852,88 @@ function atualizarBichosMata(dt, t){
     }
     // o tatu espera a Luma terminar de cavar junto (até um limite)
     const segura = P.cava && lumaNoTatu() && !B.lumaCavou && q < BM.esperaLuma;
-    if (!segura && q >= (P.para || 0)){ B.i++; B.tt = 0; B.cavando = false; if (B.i >= B.pts.length) sumirBichoMata(); }
+    if (!segura && q >= (P.para || 0)){ B.i++; B.tt = 0; B.cavando = false; if (B.i >= B.pts.length) return true; }
   }
+  return false;
+}
+// ================= os bichos na cachoeira (CACHOEIRA): de tempos em tempos um bicho da mata sai das árvores em volta do
+// lago, anda pela margem até a beira, bebe água e volta; a anta ainda entra no lago e fica um tempo de molho, e as araras, os
+// tucanos e os papagaios pousam numa pedra da beira para beber. Um de cada vez, à parte dos bichos da beira da mata, e só
+// quando a beira escolhida aparece na tela. Não mexe no save
+const VISITA_CACHOEIRA = { primeira: [6, 14], intervalo: [18, 40],
+  pesos: { anta: 2, onca: 0.8, jaguatirica: 1.5, quati: 2, cutia: 2, tamandua: 1.2, jabuti: 0.8, tatu: 1, arara: 2, tucano: 1.5, papagaio: 1 },
+  // a velocidade de cada um pela margem, em ladrilhos por segundo
+  vel: { anta: 0.45, onca: 0.6, jaguatirica: 0.7, quati: 0.65, cutia: 1.1, tamandua: 0.4, jabuti: 0.12, tatu: 0.45 },
+  bebe: [5, 9], molho: [8, 13], agua: -0.3, centro: [5, 46.5] };
+let visitaCachoeira = null, proxVisitaCachoeira = null, beirasCach = null;
+// os lugares de beber: cada ladrilho de margem encostado na água, virado para ela, com o caminho pela margem até a mata
+// mais perto (de onde o bicho sai e para onde volta) e, se a água ali é funda o bastante, o ponto onde a anta fica de molho
+function beirasCachoeira(){
+  if (beirasCach) return beirasCach;
+  const C = CACHOEIRA, l = [], V = (x, y, z) => new THREE.Vector3(x, y, z), k = (x, z) => x + ',' + z, LADOS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  for (let z = C.z0; z <= C.z1; z++) for (let x = C.x0; x <= C.x1; x++){
+    if (tipo(x, z) !== 'margem') continue;
+    for (const [dx, dz] of LADOS){
+      if (tipo(x + dx, z + dz) !== 'lago') continue;
+      const de = { [k(x, z)]: null }, fila = [[x, z]];
+      let fim = null;
+      while (fila.length && !fim){
+        const [a, b] = fila.shift();
+        for (const [ea, eb] of LADOS){
+          const na = a + ea, nb = b + eb, t = tipo(na, nb);
+          if (k(na, nb) in de) continue;
+          if (t === 'mata'){ de[k(na, nb)] = [a, b]; fim = [na, nb, ea, eb]; break; }
+          if (t === 'margem'){ de[k(na, nb)] = [a, b]; fila.push([na, nb]); }
+        }
+      }
+      if (!fim) continue;
+      const pts = [V(fim[0] + 0.5 + fim[2] * 0.3, 0, fim[1] + 0.5 + fim[3] * 0.3)];
+      for (let c = de[k(fim[0], fim[1])]; c && !(c[0] === x && c[1] === z); c = de[k(c[0], c[1])]) pts.push(V(c[0] + 0.5, 0, c[1] + 0.5));
+      pts.push(V(x + 0.5 + dx * 0.22, 0, z + 0.5 + dz * 0.22));
+      const agua = tipo(x + dx * 2, z + dz * 2) === 'lago' ? V(x + 0.5 + dx * 1.3, VISITA_CACHOEIRA.agua, z + 0.5 + dz * 1.3) : null;
+      l.push({ pts, ang: Math.atan2(dx, dz), agua });
+    }
+  }
+  return beirasCach = l;
+}
+function caminhoCachoeira(tipo){
+  const VC = VISITA_CACHOEIRA, V = (x, y, z) => new THREE.Vector3(x, y, z);
+  if (BICHOS_VOAM.includes(tipo)){
+    const pousos = CACHOEIRA.pedras.map(([x, z, , h]) => V(x, h, z)).filter(naTelaBicho);
+    if (!pousos.length) return null;
+    const c = sorteia(pousos), direita = V(Math.cos(cam.az), 0, -Math.sin(cam.az)), lado = Math.random() < 0.5 ? 1 : -1;
+    const fala = { papagaio: 'Currupaco!', arara: 'Rrraaá!' }[tipo] || null, ang = Math.atan2(VC.centro[0] - c.x, VC.centro[1] - c.z);
+    return [{ p: c.clone().addScaledVector(direita, -8 * lado).add(V(0, 4, 0)), voa: true }, { p: c, dur: 3, para: rnd(9, 14), voa: true, fala, bebe: true, olha: ang },
+      { p: c.clone().addScaledVector(direita, 8 * lado).add(V(0, 4.5, 0)), dur: 3, voa: true }];
+  }
+  let l = beirasCachoeira().filter(b => naTelaBicho(b.pts[b.pts.length - 1]));
+  if (tipo === 'anta' && l.some(b => b.agua)) l = l.filter(b => b.agua);
+  if (!l.length) return null;
+  const b = sorteia(l), vel = VC.vel[tipo] || 0.6, n = b.pts.length, pts = [{ p: b.pts[0] }];
+  for (let i = 1; i < n; i++) pts.push({ p: b.pts[i], dur: b.pts[i].distanceTo(b.pts[i - 1]) / vel });
+  Object.assign(pts[n - 1], { para: rnd(...VC.bebe), bebe: true, olha: b.ang, fala: tipo === 'onca' ? 'Grrr...' : null });
+  // a anta entra na água, fica de molho e sai pela mesma beira
+  if (tipo === 'anta' && b.agua) pts.push({ p: b.agua, dur: 2.6, para: rnd(...VC.molho) }, { p: b.pts[n - 1].clone(), dur: 2.6 });
+  for (let i = n - 2; i >= 0; i--) pts.push({ p: b.pts[i].clone(), dur: b.pts[i].distanceTo(b.pts[i + 1]) / vel });
+  return pts;
+}
+function soltarVisitaCachoeira(tipo){
+  const P = VISITA_CACHOEIRA.pesos, l = Object.keys(P).filter(podeVirBicho);
+  if (!tipo){ let r = Math.random() * l.reduce((s, k) => s + P[k], 0); tipo = l[l.length - 1]; for (const k of l){ r -= P[k]; if (r <= 0){ tipo = k; break; } } }
+  const pts = caminhoCachoeira(tipo);
+  if (!pts) return false;
+  visitaCachoeira = criarBicho(tipo, pts);
+  return true;
+}
+function sumirVisitaCachoeira(){ if (visitaCachoeira){ scene.remove(visitaCachoeira.g); visitaCachoeira = null; } proxVisitaCachoeira = rnd(...VISITA_CACHOEIRA.intervalo); }
+function atualizarVisitaCachoeira(dt, t){
+  if (!visitaCachoeira){
+    if (cine || !S.viuCineInicio) return;
+    if (proxVisitaCachoeira == null) proxVisitaCachoeira = rnd(...VISITA_CACHOEIRA.primeira);
+    if ((proxVisitaCachoeira -= dt) <= 0 && !soltarVisitaCachoeira()) proxVisitaCachoeira = rnd(4, 8);
+    return;
+  }
+  if (cine || passoBicho(visitaCachoeira, dt, t)) sumirVisitaCachoeira();
 }
 // ================= as capivaras do lago (com o terreno do canto Sul aberto): de dia, de vez em quando a família, a mãe e
 // dois filhotes, vem nadando pelo lago a oeste da ponte (só a cabeça e as costas para fora da água), sobe na beira, descansa
@@ -9671,7 +9788,14 @@ function migrar(){
   }
   if (!(S.mapa >= 2)) migrarMapa();
   if (!(S.mapa >= 3)) migrarHorta();
+  // a sexta parcela da mata virou a cachoeira: quem já tinha comprado recebe o dinheiro de volta (as árvores dela saem)
+  if (Array.isArray(S.parcelas) && S.parcelas.length > PARCELAS.length){
+    if (S.parcelas.slice(PARCELAS.length).some(Boolean)){ S.dinheiro += PARCELA_SEXTA.preco; parcelaDevolvida = true; }
+    S.parcelas.length = PARCELAS.length;
+  }
+  if (Array.isArray(S.mata) && S.mata.length > MATA_SLOTS.length) S.mata.length = MATA_SLOTS.length;
 }
+let parcelaDevolvida = false;
 // o mapa da primeira versão tinha 36 x 37 ladrilhos. No maior, entraram colunas e linhas entre as zonas, o galinheiro e o
 // curral se separaram e o leste ganhou espaço para os cercados novos: cada ponto anda com a sua zona (a fileira das
 // fábricas, o meio da fazenda e o sul). Os terrenos de canteiros foram redesenhados, então cada canteiro vai para o mesmo
@@ -9898,7 +10022,14 @@ function corChao(t, gx, gz){
   switch (t){
     case 'caminho': return r < 0.5 ? 0xdcc08a : 0xd2b47c;
     case 'orla': case 'orlaF': return r2 < 0.5 ? (r < 0.5 ? 0x68ae4a : 0x62a646) : (r < 0.5 ? 0x70b64e : 0x6aae4a);
-    case 'mata': return r2 < 0.5 ? (r < 0.5 ? 0x3f6e34 : 0x3a6630) : (r < 0.5 ? 0x4a7a3a : 0x5a7a38);
+    case 'mata': case 'pedra': return r2 < 0.5 ? (r < 0.5 ? 0x3f6e34 : 0x3a6630) : (r < 0.5 ? 0x4a7a3a : 0x5a7a38);
+    // a margem do lago da cachoeira: areia com pedrinhas na beira da água e grama rala mais para dentro
+    case 'margem': {
+      const tx = gx >> 2, tz = gz >> 2, beira = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => tipo(tx + a, tz + b) === 'lago');
+      if (hash(gx, 64, gz) < 0.1) return r < 0.5 ? 0x9a948c : 0x86817a;
+      if (beira || hash(gx >> 1, 65, gz >> 1) < 0.3) return r < 0.5 ? 0xcdb88c : 0xc2ac80;
+      return r2 < 0.5 ? (r < 0.5 ? 0x5e8e42 : 0x56853e) : (r < 0.5 ? 0x66974a : 0x5e8e44);
+    }
     case 'pista': {
       // terra batida com faixa central tracejada e marcas brancas nas pontas; com o hangar novo, asfalto com as bordas amarelas
       const meio = (PISTA_Z0 + PISTA_Z1 + 1) * 2;
@@ -9970,7 +10101,7 @@ function construirChao(){
     const tf = new Vox();
     for (let gz = bz * 16; gz < zf * 16; gz++) for (let gx = bx * 16; gx < xf * 16; gx++){
       const t = tipoChao(gx >> 4, Math.floor(gz / 16));
-      if (t !== 'grama' && t !== 'pastoV' && t !== 'pastoP' && t !== 'orla' && t !== 'orlaF' && t !== 'canto') continue;
+      if (t !== 'grama' && t !== 'pastoV' && t !== 'pastoP' && t !== 'orla' && t !== 'orlaF' && t !== 'canto' && t !== 'margem') continue;
       const r = hash(gx, 5, gz);
       if (r < 0.012){ const h = 1 + (r < 0.005 ? 1 : 0); tf.box(gx, 0, gz, gx, h - 1, gz, r < 0.006 ? 0x5ea341 : 0x6db74a); if (r < 0.0012) tf.set(gx, h, gz, sorteiaH([0xf2d14a, 0xffffff, 0xf27fa4], gx, gz)); }
     }
@@ -10034,6 +10165,134 @@ function montarMata(){
     pecas[i].push([x + 0.5 + (hash(x, 43, z) - 0.5) * 0.5, z + 0.5 + (hash(x, 44, z) - 0.5) * 0.5, Math.floor(hash(x, 45, z) * 4) * Math.PI / 2, 0.85 + hash(x, 46, z) * 0.5]);
   }
   pecas.forEach((lista, i) => MATAGAL.push(instanciasMata(geo('matagal' + i, () => vMatagal(i).build(1 / 8, { origin: [4, 0, 4] })), lista)));
+}
+
+// ================= a cachoeira da mata (CACHOEIRA): o paredão em cubinhos de 1/8 a partir do canto (x0, z0), com o riacho
+// no topo, as pedras da beira e as plantas da margem. A água que cai são dois panos com a textura correndo para baixo (o de
+// trás azul, o da frente com os fios brancos, mais rápido), com a espuma, os respingos e as ondinhas embaixo
+const CACH = { kq: () => (CACHOEIRA.queda.z - CACHOEIRA.z0) * 8, nk: () => (CACHOEIRA.z1 - CACHOEIRA.z0 + 1) * 8 };
+const naQuedaK = k => Math.abs(k + 0.5 - CACH.kq()) <= CACHOEIRA.queda.larg * 4;
+// a altura do paredão em cada fatia, mais baixa nas duas pontas; no canal da queda, a de cima dela
+function topoCachoeira(k){
+  if (naQuedaK(k)) k = Math.floor(CACH.kq());
+  const ponta = Math.min(k, CACH.nk() - 1 - k);
+  return Math.round(CACHOEIRA.alto + (hash(k >> 2, 71, 3) - 0.5) * 3 - Math.max(0, 7 - ponta) * 2);
+}
+function vCachoeira(){
+  const v = new Vox(), C = CACHOEIRA, nk = CACH.nk(), kq = CACH.kq();
+  const molhada = k => Math.abs(k + 0.5 - kq) <= C.queda.larg * 4 + 4;
+  // a frente do paredão: reta atrás da queda, irregular no resto, um pouco mais para fora no pé
+  const face = (k, y) => naQuedaK(k) ? 15 : 12 + Math.floor(hash(k >> 2, 72, y >> 2) * 4) + (y < 4 ? 1 : 0);
+  const rocha = (i, y, k) => {
+    const f = hash(i >> 1, y, k >> 1), banda = Math.floor((y + hash(k >> 3, 73, 0) * 3) / 3) % 3;
+    if (y > 3 && hash(i >> 1, y >> 1, k >> 1) < 0.1) return f < 0.5 ? 0x5f8f3e : 0x4f7f36;
+    if (molhada(k)) return f < 0.5 ? 0x5f5b57 : 0x6b6661;
+    if (f < 0.07) return 0x625c55;
+    return [0x8c857c, 0x7d766e, 0x978f85][banda];
+  };
+  const grama = (x, y, z) => hash(x, y + 7, z) < 0.5 ? 0x3f6e34 : hash(x, y, z) < 0.5 ? 0x4a7a3a : 0x56853e;
+  for (let k = 0; k < nk; k++){
+    const h = topoCachoeira(k), canal = naQuedaK(k);
+    for (let y = -2; y < h; y++){
+      const xf = face(k, y);
+      for (let i = 0; i <= xf; i++){
+        // o canal do riacho: duas camadas abaixo do topo, com a água por cima da pedra
+        if (canal && y >= h - 2) continue;
+        if (canal && y === h - 3){ v.set(i, y, k, (i + k) % 3 ? 0x4a97da : 0x6fbfee); continue; }
+        v.set(i, y, k, !canal && y === h - 1 ? grama(i, y, k) : rocha(i, y, k));
+      }
+    }
+    // cipós descendo pela frente
+    if (!molhada(k) && hash(k, 74, 1) < 0.16){ const n = 3 + Math.floor(hash(k, 75, 2) * 8); for (let y = h - 2; y >= h - 2 - n && y > 0; y--) v.set(face(k, y), y, k, y % 2 ? 0x3c8f45 : 0x2f7a3a); }
+    // o capim da beira do topo, caindo um pouquinho para fora
+    if (!canal && hash(k, 76, 3) < 0.5) v.set(face(k, h - 1) + 1, h - 1, k, grama(k, h, 1));
+    // pedras soltas no pé do paredão (fora da queda)
+    if (!molhada(k) && hash(k, 77, 4) < 0.1){ const r = 1.4 + hash(k, 78, 5) * 1.4; v.ell(face(k, 0) + 1.5, -1, k, r, r + 0.6, r, rocha, (x, y) => y >= -2); }
+  }
+  // a espuma branca na beira de cima, onde a água despenca
+  for (let k = 0; k < nk; k++) if (naQuedaK(k)) v.set(15, topoCachoeira(k) - 3, k, 0xeaf6ff);
+  // as pedras da beira, com musgo em cima
+  for (const [x, z, r, h] of C.pedras){
+    const cx = (x - C.x0) * 8, cz = (z - C.z0) * 8, ry = h * 8 + 2;
+    v.ell(cx, -2, cz, r * 8, ry, r * 8, (i, y, k) => y >= h * 8 - 1.5 && hash(i, y, k) < 0.55 ? 0x5f8f3e : rocha(i, y, k), (i, y) => y >= -2);
+  }
+  // as plantas da margem: samambaias e helicônias (o bico-de-papagaio vermelho e amarelo), longe da água
+  C.mapa.forEach((l, kz) => [...l].forEach((c, ix) => {
+    if (c !== 'm') return;
+    const tx = C.x0 + ix, tz = C.z0 + kz, beira = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([a, b]) => tipo(tx + a, tz + b) === 'lago');
+    for (let n = 0; n < 2; n++){
+      if (hash(tx, 80 + n, tz) > 0.55) continue;
+      // fica no lado do ladrilho que não dá para a água
+      let px = 2 + Math.floor(hash(tx, 82 + n, tz) * 4), pz = 2 + Math.floor(hash(tx, 84 + n, tz) * 4);
+      if (beira[0]) px = Math.min(px, 3); if (beira[1]) px = Math.max(px, 5); if (beira[2]) pz = Math.min(pz, 3); if (beira[3]) pz = Math.max(pz, 5);
+      const x = ix * 8 + px, z = kz * 8 + pz;
+      if (hash(tx, 86 + n, tz) < 0.65){
+        v.set(x, 0, z, 0x2f7a3a);
+        for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1]]) { v.set(x + a, 1, z + b, 0x3c8f45); v.set(x + a * 2, 1, z + b * 2, 0x4e9f4a); v.set(x + a * 3, 0, z + b * 3, 0x5aa845); }
+        v.set(x, 1, z, 0x3c8f45); v.set(x, 2, z, 0x4e9f4a);
+      } else {
+        v.box(x, 0, z, x, 3, z, 0x3c8f45); v.set(x + 1, 1, z, 0x4e9f4a); v.set(x - 1, 1, z, 0x4e9f4a); v.set(x, 1, z + 1, 0x4e9f4a);
+        v.set(x + 1, 3, z, 0xe0402a); v.set(x - 1, 4, z, 0xe0402a); v.set(x, 4, z, 0xf2c230);
+      }
+    }
+  }));
+  return v;
+}
+// a textura da água que cai: listras de cima a baixo, de pixel grande, que se repetem para a textura correr sem emenda
+function texQueda(frente){
+  const c = document.createElement('canvas'); c.width = 8; c.height = 32;
+  const g = c.getContext('2d'), cores = frente ? [null, null, null, 'rgba(255,255,255,0.85)', 'rgba(220,240,255,0.7)'] : ['#3f8fd6', '#4f9fe0', '#5fb0e6', '#8fcaf0', '#cfeafc'];
+  for (let i = 0; i < 8; i++){
+    let j = 0, s = 0;
+    while (j < 32){
+      const n = 2 + Math.floor(hash(i, frente ? 91 : 92, s) * 6), cor = cores[Math.floor(hash(i, frente ? 93 : 94, s) * cores.length)];
+      if (cor){ g.fillStyle = cor; g.fillRect(i, j, 1, Math.min(n, 32 - j)); }
+      j += n; s++;
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.magFilter = t.minFilter = THREE.NearestFilter; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+let cachoeira = null;
+function montarCachoeira(){
+  const C = CACHOEIRA, Q = C.queda, kq = CACH.kq();
+  const m = malha(geo('cachoeira', () => vCachoeira().build(1 / 8, { origin: [0, 0, 0], jitter: 0.03 })));
+  m.position.set(C.x0, 0, C.z0); scene.add(m);
+  // árvores em cima do paredão, longe da queda
+  for (const [x, z, i] of [[0.6, 44, 1], [0.5, 48.7, 0], [1.05, 49.7, 2], [0.4, 45.1, 2]]){
+    const k = Math.floor((z - C.z0) * 8), a = malha(geo('copa' + i, () => vCopa(i).build(1 / 8, { origin: [4, 0, 4] })), false);
+    a.position.set(x, topoCachoeira(k) / 8 - 0.02, z); a.rotation.y = Math.floor(hash(k, 79, i) * 4) * Math.PI / 2; scene.add(a);
+  }
+  // os dois panos da água, do canal lá em cima até o lago, um pouco inclinados para fora
+  const yTopo = (topoCachoeira(Math.floor(kq)) - 2) / 8, z0 = Q.z - Q.larg / 2, z1 = Q.z + Q.larg / 2, rep = (yTopo + 0.25) / (Q.larg * 4);
+  const pano = (dx, tex, opacity, depthWrite) => {
+    const g = new THREE.BufferGeometry(), xa = C.x0 + 2 + dx, xb = xa + 0.13;
+    g.setAttribute('position', new THREE.Float32BufferAttribute([xa, yTopo, z0, xa, yTopo, z1, xb, -0.24, z0, xb, -0.24, z1], 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute([1, 0.1, 0, 1, 0.1, 0, 1, 0.1, 0, 1, 0.1, 0], 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute([0, rep, 1, rep, 0, 0, 1, 0], 2));
+    g.setIndex([0, 2, 1, 1, 2, 3]);
+    const p = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: tex, transparent: true, opacity, depthWrite, side: THREE.DoubleSide, emissive: 0x16304a }));
+    scene.add(p); return p;
+  };
+  const texA = texQueda(false), texB = texQueda(true);
+  pano(0.01, texA, 0.95, true); pano(0.04, texB, 1, false);
+  // a espuma em volta do pé da queda
+  const espuma = new THREE.Mesh(geo('espumaCachoeira', () => { const v = new Vox(); v.ell(0, 0, 0, 5, 1.6, 8, (x, y, z) => hash(x, y, z) < 0.3 ? 0xcfeafc : 0xf4fbff, (x, y) => y >= 0); return v.build(1 / 16, { origin: [0, 0, 0], jitter: 0 }); }), MAT);
+  espuma.position.set(C.x0 + 2.12, -0.27, Q.z); scene.add(espuma);
+  cachoeira = { texA, texB, espuma, base: new THREE.Vector3(C.x0 + 2.2, 0, Q.z), tPart: 0, tOnda: 0 };
+}
+function atualizarCachoeira(dt, t){
+  const Q = cachoeira;
+  if (!Q) return;
+  Q.texA.offset.y = (Q.texA.offset.y + dt * 1.5) % 1; Q.texB.offset.y = (Q.texB.offset.y + dt * 2.4) % 1;
+  Q.espuma.scale.set(1 + Math.sin(t * 9) * 0.07, 1 + Math.sin(t * 7 + 1) * 0.2, 1 + Math.cos(t * 8) * 0.06);
+  // os respingos e as ondinhas só quando o pé da queda aparece na tela
+  const s = tela(Q.base);
+  if (s.x < -50 || s.x > innerWidth + 50 || s.y < -50 || s.y > innerHeight + 50) return;
+  const z = CACHOEIRA.queda.z, l = CACHOEIRA.queda.larg / 2;
+  if ((Q.tPart -= dt) <= 0){ Q.tPart = 0.09; particula(Q.base.x + rnd(-0.05, 0.25), 0.02, z + rnd(-l, l), [0xffffff, 0xcfeafc, 0x9fd4f4][(Math.random() * 3) | 0], 0.45); }
+  if ((Q.tOnda -= dt) <= 0){ Q.tOnda = 0.45; soltarOnda(Q.base.x + rnd(0.2, 0.6), z + rnd(-l, l), Math.random() < 0.4); }
 }
 
 // ================= a floresta à venda
@@ -10310,6 +10569,7 @@ function comprarCercado(id){
   hud(); salvar();
 }
 function itensFloresta(x, z){
+  if (naCachoeira(x, z) && tipo(x, z) !== 'mata') return { titulo: 'Cachoeira', icone: 'mata', estado: 'A cachoeira do fundo da mata. Os bichos vêm beber água no lago dela: fique de olho que sempre aparece alguém.', itens: [] };
   const p = parcelaEm(x, z);
   if (p >= 0 && !parcelaComprada(p)) return itensParcela(p);
   return { titulo: 'Mata nativa', icone: 'mata', estado: p >= 0 ? `Floresta protegida: aqui ninguém corta nem planta. ${parcelaComprada(p) ? textoSaude() : ''}` : 'Essa parte da mata ainda está fechada. Um dia a fazenda chega aqui.', itens: [] };
@@ -20374,7 +20634,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Freguesia</b>${nv(FREGUESIA.nivel)}: em cada visita, o Beto e o Jaca pagam o preço cheio até ${reais(FREGUESIA.base)} mais ${reais(FREGUESIA.porNivel)} por nível de cada produto (no seu nível, ${reais(demandaVisita())}). O que passar disso eles pagam ${Math.round(FREGUESIA.resto * 100)}%. A conta recomeça na visita seguinte, e o Pelúcio e o Patrinho ficam de fora.</li>
       <li><b>Estações:</b> seguem o calendário. As culturas da estação colhem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais. ${nomesRend1()}, que rendem 1, valem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais no Beto e no Jaca, mas esse bônus de preço não soma com a oferta do dia. Toque no selo da estação para ver quais.</li>
       <li><b>Figurinhas:</b> metas de longo prazo no caderno, que dão xp.</li>
-      <li><b>Floresta</b>${nv(PARCELAS[0].nivel)}: do outro lado da estrada há uma mata nativa protegida, vendida em ${PARCELAS.length} parcelas, nos níveis ${PARCELAS.map(P => P.nivel).join(', ')}. O Ed só coleta das árvores que já estão lá, sem plantar nem cortar: ${Object.values(NATIVAS).map(N => N.nomeP.toLowerCase()).join(', ')}. Cada árvore guarda uma coleta pronta, mesmo com o jogo fechado.</li>
+      <li><b>Floresta</b>${nv(PARCELAS[0].nivel)}: do outro lado da estrada há uma mata nativa protegida, vendida em ${PARCELAS.length} parcelas, nos níveis ${PARCELAS.map(P => P.nivel).join(', ')}. O Ed só coleta das árvores que já estão lá, sem plantar nem cortar: ${Object.values(NATIVAS).map(N => N.nomeP.toLowerCase()).join(', ')}. Cada árvore guarda uma coleta pronta, mesmo com o jogo fechado. No fundo da mata, no canto oeste, fica uma cachoeira com um lago, onde os bichos vêm beber água.</li>
       <li><b>Trufas</b>${nv(CENAS.patrinho.nivel())}: depois da visita do Patrinho, de vez em quando nasce uma trufa perto de uma árvore, enquanto você joga. Siga o cheirinho que sobe do chão e toque ali para o Ed cavar. Só o Patrinho compra: use o botão Ligar e ele vem de lambreta pagar ${reais(PRODUTOS.trufa.venda)} por trufa.</li>
       <li><b>Luma:</b> a irmã chihuahua dos porquinhos. De vez em quando ela sai pela portinha da casa para brincar com a bolinha roxa, em volta do chafariz se tiver um, e, se o Ed estiver por perto, dá uma mordidinha no rabicó dele. Ela também tem as aventuras dela: leva o envelope do aluguel ou o cartão-postal até o Ed, cava e acha moedinha, osso ou sementes, arranca o mato dos canteiros e leva para a composteira, foge com uma cenoura do canteiro (o Ed corre atrás), late para as vacas e para os patos, tira soneca no sol de manhã, corre atrás do disco voador e do redemoinho, pula nas poças da chuva, recebe o Beto e o Jaca na porteira, acompanha a galinha aposentada e pede biscoito no cafezinho. Na janela Cenas, o cartão da Luma tem um botão para cada uma.</li>
       ${S.viuCineLucia ? `<li><b>Aluguel do Nano Hostel:</b> de vez em quando a Lúcia, dona do hostel, deixa ${reais(ALUGUEL.valor)} num envelope na porta da casa. Toque nele para o Ed pegar.</li>` : ''}
@@ -20479,7 +20739,7 @@ function alvoNaTela(cx, cy){
       const p = PREDIO_EM[iT(x, z)];
       if (p) return { k: 'predio', p };
       const t = tipo(x, z);
-      if (t === 'mata' || t === 'orlaF') return { k: 'floresta', x, z };
+      if (t === 'mata' || t === 'orlaF' || naCachoeira(x, z)) return { k: 'floresta', x, z };
       // o chão entre as pernas do mirante também abre o menu dele (com a parte de cima translúcida, é a base que vale)
       if (t === 'mirante') return { k: 'mirante' };
       if (t === 'canto') return { k: 'canto' };
@@ -20742,6 +21002,7 @@ function quadro(agoraP){
   atualizarDisco(dt, t);
   Musica.atualizar();
   atualizarBichosMata(dt, t);
+  atualizarVisitaCachoeira(dt, t); atualizarCachoeira(dt, t);
   atualizarRelogioFoguete(dt);
   atualizarCapivaras(dt, t);
   atualizarBeijaFlor(dt, t);
@@ -20893,11 +21154,12 @@ async function iniciar(){
   scene.add(marcaSel); scene.add(marcaHover);
   construirChao();
   construirCenario();
-  montarMata();
+  montarMata(); montarCachoeira();
   if (mapaMigrado) conferirMapaNovo(); else if (hortaMigrada) conferirHorta();
   if (!Array.isArray(S.parcelas)) S.parcelas = []; if (!Array.isArray(S.mata)) S.mata = [];
   PARCELAS.forEach((_, p) => { if (parcelaComprada(p)) abrirParcela(p); });
   montarPlacasMata();
+  if (parcelaDevolvida) setTimeout(() => aviso(`A sexta parcela da mata virou uma cachoeira. Os ${reais(PARCELA_SEXTA.preco)} voltaram para você.`, 'grande', 6), 2500);
   montarMirante(); montarPlacaMirante();
   montarPlacaCanto();
   montarEnvelope(); montarCartao();
@@ -20975,7 +21237,7 @@ async function iniciar(){
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
   window.__fazenda = { flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
-    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR } }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
+    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA } }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(FAB_NOVAS).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
     trator: () => trator, TRATOR, filaTipos: () => fila.map(t => t.tipo), checar: (t, a, q) => checar(t, a, q), enfileirarTrator: (lote, acao, semente) => enfileirar('trator', { k: 'trator', lote }, { acao, semente }), tratorVis: () => tratorVis,
