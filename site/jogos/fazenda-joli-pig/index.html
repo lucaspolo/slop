@@ -16690,27 +16690,33 @@ function atualizarClima(dt){
     atualizarChipEstacao();
   }
   const ch = chovendo();
-  // a luz vem do horário (atualizarCiclo); a chuva escurece um pouco
-  sol.intensity = lerp(sol.intensity, LUZ.sol * (ch ? 0.62 : 1), Math.min(1, dt * 1.5));
-  ceuLuz.intensity = lerp(ceuLuz.intensity, LUZ.ceu * (ch ? 0.86 : 1), Math.min(1, dt * 1.5));
+  // a luz vem do horário (atualizarCiclo); a chuva escurece um pouco (CHUVA_VIS.sol e .ceu)
+  sol.intensity = lerp(sol.intensity, LUZ.sol * (ch ? CHUVA_VIS.sol : 1), Math.min(1, dt * 1.5));
+  ceuLuz.intensity = lerp(ceuLuz.intensity, LUZ.ceu * (ch ? CHUVA_VIS.ceu : 1), Math.min(1, dt * 1.5));
   if (ch && !gotas) gotas = criarGotas();
   if (gotas){
-    const pos = gotas.geometry.attributes.position, a = pos.array;
-    for (let i = 0; i < a.length; i += 3){
-      a[i + 1] -= dt * 9; a[i] -= dt * 1.2;
-      if (a[i + 1] < 0){ if (ch){ a[i] = cam.alvo.x + rnd(-14, 14); a[i + 1] = rnd(7, 9); a[i + 2] = cam.alvo.z + rnd(-14, 14); } else a[i + 1] = -99; }
+    // cada pingo é um risquinho: as duas pontas descem juntas, a de baixo na frente
+    const pos = gotas.geometry.attributes.position, a = pos.array, C = CHUVA_VIS;
+    for (let i = 0; i < a.length; i += 6){
+      let x = a[i] - dt * C.ventoX, y = a[i + 1] - dt * C.vel, z = a[i + 2];
+      if (y < 0){ if (ch){ x = cam.alvo.x + rnd(-14, 14); y = rnd(7, 9); z = cam.alvo.z + rnd(-14, 14); } else y = -99; }
+      a[i] = x; a[i + 1] = y; a[i + 2] = z;
+      a[i + 3] = x - C.ventoX / C.vel * C.risco; a[i + 4] = y - C.risco; a[i + 5] = z;
     }
     pos.needsUpdate = true;
-    gotas.material.opacity = lerp(gotas.material.opacity, ch ? 0.85 : 0, Math.min(1, dt * 2));
+    gotas.material.opacity = lerp(gotas.material.opacity, ch ? C.opacidade : 0, Math.min(1, dt * 2));
     if (!ch && gotas.material.opacity < 0.02){ scene.remove(gotas); gotas.geometry.dispose(); gotas = null; }
   }
 }
+// a chuva atrapalhava a vista (o Lucas pediu menos): eram 1600 quadradinhos azuis bem opacos; agora são menos pingos, em
+// risquinhos finos e claros, meio transparentes, e a luz escurece menos
+const CHUVA_VIS = { n: 900, risco: 0.32, vel: 9, ventoX: 1.2, cor: 0xd4e6f6, opacidade: 0.5, sol: 0.75, ceu: 0.92 };
 function criarGotas(){
-  const n = 1600, pos = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++){ pos[i * 3] = cam.alvo.x + rnd(-14, 14); pos[i * 3 + 1] = rnd(0, 9); pos[i * 3 + 2] = cam.alvo.z + rnd(-14, 14); }
+  const C = CHUVA_VIS, pos = new Float32Array(C.n * 6);
+  for (let i = 0; i < C.n; i++){ const x = cam.alvo.x + rnd(-14, 14), y = rnd(0, 9), z = cam.alvo.z + rnd(-14, 14); pos.set([x, y, z, x, y - C.risco, z], i * 6); }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const m = new THREE.Points(g, new THREE.PointsMaterial({ color: 0x5f9fd6, size: 3.2, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false }));
-  scene.add(m); return m;
+  const m = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: C.cor, transparent: true, opacity: 0, depthWrite: false }));
+  m.frustumCulled = false; scene.add(m); return m;
 }
 function abrirEstacao(){
   const e = estacaoAtual();
