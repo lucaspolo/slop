@@ -1397,6 +1397,280 @@ function corpoToalha(v, frenteZ, cor, listra){
   for (let y = 4; y <= 20; y++) for (const x of [5, 6]){ const z = frenteZ(x, y); if (z != null) v.set(x, y, z + 1, x === 6 || y === 20 ? ponta : cor); }
   for (const [x, y, z] of [[0, 13, -16], [0, 14, -17], [1, 15, -17], [2, 15, -16], [2, 14, -16], [1, 13, -16]]) v.set(x, y, z, COR.focinho);
 }
+// ================= trajes (o Lucas pediu): cada tarefa com a roupa dela, trocada num giro (TRAJES, TRAJE_ACAO, passoGiro)
+const TJ = { branco: 0xf4f2ea, brancoS: 0xd8d5c8, amarelo: 0xf2c335, palha: 0xe6d8a8, palhaE: 0xc4ae74, tela: 0x454b52,
+  caqui: 0xc9a55a, caquiE: 0xa5833c, faixa: 0xf2e14a, prata: 0xd4d6d8, preto: 0x2a2a2a, vermelho: 0xd6322c, vermelhoE: 0xa82420, dourado: 0xe2b52e,
+  capa: 0xf4d03a, capaE: 0xd2ac26, verde: 0x5f7a3a, verdeE: 0x48602c, guarda: 0xb09a62, guardaE: 0x8a7444, couro: 0x6a4a2a,
+  xadrez: 0xa9845a, xadrezE: 0x76563a, xadrezV: 0xb03a30, bone: 0x3f8a3a, boneE: 0x2c6a2a, lente: 0x9ad8f0,
+  astro: 0xf2f2f0, astroE: 0xb3b8c0, jeans: 0x4a6ab0, jeansE: 0x38548e, chef: 0xfbfaf6, chefE: 0xdedbd2, mangaPalha: 0xe8c56a };
+const misturar = (a, b, k) => new THREE.Color(a).lerp(new THREE.Color(b), k).getHex();
+// casca de um elipsoide: os cubinhos entre o de raio r e o de raio r - esp (cor pode ser função; null pula)
+function casca(v, cx, cy, cz, rx, ry, rz, esp, cor, cond){
+  for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (let z = Math.floor(cz - rz); z <= Math.ceil(cz + rz); z++){
+    if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 + ((z - cz) / rz) ** 2 > 1) continue;
+    if (((x - cx) / (rx - esp)) ** 2 + ((y - cy) / (ry - esp)) ** 2 + ((z - cz) / (rz - esp)) ** 2 <= 1) continue;
+    if (cond && !cond(x, y, z)) continue;
+    const c = typeof cor === 'function' ? cor(x, y, z) : cor; if (c != null) v.set(x, y, z, c);
+  }
+}
+const pernasTraje = (v, cor, r2 = 27) => { for (const lx of [-7, 7]) for (let y = 2; y <= 8; y++) for (let x = lx - 5; x <= lx + 5; x++) for (let z = -5; z <= 5; z++) if ((x - lx) ** 2 + z * z <= r2) v.set(x, y, z, cor(x, y, z)); };
+const naFrente = (v, fz, x, y, c, dz = 1) => { const z = fz(x, y); if (z != null) v.set(x, y, z + dz, c); };
+// o macacão de sempre do Ed, do Hud e do Dani (também por baixo dos trajes que só põem algo por cima)
+function corpoMacacao(v, frenteZ, cor, bolso){
+  const tom = (c, k) => new THREE.Color(c).multiplyScalar(k).getHex();
+  const costura = tom(cor, 0.84), barra = tom(cor, 0.9), botao = 0xfff3cf, borda = tom(bolso, 0.9);
+  for (const lx of [-7, 7]) for (let y = 2; y <= 8; y++) for (let x = lx - 5; x <= lx + 5; x++) for (let z = -5; z <= 5; z++)
+    if ((x - lx) ** 2 + z * z <= 27) v.set(x, y, z, y <= 3 ? barra : cor);
+  v.ell(0, 15, 0, 16.8, 14.2, 14.1, cor, (x, y) => y >= 5);
+  v.ell(0, 27, 0, 15.3, 7.6, 12.9, COR.pele);
+  for (let x = -9; x <= 9; x++) for (let y = 16; y <= 30; y++){ const z = frenteZ(x, y); if (z != null) v.set(x, y, z, (y === 30 || Math.abs(x) === 9) ? costura : cor); }
+  for (const lado of [-1, 1]) for (let x = 6; x <= 9; x++) for (let y = 22; y <= 36; y++) for (let z = -14; z <= 14; z++){
+    const X = lado * x, d = (X / 15.3) ** 2 + ((y - 27) / 7.6) ** 2 + (z / 12.9) ** 2;
+    if (d <= 1 && d >= 0.7) v.set(X, y, z, (x === 6 || x === 9) ? costura : cor);
+  }
+  for (const lado of [-1, 1]) for (const [x, y] of [[7, 29], [8, 29], [7, 30], [8, 30]]){ const z = frenteZ(lado * x, y); v.set(lado * x, y, z + 1, botao); }
+  const zb = {};
+  for (let x = -6; x <= 6; x++) for (let y = 9; y <= 20; y++){
+    const z = frenteZ(x, y) + 1; zb[x + ',' + y] = z;
+    v.set(x, y, z, (Math.abs(x) === 6 || y === 9 || y === 20) ? borda : bolso);
+  }
+  const P = [];
+  for (let y = 11; y <= 18; y++) P.push([-3, y], [-2, y]);
+  for (const x of [-1, 0, 1]) P.push([x, 17], [x, 18], [x, 13], [x, 14]);
+  P.push([2, 17], [2, 14], [2, 15], [2, 16], [3, 15], [3, 16]);
+  for (const [x, y] of P) v.set(x, y, zb[x + ',' + y], COR.letra);
+  for (const [x, y, z] of [[0, 14, -15], [0, 15, -16], [1, 16, -16], [2, 16, -15], [2, 15, -15], [1, 14, -15]]) v.set(x, y, z, COR.focinho);
+}
+const rabinho = v => { for (const [x, y, z] of [[0, 14, -16], [0, 15, -17], [1, 16, -17], [2, 16, -16], [2, 15, -16], [1, 14, -16]]) v.set(x, y, z, COR.focinho); };
+// o braço de um traje: manga, punho e a mão (de luva, ou a patinha de sempre)
+function vBracoTraje(B){
+  const v = new Vox(), cm = typeof B.manga === 'function' ? B.manga : () => B.manga;
+  v.ell(0, -8, 0, 5.1, 9.2, 5.1, (x, y, z) => y >= -11 ? cm(x, y, z) : y >= -13 ? (B.punho ?? cm(x, y, z)) : (B.luva ?? COR.pele));
+  v.ell(0, -15, 0.8, 3.9, 2.9, 3.9, B.luva ?? COR.focinho, (x, y) => y <= -14);
+  if (!B.luva) for (let y = -19; y <= -15; y++) for (let z = -5; z <= 5; z++) v.set(0, y, z, null);
+  return v;
+}
+// bota (ou pantufa) no lugar do pezinho
+function vPeTraje(cor, sola){
+  const v = new Vox();
+  v.ell(0, -5, 0.5, 4.7, 4.8, 5, (x, y) => y <= -9 ? sola : cor, (x, y) => y <= -1 && y >= -9);
+  v.ell(0, -7, 4.5, 4.1, 2.6, 2.7, (x, y) => y <= -9 ? sola : cor, (x, y) => y >= -9);
+  return v;
+}
+// apicultor: macacão branco fechado com zíper, luva amarela e o chapéu de abas com o véu de tela escura (em xadrez de
+// cubinho, para o focinho aparecer por trás), preso no pescoço com o elástico
+function corpoApicultor(v, fz){
+  const B = TJ.branco;
+  pernasTraje(v, (x, y) => y <= 3 ? TJ.brancoS : B, 29);
+  v.ell(0, 15, 0, 17.2, 14.6, 14.5, B, (x, y) => y >= 4);
+  v.ell(0, 27, 0, 15.8, 8, 13.4, B);
+  for (let y = 6; y <= 33; y++) naFrente(v, fz, 0, y, TJ.brancoS, 0);
+  for (let x = 4; x <= 10; x++) for (let y = 17; y <= 23; y++) naFrente(v, fz, x, y, (x === 4 || x === 10 || y === 17 || y === 23) ? TJ.brancoS : B);
+  for (const [x, y, c] of [[6, 20, TJ.amarelo], [7, 20, TJ.preto], [8, 20, TJ.amarelo], [7, 21, 0xdfeef8], [6, 21, 0xdfeef8]]) naFrente(v, fz, x, y, c);
+  rabinho(v);
+}
+function cabecaApicultor(v, cy){
+  for (let y = 30; y <= cy + 10; y++){
+    const t = (y - 30) / (cy - 20), rx = 17.5 + 5.5 * t, zf = 25, zt = 15.5 + 6.5 * t;
+    for (let x = -24; x <= 24; x++) for (let z = -24; z <= 26; z++){
+      const d = (x / rx) ** 2 + (z >= 0 ? (z / zf) ** 2 : (z / zt) ** 2), di = (x / (rx - 1.6)) ** 2 + (z >= 0 ? (z / (zf - 1.6)) ** 2 : (z / (zt - 1.6)) ** 2);
+      if (d > 1 || di <= 1) continue;
+      // a tela: fios a cada 4 cubinhos, para o rosto aparecer entre eles
+      if (y <= 31) v.set(x, y, z, TJ.branco); else if (y % 4 === 0 || ((x + z) % 4 + 4) % 4 === 0) v.set(x, y, z, TJ.tela);
+    }
+  }
+  for (let x = -24; x <= 24; x++) for (let z = -24; z <= 24; z++){ const d = (x / 24) ** 2 + (z / 24) ** 2; if (d <= 1) v.set(x, cy + 11, z, d > 0.82 ? TJ.palhaE : TJ.palha); }
+  v.ell(0, cy + 15, 0, 12.5, 6, 12.5, (x, y) => y <= cy + 13 ? 0x8a6a3a : TJ.palha, (x, y) => y >= cy + 12);
+}
+// bombeiro: casaco e calça caqui com faixas refletivas, fecho com presilhas, luva e bota pretas, capacete vermelho de aba
+// comprida atrás com o escudo dourado; as orelhas ficam dentro do capacete
+function corpoBombeiro(v, fz){
+  const C = TJ.caqui, faixa = y => (y === 11 || y === 12) ? TJ.faixa : y === 13 ? TJ.prata : null;
+  pernasTraje(v, (x, y) => y === 4 || y === 5 ? TJ.faixa : y === 6 ? TJ.prata : C, 29);
+  v.ell(0, 15, 0, 17.4, 14.8, 14.7, (x, y) => faixa(y) || C, (x, y) => y >= 4);
+  v.ell(0, 27, 0, 15.9, 8.2, 13.5, (x, y) => y >= 31 ? TJ.caquiE : C);
+  for (let y = 5; y <= 32; y++) for (const x of [-1, 0, 1]) naFrente(v, fz, x, y, x === 0 && y % 4 === 0 ? TJ.preto : TJ.caquiE, 0);
+  rabinho(v);
+}
+function cabecaBombeiro(v, cy, fz){
+  const yc = cy + 9, dentro = (x, y, z) => (x / 21) ** 2 + ((y - yc) / 14) ** 2 + ((z + 1) / 20.5) ** 2 <= 1;
+  for (let x = -21; x <= 21; x++) for (let y = cy + 11; y <= cy + 27; y++) for (let z = -6; z <= 12; z++) if (Math.abs(x) >= 4 && v.has(x, y, z) && !dentro(x, y, z)) v.set(x, y, z, null);
+  v.ell(0, yc, -1, 21, 14, 20.5, (x, y) => y <= cy + 7 ? TJ.vermelhoE : TJ.vermelho, (x, y) => y >= cy + 6);
+  for (let x = -24; x <= 24; x++) for (let z = -29; z <= 24; z++){ const d = (x / 23.5) ** 2 + (z >= 0 ? (z / 22.5) ** 2 : (z / 28.5) ** 2); if (d <= 1) v.set(x, cy + 6, z, d > 0.8 ? TJ.vermelhoE : TJ.vermelho); }
+  for (let z = -18; z <= 16; z++){ const y = Math.round(yc + 14 * Math.sqrt(Math.max(0, 1 - ((z + 1) / 20.5) ** 2))); v.set(0, y, z, TJ.vermelhoE); }
+  for (let x = -4; x <= 4; x++) for (let y = cy + 10; y <= cy + 17; y++){
+    if (y < cy + 12 && Math.abs(x) > (y - cy - 9) * 2) continue;
+    naFrente(v, fz, x, y, Math.abs(x) <= 1 && y >= cy + 12 && y <= cy + 15 ? TJ.vermelhoE : TJ.dourado);
+  }
+}
+// capa de chuva amarela com capuz (as orelhas furam o capuz) e botas amarelas
+function corpoCapa(v, fz){
+  pernasTraje(v, () => COR.pele);
+  v.ell(0, 15, 0, 17.6, 15, 14.9, (x, y) => y <= 5 ? TJ.capaE : TJ.capa, (x, y) => y >= 5);
+  // a barra abre em saia, emendada no corpo
+  for (let y = 3; y <= 8; y++){ const rx = 15.6 + (8 - y) * 0.6, rz = 13.3 + (8 - y) * 0.6; for (let x = -19; x <= 19; x++) for (let z = -17; z <= 17; z++){ const d = (x / rx) ** 2 + (z / rz) ** 2; if (d >= 0.78 && d <= 1) v.set(x, y, z, y === 3 ? TJ.capaE : TJ.capa); } }
+  v.ell(0, 27, 0, 16, 8.2, 13.6, TJ.capa);
+  for (let y = 5; y <= 31; y++) naFrente(v, fz, 0, y, TJ.capaE, 0);
+  for (let y = 9; y <= 29; y += 5) naFrente(v, fz, 2, y, 0x6a5420);
+  rabinho(v);
+}
+function cabecaCapa(v, cy){
+  casca(v, 0, cy, -1, 22.3, 21.8, 21, 2.2, (x, y, z) => z > 2 && z <= 5 ? TJ.capaE : TJ.capa, (x, y, z) => y >= cy - 12 && (z <= 5 || y >= cy + 13));
+}
+// pijama listrado na cor de cada um, gola branca, botões, bolsinho na cor do bolso, touca com pompom e pantufa
+const listraPijama = cor => { const cl = misturar(cor, 0xffffff, 0.55); return (x, y) => (((y % 6) + 6) % 6) < 2 ? cor : cl; };
+function corpoPijama(v, fz, cor, bolso){
+  const L = listraPijama(cor);
+  pernasTraje(v, (x, y) => y <= 3 ? cor : L(x, y));
+  v.ell(0, 15, 0, 17, 14.4, 14.3, L, (x, y) => y >= 5);
+  v.ell(0, 27, 0, 15.6, 7.9, 13.2, (x, y) => y >= 32 ? 0xfdf8ef : L(x, y));
+  for (let y = 9; y <= 29; y += 4) naFrente(v, fz, 0, y, 0xfdf8ef);
+  for (let x = -10; x <= -5; x++) for (let y = 19; y <= 24; y++) naFrente(v, fz, x, y, bolso);
+  rabinho(v);
+}
+function cabecaPijama(v, cy, fz, cor){
+  const cl = misturar(cor, 0xffffff, 0.55);
+  casca(v, 0, cy, 0, 21.2, 20.6, 19.8, 2, (x, y) => y <= cy + 10 ? 0xfdf8ef : ((y >> 1) % 2 ? cor : cl), (x, y) => y >= cy + 9);
+  let px = 0, py = 0, pz = 0;
+  for (let i = 0; i <= 16; i++){
+    const rr = Math.max(1.6, 9 - i * 0.48); px = i * 0.55; py = cy + 18 + i * 0.75 - Math.max(0, i - 8) * 0.9; pz = -i * 0.9;
+    v.ell(Math.round(px), Math.round(py), Math.round(pz), rr, 1.6, rr, i % 4 < 2 ? cor : cl);
+  }
+  v.ell(Math.round(px + 1), Math.round(py - 2), Math.round(pz - 1), 3.4, 3.4, 3.4, 0xfdf8ef);
+}
+// guarda-florestal: colete verde aberto por cima do macacão, com bolsos e o distintivo, chapéu de guarda-parque e bota
+function corpoGuarda(v, fz, cor, bolso){
+  corpoMacacao(v, fz, cor, bolso);
+  casca(v, 0, 17, 0, 18, 15.5, 15.4, 2, (x, y) => y === 10 ? TJ.verdeE : TJ.verde, (x, y, z) => y >= 10 && y <= 26 && !(z > 6 && Math.abs(x) <= 4));
+  for (const lado of [-1, 1]) for (let x = 6; x <= 11; x++) for (let y = 12; y <= 17; y++) naFrente(v, fz, lado * x, y, (y === 17 || x === 6 || x === 11) ? TJ.verdeE : TJ.verde);
+  for (const [x, y] of [[-8, 25], [-7, 24], [-9, 24], [-8, 23], [-8, 24]]) naFrente(v, fz, x, y, TJ.dourado);
+}
+function cabecaGuarda(v, cy){
+  for (let x = -25; x <= 25; x++) for (let z = -25; z <= 25; z++){ const d = (x / 24.5) ** 2 + (z / 23.5) ** 2; if (d <= 1) v.set(x, cy + 12, z, d > 0.86 ? TJ.guardaE : TJ.guarda); }
+  for (let y = cy + 13; y <= cy + 23; y++){
+    const t = (y - cy - 13) / 10, rr = 12.5 - t * 4.5;
+    for (let x = -13; x <= 13; x++) for (let z = -13; z <= 13; z++){
+      const d = t > 0.6 ? (Math.abs(x) + Math.abs(z)) / (rr * 1.25) : Math.hypot(x, z) / rr;
+      if (d <= 1) v.set(x, y, z, y <= cy + 14 ? TJ.couro : TJ.guarda);
+    }
+  }
+}
+// detetive das trufas: capinha xadrez nos ombros por cima do macacão, boné de duas abas (o do Sherlock) e a lupa na mão
+const xadrezDetetive = (x, y) => { const a = (x + 60) % 6, b = (y + 60) % 6; return a === 0 || b === 0 ? TJ.xadrezE : (a === 3 && b === 3) ? TJ.xadrezV : TJ.xadrez; };
+function corpoDetetive(v, fz, cor, bolso){
+  corpoMacacao(v, fz, cor, bolso);
+  casca(v, 0, 26, 0, 18.5, 12, 16, 2.2, xadrezDetetive, (x, y, z) => y >= 17 && !(z > 8 && Math.abs(x) <= 3));
+}
+function cabecaDetetive(v, cy){
+  casca(v, 0, cy, 0, 21, 20.5, 19.8, 2.2, xadrezDetetive, (x, y) => y >= cy + 8);
+  for (const lado of [1, -1]) for (let x = -9; x <= 9; x++) for (let k = 0; k <= 7; k++){ if (Math.abs(x) > 9 - k * 0.7) continue; v.set(x, cy + 8 - Math.round(k * 0.35), lado * (17 + k), xadrezDetetive(x, k)); }
+  for (const [x, y] of [[-1, 21], [0, 21], [1, 21], [-2, 22], [2, 22], [-3, 22], [3, 22]]) v.set(x, cy + y, 0, TJ.xadrezE);
+}
+// piloto de trator: lenço vermelho de bolinhas no pescoço, boné verde de aba e os óculos de proteção na testa
+const lencoVermelho = (x, y, z) => ((x * 3 + z * 5 + y * 7) % 11 + 11) % 11 === 0 ? 0xfdf8ef : TJ.vermelho;
+function corpoPiloto(v, fz, cor, bolso){
+  corpoMacacao(v, fz, cor, bolso);
+  casca(v, 0, 31, 0, 15.9, 2.4, 13.5, 1.6, lencoVermelho);
+  for (let y = 22; y <= 30; y++) for (let x = -9; x <= 9; x++) if (Math.abs(x) <= (y - 21) * 0.95) naFrente(v, fz, x, y, lencoVermelho(x, y, 0));
+}
+function cabecaPiloto(v, cy, fz){
+  casca(v, 0, cy, 0, 21, 20.6, 19.8, 2.2, TJ.bone, (x, y) => y >= cy + 9);
+  v.ell(0, cy + 20, 0, 2, 1.5, 2, TJ.boneE);
+  for (let x = -11; x <= 11; x++) for (let z = 15; z <= 26; z++) if ((x / 11.5) ** 2 + ((z - 15) / 11) ** 2 <= 1) v.set(x, cy + 9, z, TJ.boneE);
+  casca(v, 0, cy, 0, 21.4, 21, 20.2, 1, TJ.preto, (x, y) => y === cy + 14 || y === cy + 15);
+  for (const lado of [-1, 1]) for (let dx = -3; dx <= 3; dx++) for (let dy = -3; dy <= 3; dy++){
+    const d = Math.hypot(dx, dy); if (d > 3.3) continue;
+    naFrente(v, fz, lado * 6 + dx, cy + 15 + dy, d > 2.3 ? TJ.preto : TJ.lente);
+  }
+}
+// astronauta: roupa branca com juntas cinza, a caixa de controle de botõezinhos no peito, o colar de metal e o capacete
+// de vidro (uma esfera transparente à parte, em extras)
+function corpoAstronauta(v, fz){
+  const A = TJ.astro, E = TJ.astroE;
+  pernasTraje(v, (x, y) => y === 6 ? E : A, 29);
+  v.ell(0, 15, 0, 17.4, 14.8, 14.7, (x, y) => y === 6 || y === 7 ? E : A, (x, y) => y >= 4);
+  v.ell(0, 27, 0, 16, 8.3, 13.6, A);
+  for (let y = 27; y <= 29; y++) for (let x = -21; x <= 21; x++) for (let z = -21; z <= 21; z++){ const d = Math.hypot(x, z - 1); if (d >= 17.5 && d <= 20.5) v.set(x, y, z, E); }
+  for (let x = -6; x <= 6; x++) for (let y = 12; y <= 20; y++) naFrente(v, fz, x, y, x === -6 || x === 6 || y === 12 || y === 20 ? 0x7a8088 : 0x9aa0a8);
+  for (const [x, y, c] of [[-3, 16, 0xe0404a], [0, 16, 0x3f8ad8], [3, 16, 0xf2c335], [-3, 14, 0x5aa845], [2, 14, 0xfdf8ef]]) naFrente(v, fz, x, y, c);
+  rabinho(v);
+}
+function capaceteAstronauta(){
+  const k = 1 / 57, teta = Math.acos((27 - 47) / 28);
+  const m = new THREE.Mesh(new THREE.SphereGeometry(28 * k, 24, 16, 0, Math.PI * 2, 0, teta), new THREE.MeshLambertMaterial({ color: 0xcfeeff, transparent: true, opacity: 0.3, depthWrite: false }));
+  m.position.set(0, 47 * k, 1 * k);
+  const brilho = new THREE.Mesh(new THREE.SphereGeometry(4 * k, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 }));
+  brilho.position.set(-12 * k, 62 * k, 18 * k); brilho.scale.set(1, 1.6, 0.4);
+  return [m, brilho];
+}
+// caipira (no ArraiEd): camisa xadrez na cor de cada um, calça jeans com remendo, cinto, chapéu de palha desfiado com a
+// fita vermelha e o remendo, e sardas pintadas nas bochechas
+const xadrezCaipira = cor => { const meio = misturar(cor, 0xffffff, 0.35); return (x, y) => { const a = Math.floor((x + 40) / 4) % 2, b = Math.floor((y + 40) / 4) % 2; return a && b ? cor : a || b ? meio : 0xfdf8ef; }; };
+function corpoCaipira(v, fz, cor){
+  const xad = xadrezCaipira(cor);
+  pernasTraje(v, (x, y) => y <= 3 ? TJ.jeansE : TJ.jeans);
+  v.ell(0, 15, 0, 17, 14.4, 14.3, (x, y) => y <= 9 ? TJ.jeans : y === 10 ? 0x6a4a2a : xad(x, y), (x, y) => y >= 5);
+  v.ell(0, 27, 0, 15.6, 7.9, 13.2, (x, y) => y >= 32 ? COR.pele : xad(x, y));
+  for (let x = -10; x <= -5; x++) for (let y = 4; y <= 7; y++) naFrente(v, fz, x, y, (x === -10 || x === -5 || y === 4 || y === 7) ? 0xc89a20 : TJ.amarelo);
+  for (const x of [-1, 0, 1]) naFrente(v, fz, x, 10, TJ.dourado);
+  rabinho(v);
+}
+function cabecaCaipira(v, cy, fz){
+  for (const lado of [-1, 1]) for (const [dx, dy] of [[11, 3], [13, 4], [12, 1], [14, 2], [10, 5]]) v.frente(lado * dx, cy - 6 + dy, 0x9a5a3a);
+  for (let x = -26; x <= 26; x++) for (let z = -26; z <= 26; z++){
+    const d = (x / 25.5) ** 2 + (z / 24.5) ** 2; if (d > 1) continue;
+    if (d > 0.9 && hash(x, 77, z) < 0.35) continue;
+    v.set(x, cy + 12, z, ((x + z) % 3 + 3) % 3 === 0 ? TJ.palhaE : TJ.mangaPalha);
+  }
+  for (let y = cy + 13; y <= cy + 20; y++) for (let x = -11; x <= 11; x++) for (let z = -11; z <= 11; z++) if (Math.hypot(x, z) <= 10.5) v.set(x, y, z, y <= cy + 14 ? TJ.vermelho : ((y + x) % 3 + 3) % 3 === 0 ? TJ.palhaE : TJ.mangaPalha);
+  for (let x = 3; x <= 7; x++) for (let y = cy + 16; y <= cy + 19; y++) naFrente(v, fz, x, y, 0x8a5a36);
+}
+// cozinheiro (na fábrica): avental branco por cima do macacão, com bolso e a tira na cintura, e a touca de chef
+function corpoCozinheiro(v, fz, cor, bolso){
+  corpoMacacao(v, fz, cor, bolso);
+  casca(v, 0, 15, 0, 17.6, 14.9, 14.9, 0.9, TJ.chef, (x, y) => y === 15 || y === 16);
+  for (let x = -11; x <= 11; x++) for (let y = 6; y <= 29; y++){
+    if (y > 20 && Math.abs(x) > 8) continue;
+    const borda = y === 6 || y === 29 || (y <= 20 && Math.abs(x) === 11) || (y > 20 && Math.abs(x) === 8);
+    naFrente(v, fz, x, y, borda ? TJ.chefE : (Math.abs(x) <= 4 && y >= 9 && y <= 13 && (Math.abs(x) === 4 || y === 13)) ? TJ.chefE : TJ.chef);
+  }
+}
+function cabecaCozinheiro(v, cy){
+  for (let y = cy + 12; y <= cy + 19; y++) for (let x = -14; x <= 14; x++) for (let z = -14; z <= 14; z++) if (Math.hypot(x, z) <= 13.2) v.set(x, y, z, y === cy + 12 ? TJ.chefE : TJ.chef);
+  v.ell(0, cy + 25, 0, 16.5, 8.5, 15.5, (x, y, z) => (((Math.round(Math.atan2(z, x) * 3) % 2) + 2) % 2 === 0 && y < cy + 27) ? TJ.chefE : TJ.chef, (x, y) => y >= cy + 19);
+}
+// visita ao museu: gravata borboleta vermelha e monóculo dourado de corrente no olho direito
+function corpoChique(v, fz, cor, bolso){
+  corpoMacacao(v, fz, cor, bolso);
+  for (let x = -7; x <= 7; x++) for (let y = 22; y <= 29; y++){
+    const ax = Math.abs(x), dentro = ax <= 1 ? (y >= 24 && y <= 27) : Math.abs(y - 25.5) <= (ax - 1) * 0.55 + 0.6;
+    if (dentro) naFrente(v, fz, x, y, ax <= 1 ? 0x8a1a22 : 0xc8303a);
+  }
+}
+function cabecaChique(v, cy, fz){
+  const ex = 8, oy = cy + 3;
+  for (let dx = -5; dx <= 5; dx++) for (let dy = -5; dy <= 5; dy++){ const d = Math.sqrt(dx * dx / 14 + dy * dy / 16); if (Math.abs(d - 1) > 0.18) continue; const z = fz(ex + dx, oy + dy); if (z != null && z < 19) v.set(ex + dx, oy + dy, z + 1, TJ.dourado); }
+  for (let y = oy - 5; y >= 28; y -= 2){ const x = ex + 4 + Math.round((oy - 5 - y) * 0.15), z = fz(x, y); if (z != null && z < 19) v.set(x, y, z + 1, TJ.dourado); }
+}
+// as ferramentas dos trajes: fumigador (no lugar da cesta, no mel), extintor (no lugar do regador, no fogo) e lupa (no
+// lugar da enxada, nas trufas)
+function vFumigador(){ const v = new Vox(); v.box(-2, -7, -2, 2, -2, 2, (x, y) => y === -2 ? 0x8a8e94 : 0xb8bcc4); v.box(-1, -1, -1, 1, 0, 1, 0xc98a52); v.box(0, 1, 0, 0, 1, 2, 0xc98a52); v.box(-2, -6, -4, 2, -3, -3, 0x7a4a2a); return v; }
+function vExtintor(){ const v = new Vox(); v.box(-2, -10, -2, 2, -1, 2, (x, y) => y === -5 ? 0xfdf8ef : TJ.vermelho); v.box(-1, 0, -1, 1, 1, 1, TJ.preto); v.box(-1, 2, 0, 1, 2, 0, 0xc8ccd0); v.box(0, 1, 2, 0, 1, 4, TJ.preto); v.box(0, -1, 5, 0, 0, 5, TJ.preto); return v; }
+function vLupa(){ const v = new Vox(); v.box(0, -5, 0, 0, 0, 0, 0x7a4a2a); for (let x = -4; x <= 4; x++) for (let y = 1; y <= 9; y++){ const d = Math.hypot(x, y - 5); if (d <= 4.4) v.set(x, y, 0, d >= 3.3 ? TJ.dourado : 0xbfe6f5); } return v; }
+// cor: a dos riscos do giro; braco e pe podem depender da cor de cada um
+const TRAJES = {
+  apicultor:  { nome: 'Apicultor', cor: TJ.branco, corpo: corpoApicultor, cabeca: cabecaApicultor, braco: { manga: TJ.branco, punho: TJ.brancoS, luva: TJ.amarelo }, pe: [TJ.branco, TJ.brancoS], ferr: { cesta: 'fumigador' } },
+  bombeiro:   { nome: 'Bombeiro', cor: TJ.vermelho, corpo: corpoBombeiro, cabeca: cabecaBombeiro, braco: { manga: (x, y) => y === -9 || y === -10 ? TJ.faixa : TJ.caqui, punho: TJ.caquiE, luva: TJ.preto }, pe: [TJ.preto, 0x161616], ferr: { regador: 'extintor' } },
+  capa:       { nome: 'Capa de chuva', cor: TJ.capa, corpo: corpoCapa, cabeca: cabecaCapa, braco: { manga: TJ.capa, punho: TJ.capaE }, pe: [TJ.capa, TJ.capaE] },
+  pijama:     { nome: 'Pijama', cor: 0xfdf8ef, corpo: corpoPijama, cabeca: cabecaPijama, braco: cor => ({ manga: listraPijama(cor), punho: cor }), pe: cor => [misturar(cor, 0xffffff, 0.55), cor] },
+  guarda:     { nome: 'Guarda-florestal', cor: TJ.verde, corpo: corpoGuarda, cabeca: cabecaGuarda, pe: [TJ.couro, 0x4a3420] },
+  detetive:   { nome: 'Detetive das trufas', cor: TJ.xadrez, corpo: corpoDetetive, cabeca: cabecaDetetive, ferr: { enxada: 'lupa' } },
+  piloto:     { nome: 'Piloto de trator', cor: TJ.bone, corpo: corpoPiloto, cabeca: cabecaPiloto },
+  astronauta: { nome: 'Astronauta', cor: TJ.astro, corpo: corpoAstronauta, braco: { manga: TJ.astro, punho: TJ.astroE, luva: TJ.astroE }, pe: [TJ.astro, TJ.astroE], extras: capaceteAstronauta },
+  caipira:    { nome: 'Caipira', cor: TJ.mangaPalha, corpo: corpoCaipira, cabeca: cabecaCaipira, braco: cor => ({ manga: xadrezCaipira(cor) }), pe: [0x7a5232, 0x553820] },
+  cozinheiro: { nome: 'Cozinheiro', cor: TJ.chef, corpo: corpoCozinheiro, cabeca: cabecaCozinheiro },
+  chique:     { nome: 'Visita ao museu', cor: 0xc8303a, corpo: corpoChique, cabeca: cabecaChique },
+};
 function vBracoMoletom(){
   const v = new Vox();
   v.ell(0, -7, 0, 5.2, 8.6, 5.2, (x, y, z) => y <= -13 ? MOLETOM.punho : panoMoletom(x, y, z));
@@ -1406,36 +1680,14 @@ function vBracoMoletom(){
 }
 function vPorco(cor, bolso, soCabeca, roupa, oculos){
   const v = new Vox();
-  const tom = (c, k) => new THREE.Color(c).multiplyScalar(k).getHex();
-  const costura = tom(cor, 0.84), barra = tom(cor, 0.9), botao = 0xfff3cf, borda = tom(bolso, 0.9);
   const frenteZ = (x, y) => { for (let z = 80; z >= -80; z--) if (v.has(x, y, z)) return z; return null; };
-  if (!soCabeca && roupa === 'moletom') corpoMoletom(v, frenteZ);
+  const T = !soCabeca && TRAJES[roupa];
+  if (T) T.corpo(v, frenteZ, cor, bolso);
+  else if (!soCabeca && roupa === 'moletom') corpoMoletom(v, frenteZ);
   else if (!soCabeca && roupa === 'sueter') corpoSueter(v, frenteZ);
   else if (!soCabeca && roupa === 'sueterBranco') corpoSueter(v, frenteZ, SUETER_BRANCO);
   else if (!soCabeca && roupa === 'toalha') corpoToalha(v, frenteZ, cor, bolso);
-  else if (!soCabeca){
-    for (const lx of [-7, 7]) for (let y = 2; y <= 8; y++) for (let x = lx - 5; x <= lx + 5; x++) for (let z = -5; z <= 5; z++)
-      if ((x - lx) ** 2 + z * z <= 27) v.set(x, y, z, y <= 3 ? barra : cor);
-    v.ell(0, 15, 0, 16.8, 14.2, 14.1, cor, (x, y) => y >= 5);
-    v.ell(0, 27, 0, 15.3, 7.6, 12.9, COR.pele);
-    for (let x = -9; x <= 9; x++) for (let y = 16; y <= 30; y++){ const z = frenteZ(x, y); if (z != null) v.set(x, y, z, (y === 30 || Math.abs(x) === 9) ? costura : cor); }
-    for (const lado of [-1, 1]) for (let x = 6; x <= 9; x++) for (let y = 22; y <= 36; y++) for (let z = -14; z <= 14; z++){
-      const X = lado * x, d = (X / 15.3) ** 2 + ((y - 27) / 7.6) ** 2 + (z / 12.9) ** 2;
-      if (d <= 1 && d >= 0.7) v.set(X, y, z, (x === 6 || x === 9) ? costura : cor);
-    }
-    for (const lado of [-1, 1]) for (const [x, y] of [[7, 29], [8, 29], [7, 30], [8, 30]]){ const z = frenteZ(lado * x, y); v.set(lado * x, y, z + 1, botao); }
-    const zb = {};
-    for (let x = -6; x <= 6; x++) for (let y = 9; y <= 20; y++){
-      const z = frenteZ(x, y) + 1; zb[x + ',' + y] = z;
-      v.set(x, y, z, (Math.abs(x) === 6 || y === 9 || y === 20) ? borda : bolso);
-    }
-    const P = [];
-    for (let y = 11; y <= 18; y++) P.push([-3, y], [-2, y]);
-    for (const x of [-1, 0, 1]) P.push([x, 17], [x, 18], [x, 13], [x, 14]);
-    P.push([2, 17], [2, 14], [2, 15], [2, 16], [3, 15], [3, 16]);
-    for (const [x, y] of P) v.set(x, y, zb[x + ',' + y], COR.letra);
-    for (const [x, y, z] of [[0, 14, -15], [0, 15, -16], [1, 16, -16], [2, 16, -15], [2, 15, -15], [1, 14, -15]]) v.set(x, y, z, COR.focinho);
-  }
+  else if (!soCabeca) corpoMacacao(v, frenteZ, cor, bolso);
   const cy = soCabeca ? 20 : 45;
   v.ell(0, cy, 0, 19.8, 19.2, 18.3, (x, y, z) => (x === 0 && z < -5 && y > cy - 14) ? 0xead6b9 : COR.pele);
   // focinho: rebordo de pelúcia e disco rosado um pouco afundado
@@ -1496,6 +1748,7 @@ function vPorco(cor, bolso, soCabeca, roupa, oculos){
       }
     }
   }
+  if (T && T.cabeca) T.cabeca(v, cy, frenteZ, cor, bolso);
   return v;
 }
 // o tratorzinho e as bicicletas do trânsito: a frente aponta para +x, como os outros veículos
@@ -6016,7 +6269,8 @@ function executarOcorrencia(tarefa){
   if (!pc || pc.ok) return;
   const pos = new THREE.Vector3(pc.x, 0.8, pc.z);
   tirarPeca(pc);
-  if (oc.tipo === 'fogo'){ for (let k = 0; k < 26; k++) particula(pc.x + rnd(-0.3, 0.3), rnd(0.2, 0.9), pc.z + rnd(-0.3, 0.3), [0xd8eef8, 0xffffff, 0x9a9a9a][k % 3], 1); Som.regar(); }
+  // com o extintor (traje de bombeiro), sai espuma branca no lugar da água
+  if (oc.tipo === 'fogo'){ const esp = ed.traje === 'bombeiro'; for (let k = 0; k < (esp ? 40 : 26); k++) particula(pc.x + rnd(-0.3, 0.3), rnd(0.2, 0.9), pc.z + rnd(-0.3, 0.3), (esp ? [0xffffff, 0xf4f8fa, 0xe4eaee] : [0xd8eef8, 0xffffff, 0x9a9a9a])[k % 3], 1); Som.regar(); }
   else if (oc.tipo === 'galho'){ for (let k = 0; k < 16; k++) particula(pc.x + rnd(-0.6, 0.6), 0.3, pc.z + rnd(-0.3, 0.3), [0x4f8a3a, 0x6e4a2e][k % 2], 1); Som.ruido(0.3, 0.1, 500); }
   else Som.colher();
   mudarSaude(O.ganho); ganharXP(O.xp, pos);
@@ -8472,6 +8726,9 @@ function montarArraia(c){
     A.porcos.push(q);
   }
   if (maurinhoObra.g.visible){ pararMaurinhoObra(); maurinhoObra.g.visible = false; obraVis.estado = ''; }
+  // todo mundo de caipira: o Ed e quem vem andando giram antes de sair; quem já aparece na roda chega vestido
+  for (const q of A.porcos) if (q.p === irmaoHud || q.p === irmaoDani){ if (q.chegou) q.p.vestirTraje('caipira'); else q.p.girarPara('caipira'); }
+  ed.girarPara('caipira');
   // o disco do ETzinho, parado no alto, em cima das vaquinhas
   const P = discoJogo, [dx, dy, dz] = ARRAIA.disco;
   P.g.visible = true; P.t = 0; P.g.position.set(mx + dx, dy, mz + dz); P.g.scale.setScalar(DISCO_JOGO.escala);
@@ -11644,7 +11901,7 @@ const OP_PORCO = { origin: [0.5, 0, 0.5], jitter: 0.015, ao: AO_SUAVE };
 class Porco {
   // modelo: { corpo, braco, pe, ombro: [x, y, z], quadril: [x, y], mao: [y, z], altura } em cubinhos; sem ele, é um porquinho
   constructor(cor, bolso, nome, modelo){
-    this.nome = nome;
+    this.nome = nome; this.cor = cor; this.bolso = bolso; this.traje = null;
     const s = 1 / 57;
     const M = modelo || { corpo: () => vPorco(cor, bolso), braco: vBraco, pe: vPe, ombro: [15.5, 28.5, 1], quadril: [7, 9], mao: [-16, 1.5], altura: 1.32 };
     const op = OP_PORCO;
@@ -11666,6 +11923,35 @@ class Porco {
     if (nome !== 'ed'){ this.g.traverse(o => { o.userData.alvo = { k: nome }; }); pickaveis.push(this.g); }
   }
   colocar(x, z){ this.pos.set(x, z); this.g.position.set(x, 0, z); }
+  // o traje da tarefa (TRAJES): corpo, braços e pés trocam de desenho, e alguns trazem peças à parte (o capacete de vidro);
+  // vestirTraje(null) volta para o macacão
+  vestirTraje(id){
+    const mc = this.corpo.children[0], mb = [this.bE.children[0], this.bD.children[0]], mp = [this.pE.children[0], this.pD.children[0]], s = this.escala, op = OP_PORCO;
+    if (!this.roupa) this.roupa = { c: mc.geometry, b: mb[0].geometry };
+    if (!this.roupa.p) this.roupa.p = mp[0].geometry;
+    if (this.extrasTraje){ for (const e of this.extrasTraje) this.corpo.remove(e); this.extrasTraje = null; }
+    const T = id && TRAJES[id];
+    this.traje = T ? id : null; this.deToalha = false;
+    if (!T){ mc.geometry = this.roupa.c; for (const m of mb) m.geometry = this.roupa.b; for (const m of mp) m.geometry = this.roupa.p; }
+    else {
+      const cor = this.cor, bolso = this.bolso, k = id + cor + '_' + bolso;
+      const B = typeof T.braco === 'function' ? T.braco(cor) : T.braco, P = typeof T.pe === 'function' ? T.pe(cor) : T.pe;
+      mc.geometry = geo('trajeC' + k, () => vPorco(cor, bolso, false, id).build(s, op));
+      for (const m of mb) m.geometry = B ? geo('trajeB' + k, () => vBracoTraje(B).build(s, op)) : this.roupa.b;
+      for (const m of mp) m.geometry = P ? geo('trajeP' + k, () => vPeTraje(...P).build(s, op)) : this.roupa.p;
+      if (T.extras){ this.extrasTraje = T.extras(); for (const e of this.extrasTraje) this.corpo.add(e); }
+    }
+    // a ferramenta que está na mão troca junto (o regador vira extintor e volta)
+    const naMao = Object.keys(this.ferramentas).find(n => this.ferramentas[n].visible && this.ferramentas[n].userData.pedida);
+    if (naMao) this.ferramenta(this.ferramentas[naMao].userData.pedida);
+  }
+  // gira e troca de roupa (passoGiro); devolve se começou a girar
+  girarPara(id){
+    id = (id && TRAJES[id]) ? id : null;
+    if (!this.giro && this.traje === id && !this.deToalha) return false;
+    comecarGiro(this, () => this.vestirTraje(id), id ? TRAJES[id].cor : 0xfdf8ef);
+    return true;
+  }
   // no spa, de toalha: o corpo de toalha na cor de cada um e os braços sem manga; toalha() sem cor volta para a roupa
   toalha(quem){
     const mc = this.corpo.children[0], mb = [this.bE.children[0], this.bD.children[0]], s = this.escala, op = OP_PORCO;
@@ -11681,19 +11967,24 @@ class Porco {
   ferramenta(n){
     for (const k in this.ferramentas) this.ferramentas[k].visible = false;
     if (!n) return;
+    // com traje, umas ferramentas trocam (TRAJES[].ferr): a cesta vira fumigador, o regador vira extintor...
+    const pedida = n, T = this.traje && TRAJES[this.traje];
+    if (T && T.ferr && T.ferr[n]) n = T.ferr[n];
     // depois do presente da Picoça, o Ed toma o lanchinho na caneca da Joli Coffee
     if (n === 'caneca' && this.nome === 'ed' && S.canecaJoli) n = 'canecaJoli';
     if (!this.ferramentas[n]){
-      const fn = { enxada: vEnxada, regador: vRegador, cesta: vCesta, saco: vSaco, caneca: vCaneca, canecaJoli: vCanecaJoli, maca: VI.maca, prancheta: vPrancheta, trena: vTrena, martelo: vMartelo }[n];
+      const fn = { enxada: vEnxada, regador: vRegador, cesta: vCesta, saco: vSaco, caneca: vCaneca, canecaJoli: vCanecaJoli, maca: VI.maca, prancheta: vPrancheta, trena: vTrena, martelo: vMartelo, fumigador: vFumigador, extintor: vExtintor, lupa: vLupa }[n];
       if (!fn) return; // 'comer' e afins: só o gesto, sem ferramenta
       const mm = malha(geo('ferr' + n, () => fn().build(1 / 19, { origin: [0.5, 0, 0.5] })));
       this.mao.add(mm); this.ferramentas[n] = mm;
     }
-    this.ferramentas[n].visible = true;
+    this.ferramentas[n].visible = true; this.ferramentas[n].userData.pedida = pedida;
   }
   trabalhar(dur, ferr, aoFim){ if (this === ed && !cine) dur /= fatorEd(); this.estado = 'trabalhando'; this.trab = { t: 0, dur, ferr, aoFim }; this.ferramenta(ferr); }
   update(dt, t){
-    if (this.estado === 'andando'){
+    // girando para trocar de roupa: não sai do lugar até o giro acabar
+    const giro = this.giro ? passoGiro(this, dt, this.pos.x, this.pos.y) : 0;
+    if (this.estado === 'andando' && !this.giro){
       const p = this.pontos[0];
       const dx = p[0] - this.pos.x, dz = p[1] - this.pos.y, d = Math.hypot(dx, dz);
       // com as botas de chuva, o Ed anda mais rápido na chuva
@@ -11706,8 +11997,8 @@ class Porco {
     if (this.pressa > 0) this.pressa -= dt;
     this.ang = anguloPerto(this.ang, this.angAlvo, Math.min(1, dt * 12));
     this.g.position.set(this.pos.x, this.alt || 0, this.pos.y);
-    this.g.rotation.y = this.ang;
-    const andando = this.estado === 'andando';
+    this.g.rotation.y = this.ang + giro;
+    const andando = this.estado === 'andando' && !this.giro;
     const sw = andando ? Math.sin(this.fase) : 0;
     this.pE.rotation.x = sw * 0.7; this.pD.rotation.x = -sw * 0.7;
     this.bE.rotation.set(-sw * 0.6, 0, -0.65); this.bD.rotation.set(sw * 0.6, 0, 0.65);
@@ -12308,10 +12599,64 @@ const FAMILIA_SPA = {
 const COPIA_SPA = {};
 // a toalha de cada um: [cor, listra], nas cores de cada personagem (o Milton na laranja do PIG-MTP)
 const TOALHA_SPA = { ed: [COR.ed, 0xfdf8ef], hud: [COR.ed, 0xfdf8ef], beto: [COR.beto, 0xfdf8ef], dani: [COR.dani, 0xfdf8ef], pelucio: [MOLETOM.rosa, MOLETOM.p], milton: [0xff7a3a, 0xfdf8ef], patrinho: [SUETER.claro, 0xfdf8ef], maurinho: [SUETER_BRANCO.claro, SUETER.base] };
-// troca de roupa no spa (pela toalha depois do balcão, de volta para a roupa antes de sair): uma nuvenzinha de vapor
+// troca de roupa no spa (pela toalha depois do balcão, de volta para a roupa antes de sair): no giro, como os trajes
 function trocaDeRoupaSpa(p, quem, x, z){
-  p.toalha(quem);
-  if (naTelaSpa(x, z)){ for (let i = 0; i < 7; i++) vaporSpa(x + rnd(-0.22, 0.22), rnd(0.2, 0.8), z + rnd(-0.22, 0.22)); Som.tom(900, 0.12, 'sine', 0.025, 1300); }
+  comecarGiro(p, () => p.toalha(quem), quem && TOALHA_SPA[quem] ? TOALHA_SPA[quem][0] : 0xfdf8ef);
+  if (naTelaSpa(x, z)) for (let i = 0; i < 5; i++) vaporSpa(x + rnd(-0.22, 0.22), rnd(0.2, 0.8), z + rnd(-0.22, 0.22));
+}
+// ----- o giro de trocar de roupa (o Lucas pediu: como o Superman do Christopher Reeve): começa devagar, gira cada vez mais
+// rápido até virar um borrão, a roupa troca no meio, desacelera e termina com um pulinho; em volta, um redemoinho de riscos
+// na cor da roupa nova. O ângulo é a integral de uma velocidade em sino (zero no começo e no fim)
+const GIRO = { dur: 0.85, voltas: 8 };
+function comecarGiro(p, troca, cor){
+  if (p.giro && !p.giro.trocou){ p.giro.troca = troca; p.giro.cor = cor; return; }
+  p.giro = { t: 0, troca, trocou: false, cor };
+  if (p.estado === 'parado') p.estado = 'girando';
+  if (p.g.visible) Som.tom(240, GIRO.dur * 0.9, 'triangle', 0.025, 1500);
+}
+function passoGiro(p, dt, x, z){
+  const G = p.giro; G.t += dt;
+  const f = Math.min(1, G.t / GIRO.dur), a = GIRO.voltas * 2 * Math.PI * (f - Math.sin(2 * Math.PI * f) / (2 * Math.PI));
+  const alto = (p.altura || 1.3) * (p.g.scale.y || 1);
+  if (!G.trocou && f >= 0.5){
+    G.trocou = true; G.troca();
+    if (p.g.visible){ for (let i = 0; i < 10; i++) particula(x + rnd(-0.3, 0.3), rnd(0.1, 1) * alto, z + rnd(-0.3, 0.3), i % 2 ? G.cor : 0xfdf8ef, 0.9); Som.tom(1300, 0.14, 'sine', 0.025, 2100); }
+  }
+  if (p.g.visible && Math.random() < dt * 45 * Math.sin(Math.PI * f)){ const k = rnd(0, 6.28); particula(x + Math.cos(k) * 0.34 * (p.g.scale.x || 1), rnd(0.05, 1) * alto, z + Math.sin(k) * 0.34 * (p.g.scale.x || 1), Math.random() < 0.6 ? G.cor : 0xfdf8ef, 0.3); }
+  if (f >= 1){ p.giro = null; if (p.estado === 'girando') p.estado = 'parado'; p.pulo = 0.45; return 0; }
+  return a;
+}
+// a roupa de cada tarefa (undefined: a tarefa não muda nada, como andar); com chuva, a capa nas tarefas ao ar livre
+const TRAJE_ACAO = { coletarMel: 'apicultor', apagarFogo: 'bombeiro', coletarMata: 'guarda', tirarGalho: 'guarda', recolherLixo: 'guarda', cavarTrufa: 'detetive', trator: 'piloto', estrelas: 'astronauta', museu: 'chique' };
+const SEM_CAPA = new Set(['spa', 'museu']);
+function trajeDaTarefa(t){
+  if (!t || t.tipo === 'andar') return undefined;
+  if (TRAJE_ACAO[t.tipo]) return TRAJE_ACAO[t.tipo];
+  if (t.alvo && t.alvo.k === 'fabrica' && (t.tipo === 'produzir' || t.tipo === 'recolher')) return 'cozinheiro';
+  if (chovendo() && !SEM_CAPA.has(t.tipo)) return 'capa';
+  return null;
+}
+// antes de ir para a tarefa: se a roupa é outra, gira primeiro (e a tarefa espera o giro acabar)
+function trocarParaTarefa(p, t){
+  const tj = trajeDaTarefa(t);
+  if (tj === undefined || p.giro) return !!p.giro;
+  if ((p.traje || null) === tj && !p.deToalha) return false;
+  return p.girarPara(tj);
+}
+// sem tarefa, parado uns segundos, o traje sai (num giro); fora das cenas
+const TRAJE_OCIOSO = 3;
+function atualizarTrajes(dt){
+  if (cine) return;
+  for (const p of [ed, irmaoHud, irmaoDani]){
+    if (!p || !p.traje || p.giro || !p.g.visible){ if (p) p.ocioso = 0; continue; }
+    const livre = p === ed ? (ed.estado === 'parado' && !tarefaAtual && !fila.length && !banhoEd && !trator) : (p.estado === 'parado' && !(p === irmaoHud ? AJUDA.hud : AJUDA.dani).tarefa);
+    p.ocioso = livre ? (p.ocioso || 0) + dt : 0;
+    if (p.ocioso > TRAJE_OCIOSO){ p.ocioso = 0; p.girarPara(null); }
+  }
+}
+// nas cenas, cada um volta na hora para o macacão (as cenas com traje próprio vestem depois)
+function tirarTrajesNaHora(){
+  for (const p of [ed, irmaoHud, irmaoDani]){ if (!p) continue; p.giro = null; if (p.estado === 'girando') p.estado = 'parado'; if (p.traje) p.vestirTraje(null); p.ocioso = 0; }
 }
 function criarFamiliaSpa(quem){
   const F = FAMILIA_SPA[quem];
@@ -12388,9 +12733,9 @@ function andarNoSpa(v, cel){
 }
 function sairDoSpa(v){
   v.vai = 'sair'; v.lugar = null;
-  if (v.tipo === 'familia' && v.p.deToalha) trocaDeRoupaSpa(v.p, null, v.x, v.z);
   const dentro = caminhoSpa(celulaDe(v), SPA.porta) || [];
   v.pts = [...dentro, ...estradaDoSpa().reverse(), [X_CURVA, H + 1]]; v.estado = 'saindo';
+  if (v.tipo === 'familia' && v.p.deToalha){ trocaDeRoupaSpa(v.p, null, v.x, v.z); v.esperaGiro = GIRO.dur; }
 }
 // um pulinho em arco até (x, y, z) no mundo; o ofurô pede um pulo mais alto, por cima da tina
 function pularNoSpa(v, x, y, z, alto, depois){ v.salto = { x0: v.x, z0: v.z, y0: v.y, x1: x, z1: z, y1: y, alto, t: 0, depois }; v.estado = 'pulando'; v.ang = Math.atan2(x - v.x, z - v.z); }
@@ -12423,6 +12768,7 @@ function passoSpa(v, dt, t, noite){
   const vel = v.tipo === 'porco' ? SPA.vel : SPA.velFamilia;
   switch (v.estado){
     case 'chegando': case 'andando': case 'saindo': {
+      if (v.esperaGiro > 0){ v.esperaGiro -= dt; break; }
       const P = v.pts[0];
       if (!P){
         if (v.estado === 'saindo'){ tirarDoSpa(v); return; }
@@ -12444,7 +12790,7 @@ function passoSpa(v, dt, t, noite){
         if (v.tipo === 'porco') pagarSpa(v);
         else { const f = variar(FALAS_SPA_FAMILIA_ENTRADA); falar(v, f, tempoDeLeitura(f)); v.p.aceno = 1.2; }
       }
-      if (v.t <= 0){ v.estado = 'parado'; v.t = rnd(0.3, 0.8); if (v.tipo === 'familia') trocaDeRoupaSpa(v.p, v.quem, v.x, v.z); }
+      if (v.t <= 0){ v.estado = 'parado'; v.t = rnd(0.3, 0.8); if (v.tipo === 'familia'){ trocaDeRoupaSpa(v.p, v.quem, v.x, v.z); v.t = GIRO.dur + 0.15; } }
       break;
     case 'parado': v.t -= dt; if (v.t <= 0) proximaNoSpa(v); break;
     case 'chegou':
@@ -12644,7 +12990,8 @@ function animarSpa(v, dt, t){
   }
   if (v.pulo > 0){ v.pulo = Math.max(0, v.pulo - dt); y += Math.sin((1 - v.pulo / 0.3) * Math.PI) * 0.08; }
   v.g.position.set(v.x, y, v.z);
-  v.g.rotation.y = anguloPerto(v.g.rotation.y, v.ang, Math.min(1, dt * 8));
+  if (v.tipo === 'familia' && v.p.giro) v.g.rotation.y = v.ang + passoGiro(v.p, dt, v.x, v.z);
+  else v.g.rotation.y = anguloPerto(v.g.rotation.y, v.ang, Math.min(1, dt * 8));
 }
 const OQUE_SPA = { lama: 'Está rolando na lama.', ofuro: 'Está no ofurô quentinho.', ducha: 'Está tomando uma ducha.', cadeira: 'Está na espreguiçadeira com pepino nos olhos.', sauna: 'Está na sauna.',
   pedicure: 'Está pintando os cascos.', bar: 'Está tomando um suco no bar.', tobogaFim: 'Acabou de cair do tobogã na lama.', toboga: 'Está no tobogã!' };
@@ -15137,8 +15484,10 @@ const CENAS = {
         // os dois chegam na frente da casa e viram um para o outro
         case 'n-indo': {
           const comLuma = !N.comHud && !N.comDani, lumaOk = !comLuma || !L.pontos.length;
+          // chegando, cada um gira e veste o pijama; depois começa a conversa
           if (c.edOk && (!N.comHud || c.hudOk) && (!N.comDani || c.daniOk) && lumaOk && c.t > 0.8){
-            olharNanar(); c.passo = 'dialogo'; mostrarFalaCine(0);
+            if (!c.pijama){ c.pijama = c.t; for (const [P, vem] of [[ed, true], [H, N.comHud], [D, N.comDani]]) if (vem) P.girarPara('pijama'); }
+            else if (c.t - c.pijama > GIRO.dur + 0.25){ olharNanar(); c.passo = 'dialogo'; mostrarFalaCine(0); }
           }
           break;
         }
@@ -15402,6 +15751,7 @@ function iniciarCine(id, reprise){
   cam.azAlvo = Math.round((cam.azAlvo - Math.PI / 4) / (Math.PI / 2)) * (Math.PI / 2) + Math.PI / 4;
   $('jogo').classList.add('cinema');
   $('cine').hidden = false; requestAnimationFrame(() => $('cine').classList.add('on'));
+  tirarTrajesNaHora();
   cine.passo = cena.iniciar(cine);
   if (cena.musica) Musica.tocar(cena.musica);
 }
@@ -17361,7 +17711,7 @@ function chamarHud(){
   const ja = hudAtivo();
   S.hudAte = (ja ? S.hudAte : Date.now()) + HUD.minutos * 60000; contar('acoes', 'hud');
   if (!ja){
-    irmaoHud.saindo = false; irmaoHud.g.visible = true; irmaoHud.estado = 'parado'; irmaoHud.pontos = [];
+    irmaoHud.saindo = false; irmaoHud.g.visible = true; irmaoHud.estado = 'parado'; irmaoHud.pontos = []; irmaoHud.vestirTraje(null); irmaoHud.giro = null;
     irmaoHud.colocar(5.5, 5.6); irmaoHud.ang = irmaoHud.angAlvo = 0.3; irmaoHud.pulo = 0.45;
     falar(irmaoHud, variar(FALAS_HUD_CHEGA), 2.8);
   } else falar(irmaoHud, variar(FALAS_HUD_MAIS), 2.2);
@@ -17404,7 +17754,7 @@ const AJUDA_LONGE = 8;
 function atualizarAjudante(A, dt, t){
   const Hd = A.p();
   if (!Hd.g.visible){
-    if (A.ativo() && !cine){ Hd.g.visible = true; Hd.colocar(...HUD_PORTA); Hd.estado = 'parado'; }
+    if (A.ativo() && !cine){ Hd.g.visible = true; Hd.colocar(...HUD_PORTA); Hd.estado = 'parado'; Hd.vestirTraje(null); Hd.giro = null; }
     return;
   }
   Hd.update(dt, t);
@@ -17416,6 +17766,8 @@ function atualizarAjudante(A, dt, t){
   if (!A.ativo()){
     if (A.balanco) sairDoBalanco(A, Hd);
     if (A.fogueira) sairDaFogueira(A, Hd);
+    // antes de ir embora, tira o traje
+    if (!Hd.saindo && Hd.traje && Hd.girarPara(null)) return;
     if (!Hd.saindo){
       Hd.saindo = true;
       falar(Hd, variar(A.cansou()), 3);
@@ -17428,7 +17780,7 @@ function atualizarAjudante(A, dt, t){
   const alvos = alvosHud();
   // sem nada para fazer, vai para o balanço de pneu, se tiver um livre; com trabalho, desce dele
   // nas noites de inverno, a fogueira vem antes do balanço
-  if (!alvos.length){ if (!aquecerAjudante(A, Hd)) balancarAjudante(A, Hd); return; }
+  if (!alvos.length){ if (Hd.traje && !A.balanco && !A.fogueira && Hd.girarPara(null)) return; if (!aquecerAjudante(A, Hd)) balancarAjudante(A, Hd); return; }
   if (A.balanco) sairDoBalanco(A, Hd);
   if (A.fogueira) sairDaFogueira(A, Hd);
   // vai ao que está mais perto, mas, com o outro ajudante na rua, evita a região onde ele está trabalhando (até
@@ -17438,6 +17790,8 @@ function atualizarAjudante(A, dt, t){
   const custo = a => Math.hypot(a[2] - Hd.pos.x, a[3] - Hd.pos.y) + (ref ? 2 * Math.max(0, AJUDA_LONGE - Math.hypot(a[2] - ref[0], a[3] - ref[1])) : 0);
   alvos.sort((a, b) => custo(a) - custo(b));
   const [tipo, alvo, tx, tz, param] = alvos[0];
+  // a roupa da tarefa: gira antes de ir (no próximo quadro ele escolhe de novo)
+  if (trocarParaTarefa(Hd, { tipo, alvo })) return;
   A.alvoXZ = [tx, tz];
   const tarefa = { tipo, alvo, param, hud: true, quem: A.quem || 'hud' };
   let pts = rota(clamp(Math.floor(Hd.pos.x), 0, W - 1), clamp(Math.floor(Hd.pos.y), 0, H - 1), Math.floor(tx), Math.floor(tz));
@@ -17478,7 +17832,7 @@ function chamarDani(){
   const ja = daniAtivo(), D = irmaoDani;
   S.daniAte = (ja ? S.daniAte : Date.now()) + DANI.minutos * 60000; contar('acoes', 'dani');
   if (!ja){
-    D.saindo = false; D.g.visible = true; D.estado = 'parado'; D.pontos = [];
+    D.saindo = false; D.g.visible = true; D.estado = 'parado'; D.pontos = []; D.vestirTraje(null); D.giro = null;
     D.colocar(...HUD_PORTA); D.ang = D.angAlvo = 0.3; D.pulo = 0.45;
     falar(D, variar(FALAS_DANI_CHEGA), 2.8);
   } else falar(D, variar(FALAS_DANI_MAIS), 2.2);
@@ -17842,6 +18196,8 @@ function proximaTarefa(){
   if (cine || cenaPedida || emEncontroSaci() || tarefaAtual || ed.estado !== 'parado' || !fila.length || segurarFila()) return;
   const tarefa = fila[0];
   if (tarefa.tipo !== 'andar' && !checar(tarefa.tipo, tarefa.alvo, tarefa.param).ok && !(tarefa.custo && Object.keys(tarefa.custo).length)){ fila.shift(); liberar(tarefa, true); hud(); return; }
+  // a roupa da tarefa: se é outra, o Ed gira e troca antes de ir (trocarParaTarefa)
+  if (trocarParaTarefa(ed, tarefa)) return;
   tarefaAtual = tarefa;
   const [tx, tz] = alvoMundo(tarefa.alvo);
   const sx = clamp(Math.floor(ed.pos.x), 0, W - 1), sz = clamp(Math.floor(ed.pos.y), 0, H - 1);
@@ -17908,6 +18264,8 @@ function efeitoDuranteTrabalho(tarefa){
     return;
   }
   const [x, z] = alvoMundo(tarefa.alvo);
+  // no mel, as abelhinhas rodeiam a colmeia e o fumigador solta fumaça
+  if (tarefa.tipo === 'coletarMel') for (let i = 0; i < 14; i++) setTimeout(() => { const a = rnd(0, 6.28); particula(x + Math.cos(a) * 0.45, rnd(0.45, 1.1), z + Math.sin(a) * 0.45, i % 3 ? 0xf2c335 : 0x2a2a2a, 0.15); if (i % 2) particula(x + rnd(-0.2, 0.2), rnd(0.5, 0.8), z + rnd(-0.2, 0.2), 0xd0d0d0, 0.7); }, i * 70);
   if (tarefa.tipo === 'cavarTrufa') falar(ed, 'Snif snif...', 1.4);
   const n = { arar: 14, regar: 18, capinar: 10, colher: 8, plantar: 4, alimentar: 10, arrancar: 8, adubar: 10, cavarTrufa: 22 }[tarefa.tipo] || 0;
   const cor = { arar: [0x8a5c3a, 0xa47448], regar: [0x6fc3f5, 0xa8dcfa], capinar: [0x3f7a2a, 0x5a9e3c], colher: [0xffe066, 0xffffff], plantar: [0x5e3a22], alimentar: [0xf5d142, 0xe2cfa0], arrancar: [0x6cbf47, 0x8a5c3a], adubar: [0x4a2c18, 0x7a9a3c], cavarTrufa: [0x6e472c, 0x8a5c3a] }[tarefa.tipo] || [0xffffff];
@@ -20319,6 +20677,7 @@ function quadro(agoraP){
   posicionarCamera();
   if (ed.estado === 'parado' && !tarefaAtual && !fila.length && !cine && !modo && !menuAberto && !algumaJanela()) edParadoDesde = edParadoDesde || agoraP; else edParadoDesde = 0;
   if (cine) atualizarCine(dt); else { const cenaId = podeIniciarCine(); if (cenaId) iniciarCine(cenaId, cenaId === cenaPedida); }
+  atualizarTrajes(dt);
   proximaTarefa();
   atualizarMaca(dt, t);
   atualizarRedemoinho(dt, t);
@@ -20670,6 +21029,22 @@ function catalogoModelos(){
   const produto = k => VI[k] ? [['Produto', VI[k]]] : [];
   const usados = new Set();
   const uso = k => { usados.add(k); return k; };
+  const trajado = (id, args, esc = 1, acao) => () => {
+    const p = new Porco(...args); p.vestirTraje(id); p.g.scale.setScalar(esc);
+    if (acao){ p.trabalhar(1e9, acao.ferr); }
+    p.g.userData.anima = (dt, t) => { p.update(dt, t); p.pos.set(0, 0); p.g.position.set(0, 0, 0); if (!p.giro) p.g.rotation.y = 0; };
+    p.g.userData.anima(0, 0); return p.g;
+  };
+  const QUEM_TRAJE = [['Ed', [COR.ed, COR.edBolso, 'ed'], 1], ['Hud', [COR.ed, COR.edBolso, 'hud', MODELO_HUD], 0.5], ['Dani', [COR.dani, COR.daniBolso, 'dani', MODELO_DANI], ESCALA_DANI]];
+  const ACAO_TRAJE = { apicultor: { ferr: 'cesta' }, bombeiro: { ferr: 'regador' }, detetive: { ferr: 'enxada' } };
+  const grupoTrajes = { nome: 'Trajes', itens: [...Object.keys(TRAJES).map(id => ({ nome: TRAJES[id].nome, variantes: [
+    ...QUEM_TRAJE.map(([n, args, esc]) => ({ nome: n, cria: trajado(id, args, esc) })),
+    ...(ACAO_TRAJE[id] ? [{ nome: 'Trabalhando', cria: trajado(id, QUEM_TRAJE[0][1], 1, ACAO_TRAJE[id]) }] : []),
+  ] })), { nome: 'Giro de trocar de roupa', variantes: [{ nome: 'Ed', cria: () => {
+    const p = new Porco(COR.ed, COR.edBolso, 'ed'), ids = [null, ...Object.keys(TRAJES)]; let i = 0, espera = 0.6;
+    p.g.userData.anima = (dt, t) => { if (!p.giro){ espera -= dt; if (espera <= 0){ i = (i + 1) % ids.length; p.girarPara(ids[i]); espera = 1.2; } } p.update(dt, t); p.pos.set(0, 0); p.g.position.set(0, 0, 0); if (!p.giro) p.g.rotation.y = 0; };
+    p.g.userData.anima(0, 0); return p.g;
+  } }] }] };
   const grupos = [
     { nome: 'Personagens', itens: [porco('Ed', COR.ed, COR.edBolso, 'ed'), porco('Beto', COR.beto, COR.betoBolso, 'beto'), porco('Hud', COR.ed, COR.edBolso, 'hud', MODELO_HUD), porco('Dani', COR.dani, COR.daniBolso, 'dani', MODELO_DANI), { nome: 'Ed, Hud e Dani juntos', variantes: [{ nome: '', cria: () => {
       // os três no tamanho do jogo, para comparar: o Hud com metade do Ed e o Dani maior que ele
@@ -20735,6 +21110,7 @@ function catalogoModelos(){
     { nome: 'Enfeites', itens: [um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), { nome: 'Varal de luzes', variantes: [{ nome: '', cria: () => { const v = vVaralTrecho(), m = malha(v.build(1 / RES_VARAL)); m.userData.cubos = v.m.size; return m; } }] }, um('Chafariz', vFonte), um('Estátua do Ed', vEstatua), um('Casinha da Luma', vCasinhaLuma), um('Carriola florida', vCarriola), um('Mesa de piquenique', vMesaPiquenique), um('Relógio de sol', vRelogioSol), um('Pérgola', vPergola), um('Balanço de pneu', VI.balanco), um('Comedouro de passarinho', vComedouro), um('Fogueira de roda', vFogueiraRoda), varios('Laguinho com sapinho', [['Laguinho', vLaguinho], ['Sapinho', vSapinho]]), varios('Topiaria', Object.keys(FORMAS_TOPIARIA).map(k => [FORMAS_TOPIARIA[k].nome, () => vTopiaria(k)])), um('Poço dos desejos', vPocoDesejos), varios('Estátua da família', Object.keys(FORMAS_ESTATUA).map(k => [FORMAS_ESTATUA[k].nome, () => vEstatuaFamilia(k)])), varios('Bandeirinhas do ArraiEd', [['Inteiras', vBandeirinhas], ['Mastros', vBandeirinhasMastros], ['Cordão', vBandeirinhasCordao]])] },
     { nome: 'Objetos', itens: [varios('Missão NANO', [['Foguete', vFoguete], ['Plataforma', vPlataformaFoguete], ['Paraquedas', () => vParaquedas(0xd8302a, 0xffffff)], ['Nano de capacete', () => vNanoMissao(2)], ['Nano com fuligem', () => vNanoMissao(2, true)], ['Megafone', vMegafone], ['Chapéu de festa', vConeFesta]]), varios('ArraiEd', [['Fogueira', vFogueira], ['Fogo', vChama], ['Mastro', vMastro], ['Barraca do milho', () => vBarraca('milho')], ['Barraca da pescaria', () => vBarraca('pescaria')], ['Bandeirinhas', vBandeirinhas]]), um('Cartão-postal', vCartaoPostal), um('Osso da Luma', vOsso), um('Biscoito da Luma', vBiscoito), um('Ponte do lago', vPonte), um('Rampa dos patos', vRampaPatos), um('Fábrica de barras', vFabBarras), um('Chocolateria', vChocolateria), um('Oficina de borracha', vOficina), um('Mirante da mata', vMirante), varios('Fogo na mata', [0, 1, 2].map(f => ['Fase ' + (f + 1), () => vFogo(f)])), varios('Lixo na mata', [['Garrafa', () => vLixo(0)], ['Latinha', () => vLixo(1)], ['Saquinho', () => vLixo(2)]]), um('Galho caído', vGalho), um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Lanterna', vLanterna), um('Lua', vLua), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Nano Hostel', vNanoHostel), um('Nano Metrô', vNanoMetro), varios('Nano pessoa', [0, 1, 2, 3, 4, 5].map(k => ['Nano ' + (k + 1), () => vNano(k * 7, k === 2)])), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
   ];
+  grupos.splice(1, 0, grupoTrajes);
   grupos.push({ nome: 'Ícones', itens: Object.keys(VI).filter(k => !usados.has(k)).sort().map(k => um((PRODUTOS[k] && PRODUTOS[k].nome) || k, VI[k])) });
   return grupos.flatMap(g => g.itens.map(it => ({ ...it, grupo: g.nome, ini: it.ini || 0, id: (g.nome + '-' + it.nome).normalize('NFD').replace(/[^\w]+/g, '-').toLowerCase() })));
 }

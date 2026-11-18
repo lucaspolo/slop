@@ -123,6 +123,31 @@ Jogo de fazenda em voxels, num arquivo só (`index.html`, three.js r128 pelo CDN
 - A torre tem o dobro da altura do começo (o Lucas pediu): o deque fica no cubinho `MIRANTE_DEQUE` (72; era 35), com duas seções de travas em X e uma cinta no meio, e a escada vai até lá. `MIRANTE_1P.deque`, o deque dos visitantes (`caminhoTrilha`) e o mirante dos nanos saem dele. A torre alta tapa um pedaço da horta. Quando o zoom enquadra um terreno de canteiros (o meio da tela dentro dele, com `MIRANTE_VISAO.margem` de folga, e a câmera mais perto que `MIRANTE_VISAO.vista`) e a torre cobre na tela um canteiro dele que está atrás (`miranteCobre`, conferido a cada `MIRANTE_VISAO.cada` s), ela inteira fica translúcida (`atualizarVisaoMirante`, opacidade `MIRANTE_VISAO.opac`), sem sombra e sem escrever profundidade, e o toque passa por ela e chega no canteiro. Fora disso ela fica como sempre (o Lucas achou estranho ela sumir em qualquer vista). O menu do mirante abre pela torre sólida ou pelo chão entre as pernas. Em primeira pessoa ela fica sólida. Para testar: `__fazenda.miranteVisao`.
 - Os nanos ganham um mirante do tamanho deles atrás do celeiro, ao lado do banco, na mesma escala relativa (calculada pela altura dos modelos).
 
+## Trajes
+
+O Lucas pediu: cada tarefa com a roupa dela, para o Ed, o Hud e o Dani, trocada num giro como o do Superman do Christopher Reeve.
+
+| Traje | Quando | Como é |
+|---|---|---|
+| Apicultor | coletar mel | macacão branco com zíper, luva amarela, chapéu de abas com véu de tela (fios a cada 4 cubinhos, para o rosto aparecer); fumigador no lugar da cesta, abelhinhas e fumaça em volta |
+| Bombeiro | apagar o fogo da mata (só o Ed) | casaco e calça caqui com faixas refletivas, luva e bota pretas, capacete vermelho de aba comprida atrás com o escudo dourado (as orelhas ficam dentro); extintor no lugar do regador, e a água vira espuma |
+| Capa de chuva | chovendo, em qualquer tarefa ao ar livre que não tenha traje próprio | capa amarela com capuz (as orelhas furam), saia na barra, botas amarelas |
+| Pijama | Hora de nanar: cada um gira ao chegar na frente da casa, antes da conversa, e acorda de pijama | listrado na cor de cada um, gola branca, bolsinho na cor do bolso, touca com pompom, pantufa |
+| Guarda-florestal | coletar na mata, tirar galho, recolher lixo | colete verde aberto por cima do macacão, com bolsos e distintivo, chapéu de guarda-parque, bota marrom |
+| Detetive das trufas | cavar trufa | capinha xadrez nos ombros, boné de duas abas; lupa no lugar da enxada |
+| Piloto de trator | sair com o trator | lenço vermelho de bolinhas, boné verde com os óculos de proteção |
+| Astronauta | olhar as estrelas | roupa branca com a caixa de botões, colar de metal e o capacete de vidro (esfera transparente à parte, `capaceteAstronauta`) |
+| Caipira | ArraiEd: o Ed e quem vem andando giram; quem já aparece na roda chega vestido | camisa xadrez na cor de cada um, calça jeans com remendo, chapéu de palha desfiado, sardas pintadas |
+| Cozinheiro | levar a produção para as fábricas e recolher lá | avental branco por cima do macacão, touca de chef |
+| Visita ao museu | visitar o museu | gravata borboleta e monóculo de corrente |
+
+- Os desenhos estão em `TRAJES` (corpo, cabeça, braço, pé, `ferr` com as ferramentas que trocam e `extras`), com as cores em `TJ`. O corpo de cada um entra no `vPorco` pelo `roupa` (o macacão de sempre virou `corpoMacacao`, que os trajes de pôr por cima usam). Os de cor própria (pijama, caipira) pegam a cor de cada um.
+- `Porco.vestirTraje(id)` troca o desenho do corpo, dos braços e dos pés (cache por traje e cor) e a ferramenta que está na mão; `vestirTraje(null)` volta ao macacão. `Porco.girarPara(id)` faz o giro (`comecarGiro`, `passoGiro`, `GIRO`): velocidade em sino, 8 voltas em 0,85 s, a roupa troca no meio, redemoinho de riscos na cor do traje, som subindo e um pulinho no fim. Girando, ele não anda.
+- Qual traje: `trajeDaTarefa` (`TRAJE_ACAO`; fábrica é cozinheiro; com chuva, capa, menos no spa e no museu; andar não muda nada). `trocarParaTarefa` é chamada antes de o Ed (`proximaTarefa`) e os ajudantes (`atualizarAjudante`) irem para a tarefa: se a roupa é outra, eles giram e a tarefa espera. Tarefas seguidas do mesmo tipo não giram de novo.
+- Tirar: parado sem tarefa por `TRAJE_OCIOSO` s, o traje sai num giro (`atualizarTrajes`); o ajudante tira antes do balanço, da fogueira e de ir embora, e volta de macacão quando aparece de novo. Nas cenas, `tirarTrajesNaHora` (em `iniciarCine`) deixa todo mundo de macacão na hora, sem giro; o pijama e o caipira vêm depois, nas cenas deles. O traje não vai para o save.
+- O spa usa o mesmo giro para pôr e tirar a toalha (`trocaDeRoupaSpa`); a família espera o giro acabar antes de andar.
+- No visualizador, o grupo Trajes mostra cada um no Ed, no Hud e no Dani (e trabalhando, nos que trocam de ferramenta), e "Giro de trocar de roupa" passa por todos.
+
 ## Bichos da mata, do lago e das flores
 
 - Só enfeite: aparecem onde dá para ver na tela, somem quando começa uma cena e não ficam no save (a não ser a castanha da cutia). Todos os modelos estão no visualizador, no grupo Bichos, de frente para +z.
