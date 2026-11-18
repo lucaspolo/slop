@@ -28,7 +28,7 @@ site/              # tudo o que é publicado
     <projeto>/index.html  # cada gerador: prévia 3D, medidas e download do STL
   simulacoes/
     index.html     # a lista das simulações
-    <projeto>/index.html  # cada simulação, em three.js ou num canvas 2D (o aspirador ciclone e os schedulers)
+    <projeto>/index.html  # cada simulação, em three.js ou num canvas 2D (o aspirador ciclone, os schedulers e a fila do supermercado)
   style.css        # o visual escrachado: contorno preto grosso, sombra dura; serve às listas, não aos geradores
   favicon.svg
   tabs.js          # troca de aba na página inicial e lembra a aba no endereço (#impressao-3d, #jogos, #simulacoes)
@@ -79,6 +79,10 @@ O mercadinho do Beto e do Jaca, irmão da Fazenda Joli Pig, com o mesmo motor e 
 ### Visualizador de modelos da Fazenda Joli Pig
 
 Os desenhos ficam dentro do script do jogo, então o visualizador é um modo da própria página: `jogos/fazenda-joli-pig/?modelos`, e `jogos/fazenda-joli-pig/modelos/` só encaminha para lá. Nesse modo o jogo não carrega nem grava o save. Modelo novo entra em `catalogoModelos`; o que estiver em `VI` e não for usado no catálogo aparece sozinho no grupo Ícones.
+
+### Fila do Supermercado
+
+O motor da simulação fica entre `// ===== MOTOR INÍCIO =====` e `// ===== MOTOR FIM =====` e não toca no DOM: dá para carregar esse trecho no node e rodar horas simuladas contra a teoria (M/M/1, M/M/c pelo Erlang C, M/D/1 e a lei de Little). Os números citados no texto dos capítulos saíram dessas contas; mudou o motor ou um cenário, confira de novo.
 
 ### Geradores de impressão 3D
 

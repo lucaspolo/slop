@@ -1,0 +1,2591 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fila do Supermercado, de Poisson a Erlang · slop</title>
+<meta name="description" content="Simulação dos caixas de um supermercado para entender a teoria das filas: chegadas de Poisson, ocupação, M/M/1, lei de Little, variabilidade, fila única contra uma fila por caixa, caixa rápido e a escala do gerente pelo Erlang C.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Visual: encarte de supermercado (vermelho, etiqueta amarela) e cupom de papel térmico. */
+:root {
+  --fundo: #f3efe6; --placa: #fffdf8; --tinta: #1c2230; --tinta2: #474f60; --apagado: #6a7282; --linha: #dad3c3;
+  --vermelho: #d4232b; --vermelho-tinta: #ffffff; --vermelho-suave: #fbe3e1; --amarelo: #ffd23f; --amarelo-tinta: #1c2230;
+  --s1: #2a78d6; --s2: #eb6834; --grade: #e9e4d8;
+  --piso: #ebe5d7; --piso2: #e3dccb; --gondola: #cdbb9d; --prateleira: #8f775a; --balcao: #dfe3ea; --balcao-borda: #8e97a8;
+  --esteira: #2b2f37; --saida: #d5ebd9; --saida-tinta: #2e6a43; --aberto: #22a559; --fechando: #e7a300; --fechado: #a2a8b3;
+  --cupom: #fdfcf7; --cupom-tinta: #22252b; --cupom-apagado: #6e7178;
+  --f-titulo: "Barlow Condensed", "Arial Narrow", Arial, sans-serif;
+  --f-texto: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) {
+  --fundo: #15171c; --placa: #1e2128; --tinta: #eef0f4; --tinta2: #bcc2ce; --apagado: #8d94a3; --linha: #343947;
+  --vermelho: #ff5c61; --vermelho-tinta: #16070a; --vermelho-suave: #3a1c1f; --amarelo: #f2c230; --amarelo-tinta: #15171c;
+  --s1: #3987e5; --s2: #d95926; --grade: #2a2e38;
+  --piso: #252930; --piso2: #2b3038; --gondola: #4d4436; --prateleira: #6f5d47; --balcao: #3b414d; --balcao-borda: #6d7585;
+  --esteira: #0e1013; --saida: #1d3527; --saida-tinta: #8fd3a6; --aberto: #3cc173; --fechando: #f0b62a; --fechado: #5b616d;
+  --cupom: #e8e5dc; --cupom-tinta: #1f2126; --cupom-apagado: #5d6067;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --fundo: #15171c; --placa: #1e2128; --tinta: #eef0f4; --tinta2: #bcc2ce; --apagado: #8d94a3; --linha: #343947;
+  --vermelho: #ff5c61; --vermelho-tinta: #16070a; --vermelho-suave: #3a1c1f; --amarelo: #f2c230; --amarelo-tinta: #15171c;
+  --s1: #3987e5; --s2: #d95926; --grade: #2a2e38;
+  --piso: #252930; --piso2: #2b3038; --gondola: #4d4436; --prateleira: #6f5d47; --balcao: #3b414d; --balcao-borda: #6d7585;
+  --esteira: #0e1013; --saida: #1d3527; --saida-tinta: #8fd3a6; --aberto: #3cc173; --fechando: #f0b62a; --fechado: #5b616d;
+  --cupom: #e8e5dc; --cupom-tinta: #1f2126; --cupom-apagado: #5d6067;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--fundo); color: var(--tinta); font: 400 16px/1.55 var(--f-texto); }
+.wrap { max-width: 1440px; margin: 0 auto; padding: 14px max(16px, env(safe-area-inset-right, 0px)) 56px max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 14px; }
+h1, h2, h3 { font-family: var(--f-titulo); font-weight: 800; margin: 0; line-height: 1.08; text-wrap: balance; }
+h1 { font-size: clamp(30px, 4vw, 46px); letter-spacing: -.01em; }
+h2 { font-size: clamp(22px, 2.2vw, 28px); }
+h3 { font-size: 18px; font-weight: 800; }
+p { margin: 0; }
+a { color: var(--vermelho); }
+button, select, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--vermelho); outline-offset: 2px; }
+.crumbs { font: 500 13px var(--f-mono); color: var(--apagado); }
+.crumbs a { color: inherit; }
+.mast { display: flex; flex-direction: column; gap: 6px; }
+.mast .sub { color: var(--tinta2); max-width: 80ch; font-size: 17px; }
+.f { font-family: var(--f-mono); font-size: .88em; white-space: nowrap; }
+sub, sup { line-height: 0; }
+
+/* Capítulos: etiquetas de preço. */
+.capitulos { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: thin; }
+.cap { flex: none; display: flex; align-items: baseline; gap: 6px; padding: 5px 11px 5px 9px; border: 1.5px solid var(--linha); border-radius: 6px; background: var(--placa); font: 600 15px/1.2 var(--f-titulo); letter-spacing: .01em; white-space: nowrap; }
+.cap b { font: 600 12px var(--f-mono); color: var(--apagado); }
+.cap:hover { border-color: var(--vermelho); }
+.cap[aria-current="true"] { background: var(--vermelho); border-color: var(--vermelho); color: var(--vermelho-tinta); }
+.cap[aria-current="true"] b { color: inherit; opacity: .8; }
+
+/* A bancada: o mercado e os controles à esquerda, a lição e o cupom à direita. */
+.banca { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 14px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.cartao { background: var(--placa); border: 1.5px solid var(--linha); border-radius: 8px; }
+.palco { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.palco-tela { position: relative; }
+canvas { display: block; width: 100%; }
+#mercado { touch-action: manipulation; }
+.aviso { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); max-width: min(440px, 88%); padding: 14px 18px; border-radius: 8px; background: var(--placa); border: 2px solid var(--tinta); box-shadow: 4px 4px 0 var(--tinta); text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.aviso p { font-size: 15px; color: var(--tinta2); }
+.transporte { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 9px 12px; border-top: 1.5px solid var(--linha); }
+.relogio { margin-left: auto; font: 500 13.5px var(--f-mono); color: var(--tinta2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.btn { padding: 6px 12px; border: 1.5px solid var(--linha); border-radius: 6px; background: transparent; font: 600 15px/1.2 var(--f-titulo); letter-spacing: .02em; }
+.btn:hover { border-color: var(--vermelho); color: var(--vermelho); }
+.btn.prim { background: var(--vermelho); border-color: var(--vermelho); color: var(--vermelho-tinta); }
+.btn.prim:hover { color: var(--vermelho-tinta); filter: brightness(1.07); }
+.btn:disabled { opacity: .4; cursor: default; }
+.seg { display: inline-flex; border: 1.5px solid var(--linha); border-radius: 6px; overflow: hidden; flex-wrap: wrap; }
+.seg button { padding: 4px 10px; border: 0; background: transparent; font: 600 14.5px/1.25 var(--f-titulo); color: var(--tinta2); }
+.seg button + button { border-left: 1.5px solid var(--linha); }
+.seg button[aria-pressed="true"] { background: var(--tinta); color: var(--fundo); }
+.seg button:disabled { opacity: .45; cursor: default; }
+
+/* A lição do capítulo. */
+.licao { padding: 16px 18px 14px; display: flex; flex-direction: column; gap: 11px; }
+.licao header { display: flex; align-items: flex-start; gap: 10px; }
+.etiqueta { flex: none; position: relative; padding: 3px 9px 3px 15px; background: var(--amarelo); color: var(--amarelo-tinta); font: 800 15px/1.2 var(--f-titulo); border-radius: 3px 6px 6px 3px; clip-path: polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 50%); margin-top: 2px; }
+.etiqueta::before { content: ""; position: absolute; left: 7px; top: 50%; width: 4px; height: 4px; margin-top: -2px; border-radius: 50%; background: var(--fundo); }
+#l-texto { display: flex; flex-direction: column; gap: 9px; }
+#l-texto p, #l-texto li { font-size: 15.5px; line-height: 1.55; }
+#l-texto ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
+#l-texto table { border-collapse: collapse; font-size: 14.5px; margin: 2px 0; }
+#l-texto td { padding: 2px 10px 2px 0; border-bottom: 1px dashed var(--linha); }
+#l-texto td:last-child { text-align: right; font: 600 13.5px var(--f-mono); padding-right: 0; white-space: nowrap; }
+.curiosidade { font-size: 14px !important; color: var(--tinta2); padding: 8px 10px; border-left: 3px solid var(--amarelo); background: color-mix(in srgb, var(--amarelo) 12%, transparent); border-radius: 0 6px 6px 0; }
+.repare { padding: 9px 11px; border-radius: 6px; background: var(--vermelho-suave); font-size: 14.5px; line-height: 1.45; }
+.repare b { font-family: var(--f-titulo); font-size: 15.5px; letter-spacing: .02em; color: var(--vermelho); margin-right: 3px; }
+.l-nav { display: flex; gap: 6px; flex-wrap: wrap; }
+.l-nav .prim { margin-left: auto; }
+
+/* O cupom com os números. */
+.cupom { position: relative; background: var(--cupom); color: var(--cupom-tinta); border-radius: 4px 4px 0 0; padding: 16px 16px 26px; font: 400 12.5px/1.5 var(--f-mono); box-shadow: 0 1px 0 var(--linha), 0 6px 18px rgb(0 0 0 / .07); }
+.cupom::after { content: ""; position: absolute; left: 0; right: 0; bottom: -9px; height: 10px; background: linear-gradient(-45deg, transparent 6px, var(--cupom) 0) 0 0 / 12px 10px repeat-x, linear-gradient(45deg, transparent 6px, var(--cupom) 0) 0 0 / 12px 10px repeat-x; }
+.cupom h2 { font: 600 14px/1.3 var(--f-mono); text-align: center; letter-spacing: .08em; }
+.cupom .centro { text-align: center; color: var(--cupom-apagado); }
+.cupom hr { border: 0; border-top: 1.5px dashed var(--cupom-apagado); opacity: .55; margin: 8px 0; }
+.cupom table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.cupom th { font-weight: 400; text-align: right; color: var(--cupom-apagado); padding: 0 0 2px 8px; }
+.cupom th:first-child, .cupom td:first-child { text-align: left; padding-left: 0; }
+.cupom td { text-align: right; padding: 1px 0 1px 8px; vertical-align: baseline; }
+.cupom td.med { font-weight: 600; }
+.cupom td.teo { color: var(--cupom-apagado); white-space: nowrap; }
+.cupom .linhas2 { display: grid; grid-template-columns: 1fr auto; gap: 1px 10px; }
+.cupom .linhas2 span:nth-child(even) { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cupom .nota { color: var(--cupom-apagado); font-size: 11.5px; line-height: 1.45; }
+.cupom .little { font-size: 13px; }
+.cupom .little b { font-weight: 600; }
+
+/* Os controles. */
+.controles { padding: 12px 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px 18px; }
+.grupo { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.grupo h3 { font-size: 17px; color: var(--vermelho); }
+.grupo .seg { display: flex; }
+.grupo .seg button { flex: 1 1 0; white-space: normal; padding: 5px 6px; }
+.linha { display: flex; align-items: baseline; justify-content: space-between; gap: 9px; font-size: 15px; }
+.val { font: 600 13px var(--f-mono); color: var(--tinta); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rng { display: flex; flex-direction: column; gap: 1px; }
+input[type=range] { width: 100%; accent-color: var(--vermelho); margin: 0; height: 24px; }
+input[type=checkbox] { accent-color: var(--vermelho); width: 17px; height: 17px; margin: 2px 0 0; flex: none; }
+.chk { display: flex; align-items: flex-start; gap: 8px; font-size: 15px; line-height: 1.35; }
+.chk.off { opacity: .45; }
+.campo { display: flex; flex-direction: column; gap: 3px; font-size: 15px; }
+select { width: 100%; padding: 5px 7px; border: 1.5px solid var(--linha); border-radius: 6px; background: var(--placa); font-size: 15px; }
+input:disabled + span, .rng.off { opacity: .45; }
+.previsto { grid-column: 1 / -1; padding: 8px 11px; border-radius: 6px; background: var(--fundo); font-size: 15px; line-height: 1.4; }
+.previsto.alerta { background: var(--vermelho-suave); }
+.previsto b { font-family: var(--f-mono); font-size: 14px; }
+
+/* Os gráficos. */
+.graficos { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.graf { margin: 0; padding: 12px 14px 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; transition: border-color .3s, box-shadow .3s; }
+.graf.destaque { border-color: var(--vermelho); box-shadow: 0 0 0 1.5px var(--vermelho); }
+.graf h3 { font-size: 18px; }
+.graf h4 { margin: 6px 0 0; font: 800 16px var(--f-titulo); }
+.graf .legenda-texto { font-size: 13.5px; color: var(--tinta2); line-height: 1.4; }
+.legenda { display: flex; flex-wrap: wrap; gap: 3px 13px; font-size: 13.5px; color: var(--tinta2); }
+.legenda > span { display: inline-block; }
+.legenda i { display: inline-block; vertical-align: middle; margin: -2px 6px 0 0; }
+.legenda i.barra { width: 11px; height: 11px; border-radius: 2px; }
+.legenda i.ponto { width: 9px; height: 9px; border-radius: 50%; }
+.legenda i.traco { width: 16px; height: 0; border-top: 2px solid; }
+.legenda i.tracejado { width: 16px; height: 0; border-top: 2px dashed; }
+.legenda i.anel { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--tinta); }
+.legenda i.alvo { width: 10px; height: 10px; border-radius: 50%; background: var(--tinta); }
+.dica { position: fixed; z-index: 30; pointer-events: none; padding: 6px 9px; border-radius: 5px; background: var(--tinta); color: var(--fundo); font: 500 12.5px/1.4 var(--f-mono); max-width: 280px; }
+
+/* O texto de referência no fim. */
+.texto { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.texto section { padding: 16px 18px; display: flex; flex-direction: column; gap: 9px; }
+.texto h2 { font-size: 24px; }
+.texto p, .texto li { font-size: 15px; color: var(--tinta2); }
+.texto ul, .texto ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.formulas li { color: var(--tinta); }
+.formulas .f { white-space: normal; }
+.refs li { font-size: 14px; line-height: 1.45; }
+footer { color: var(--apagado); font-size: 14px; }
+footer a { color: inherit; }
+
+@media (max-width: 1100px) {
+  .banca { display: flex; flex-direction: column; }
+  .col { display: contents; }
+  .palco { order: 1; }
+  .licao { order: 2; }
+  .cupom { order: 3; margin-bottom: 8px; }
+  .controles { order: 4; }
+  .relogio { margin-left: 0; width: 100%; }
+}
+@media (max-width: 520px) {
+  .wrap { padding-left: 10px; padding-right: 10px; gap: 12px; }
+  .licao { padding: 14px; }
+  .transporte .btn { padding: 6px 10px; }
+  .seg button { padding: 4px 8px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <nav class="crumbs" aria-label="Caminho"><a href="../../">slop</a> / <a href="../">simulações</a></nav>
+    <h1>Fila do Supermercado, de Poisson a Erlang</h1>
+    <p class="sub">Por que se forma fila mesmo com caixa sobrando, e por que ela explode perto do limite. Os clientes chegam ao acaso, como num processo de Poisson, e os números da teoria das filas aparecem ao lado do que a simulação mede.</p>
+  </header>
+
+  <nav class="capitulos" id="capitulos" aria-label="Capítulos"></nav>
+
+  <main class="banca">
+   <div class="col">
+    <section class="palco cartao" aria-label="O mercado visto de cima">
+      <div class="palco-tela">
+        <canvas id="mercado" role="img" aria-label="Vista de cima dos caixas do supermercado, com os clientes nas filas"></canvas>
+        <div class="aviso" id="aviso" hidden>
+          <h3 id="aviso-titulo"></h3>
+          <p id="aviso-texto"></p>
+          <button type="button" class="btn prim" id="aviso-botao">recomeçar o dia</button>
+        </div>
+      </div>
+      <div class="transporte">
+        <button type="button" class="btn prim" id="b-play">pausar</button>
+        <button type="button" class="btn" id="b-reiniciar">reiniciar</button>
+        <div class="seg" id="seg-vel" role="group" aria-label="Velocidade">
+          <button type="button" data-v="1" title="tempo real">1×</button>
+          <button type="button" data-v="10">10×</button>
+          <button type="button" data-v="60" title="um minuto simulado por segundo">60×</button>
+          <button type="button" data-v="300">300×</button>
+          <button type="button" data-v="900">900×</button>
+        </div>
+        <span class="relogio" id="relogio"></span>
+      </div>
+    </section>
+
+    <section class="controles cartao" aria-label="Controles">
+      <div class="grupo">
+        <h3>Chegadas</h3>
+        <div class="seg" id="seg-perfil" role="group" aria-label="Movimento">
+          <button type="button" data-v="constante">taxa constante</button>
+          <button type="button" data-v="sabado">um sábado inteiro</button>
+        </div>
+        <div class="seg" id="seg-chegada" role="group" aria-label="Tipo de chegada">
+          <button type="button" data-v="poisson">ao acaso (Poisson)</button>
+          <button type="button" data-v="fixa">intervalo fixo</button>
+        </div>
+        <label class="rng" id="rng-lambda"><span class="linha">Taxa de chegada λ <span class="val" id="v-lambda"></span></span><input type="range" id="r-lambda" min="0.1" max="6" step="0.05"></label>
+      </div>
+      <div class="grupo">
+        <h3>Caixas</h3>
+        <label class="rng" id="rng-caixas"><span class="linha">Caixas abertos <span class="val" id="v-caixas"></span></span><input type="range" id="r-caixas" min="1" max="8" step="1"></label>
+        <label class="rng"><span class="linha">Tempo médio de uma compra <span class="val" id="v-tm"></span></span><input type="range" id="r-tm" min="0.5" max="5" step="0.1"></label>
+        <label class="campo"><span>Variação do tempo de compra</span>
+          <select id="s-dist">
+            <option value="D">fixo, sempre igual (D, c² = 0)</option>
+            <option value="E3">carrinho comum, pouca variação (E₃, c² = 1/3)</option>
+            <option value="M">exponencial (M, c² = 1)</option>
+            <option value="H2">cestinhas e carrinhões (H₂, c² = 3)</option>
+          </select>
+        </label>
+      </div>
+      <div class="grupo">
+        <h3>Fila</h3>
+        <label class="campo"><span>Organização</span>
+          <select id="s-fila">
+            <option value="menor">uma por caixa, o cliente escolhe a menor</option>
+            <option value="aleatoria">uma por caixa, escolhida ao acaso</option>
+            <option value="unica">fila única para todos os caixas</option>
+          </select>
+        </label>
+        <label class="chk" id="chk-rapido"><input type="checkbox" id="c-rapido"><span>caixa 1 é caixa rápido (até 10 volumes)</span></label>
+        <label class="chk" id="chk-troca"><input type="checkbox" id="c-troca"><span>cliente troca de fila se a do lado tiver 2 pessoas a menos</span></label>
+        <label class="chk"><input type="checkbox" id="c-desist"><span>cliente desiste se a espera estimada passar de <span class="val" id="v-pac"></span></span></label>
+        <label class="rng" id="rng-pac"><span class="linha"><span>Paciência</span></span><input type="range" id="r-pac" min="2" max="30" step="1" aria-label="Paciência em minutos"></label>
+        <label class="chk" id="chk-gerente"><input type="checkbox" id="c-gerente"><span>gerente abre e fecha caixas pelo Erlang C (meta: 2 min de espera)</span></label>
+      </div>
+      <p class="previsto" id="previsto"></p>
+    </section>
+   </div>
+   <div class="col">
+    <article class="licao cartao" id="licao" aria-live="polite">
+      <header><span class="etiqueta" id="l-num">1/9</span><h2 id="l-titulo"></h2></header>
+      <div id="l-texto"></div>
+      <p class="repare" id="l-repare"></p>
+      <div class="l-nav">
+        <button type="button" class="btn" id="l-ant">← anterior</button>
+        <button type="button" class="btn" id="l-montar" title="Volta os controles para o cenário deste capítulo">remontar</button>
+        <button type="button" class="btn prim" id="l-prox">próximo →</button>
+      </div>
+    </article>
+
+    <section class="cupom" aria-label="Números da simulação">
+      <h2>SUPERMERCADO SLOP</h2>
+      <p class="centro">cupom da simulação · não é documento fiscal</p>
+      <hr>
+      <div class="linhas2">
+        <span>MODELO</span><span id="k-modelo"></span>
+        <span>TEMPO MEDIDO</span><span id="k-tempo"></span>
+        <span>NA FILA AGORA</span><span id="k-agora"></span>
+      </div>
+      <hr>
+      <table>
+        <thead><tr><th></th><th>medido</th><th>teoria</th></tr></thead>
+        <tbody>
+          <tr><td>OCUPAÇÃO ρ</td><td class="med" id="m-rho"></td><td class="teo" id="t-rho"></td></tr>
+          <tr><td>FILA MÉDIA Lq</td><td class="med" id="m-lq"></td><td class="teo" id="t-lq"></td></tr>
+          <tr><td>ESPERA MÉDIA Wq</td><td class="med" id="m-wq"></td><td class="teo" id="t-wq"></td></tr>
+          <tr><td>ESPEROU &gt; 5 MIN</td><td class="med" id="m-p5"></td><td class="teo" id="t-p5"></td></tr>
+          <tr><td>NO MERCADO W</td><td class="med" id="m-w"></td><td class="teo" id="t-w"></td></tr>
+          <tr><td>ULTRAPASSADOS</td><td class="med" id="m-ult"></td><td class="teo" id="t-ult"></td></tr>
+        </tbody>
+      </table>
+      <p class="nota" id="k-nota"></p>
+      <hr>
+      <p class="little"><b>LEI DE LITTLE</b> L = λ × W</p>
+      <p class="little" id="k-little"></p>
+      <hr>
+      <table>
+        <thead><tr><th></th><th>espera</th><th>compra</th></tr></thead>
+        <tbody>
+          <tr><td>CESTINHAS (≤ 10)</td><td class="med" id="m-cest"></td><td class="teo" id="s-cest"></td></tr>
+          <tr><td>CARRINHOS</td><td class="med" id="m-carr"></td><td class="teo" id="s-carr"></td></tr>
+        </tbody>
+      </table>
+      <hr>
+      <div class="linhas2">
+        <span>CHEGARAM</span><span id="k-cheg"></span>
+        <span>ATENDIDOS</span><span id="k-atend"></span>
+        <span>DESISTIRAM</span><span id="k-desist"></span>
+        <span>TROCARAM DE FILA</span><span id="k-trocas"></span>
+        <span>MAIOR ESPERA</span><span id="k-max"></span>
+      </div>
+      <hr>
+      <p class="centro">tempos em minutos · médias zeradas a cada mudança</p>
+    </section>
+   </div>
+  </main>
+
+  <section class="graficos" aria-label="Gráficos">
+    <figure class="graf cartao" id="g-chegadas">
+      <h3>Chegadas, minuto a minuto</h3>
+      <p class="legenda-texto">Cada traço é um cliente chegando ao caixa nos últimos 10 minutos; o número em cima conta quantos chegaram em cada minuto.</p>
+      <canvas id="c-fita"></canvas>
+      <h4>Quantos chegam em um minuto</h4>
+      <div class="legenda"><span><i class="barra" style="background: var(--s1)"></i>medido (<span id="lg-min">0</span> minutos)</span><span><i class="ponto" style="background: var(--s2)"></i><span id="lg-pois">Poisson</span></span></div>
+      <canvas id="c-hist"></canvas>
+    </figure>
+    <figure class="graf cartao" id="g-intervalos">
+      <h3>Tempo entre uma chegada e a próxima</h3>
+      <p class="legenda-texto">Muitos intervalos curtos, poucos longos. Com chegadas de Poisson, os intervalos seguem a exponencial.</p>
+      <div class="legenda"><span><i class="barra" style="background: var(--s1)"></i>medido (<span id="lg-int">0</span> intervalos)</span><span><i class="traco" style="border-color: var(--s2)"></i><span id="lg-exp">exponencial</span></span></div>
+      <canvas id="c-interv"></canvas>
+    </figure>
+    <figure class="graf cartao" id="g-tempo">
+      <h3>A fila ao longo do tempo</h3>
+      <h4>Chegada e capacidade (clientes por minuto)</h4>
+      <div class="legenda"><span><i class="traco" style="border-color: var(--s1)"></i>chegada λ</span><span><i class="traco" style="border-color: var(--s2)"></i>capacidade: caixas abertos ÷ tempo de compra</span><span><i class="barra" style="background: color-mix(in srgb, var(--vermelho) 28%, transparent)"></i>chegada acima da capacidade</span></div>
+      <canvas id="c-taxa"></canvas>
+      <h4>Pessoas esperando na fila</h4>
+      <div class="legenda" id="lg-fila"><span><i class="traco" style="border-color: var(--s1)"></i>na fila</span><span id="lg-fila-teo"><i class="tracejado" style="border-color: var(--apagado)"></i>média da teoria</span></div>
+      <canvas id="c-fila"></canvas>
+    </figure>
+    <figure class="graf cartao" id="g-taco">
+      <h3>O taco de hóquei: espera e ocupação</h3>
+      <p class="legenda-texto">Espera média na fila pela teoria, com os mesmos caixas e o mesmo tempo de compra, conforme a taxa de chegada sobe.</p>
+      <div class="legenda"><span><i class="traco" style="border-color: var(--s1)"></i>fila única</span><span id="lg-sep"><i class="traco" style="border-color: var(--s2)"></i>uma fila por caixa, ao acaso</span><span><i class="alvo"></i>agora</span><span id="lg-med"><i class="anel"></i>medido</span></div>
+      <canvas id="c-taco"></canvas>
+    </figure>
+  </section>
+
+  <div class="texto">
+    <section class="cartao">
+      <h2>Notação de Kendall</h2>
+      <p>Os modelos de fila têm nome no formato A/S/c, proposto por David Kendall em 1953: A é a distribuição das chegadas, S a do atendimento e c o número de atendentes.</p>
+      <ul>
+        <li><b>M</b> (de Markov): exponencial, sem memória. Nas chegadas, é o mesmo que dizer que elas formam um processo de Poisson.</li>
+        <li><b>D</b>: determinístico, sempre o mesmo tempo.</li>
+        <li><b>E<sub>k</sub></b>: Erlang de k fases, a soma de k exponenciais; varia menos que a exponencial.</li>
+        <li><b>H<sub>2</sub></b>: hiperexponencial, a mistura de duas exponenciais; varia mais.</li>
+        <li><b>G</b>: uma distribuição geral qualquer.</li>
+      </ul>
+      <p>O M/M/1 é o caixa único com chegadas de Poisson e compras exponenciais; o M/D/4, quatro caixas com chegadas de Poisson e compras de tempo fixo.</p>
+    </section>
+    <section class="cartao formulas">
+      <h2>As fórmulas usadas</h2>
+      <ul>
+        <li>Poisson: <span class="f">P(k chegadas) = λ<sup>k</sup> e<sup>−λ</sup> / k!</span></li>
+        <li>Exponencial: <span class="f">P(intervalo &gt; t) = e<sup>−λt</sup></span></li>
+        <li>Ocupação: <span class="f">ρ = λ / (c μ)</span>, com μ = 1 / tempo médio de compra</li>
+        <li>M/M/1: <span class="f">Lq = ρ² / (1 − ρ)</span> e <span class="f">Wq = ρ / (μ − λ)</span></li>
+        <li>Erlang C, a chance de esperar no M/M/c, com a = λ/μ: <span class="f">C = [a<sup>c</sup>/c! · 1/(1−ρ)] / [Σ<sub>k&lt;c</sub> a<sup>k</sup>/k! + a<sup>c</sup>/c! · 1/(1−ρ)]</span></li>
+        <li>M/M/c: <span class="f">Wq = C / (cμ − λ)</span> e <span class="f">P(espera &gt; t) = C e<sup>−(cμ−λ)t</sup></span></li>
+        <li>Lei de Little: <span class="f">L = λW</span> e <span class="f">Lq = λWq</span></li>
+        <li>Kingman (G/G/1): <span class="f">Wq ≈ ρ/(1−ρ) · (c<sub>a</sub>² + c<sub>s</sub>²)/2 · 1/μ</span>; com chegadas de Poisson é a fórmula exata de Pollaczek-Khinchine</li>
+        <li>Allen-Cunneen (G/G/c): <span class="f">Wq ≈ Wq(M/M/c) · (c<sub>a</sub>² + c<sub>s</sub>²)/2</span></li>
+      </ul>
+    </section>
+    <section class="cartao">
+      <h2>Como a simulação funciona</h2>
+      <p>É uma simulação de eventos discretos: o relógio pula de um evento para o próximo (uma chegada, o fim de uma compra, a ronda do gerente) e o desenho só acompanha. Os bonecos andando não contam no tempo; a espera medida é só a da fila.</p>
+      <p>Cada cliente chega com o tempo de compra já sorteado, e o número de volumes do carrinho sai desse tempo. Quem leva até 10 volumes pode usar o caixa rápido.</p>
+      <p>As médias do cupom são zeradas a cada mudança de controle e contam só quem chegou depois dela. No começo, com o mercado vazio, elas ficam abaixo da teoria; perto de 100% de ocupação, levam horas simuladas para chegar perto dela.</p>
+      <p>A teoria vale para o regime permanente com a taxa fixa. Com caixa rápido, desistência ou troca de fila não há fórmula fechada, e o cupom mostra só o que foi medido.</p>
+    </section>
+    <section class="cartao refs">
+      <h2>Referências</h2>
+      <ol>
+        <li>S. D. Poisson (1837). <i>Recherches sur la probabilité des jugements en matière criminelle et en matière civile</i>. Paris: Bachelier.</li>
+        <li>L. von Bortkiewicz (1898). <i>Das Gesetz der kleinen Zahlen</i>. Leipzig: Teubner.</li>
+        <li>A. K. Erlang (1909). Sandsynlighedsregning og Telefonsamtaler. <i>Nyt Tidsskrift for Matematik B</i>, 20, 33–39.</li>
+        <li>A. K. Erlang (1917). Løsning af nogle Problemer fra Sandsynlighedsregningen af Betydning for de automatiske Telefoncentraler. <i>Elektroteknikeren</i>, 13.</li>
+        <li>F. Pollaczek (1930). Über eine Aufgabe der Wahrscheinlichkeitstheorie. <i>Mathematische Zeitschrift</i>, 32, 64–100. <a href="https://doi.org/10.1007/BF01194620">doi:10.1007/BF01194620</a></li>
+        <li>D. G. Kendall (1953). Stochastic Processes Occurring in the Theory of Queues and their Analysis by the Method of the Imbedded Markov Chain. <i>Annals of Mathematical Statistics</i>, 24(3), 338–354. <a href="https://doi.org/10.1214/aoms/1177728975">doi:10.1214/aoms/1177728975</a></li>
+        <li>J. D. C. Little (1961). A Proof for the Queuing Formula: L = λW. <i>Operations Research</i>, 9(3), 383–387. <a href="https://doi.org/10.1287/opre.9.3.383">doi:10.1287/opre.9.3.383</a></li>
+        <li>J. F. C. Kingman (1961). The single server queue in heavy traffic. <i>Mathematical Proceedings of the Cambridge Philosophical Society</i>, 57(4), 902–904. <a href="https://doi.org/10.1017/S0305004100036094">doi:10.1017/S0305004100036094</a></li>
+        <li>P. A. W. Lewis e G. S. Shedler (1979). Simulation of nonhomogeneous Poisson processes by thinning. <i>Naval Research Logistics Quarterly</i>, 26(3), 403–413. <a href="https://doi.org/10.1002/nav.3800260304">doi:10.1002/nav.3800260304</a></li>
+        <li>R. C. Larson (1987). Perspectives on Queues: Social Justice and the Psychology of Queueing. <i>Operations Research</i>, 35(6), 895–905. <a href="https://doi.org/10.1287/opre.35.6.895">doi:10.1287/opre.35.6.895</a></li>
+        <li>M. H. Rothkopf e P. Rech (1987). Perspectives on Queues: Combining Queues is Not Always Beneficial. <i>Operations Research</i>, 35(6), 906–909. <a href="https://doi.org/10.1287/opre.35.6.906">doi:10.1287/opre.35.6.906</a></li>
+        <li>M. Harchol-Balter (2013). <i>Performance Modeling and Design of Computer Systems: Queueing Theory in Action</i>. Cambridge University Press.</li>
+      </ol>
+    </section>
+  </div>
+
+  <footer>Lucas Polo · <a href="../../">slop</a> · <a href="../">outras simulações</a></footer>
+</div>
+<div class="dica" id="dica" hidden></div>
+<script>
+// ===== MOTOR INÍCIO =====
+// O mercado como uma simulação de eventos discretos: o relógio pula de um evento para o
+// próximo (uma chegada, o fim de uma compra, a ronda do gerente). Este trecho não toca no
+// DOM, então roda igual no navegador e no node (nos testes contra a teoria).
+
+const MAX_CAIXAS = 8;
+const ITENS_RAPIDO = 10;
+const FECHA_SABADO = 14 * 60; // o sábado vai das 8h às 22h; t conta minutos desde a abertura
+
+const DISTS = {
+  M: { nome: 'exponencial', letra: 'M', cs2: 1 },
+  D: { nome: 'fixo', letra: 'D', cs2: 0 },
+  E3: { nome: 'carrinho comum', letra: 'E₃', cs2: 1 / 3 },
+  H2: { nome: 'cestinhas e carrinhões', letra: 'H₂', cs2: 3 },
+};
+
+const PADRAO = {
+  perfil: 'constante', // 'constante' | 'sabado'
+  chegada: 'poisson', // 'poisson' | 'fixa'
+  lambda: 1, // clientes por minuto
+  caixas: 2,
+  tm: 1.6, // tempo médio de atendimento, em minutos
+  dist: 'M',
+  fila: 'menor', // 'menor' | 'aleatoria' | 'unica'
+  rapido: false,
+  troca: false,
+  desistencia: false,
+  paciencia: 10, // minutos de espera estimada que o cliente aceita
+  gerente: false,
+  metaGerente: 2, // espera média que o gerente aceita, em minutos
+};
+
+// Gerador com semente (mulberry32), para os testes serem repetíveis.
+function criarSorteio(semente) {
+  let a = semente >>> 0;
+  return function () {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function expo(r, media) {
+  return -Math.log(1 - r()) * media;
+}
+
+// Duração de uma compra no caixa, com média m e a variação escolhida.
+function sortearAtendimento(r, dist, m) {
+  switch (dist) {
+    case 'D':
+      return m;
+    case 'E3':
+      return expo(r, m / 3) + expo(r, m / 3) + expo(r, m / 3);
+    case 'H2': // 80% cestinhas (média m/2), 20% carrinhões (média 3m): c² = 3
+      return r() < 0.8 ? expo(r, 0.5 * m) : expo(r, 3 * m);
+    default:
+      return expo(r, m);
+  }
+}
+
+// Movimento de um sábado, em clientes por minuto; t em minutos desde as 8h.
+function lambdaSabado(t) {
+  if (t < 0 || t >= FECHA_SABADO) return 0;
+  const h = 8 + t / 60;
+  const g = (c, s) => Math.exp(-((h - c) ** 2) / (2 * s * s));
+  return 0.4 + 1.1 * g(11.75, 1.0) + 0.35 * g(15.25, 1.4) + 2.4 * g(18.25, 1.3);
+}
+const LAMBDA_SABADO_MAX = 3; // acima do pico (2,84), para o afinamento
+
+// Probabilidade de esperar no M/M/c (Erlang C), com a = λ/μ, pela recursão de Erlang B.
+function erlangC(c, a) {
+  if (a >= c) return 1;
+  let B = 1;
+  for (let k = 1; k <= c; k++) B = (a * B) / (k + a * B);
+  return B / (1 - (a / c) * (1 - B));
+}
+
+// Fila com c caixas e fila única. fator = (cₐ² + cₛ²)/2: 1 no M/M/c (exato); nos outros
+// casos é a aproximação de Allen-Cunneen, que com c = 1 e chegadas de Poisson vira a
+// fórmula exata de Pollaczek-Khinchine.
+function filaMMc(lam, m, c, fator = 1) {
+  const a = lam * m;
+  const rho = a / c;
+  if (!(lam > 0)) return { rho: 0, Wq: 0, Lq: 0, pEspera: 0, taxaCauda: Infinity, estavel: true };
+  if (rho >= 1) return { rho, Wq: Infinity, Lq: Infinity, pEspera: 1, taxaCauda: 0, estavel: false };
+  const C = erlangC(c, a);
+  const Wq = (C / (c / m - lam)) * fator;
+  return { rho, Wq, Lq: lam * Wq, pEspera: C, taxaCauda: c / m - lam, estavel: true };
+}
+
+// O que a teoria diz para os parâmetros p, a taxa lam e c caixas.
+function teoria(p, lam, c) {
+  const ca2 = p.chegada === 'fixa' && p.perfil !== 'sabado' ? 0 : 1;
+  const d = DISTS[p.dist] || DISTS.M;
+  const cs2 = d.cs2;
+  const unica = filaMMc(lam, p.tm, c, (ca2 + cs2) / 2);
+  // Repartir ao acaso chegadas de Poisson dá Poisson em cada fila; repartir chegadas
+  // regulares deixa cada fila com c² = 1 − 1/c.
+  const ca2s = 1 - (1 - ca2) / c;
+  const uma = filaMMc(lam / c, p.tm, 1, (ca2s + cs2) / 2);
+  const separadas = { ...uma, Lq: uma.Lq * c };
+  const mm = ca2 === 1 && cs2 === 1;
+  return {
+    ca2,
+    cs2,
+    rho: (lam * p.tm) / c,
+    unica,
+    separadas,
+    mm,
+    exataUnica: mm || (c === 1 && ca2 === 1),
+    exataSeparadas: ca2s === 1,
+    kendall: (ca2 ? 'M' : 'D') + '/' + d.letra + '/' + c,
+  };
+}
+
+// P(espera > t), só para os modelos M/M.
+function pEsperaMaisQue(r, t) {
+  if (!r.estavel) return 1;
+  return r.pEspera * Math.exp(-r.taxaCauda * t);
+}
+
+class Mercado {
+  constructor(params = {}, semente = (Math.random() * 2 ** 32) >>> 0) {
+    this.p = Object.assign({}, PADRAO, params);
+    this.r = criarSorteio(semente);
+    this.reiniciar();
+  }
+
+  reiniciar() {
+    const p = this.p;
+    this.t = 0;
+    this.proxId = 1;
+    this.caixas = [];
+    for (let i = 0; i < MAX_CAIXAS; i++) {
+      this.caixas.push({ i, aberto: false, rapido: false, atendendo: null, fim: Infinity, fila: [], atendidos: 0 });
+    }
+    this.filaUnica = [];
+    this.eventos = []; // para quem desenha: chegou, desistiu, saiu
+    this.encerrado = false;
+    this.maxChegadaIniciada = -Infinity;
+    this.ultimaChegada = -Infinity;
+    this.chegadasRecentes = [];
+    this.serie = [];
+    this.proxAmostra = 0;
+    this.nAbertos = 1;
+    this.zerarEstatisticas();
+    this.zerarChegadas();
+    const comGerente = p.perfil === 'sabado' && p.gerente;
+    this.abrirCaixas(comGerente ? this.caixasDoGerente() : p.caixas);
+    this.proxGerente = comGerente ? 15 : Infinity;
+    this.proxChegada = this.sortearChegada(0);
+  }
+
+  zerarEstatisticas() {
+    this.e = {
+      t0: this.t,
+      chegadas: 0,
+      entraram: 0,
+      desistencias: 0,
+      iniciados: 0,
+      saidas: 0,
+      somaWq: 0,
+      somaW: 0,
+      maxWq: 0,
+      mais5: 0,
+      ultrapassados: 0,
+      trocas: 0,
+      areaQ: 0,
+      areaL: 0,
+      areaOcup: 0,
+      areaAbertos: 0,
+      pequenos: { n: 0, soma: 0, somaS: 0 },
+      grandes: { n: 0, soma: 0, somaS: 0 },
+    };
+  }
+
+  // Contagem de chegadas por minuto e intervalos entre chegadas, para os gráficos da Poisson.
+  // A contagem começa no próximo minuto cheio, para não medir um minuto pela metade.
+  zerarChegadas() {
+    this.inicioContagem = Math.ceil(this.t);
+    this.minAtual = this.inicioContagem;
+    this.noMinuto = 0;
+    this.histMin = [];
+    this.nMinutos = 0;
+    this.somaPorMinuto = 0;
+    this.intervalos = [];
+    this.anteriorDoRegime = null;
+    this.lambdaContagem = this.p.lambda;
+  }
+
+  lambdaAgora(t = this.t) {
+    return this.p.perfil === 'sabado' ? lambdaSabado(t) : this.p.lambda;
+  }
+
+  sortearChegada(depois) {
+    const p = this.p;
+    if (p.perfil === 'sabado') {
+      // Afinamento (Lewis e Shedler): sorteia na taxa máxima e aceita com chance λ(t)/λmax.
+      let t = depois;
+      for (;;) {
+        t += expo(this.r, 1 / LAMBDA_SABADO_MAX);
+        if (t >= FECHA_SABADO) return Infinity;
+        if (this.r() * LAMBDA_SABADO_MAX <= lambdaSabado(t)) return t;
+      }
+    }
+    if (!(p.lambda > 0)) return Infinity;
+    if (p.chegada === 'fixa') return Math.max(depois, this.ultimaChegada + 1 / p.lambda);
+    return depois + expo(this.r, 1 / p.lambda);
+  }
+
+  // Muda parâmetros com a simulação rodando. Trocar a organização da fila ou o perfil
+  // recomeça do zero; o resto vale daqui para a frente e zera as médias.
+  mudar(novos) {
+    const antes = this.p;
+    const p = (this.p = Object.assign({}, antes, novos));
+    if (p.fila !== antes.fila || p.perfil !== antes.perfil) {
+      this.reiniciar();
+      return;
+    }
+    if (p.lambda !== antes.lambda || p.chegada !== antes.chegada) {
+      this.proxChegada = this.sortearChegada(this.t);
+      this.zerarChegadas();
+    }
+    const comGerente = p.perfil === 'sabado' && p.gerente;
+    if (comGerente && !antes.gerente) this.proxGerente = this.t;
+    if (!comGerente) this.proxGerente = Infinity;
+    if (!comGerente && (p.caixas !== antes.caixas || antes.gerente !== p.gerente)) this.abrirCaixas(p.caixas);
+    else if (p.rapido !== antes.rapido) this.abrirCaixas(this.nAbertos);
+    if (p.troca && !antes.troca) this.trocarFilas();
+    this.zerarEstatisticas();
+  }
+
+  abrirCaixas(n) {
+    n = Math.max(1, Math.min(MAX_CAIXAS, Math.round(n)));
+    const rapido = this.p.rapido && n >= 2;
+    this.caixas.forEach((cx, i) => {
+      cx.aberto = i < n;
+      cx.rapido = rapido && i === 0;
+    });
+    this.nAbertos = n;
+    if (this.p.troca) this.trocarFilas();
+    this.caixas.forEach((cx) => this.tentarAtender(cx));
+  }
+
+  // Escala do gerente: o menor número de caixas que deixa a espera média da próxima meia
+  // hora abaixo da meta pelo Erlang C, mais um se a fila já passou de 4 por caixa.
+  caixasDoGerente() {
+    const p = this.p;
+    const t = this.t;
+    let soma = 0;
+    for (let k = 0; k < 6; k++) soma += lambdaSabado(t + 2.5 + 5 * k);
+    const lam = soma / 6;
+    const fator = (1 + (DISTS[p.dist] || DISTS.M).cs2) / 2;
+    let n = MAX_CAIXAS;
+    for (let c = 1; c <= MAX_CAIXAS; c++) {
+      const r = filaMMc(lam, p.tm, c, fator);
+      if (r.estavel && r.Wq <= p.metaGerente) {
+        n = c;
+        break;
+      }
+    }
+    if (this.naFila() > 4 * this.nAbertos) n = Math.max(n, this.nAbertos + 1);
+    return Math.min(MAX_CAIXAS, Math.max(n, p.rapido ? 2 : 1));
+  }
+
+  naFila() {
+    let n = this.filaUnica.length;
+    for (const cx of this.caixas) n += cx.fila.length;
+    return n;
+  }
+
+  emAtendimento() {
+    let n = 0;
+    for (const cx of this.caixas) if (cx.atendendo) n++;
+    return n;
+  }
+
+  // Caixas que contam na ocupação: os abertos e os que estão fechando com gente.
+  servindo() {
+    let n = 0;
+    for (const cx of this.caixas) if (cx.aberto || cx.atendendo || cx.fila.length) n++;
+    return n;
+  }
+
+  vazio() {
+    return this.naFila() === 0 && this.emAtendimento() === 0;
+  }
+
+  avancar(dt) {
+    const fim = this.t + dt;
+    for (let guarda = 0; guarda < 200000; guarda++) {
+      let te = this.proxChegada;
+      let tipo = 'chegada';
+      let cxe = null;
+      for (const cx of this.caixas) {
+        if (cx.fim < te) {
+          te = cx.fim;
+          tipo = 'fim';
+          cxe = cx;
+        }
+      }
+      if (this.proxGerente < te) {
+        te = this.proxGerente;
+        tipo = 'gerente';
+      }
+      if (this.proxAmostra < te) {
+        te = this.proxAmostra;
+        tipo = 'amostra';
+      }
+      if (te > fim) break;
+      this.integrar(te);
+      if (tipo === 'chegada') {
+        this.chegar();
+        this.proxChegada = this.sortearChegada(this.t);
+      } else if (tipo === 'fim') {
+        this.terminar(cxe);
+      } else if (tipo === 'gerente') {
+        this.abrirCaixas(this.caixasDoGerente());
+        this.proxGerente = this.t >= FECHA_SABADO ? Infinity : this.t + 15;
+      } else {
+        this.amostrar();
+      }
+    }
+    this.integrar(fim);
+    this.fecharMinutos(this.t);
+    if (this.p.perfil === 'sabado' && this.t >= FECHA_SABADO && this.vazio()) this.encerrado = true;
+  }
+
+  integrar(te) {
+    const dt = te - this.t;
+    if (dt > 0) {
+      const e = this.e;
+      const nf = this.naFila();
+      const ns = this.emAtendimento();
+      e.areaQ += nf * dt;
+      e.areaL += (nf + ns) * dt;
+      e.areaOcup += ns * dt;
+      e.areaAbertos += this.servindo() * dt;
+    }
+    this.t = te;
+  }
+
+  amostrar() {
+    const p = this.p;
+    this.serie.push({
+      t: this.t,
+      fila: this.naFila(),
+      lam: this.lambdaAgora(),
+      cap: this.nAbertos / p.tm,
+      abertos: this.nAbertos,
+    });
+    if (p.perfil !== 'sabado' && this.serie.length > 720) this.serie.splice(0, this.serie.length - 720);
+    this.proxAmostra += 0.5;
+  }
+
+  fecharMinutos(t) {
+    while (Math.floor(t) > this.minAtual) {
+      this.histMin[this.noMinuto] = (this.histMin[this.noMinuto] || 0) + 1;
+      this.nMinutos++;
+      this.somaPorMinuto += this.noMinuto;
+      this.noMinuto = 0;
+      this.minAtual++;
+    }
+  }
+
+  registrarChegada(t) {
+    this.fecharMinutos(t);
+    if (t >= this.inicioContagem) this.noMinuto++;
+    if (this.anteriorDoRegime !== null) {
+      this.intervalos.push(t - this.anteriorDoRegime);
+      if (this.intervalos.length > 5000) this.intervalos.splice(0, 1000);
+    }
+    this.anteriorDoRegime = t;
+    this.ultimaChegada = t;
+    this.chegadasRecentes.push(t);
+    if (this.chegadasRecentes.length > 600 || this.chegadasRecentes[0] < t - 30) {
+      const corte = t - 30;
+      let k = 0;
+      while (k < this.chegadasRecentes.length - 1 && this.chegadasRecentes[k] < corte) k++;
+      this.chegadasRecentes.splice(0, Math.max(k, this.chegadasRecentes.length - 600));
+    }
+    this.e.chegadas++;
+  }
+
+  chegar() {
+    const p = this.p;
+    const t = this.t;
+    const S = sortearAtendimento(this.r, p.dist, p.tm);
+    const itens = Math.max(1, Math.round((14 * S) / p.tm));
+    const cli = {
+      id: this.proxId++,
+      chegada: t,
+      S,
+      itens,
+      pequeno: itens <= ITENS_RAPIDO,
+      inicio: null,
+      fim: null,
+      caixa: -1,
+      desistiu: false,
+      ultrapassado: false,
+      trocas: 0,
+      aparencia: Math.floor(this.r() * 2 ** 30),
+    };
+    this.registrarChegada(t);
+    const alvo = this.escolherFila(cli);
+    if (p.desistencia && !alvo.livre) {
+      // O cliente estima a espera pelo tamanho da fila: quem está na frente, mais quem
+      // está sendo atendido, vezes o tempo médio, dividido pelos caixas daquela fila.
+      const estimada = ((alvo.fila.length + 1) * p.tm) / alvo.servidores;
+      if (estimada > p.paciencia) {
+        cli.desistiu = true;
+        this.e.desistencias++;
+        this.eventos.push({ tipo: 'desistiu', cli });
+        return;
+      }
+    }
+    alvo.fila.push(cli);
+    this.e.entraram++;
+    this.eventos.push({ tipo: 'chegou', cli });
+    if (alvo.caixa) this.tentarAtender(alvo.caixa);
+    else for (const cx of this.caixas) this.tentarAtender(cx);
+    if (p.troca) this.trocarFilas();
+  }
+
+  escolherFila(cli) {
+    const p = this.p;
+    const cxs = this.caixas;
+    const gente = (cx) => cx.fila.length + (cx.atendendo ? 1 : 0);
+    if (p.fila === 'unica') {
+      const regulares = cxs.filter((cx) => cx.aberto && !cx.rapido);
+      const n = Math.max(1, regulares.length);
+      const algumLivre = regulares.some((cx) => !cx.atendendo && !cx.fila.length);
+      const unica = {
+        fila: this.filaUnica,
+        caixa: null,
+        servidores: n,
+        livre: algumLivre && this.filaUnica.length === 0,
+        carga: (this.filaUnica.length + regulares.filter((cx) => cx.atendendo).length) / n,
+      };
+      const rap = cxs.find((cx) => cx.aberto && cx.rapido);
+      if (rap && cli.pequeno) {
+        const carga = gente(rap);
+        if (carga <= unica.carga) return { fila: rap.fila, caixa: rap, servidores: 1, livre: carga === 0 };
+      }
+      return unica;
+    }
+    let cands = cxs.filter((cx) => cx.aberto && (!cx.rapido || cli.pequeno));
+    if (!cands.length) cands = cxs.filter((cx) => cx.aberto);
+    let cx;
+    if (p.fila === 'aleatoria') {
+      cx = cands[Math.floor(this.r() * cands.length)];
+    } else {
+      let menor = Infinity;
+      let empates = [];
+      for (const c of cands) {
+        const g = gente(c);
+        if (g < menor) {
+          menor = g;
+          empates = [c];
+        } else if (g === menor) empates.push(c);
+      }
+      cx = empates[Math.floor(this.r() * empates.length)];
+    }
+    return { fila: cx.fila, caixa: cx, servidores: 1, livre: !cx.atendendo && !cx.fila.length };
+  }
+
+  tentarAtender(cx) {
+    if (cx.atendendo) return;
+    let cli = null;
+    if (cx.fila.length) cli = cx.fila.shift();
+    else if (this.p.fila === 'unica' && cx.aberto && !cx.rapido && this.filaUnica.length) cli = this.filaUnica.shift();
+    if (cli) this.iniciar(cx, cli);
+  }
+
+  iniciar(cx, cli) {
+    const t = this.t;
+    const e = this.e;
+    cli.inicio = t;
+    cli.caixa = cx.i;
+    cx.atendendo = cli;
+    cx.fim = t + cli.S;
+    // Ultrapassado: alguém que chegou depois já começou a ser atendido.
+    cli.ultrapassado = cli.chegada < this.maxChegadaIniciada;
+    if (cli.chegada > this.maxChegadaIniciada) this.maxChegadaIniciada = cli.chegada;
+    if (cli.chegada >= e.t0) {
+      const espera = t - cli.chegada;
+      e.iniciados++;
+      e.somaWq += espera;
+      if (espera > e.maxWq) e.maxWq = espera;
+      if (espera > 5) e.mais5++;
+      if (cli.ultrapassado) e.ultrapassados++;
+      const g = cli.pequeno ? e.pequenos : e.grandes;
+      g.n++;
+      g.soma += espera;
+      g.somaS += cli.S;
+    }
+  }
+
+  terminar(cx) {
+    const cli = cx.atendendo;
+    const e = this.e;
+    cli.fim = this.t;
+    cx.atendendo = null;
+    cx.fim = Infinity;
+    cx.atendidos++;
+    if (cli.chegada >= e.t0) {
+      e.saidas++;
+      e.somaW += this.t - cli.chegada;
+    }
+    this.eventos.push({ tipo: 'saiu', cli });
+    this.tentarAtender(cx);
+    if (this.p.troca) this.trocarFilas();
+  }
+
+  // Troca de fila: o último de uma fila passa para outra se lá tiver pelo menos duas
+  // pessoas a menos (contando quem está no caixa). Não há vaivém: cada troca reduz a
+  // diferença em dois.
+  trocarFilas() {
+    if (this.p.fila === 'unica') return;
+    const cxs = this.caixas;
+    const gente = (cx) => cx.fila.length + (cx.atendendo ? 1 : 0);
+    for (let guarda = 0; guarda < 400; guarda++) {
+      let mudou = false;
+      for (const de of cxs) {
+        if (!de.fila.length) continue;
+        const cli = de.fila[de.fila.length - 1];
+        let melhor = null;
+        for (const para of cxs) {
+          if (para === de || !para.aberto || (para.rapido && !cli.pequeno)) continue;
+          if (gente(de) - gente(para) >= 2 && (!melhor || gente(para) < gente(melhor))) melhor = para;
+        }
+        if (melhor) {
+          de.fila.pop();
+          melhor.fila.push(cli);
+          cli.trocas++;
+          this.e.trocas++;
+          this.tentarAtender(melhor);
+          mudou = true;
+        }
+      }
+      if (!mudou) break;
+    }
+  }
+
+  resumo() {
+    const e = this.e;
+    const dur = this.t - e.t0;
+    const div = (a, b) => (b > 0 ? a / b : NaN);
+    const Wq = div(e.somaWq, e.iniciados);
+    const W = div(e.somaW, e.saidas);
+    const lam = div(e.entraram, dur);
+    return {
+      dur,
+      Lq: div(e.areaQ, dur),
+      L: div(e.areaL, dur),
+      rho: div(e.areaOcup, e.areaAbertos),
+      Wq,
+      W,
+      lam,
+      lamW: lam * W,
+      mais5: div(e.mais5, e.iniciados),
+      ultrapassados: div(e.ultrapassados, e.iniciados),
+      wqPequenos: div(e.pequenos.soma, e.pequenos.n),
+      wqGrandes: div(e.grandes.soma, e.grandes.n),
+      sPequenos: div(e.pequenos.somaS, e.pequenos.n),
+      sGrandes: div(e.grandes.somaS, e.grandes.n),
+      nPequenos: e.pequenos.n,
+      nGrandes: e.grandes.n,
+      atendidos: e.saidas,
+      chegadas: e.chegadas,
+      desistencias: e.desistencias,
+      trocas: e.trocas,
+      maxWq: e.maxWq,
+    };
+  }
+}
+// ===== MOTOR FIM =====
+
+// ===== CAPÍTULOS =====
+// Cada capítulo monta um cenário (preset) e explica o que olhar. O último deixa tudo livre.
+const CAPS = [
+  {
+    curto: 'Poisson',
+    titulo: 'Ninguém combina a hora de chegar',
+    preset: { lambda: 1, caixas: 2, tm: 1.6, dist: 'M' },
+    vel: 60,
+    destaque: ['g-chegadas', 'g-intervalos'],
+    texto: `
+      <p>Cada cliente termina as compras quando termina, e a decisão de um não depende da dos outros. Quando muita gente decide assim, cada pessoa com uma chance pequena de aparecer num instante qualquer, o número de chegadas por minuto segue a distribuição de Poisson, publicada por Siméon Denis Poisson em 1837.</p>
+      <p>Ela tem um parâmetro só, a taxa λ (lambda), a média de chegadas por minuto. A chance de chegarem exatamente k clientes num minuto é <span class="f">P(k) = λ<sup>k</sup> e<sup>−λ</sup> / k!</span>, e a variância é igual à média. Com λ = 1 por minuto, em 37% dos minutos não chega ninguém, em 37% chega um e em 26% chegam dois ou mais.</p>
+      <p>O tempo entre uma chegada e a próxima segue a distribuição exponencial, com média 1/λ. Ela não tem memória: se faz cinco minutos que ninguém aparece, a chance de alguém chegar no minuto seguinte continua a mesma. Por isso as chegadas vêm em rajadas e buracos, e não espaçadas como um relógio.</p>
+      <p class="curiosidade">Em 1898, Ladislaus von Bortkiewicz contou as mortes por coice de cavalo em corpos do exército prussiano. Em 200 anos-corpo houve 109 sem mortes, 65 com uma, 22 com duas, 3 com três e 1 com quatro; uma Poisson de média 0,61 prevê 108,7, 66,3, 20,2, 4,1 e 0,6. Eventos raros e independentes, somados, dão Poisson.</p>`,
+    repare: `Na fita, minutos vazios ao lado de minutos com três ou quatro chegadas. Com o tempo, as barras do histograma encostam nos pontos da Poisson e os intervalos desenham a curva exponencial. Troque para <b>intervalo fixo</b> e veja a diferença.`,
+  },
+  {
+    curto: 'Um caixa',
+    titulo: 'Um caixa só, e já tem fila',
+    preset: { lambda: 0.5, caixas: 1, tm: 1.6, dist: 'M' },
+    vel: 60,
+    destaque: ['g-tempo'],
+    texto: `
+      <p>Com um caixa, a conta que manda é a ocupação <span class="f">ρ = λ / μ</span>: a taxa de chegada dividida pela taxa de atendimento. Aqui chegam 0,5 cliente por minuto e cada compra leva em média 1,6 minuto, então o caixa atende até 0,625 cliente por minuto e fica ocupado 80% do tempo.</p>
+      <p>Mesmo com 20% de folga, forma-se fila. Às vezes chegam três clientes durante uma compra grande e esperam; em outras horas o caixa fica parado, e esse tempo parado não volta para ajudar depois. A fila vem da variação, não da falta de capacidade média.</p>
+      <p>No modelo M/M/1 (chegadas de Poisson, compras com duração exponencial, um caixa), a fila média é <span class="f">Lq = ρ² / (1 − ρ)</span> e a espera média é <span class="f">Wq = ρ / (μ − λ)</span>. Com 80% de ocupação, são 3,2 pessoas na fila e 6,4 minutos de espera, quatro vezes o tempo da própria compra.</p>`,
+    repare: `A fila cresce e some sozinha, sem nada mudar nos controles. As médias do cupom oscilam bastante no começo e só chegam perto da teoria depois de algumas horas simuladas: experimente a velocidade de 900×.`,
+  },
+  {
+    curto: 'Taco de hóquei',
+    titulo: 'O taco de hóquei',
+    preset: { lambda: 0.45, caixas: 1, tm: 2, dist: 'M' },
+    vel: 300,
+    destaque: ['g-taco'],
+    texto: `
+      <p>A espera não cresce em linha reta com a ocupação. No M/M/1, a espera contada em tempos de compra é <span class="f">ρ / (1 − ρ)</span>:</p>
+      <table>
+        <tr><td>ocupação de 50%</td><td>1 compra</td></tr>
+        <tr><td>ocupação de 80%</td><td>4 compras</td></tr>
+        <tr><td>ocupação de 90%</td><td>9 compras</td></tr>
+        <tr><td>ocupação de 95%</td><td>19 compras</td></tr>
+        <tr><td>ocupação de 99%</td><td>99 compras</td></tr>
+      </table>
+      <p>Por isso um mercado que vai bem a 80% desanda num dia só um pouco mais cheio: de 80% para 90% a espera mais que dobra. A partir de 100% não existe equilíbrio, e a fila cresce sem parar por menor que seja a diferença entre chegada e atendimento.</p>
+      <p>Perto do limite a fila também fica instável: passa muito tempo longe da média, e a simulação precisa rodar bem mais para a média medida encostar na teoria.</p>`,
+    repare: `Arraste a taxa de chegada e veja o ponto andar na curva do taco de hóquei. Tente 0,40 (80%), 0,45 (90%) e 0,50 (100%), com uma compra média de 2 minutos.`,
+  },
+  {
+    curto: 'Lei de Little',
+    titulo: 'A lei de Little',
+    preset: { lambda: 1.5, caixas: 3, tm: 1.7, dist: 'M', fila: 'menor' },
+    vel: 60,
+    destaque: [],
+    texto: `
+      <p>Uma relação vale para qualquer fila estável, sejam quais forem as chegadas, o atendimento ou a ordem de quem passa: <span class="f">L = λ × W</span>. O número médio de pessoas dentro do sistema é a taxa de chegada vezes o tempo médio que cada uma fica lá dentro. John Little publicou a demonstração em 1961.</p>
+      <p>Ela vale também só para a fila, <span class="f">Lq = λ × Wq</span>, e serve ao gerente: contando quantas pessoas esperam e sabendo quantas chegam por minuto, ele sabe a espera média sem cronometrar ninguém. Seis pessoas na fila com duas chegadas por minuto dão três minutos de espera.</p>
+      <p>O cupom faz as duas contas com o que a simulação mediu: de um lado, o número médio de pessoas no mercado ao longo do tempo; do outro, a taxa de chegada vezes o tempo médio de quem já saiu.</p>`,
+    repare: `As duas contas da lei de Little no cupom chegam ao mesmo número, mesmo com o cliente escolhendo a menor fila, caso que não tem fórmula fechada para a espera. Ligue a desistência ou o caixa rápido: a lei continua valendo.`,
+  },
+  {
+    curto: 'Variação',
+    titulo: 'A variação custa caro',
+    preset: { lambda: 0.5, caixas: 1, tm: 1.6, dist: 'D' },
+    vel: 300,
+    destaque: ['g-taco'],
+    texto: `
+      <p>Duas filas com a mesma ocupação podem ter esperas bem diferentes. Para um caixa com chegadas de Poisson, a fórmula de Pollaczek e Khinchine dá a espera exata para qualquer distribuição do tempo de compra, e o que pesa é a variação, medida pelo quadrado do coeficiente de variação (c²): a variância dividida pelo quadrado da média.</p>
+      <p>Kingman resumiu a ideia em três fatores: <span class="f">Wq ≈ ρ/(1 − ρ) × (c<sub>a</sub>² + c<sub>s</sub>²)/2 × tempo de compra</span>. Ocupação, variação (das chegadas e das compras) e duração. Chegadas de Poisson e compras exponenciais têm c² = 1. Com um caixa a 80% e compras de 1,6 minuto em média:</p>
+      <table>
+        <tr><td>tempo fixo (c² = 0)</td><td>3,2 min</td></tr>
+        <tr><td>carrinho comum (c² = 1/3)</td><td>4,3 min</td></tr>
+        <tr><td>exponencial (c² = 1)</td><td>6,4 min</td></tr>
+        <tr><td>cestinhas e carrinhões (c² = 3)</td><td>12,8 min</td></tr>
+      </table>
+      <p>Se, além disso, os clientes chegassem em intervalos fixos, não haveria fila nenhuma até 100% de ocupação.</p>`,
+    repare: `Troque a variação do tempo de compra e o tipo de chegada. Com intervalo fixo e tempo fixo, a fila desaparece; com cestinhas e carrinhões, ela dobra.`,
+  },
+  {
+    curto: 'Fila única',
+    titulo: 'Fila única ou uma por caixa?',
+    preset: { lambda: 2, caixas: 4, tm: 1.7, dist: 'M', fila: 'aleatoria' },
+    vel: 60,
+    destaque: ['g-taco'],
+    texto: `
+      <p>Com quatro caixas, a organização da fila muda tudo. Se cada cliente escolhe uma fila ao acaso, o mercado vira quatro filas M/M/1 independentes, e um caixa pode ficar parado enquanto outro tem cinco pessoas esperando. Na fila única, a serpentina de banco, ninguém espera enquanto houver caixa livre: é o modelo M/M/c, que Agner Erlang resolveu em 1917 para as centrais telefônicas de Copenhague.</p>
+      <p>Com 85% de ocupação, quatro filas ao acaso dão 9,6 minutos de espera média; a fila única dá 2,0. Na vida real o cliente escolhe a menor fila, o que fica no meio do caminho, mais perto da fila única.</p>
+      <p>O que sobra é a justiça. Com filas separadas, uma compra demorada prende quem está atrás enquanto quem chegou depois passa na fila do lado; no cupom, os ultrapassados contam quem viu isso acontecer. Com quatro filas, a sua só é a mais rápida mais ou menos uma vez a cada quatro, e por isso a outra fila sempre parece andar mais.</p>
+      <p>A fila única tem custos que a conta não vê: o tempo de andar até o caixa livre e a cara de fila comprida, que espanta cliente. E quando os clientes trocam de fila, as filas separadas já chegam perto da única (Rothkopf e Rech, 1987).</p>`,
+    repare: `Troque a organização entre ao acaso, a menor e fila única, e compare a espera e os ultrapassados no cupom. Depois volte para a menor fila e ligue a troca de fila.`,
+  },
+  {
+    curto: 'Caixa rápido',
+    titulo: 'O caixa rápido',
+    preset: { lambda: 1.75, caixas: 4, tm: 1.7, dist: 'H2', fila: 'menor', rapido: true },
+    vel: 60,
+    destaque: [],
+    texto: `
+      <p>Aqui as compras variam muito: 80% são pequenas e 20% são carrinhões, seis vezes mais demorados em média. Numa fila comum todo mundo espera mais ou menos o mesmo, uns 2 minutos. Para quem leva uma cestinha de meio minuto, são mais de quatro vezes o tempo da compra; para um carrinho de quatro minutos, metade.</p>
+      <p>O caixa rápido, de até 10 volumes, tira as compras pequenas dessa loteria. Dentro dele as compras são parecidas e a variação é pequena. Nesta simulação, em média, as cestinhas passam a esperar 0,6 minuto e os carrinhos 5,7: as duas esperas ficam perto de 1,3 vez o tempo da própria compra.</p>
+      <p>O preço é reservar um caixa. Os carrinhos ficam com um caixa a menos e a média geral piora um pouco, de 2,2 para 2,3 minutos. Separar não reduz a espera total; muda quem espera, e deixa a espera proporcional ao tamanho da compra.</p>`,
+    repare: `Compare no fim do cupom a espera das cestinhas e dos carrinhos, com o caixa rápido ligado e desligado. Suba a taxa de chegada e veja os carrinhos pagarem a conta.`,
+  },
+  {
+    curto: 'Sábado',
+    titulo: 'Um sábado inteiro',
+    preset: { perfil: 'sabado', caixas: 5, tm: 2, dist: 'M', fila: 'menor', troca: true },
+    vel: 900,
+    destaque: ['g-tempo'],
+    texto: `
+      <p>Num dia de verdade a taxa de chegada muda: pouca gente de manhã, um pico no almoço e outro maior no fim da tarde. As chegadas continuam sendo de Poisson, só que com λ variando com a hora, um processo de Poisson não homogêneo. A simulação sorteia chegadas na taxa máxima e descarta cada uma com a chance de a taxa daquele horário ser menor, o afinamento de Lewis e Shedler.</p>
+      <p>Com cinco caixas fixos, o mercado sobra de manhã e não dá conta às seis da tarde: no pico, a chegada passa da capacidade, a ocupação passa de 100% e a fila cresce em linha reta. O pico da fila vem depois do pico de chegadas, porque enquanto chega mais gente do que sai a fila continua crescendo, mesmo com as chegadas já caindo.</p>
+      <p>Ligue o gerente. A cada 15 minutos ele calcula pelo Erlang C quantos caixas deixam a espera média abaixo de 2 minutos com a demanda prevista para a meia hora seguinte, e abre mais um se a fila passar de quatro pessoas por caixa. É a mesma conta que as centrais de atendimento usam para montar a escala.</p>`,
+    repare: `No gráfico da fila ao longo do tempo, a área vermelha onde a chegada passa da capacidade e a fila que cresce logo depois. Com o gerente, a capacidade acompanha a chegada e a fila quase some.`,
+  },
+  {
+    curto: 'Seu mercado',
+    titulo: 'Seu mercado',
+    preset: null,
+    vel: null,
+    destaque: [],
+    texto: `
+      <p>Todos os controles estão liberados. Algumas perguntas para testar:</p>
+      <ul>
+        <li>Dois caixas com compras de 1,6 minuto ou um caixa duas vezes mais rápido, com a mesma capacidade? Compare a espera na fila e o tempo total no mercado.</li>
+        <li>Com 3 clientes por minuto e compras de 2 minutos, quantos caixas são precisos para que menos de 10% esperem mais de 5 minutos?</li>
+        <li>Com a desistência ligada, quantos clientes o mercado perde quando a ocupação passa de 95%?</li>
+        <li>A lei de Little continua valendo com caixa rápido, troca de fila e desistência ao mesmo tempo?</li>
+      </ul>`,
+    repare: `O cupom mostra a teoria sempre que existe fórmula. Quando não existe, só o que foi medido.`,
+  },
+];
+
+// ===== TELA =====
+const $ = (id) => document.getElementById(id);
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const SEM = '--';
+function fmt(x, d = 1) {
+  if (x === Infinity) return '∞';
+  if (!Number.isFinite(x)) return SEM;
+  return x.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+function pct(x) {
+  if (!Number.isFinite(x)) return SEM;
+  return Math.round(x * 100) + '%';
+}
+function duracao(min, comSegundos) {
+  const s = Math.floor(min * 60);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  const p2 = (n) => String(n).padStart(2, '0');
+  if (h) return `${h}h ${p2(m)}min` + (comSegundos ? ` ${p2(ss)}s` : '');
+  return `${m}min` + (comSegundos ? ` ${p2(ss)}s` : '');
+}
+function hora(t) {
+  const m = Math.floor(8 * 60 + t);
+  return `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+
+// Cores do tema, lidas do CSS para o canvas acompanhar o modo escuro.
+let C = {};
+function lerCores() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = (n) => cs.getPropertyValue('--' + n).trim();
+  C = {
+    fundo: v('fundo'), placa: v('placa'), tinta: v('tinta'), tinta2: v('tinta2'), apagado: v('apagado'), linha: v('linha'),
+    vermelho: v('vermelho'), vermelhoSuave: v('vermelho-suave'), amarelo: v('amarelo'), s1: v('s1'), s2: v('s2'), grade: v('grade'),
+    piso: v('piso'), piso2: v('piso2'), gondola: v('gondola'), prateleira: v('prateleira'), balcao: v('balcao'), balcaoBorda: v('balcao-borda'),
+    esteira: v('esteira'), saida: v('saida'), saidaTinta: v('saida-tinta'), aberto: v('aberto'), fechando: v('fechando'), fechado: v('fechado'),
+  };
+}
+
+const CAMISAS = ['#e4572e', '#2e86ab', '#f2a541', '#5b8e7d', '#8e6c8a', '#3d5a80', '#c44569', '#7bb661', '#f19c79', '#4a6fa5', '#b5838d', '#2a9d8f'];
+const PELES = ['#f1c9a5', '#e0ac82', '#c68a5e', '#9c6644', '#6f4a32', '#f6d5bd'];
+const CABELOS = ['#2b1d14', '#4a3222', '#6b4a2b', '#1c1c1c', '#a4743f', '#d9b26f', '#8c8c8c', '#5a2e1c'];
+const PRODUTOS = ['#e63946', '#f4a261', '#2a9d8f', '#e9c46a', '#457b9d', '#8ab17d', '#d62828', '#6d597a', '#f7b267', '#90be6d'];
+
+// ---------- estado ----------
+let sim = new Mercado(Object.assign({}, CAPS[0].preset));
+let rodando = true;
+let vel = 60;
+let capAtual = 0;
+let sprites = new Map();
+let saindo = [];
+let flashes = new Array(MAX_CAIXAS).fill(0);
+let restantes = new Array(MAX_CAIXAS).fill(-1);
+let avisoVisto = false;
+let hoverT = null; // tempo sob o cursor nos gráficos da fila ao longo do tempo
+
+// ---------- o mercado (canvas principal) ----------
+const tela = $('mercado');
+let ctx;
+let W = 0;
+let H = 0;
+let dpr = 1;
+let L = null;
+let fundoCache = null;
+
+function medirPalco() {
+  const largura = Math.round(tela.parentElement.getBoundingClientRect().width);
+  if (!largura) return;
+  W = largura;
+  H = Math.round(W < 640 ? Math.min(W * 1.28, 600) : clamp(W * 0.6, 400, 580));
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  tela.width = Math.round(W * dpr);
+  tela.height = Math.round(H * dpr);
+  tela.style.height = H + 'px';
+  ctx = tela.getContext('2d');
+  L = calcularLayout();
+  fundoCache = null;
+}
+
+function calcularLayout() {
+  const larg = W / MAX_CAIXAS;
+  const e = clamp(larg / 80, 0.58, 1.3);
+  const altG = Math.round(clamp(H * 0.12, 48, 70));
+  const altSaida = Math.round(24 * Math.max(e, 0.9));
+  const altCaixa = Math.round(clamp(H * 0.15, 62, 84));
+  const yCaixa = H - altSaida - altCaixa;
+  const caixas = [];
+  for (let i = 0; i < MAX_CAIXAS; i++) {
+    const x0 = i * larg;
+    caixas.push({
+      x0,
+      xOp: x0 + larg * 0.13,
+      xEsteira: x0 + larg * 0.38,
+      lEsteira: clamp(larg * 0.2, 8, 18),
+      xBalcao0: x0 + larg * 0.25,
+      xBalcao1: x0 + larg * 0.52,
+      xCorredor: x0 + larg * 0.74,
+      yAtende: yCaixa + altCaixa * 0.62,
+    });
+  }
+  const passo = 25 * e;
+  const yFila0 = yCaixa - 24 * e;
+  const yTopo = altG + 14 * e;
+  const vagas = Math.max(1, Math.floor((yFila0 - yTopo) / passo) + 1);
+  return { W, H, e, larg, altG, altSaida, altCaixa, yCaixa, caixas, passo, yFila0, yTopo, vagas, yNasce: altG + 4 * e };
+}
+
+function serpentina() {
+  const e = L.e;
+  const ini = sim.caixas[0].rapido ? 1 : 0;
+  const colGap = 21 * e;
+  const rowGap = L.passo;
+  const xEsq = L.caixas[ini].x0 + 16 * e;
+  const porLinha = Math.max(2, Math.floor((W - 16 * e - xEsq) / colGap) + 1);
+  const yBase = L.yCaixa - 48 * e;
+  const linhas = Math.max(1, Math.floor((yBase - L.yTopo) / rowGap) + 1);
+  return { ini, colGap, rowGap, xEsq, xDir: xEsq + (porLinha - 1) * colGap, porLinha, yBase, linhas, cap: porLinha * linhas };
+}
+
+function vagaSerp(S, k) {
+  if (k >= S.cap) return { x: S.xEsq, y: L.yTopo, vis: false };
+  const r = Math.floor(k / S.porLinha);
+  const j = k % S.porLinha;
+  return { x: r % 2 === 0 ? S.xDir - j * S.colGap : S.xEsq + j * S.colGap, y: S.yBase - r * S.rowGap, vis: true };
+}
+
+function vagaCaixa(i, k) {
+  const g = L.caixas[i];
+  if (k >= L.vagas) return { x: g.xCorredor, y: L.yTopo, vis: false };
+  return { x: g.xCorredor, y: L.yFila0 - k * L.passo, vis: true };
+}
+
+// Pseudoaleatório estável a partir de um número (para desenhos que não piscam).
+function hash(n) {
+  n = (n ^ 61) ^ (n >>> 16);
+  n = Math.imul(n, 0x27d4eb2d);
+  n ^= n >>> 15;
+  return (n >>> 0) / 4294967296;
+}
+
+function desenharFundo() {
+  fundoCache = document.createElement('canvas');
+  fundoCache.width = tela.width;
+  fundoCache.height = tela.height;
+  const g = fundoCache.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const e = L.e;
+  // piso quadriculado
+  g.fillStyle = C.piso;
+  g.fillRect(0, 0, W, H);
+  const q = 30 * e;
+  g.fillStyle = C.piso2;
+  for (let y = 0, r = 0; y < H; y += q, r++) for (let x = (r % 2) * q; x < W; x += 2 * q) g.fillRect(x, y, q, q);
+  // gôndolas: os corredores de onde os clientes saem
+  g.fillStyle = C.piso2;
+  g.fillRect(0, 0, W, L.altG);
+  const passoG = Math.max(54, 74 * e);
+  const lg = Math.max(16, 22 * e);
+  let n = 0;
+  for (let x = passoG * 0.35; x < W - lg * 0.5; x += passoG, n++) {
+    g.fillStyle = C.gondola;
+    g.beginPath();
+    g.roundRect(x, -8, lg, L.altG - 6 * e + 8, [0, 0, 4, 4]);
+    g.fill();
+    g.fillStyle = C.prateleira;
+    g.fillRect(x + lg / 2 - 1, -8, 2, L.altG - 6 * e + 6);
+    // produtos nas prateleiras dos dois lados
+    const tam = Math.max(3, 4.5 * e);
+    for (let y = 3; y < L.altG - 10 * e; y += tam + 2) {
+      for (const lado of [0, 1]) {
+        const h = hash(n * 997 + Math.round(y) * 13 + lado);
+        if (h < 0.12) continue;
+        g.fillStyle = PRODUTOS[Math.floor(h * PRODUTOS.length * 7) % PRODUTOS.length];
+        g.fillRect(lado ? x + lg / 2 + 2 : x + 2, y, lg / 2 - 4, tam);
+      }
+    }
+  }
+  // placas dos setores, se couber
+  const setores = ['hortifrúti', 'padaria', 'mercearia', 'frios', 'bebidas', 'limpeza', 'pet', 'higiene'];
+  g.font = `600 ${Math.round(clamp(12 * e, 10, 13))}px Barlow Condensed, Arial Narrow, sans-serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  const nPlacas = Math.floor(W / 130);
+  for (let k = 0; k < nPlacas; k++) {
+    const x = (W / nPlacas) * (k + 0.5);
+    const txt = setores[k % setores.length].toUpperCase();
+    const tw = g.measureText(txt).width + 10;
+    g.fillStyle = C.placa;
+    g.strokeStyle = C.linha;
+    g.lineWidth = 1;
+    g.beginPath();
+    g.roundRect(x - tw / 2, L.altG - 15 * e - 4, tw, 14 * e + 2, 3);
+    g.fill();
+    g.stroke();
+    g.fillStyle = C.tinta2;
+    g.fillText(txt, x, L.altG - 8 * e - 2.5);
+  }
+  // saída
+  const ys = H - L.altSaida;
+  g.fillStyle = C.saida;
+  g.fillRect(0, ys, W, L.altSaida);
+  g.fillStyle = C.saidaTinta;
+  g.font = `800 ${Math.round(13 * Math.max(e, 0.9))}px Barlow Condensed, Arial Narrow, sans-serif`;
+  const nS = Math.max(1, Math.floor(W / 260));
+  for (let k = 0; k < nS; k++) g.fillText('SAÍDA  ↓', (W / nS) * (k + 0.5), ys + L.altSaida / 2 + 1);
+}
+
+function desenharMercado() {
+  if (!L) return;
+  if (!fundoCache) desenharFundo();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(fundoCache, 0, 0);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const unica = sim.p.fila === 'unica';
+  const S = unica ? serpentina() : null;
+  if (S) desenharSerpentina(S);
+  for (let i = 0; i < MAX_CAIXAS; i++) desenharCaixa(i);
+  // clientes, de cima para baixo
+  const todos = [...sprites.values(), ...saindo].filter((s) => s.a > 0.02).sort((a, b) => a.y - b.y);
+  for (const s of todos) desenharPessoa(s);
+  // quantos não cabem na tela
+  for (let i = 0; i < MAX_CAIXAS; i++) {
+    const n = sim.caixas[i].fila.length - L.vagas;
+    if (n > 0) selo(L.caixas[i].xCorredor, L.yTopo - 10 * L.e, '+' + n);
+  }
+  if (S && sim.filaUnica.length > S.cap) {
+    const v = vagaSerp(S, S.cap - 1);
+    selo(v.x, v.y - 16 * L.e, '+' + (sim.filaUnica.length - S.cap));
+  }
+  for (const s of saindo) if (s.modo === 'desistiu' && s.a > 0.05) balao(s.x, s.y - 14 * L.e, 'desisto!', s.a);
+}
+
+function selo(x, y, txt) {
+  const e = L.e;
+  ctx.font = `600 ${Math.round(clamp(12 * e, 10, 13))}px JetBrains Mono, monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const w = ctx.measureText(txt).width + 10;
+  const h = 16 * Math.max(e, 0.85);
+  ctx.fillStyle = C.vermelho;
+  ctx.beginPath();
+  ctx.roundRect(x - w / 2, y - h / 2, w, h, h / 2);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.fillText(txt, x, y + 0.5);
+}
+
+function balao(x, y, txt, a) {
+  ctx.globalAlpha = a;
+  ctx.font = `600 ${Math.round(clamp(13 * L.e, 11, 14))}px Barlow Condensed, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const w = ctx.measureText(txt).width + 12;
+  const h = 18;
+  const bx = clamp(x, w / 2 + 2, W - w / 2 - 2);
+  ctx.fillStyle = C.placa;
+  ctx.strokeStyle = C.tinta;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(bx - w / 2, y - h, w, h, 6);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = C.vermelho;
+  ctx.fillText(txt, bx, y - h / 2 + 0.5);
+  ctx.globalAlpha = 1;
+}
+
+function desenharSerpentina(S) {
+  const e = L.e;
+  const m = S.colGap * 0.5;
+  const usadas = clamp(Math.ceil((sim.filaUnica.length + 1) / S.porLinha), 2, S.linhas);
+  const linhas = [];
+  for (let r = 0; r <= usadas; r++) {
+    const y = S.yBase - (r - 0.5) * S.rowGap + 2 * e;
+    if (r === 0 || (r < usadas && (r - 1) % 2 === 1)) linhas.push([S.xEsq - m, S.xDir - m, y]);
+    else if (r < usadas) linhas.push([S.xEsq + m, S.xDir + m, y]);
+    else linhas.push([S.xEsq - m, S.xDir + m, y]);
+  }
+  ctx.lineCap = 'round';
+  for (const [x0, x1, y] of linhas) {
+    ctx.strokeStyle = C.vermelho;
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = 2.5 * e;
+    ctx.beginPath();
+    ctx.moveTo(x0, y);
+    ctx.lineTo(x1, y);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    for (const x of [x0, x1]) {
+      ctx.fillStyle = C.balcaoBorda;
+      ctx.beginPath();
+      ctx.arc(x, y, 3.2 * e, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function desenharCaixa(i) {
+  const g = L.caixas[i];
+  const cx = sim.caixas[i];
+  const e = L.e;
+  const yT = L.yCaixa;
+  const h = L.altCaixa;
+  const ativo = cx.aberto || cx.atendendo || cx.fila.length;
+  // operador(a)
+  if (ativo) {
+    const yo = yT + h * 0.66;
+    ctx.fillStyle = C.vermelho;
+    ctx.beginPath();
+    ctx.ellipse(g.xOp, yo, 6.5 * e, 4.6 * e, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = PELES[i % PELES.length];
+    ctx.beginPath();
+    ctx.arc(g.xOp, yo - 0.5 * e, 3.7 * e, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = CABELOS[(i * 3) % CABELOS.length];
+    ctx.beginPath();
+    ctx.arc(g.xOp, yo - 1.2 * e, 3.7 * e, Math.PI * 1.05, Math.PI * 1.95);
+    ctx.fill();
+  }
+  // balcão
+  ctx.fillStyle = C.balcao;
+  ctx.strokeStyle = C.balcaoBorda;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.roundRect(g.xBalcao0, yT, g.xBalcao1 - g.xBalcao0, h - 4 * e, 4 * e);
+  ctx.fill();
+  ctx.stroke();
+  // esteira
+  const ex = g.xEsteira - g.lEsteira / 2;
+  const ey = yT + 4 * e;
+  const eh = h * 0.5;
+  ctx.fillStyle = C.esteira;
+  ctx.fillRect(ex, ey, g.lEsteira, eh);
+  if (cx.atendendo) {
+    const off = ((performance.now() / 1000) * 18 * e) % (6 * e);
+    ctx.strokeStyle = 'rgba(255,255,255,.14)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let y = ey + off; y < ey + eh; y += 6 * e) {
+      ctx.moveTo(ex + 1, y);
+      ctx.lineTo(ex + g.lEsteira - 1, y);
+    }
+    ctx.stroke();
+  }
+  // scanner e monitor
+  const sy = ey + eh + 3 * e;
+  ctx.fillStyle = C.esteira;
+  ctx.globalAlpha = 0.85;
+  ctx.fillRect(ex, sy, g.lEsteira, 7 * e);
+  ctx.globalAlpha = 1;
+  if (flashes[i] > 0) {
+    ctx.fillStyle = C.vermelho;
+    ctx.globalAlpha = Math.min(1, flashes[i] * 8);
+    ctx.fillRect(ex + 1, sy + 2.5 * e, g.lEsteira - 2, 2 * e);
+    ctx.globalAlpha = 1;
+  }
+  // itens na esteira e progresso da compra
+  const cli = cx.atendendo;
+  let resta = -1;
+  if (cli) {
+    const frac = clamp((sim.t - cli.inicio) / cli.S, 0, 1);
+    resta = Math.ceil(cli.itens * (1 - frac));
+    const tam = Math.max(3, g.lEsteira * 0.36);
+    const cabe = Math.max(1, Math.floor((eh - 3) / (tam + 2)));
+    const mostra = Math.min(resta, cabe * 2);
+    for (let k = 0; k < mostra; k++) {
+      const col = Math.floor(k / cabe);
+      const lin = k % cabe;
+      ctx.fillStyle = PRODUTOS[(cli.aparencia + k * 7) % PRODUTOS.length];
+      ctx.fillRect(ex + 2 + col * (g.lEsteira / 2 - 1), ey + eh - 2 - (lin + 1) * (tam + 2) + 2, Math.min(tam, g.lEsteira / 2 - 3), tam);
+    }
+    ctx.fillStyle = C.vermelho;
+    ctx.fillRect(g.xBalcao0 + 2, yT + h - 4 * e - 3, (g.xBalcao1 - g.xBalcao0 - 4) * frac, 2);
+  }
+  if (resta >= 0 && restantes[i] >= 0 && resta < restantes[i]) flashes[i] = 0.12;
+  restantes[i] = resta;
+  // placa com o número e a luz
+  const estado = cx.aberto ? 'aberto' : ativo ? 'fechando' : 'fechado';
+  const rap = cx.rapido && cx.aberto;
+  const txt = rap ? '≤10' : String(i + 1);
+  const fs = Math.round(clamp(12 * e, 9, 13));
+  ctx.font = `800 ${fs}px Barlow Condensed, Arial Narrow, sans-serif`;
+  const pw = Math.max(ctx.measureText(txt).width + 8, 16 * e);
+  const ph = fs + 4;
+  const px = g.xEsteira;
+  const py = yT - 4 * e - ph / 2;
+  ctx.strokeStyle = C.balcaoBorda;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(px, yT);
+  ctx.lineTo(px, py);
+  ctx.stroke();
+  ctx.fillStyle = rap ? C.amarelo : estado === 'aberto' ? C.aberto : estado === 'fechando' ? C.fechando : C.fechado;
+  ctx.beginPath();
+  ctx.roundRect(px - pw / 2, py - ph / 2, pw, ph, 3);
+  ctx.fill();
+  ctx.fillStyle = rap ? '#1c2230' : '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(txt, px, py + 0.5);
+}
+
+function desenharPessoa(s) {
+  const c = s.cli;
+  const e = L.e;
+  const ap = c.aparencia;
+  const x = s.x;
+  const y = s.y;
+  ctx.globalAlpha = s.a;
+  // carrinho ou cestinha, na frente (para baixo, onde estão os caixas)
+  if (c.pequeno) {
+    const bx = x + 2 * e;
+    const by = y + 4.5 * e;
+    ctx.strokeStyle = '#7a1d1d';
+    ctx.lineWidth = 1.2 * e;
+    ctx.beginPath();
+    ctx.arc(bx + 4 * e, by + 1 * e, 3.2 * e, Math.PI, 0);
+    ctx.stroke();
+    ctx.fillStyle = '#d4232b';
+    ctx.fillRect(bx, by, 8 * e, 6 * e);
+    ctx.fillStyle = PRODUTOS[ap % PRODUTOS.length];
+    ctx.fillRect(bx + 1.5 * e, by + 1.2 * e, 2.5 * e, 2.5 * e);
+  } else {
+    const cw = 13 * e;
+    const ch = (7 + Math.min(5, c.itens / 8)) * e;
+    const cx0 = x - cw / 2;
+    const cy0 = y + 5.5 * e;
+    ctx.fillStyle = 'rgba(160,168,180,.55)';
+    ctx.strokeStyle = '#5d6573';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.roundRect(cx0, cy0, cw, ch, 1.5 * e);
+    ctx.fill();
+    ctx.stroke();
+    const n = Math.min(9, Math.round(c.itens / 5));
+    const t = 3 * e;
+    for (let k = 0; k < n; k++) {
+      ctx.fillStyle = PRODUTOS[(ap + k * 3) % PRODUTOS.length];
+      ctx.fillRect(cx0 + 1.5 * e + (k % 3) * (t + 0.8 * e), cy0 + ch - 1.5 * e - t - Math.floor(k / 3) * (t + 0.6 * e), t, t);
+    }
+  }
+  // ombros e cabeça, vistos de cima
+  ctx.fillStyle = CAMISAS[ap % CAMISAS.length];
+  ctx.beginPath();
+  ctx.ellipse(x, y, 7.6 * e, 5 * e, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = PELES[(ap >>> 4) % PELES.length];
+  ctx.beginPath();
+  ctx.arc(x, y + 0.3 * e, 4.1 * e, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = CABELOS[(ap >>> 8) % CABELOS.length];
+  ctx.beginPath();
+  ctx.arc(x, y - 0.5 * e, 4.1 * e, Math.PI * 1.02, Math.PI * 1.98);
+  ctx.fill();
+  if (s.modo === 'desistiu') {
+    ctx.strokeStyle = C.vermelho;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(x, y, 9.5 * e, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- os bonecos acompanhando a simulação ----------
+function consumirEventos() {
+  for (const ev of sim.eventos) {
+    const c = ev.cli;
+    if (ev.tipo === 'chegou') {
+      sprites.set(c.id, novoSprite(c, 'ativo'));
+    } else if (ev.tipo === 'desistiu') {
+      const s = novoSprite(c, 'desistiu');
+      s.vida = 1.8;
+      saindo.push(s);
+    } else if (ev.tipo === 'saiu') {
+      let s = sprites.get(c.id);
+      sprites.delete(c.id);
+      if (!s) {
+        const g = L.caixas[c.caixa];
+        s = { cli: c, x: g.xCorredor, y: g.yAtende, a: 0 };
+      }
+      s.modo = 'saindo';
+      saindo.push(s);
+    }
+  }
+  sim.eventos.length = 0;
+  if (saindo.length > 160) saindo.splice(0, saindo.length - 160);
+}
+
+function novoSprite(cli, modo) {
+  const x = 14 + hash(cli.aparencia) * (W - 28);
+  return { cli, modo, x, y: L.yNasce, a: 0, vida: 0 };
+}
+
+function andar(s, tx, ty, passo) {
+  const dx = tx - s.x;
+  const dy = ty - s.y;
+  const d = Math.hypot(dx, dy);
+  if (d <= passo || d < 0.01) {
+    s.x = tx;
+    s.y = ty;
+  } else {
+    s.x += (dx / d) * passo;
+    s.y += (dy / d) * passo;
+  }
+}
+
+function moverSprites(dt) {
+  const e = L.e;
+  const v = Math.min(2000, 130 + 1.8 * vel) * e;
+  const passo = v * dt;
+  const pos = new Map();
+  sim.caixas.forEach((cx, i) => cx.fila.forEach((c, k) => pos.set(c.id, vagaCaixa(i, k))));
+  if (sim.filaUnica.length) {
+    const S = serpentina();
+    sim.filaUnica.forEach((c, k) => pos.set(c.id, vagaSerp(S, k)));
+  }
+  for (const s of sprites.values()) {
+    const c = s.cli;
+    let alvo;
+    if (c.inicio !== null) {
+      const g = L.caixas[c.caixa];
+      alvo = { x: g.xCorredor, y: g.yAtende, vis: true };
+    } else {
+      alvo = pos.get(c.id) || { x: s.x, y: s.y, vis: true };
+    }
+    // Quem vai para além da tela some ao chegar no alto da fila.
+    andar(s, alvo.x, alvo.y, passo);
+    const perto = Math.hypot(alvo.x - s.x, alvo.y - s.y) < 4;
+    const alvoA = alvo.vis || !perto ? 1 : 0;
+    s.a += clamp(alvoA - s.a, -dt * 5, dt * 5);
+  }
+  for (let k = saindo.length - 1; k >= 0; k--) {
+    const s = saindo[k];
+    if (s.modo === 'saindo') {
+      const g = L.caixas[s.cli.caixa];
+      if (s.y < g.yAtende - 1) andar(s, g.xCorredor, g.yAtende, passo * 1.5);
+      else andar(s, g.xCorredor, H + 30, passo);
+      s.a = Math.min(1, s.a + dt * 5);
+      if (s.y >= H + 20) saindo.splice(k, 1);
+    } else {
+      s.vida -= dt;
+      s.y -= 10 * e * dt;
+      s.a = clamp(Math.min(s.vida / 0.5, (1.8 - s.vida) * 6), 0, 1);
+      if (s.vida <= 0) saindo.splice(k, 1);
+    }
+  }
+  for (let i = 0; i < MAX_CAIXAS; i++) flashes[i] = Math.max(0, flashes[i] - dt);
+}
+
+function limparSprites() {
+  sprites = new Map();
+  saindo = [];
+  restantes.fill(-1);
+}
+
+// ---------- capítulos e controles ----------
+function montarCapitulos() {
+  const nav = $('capitulos');
+  nav.innerHTML = '';
+  CAPS.forEach((c, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'cap';
+    b.innerHTML = `<b>${i + 1}</b>${c.curto}`;
+    b.addEventListener('click', () => irPara(i, true));
+    nav.appendChild(b);
+  });
+}
+
+function irPara(i, montar) {
+  capAtual = clamp(i, 0, CAPS.length - 1);
+  const cap = CAPS[capAtual];
+  $('l-num').textContent = `${capAtual + 1}/${CAPS.length}`;
+  $('l-titulo').textContent = cap.titulo;
+  $('l-texto').innerHTML = cap.texto;
+  $('l-repare').innerHTML = `<b>Repare:</b> ${cap.repare}`;
+  $('l-ant').disabled = capAtual === 0;
+  $('l-prox').disabled = capAtual === CAPS.length - 1;
+  $('l-montar').hidden = !cap.preset;
+  document.querySelectorAll('.cap').forEach((b, k) => b.setAttribute('aria-current', k === capAtual ? 'true' : 'false'));
+  // Rola só a barra de capítulos, na horizontal, sem mexer na página.
+  const nav = $('capitulos');
+  const atual = nav.children[capAtual];
+  if (atual) nav.scrollTo({ left: atual.offsetLeft - nav.offsetLeft - 24, behavior: 'smooth' });
+  document.querySelectorAll('.graf').forEach((f) => f.classList.toggle('destaque', cap.destaque.includes(f.id)));
+  if (montar && cap.preset) montarCenario(cap);
+  history.replaceState(null, '', '#cap-' + (capAtual + 1));
+}
+
+function montarCenario(cap) {
+  sim = new Mercado(Object.assign({}, cap.preset));
+  if (cap.vel) vel = cap.vel;
+  rodando = true;
+  avisoVisto = false;
+  $('aviso').hidden = true;
+  limparSprites();
+  sincronizar();
+  desenharGraficos();
+}
+
+function mudar(novos) {
+  const antes = sim.p;
+  sim.mudar(novos);
+  if (sim.p.fila !== antes.fila || sim.p.perfil !== antes.perfil) {
+    limparSprites();
+    avisoVisto = false;
+    $('aviso').hidden = true;
+  }
+  sincronizar();
+  desenharGraficos();
+}
+
+function marcarSeg(id, valor) {
+  document.querySelectorAll(`#${id} button`).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === String(valor))));
+}
+
+function sincronizar() {
+  const p = sim.p;
+  const sab = p.perfil === 'sabado';
+  const gerente = sab && p.gerente;
+  marcarSeg('seg-perfil', p.perfil);
+  marcarSeg('seg-chegada', sab ? 'poisson' : p.chegada);
+  marcarSeg('seg-vel', vel);
+  document.querySelectorAll('#seg-chegada button').forEach((b) => (b.disabled = sab));
+  $('r-lambda').value = p.lambda;
+  $('r-lambda').disabled = sab;
+  $('rng-lambda').classList.toggle('off', sab);
+  $('r-caixas').value = gerente ? sim.nAbertos : p.caixas;
+  $('r-caixas').disabled = gerente;
+  $('rng-caixas').classList.toggle('off', gerente);
+  $('r-tm').value = p.tm;
+  $('s-dist').value = p.dist;
+  $('s-fila').value = p.fila;
+  $('c-rapido').checked = p.rapido;
+  $('c-troca').checked = p.troca;
+  $('c-troca').disabled = p.fila === 'unica';
+  $('chk-troca').classList.toggle('off', p.fila === 'unica');
+  $('c-desist').checked = p.desistencia;
+  $('r-pac').value = p.paciencia;
+  $('r-pac').disabled = !p.desistencia;
+  $('rng-pac').classList.toggle('off', !p.desistencia);
+  $('c-gerente').checked = p.gerente;
+  $('c-gerente').disabled = !sab;
+  $('chk-gerente').classList.toggle('off', !sab);
+  const nCaixas = gerente ? sim.nAbertos : p.caixas;
+  $('c-rapido').disabled = nCaixas < 2 && !gerente;
+  $('chk-rapido').classList.toggle('off', nCaixas < 2 && !gerente);
+  atualizarValores();
+  $('b-play').textContent = rodando ? 'pausar' : 'continuar';
+}
+
+function atualizarValores() {
+  const p = sim.p;
+  const sab = p.perfil === 'sabado';
+  const lam = sim.lambdaAgora();
+  const n = sim.nAbertos;
+  $('v-lambda').textContent = sab ? `${fmt(lam, 2)}/min agora` : `${fmt(p.lambda, 2)} por minuto`;
+  $('v-caixas').textContent = String(sab && p.gerente ? n : p.caixas);
+  $('v-tm').textContent = `${fmt(p.tm, 1)} min`;
+  $('v-pac').textContent = `${p.paciencia} min`;
+  const rho = (lam * p.tm) / n;
+  const el = $('previsto');
+  el.classList.toggle('alerta', rho >= 1);
+  const conta = `ρ = λ × tempo de compra ÷ caixas = ${fmt(lam, 2)} × ${fmt(p.tm, 1)} ÷ ${n} = <b>${pct(rho)}</b>`;
+  if (sab) {
+    el.innerHTML = `Às ${hora(Math.min(sim.t, FECHA_SABADO - 1))}: ${conta}.` + (rho >= 1 ? ' Chega mais gente do que os caixas dão conta, e a fila cresce.' : '');
+  } else {
+    el.innerHTML = `Ocupação prevista: ${conta}.` + (rho >= 1 ? ' Acima de 100%: chega mais gente do que os caixas dão conta, e a fila cresce sem parar.' : '');
+  }
+}
+
+function ligarControles() {
+  $('b-play').addEventListener('click', () => {
+    rodando = !rodando;
+    $('b-play').textContent = rodando ? 'pausar' : 'continuar';
+  });
+  $('b-reiniciar').addEventListener('click', () => {
+    sim.reiniciar();
+    limparSprites();
+    avisoVisto = false;
+    $('aviso').hidden = true;
+    rodando = true;
+    sincronizar();
+    desenharGraficos();
+  });
+  $('aviso-botao').addEventListener('click', () => $('b-reiniciar').click());
+  document.querySelectorAll('#seg-vel button').forEach((b) =>
+    b.addEventListener('click', () => {
+      vel = Number(b.dataset.v);
+      marcarSeg('seg-vel', vel);
+    }),
+  );
+  document.querySelectorAll('#seg-perfil button').forEach((b) => b.addEventListener('click', () => mudar({ perfil: b.dataset.v })));
+  document.querySelectorAll('#seg-chegada button').forEach((b) => b.addEventListener('click', () => mudar({ chegada: b.dataset.v })));
+  const rng = (id, chave) => {
+    $(id).addEventListener('input', () => mudar({ [chave]: Number($(id).value) }));
+  };
+  rng('r-lambda', 'lambda');
+  rng('r-caixas', 'caixas');
+  rng('r-tm', 'tm');
+  rng('r-pac', 'paciencia');
+  $('s-dist').addEventListener('change', () => mudar({ dist: $('s-dist').value }));
+  $('s-fila').addEventListener('change', () => mudar({ fila: $('s-fila').value }));
+  $('c-rapido').addEventListener('change', () => mudar({ rapido: $('c-rapido').checked }));
+  $('c-troca').addEventListener('change', () => mudar({ troca: $('c-troca').checked }));
+  $('c-desist').addEventListener('change', () => mudar({ desistencia: $('c-desist').checked }));
+  $('c-gerente').addEventListener('change', () => mudar({ gerente: $('c-gerente').checked }));
+  $('l-ant').addEventListener('click', () => irPara(capAtual - 1, true));
+  $('l-prox').addEventListener('click', () => irPara(capAtual + 1, true));
+  $('l-montar').addEventListener('click', () => irPara(capAtual, true));
+}
+
+// ---------- o cupom ----------
+function atualizarCupom() {
+  const p = sim.p;
+  const r = sim.resumo();
+  const sab = p.perfil === 'sabado';
+  const lam = sim.lambdaAgora();
+  const c = sim.nAbertos;
+  const th = teoria(p, lam, c);
+  const rapido = sim.caixas.some((cx) => cx.rapido);
+  const semFormula = rapido || p.desistencia;
+  let ref = null;
+  let faixa = null;
+  let exata = false;
+  if (!semFormula) {
+    if (p.fila === 'unica') {
+      ref = th.unica;
+      exata = th.exataUnica;
+    } else if (p.fila === 'aleatoria' && !p.troca) {
+      ref = th.separadas;
+      exata = th.exataSeparadas;
+    } else if (c > 1) faixa = [th.unica, th.separadas];
+    else {
+      ref = th.unica;
+      exata = th.exataUnica;
+    }
+  }
+  // modelo
+  const um = th.kendall.replace(/\/\d+$/, '/1');
+  let modelo = p.fila === 'unica' || c === 1 ? th.kendall + (c > 1 ? ' · fila única' : '') : p.fila === 'aleatoria' ? `${c} × ${um} · ao acaso` : `${c} filas · a menor`;
+  const extras = [];
+  if (rapido) extras.push('rápido');
+  if (p.troca && p.fila !== 'unica') extras.push('troca');
+  if (p.desistencia) extras.push('desistência');
+  if (extras.length) modelo += ' + ' + extras.join(' + ');
+  $('k-modelo').textContent = (sab ? 'sábado · ' : '') + modelo;
+  $('k-tempo').textContent = r.dur >= 1 ? duracao(r.dur) : 'começando';
+  $('k-agora').textContent = `${sim.naFila()} na fila, ${sim.emAtendimento()} no caixa`;
+  const ok = r.dur >= 1;
+  const ap = exata ? '' : '≈';
+  const val = (x, d = 1) => (x === Infinity ? '∞' : ap + fmt(x, d));
+  const tf = (f, d = 1) => (ref ? val(f(ref), d) : faixa ? `${fmt(f(faixa[0]), d)} a ${fmt(f(faixa[1]), d)}` : SEM);
+  $('m-rho').textContent = ok ? pct(r.rho) : SEM;
+  $('t-rho').textContent = pct(th.rho);
+  $('m-lq').textContent = ok ? fmt(r.Lq) : SEM;
+  $('t-lq').textContent = tf((x) => x.Lq);
+  $('m-wq').textContent = ok ? fmt(r.Wq) : SEM;
+  $('t-wq').textContent = tf((x) => x.Wq);
+  $('m-p5').textContent = ok ? pct(r.mais5) : SEM;
+  $('t-p5').textContent = ref && th.mm ? pct(pEsperaMaisQue(ref, 5)) : faixa && th.mm ? `${pct(pEsperaMaisQue(faixa[0], 5))} a ${pct(pEsperaMaisQue(faixa[1], 5))}` : SEM;
+  $('m-w').textContent = ok ? fmt(r.W) : SEM;
+  $('t-w').textContent = tf((x) => x.Wq + p.tm);
+  $('m-ult').textContent = ok ? pct(r.ultrapassados) : SEM;
+  $('t-ult').textContent = !semFormula && (p.fila === 'unica' || c === 1) ? '0%' : SEM;
+  // nota sobre a teoria
+  let nota;
+  if (th.rho >= 1) nota = 'Com ρ de 100% ou mais a teoria não tem equilíbrio: a fila cresce sem parar.';
+  else if (semFormula) nota = 'Com caixa rápido ou desistência não há fórmula fechada; vale o que foi medido.';
+  else if (faixa) nota = 'Escolher a menor fila' + (p.troca ? ' e trocar de fila' : '') + ' não tem fórmula fechada: a teoria mostra os dois extremos, fila única e filas ao acaso.';
+  else if (th.mm) nota = c === 1 || p.fila !== 'unica' ? 'Teoria do M/M/1, exata.' : `Teoria do M/M/${c} pelo Erlang C, exata.`;
+  else if (exata) nota = 'Teoria pela fórmula de Pollaczek-Khinchine, exata para um caixa com chegadas de Poisson.';
+  else nota = '≈ aproximação de ' + (c === 1 || p.fila !== 'unica' ? 'Kingman' : 'Allen-Cunneen') + ' para quando chegadas ou compras não são exponenciais.';
+  if (sab) nota = `Teoria para o λ das ${hora(Math.min(sim.t, FECHA_SABADO - 1))}, como se ele não mudasse. ` + nota;
+  $('k-nota').textContent = nota;
+  $('k-little').innerHTML = ok && Number.isFinite(r.W)
+    ? `L medido = <b>${fmt(r.L, 2)}</b> · λ × W = ${fmt(r.lam, 2)} × ${fmt(r.W, 2)} = <b>${fmt(r.lamW, 2)}</b>`
+    : 'esperando os primeiros clientes saírem';
+  $('m-cest').textContent = r.nPequenos ? fmt(r.wqPequenos) : SEM;
+  $('s-cest').textContent = r.nPequenos ? fmt(r.sPequenos) : SEM;
+  $('m-carr').textContent = r.nGrandes ? fmt(r.wqGrandes) : SEM;
+  $('s-carr').textContent = r.nGrandes ? fmt(r.sGrandes) : SEM;
+  $('k-cheg').textContent = r.chegadas.toLocaleString('pt-BR');
+  $('k-atend').textContent = r.atendidos.toLocaleString('pt-BR');
+  $('k-desist').textContent = r.desistencias ? `${r.desistencias.toLocaleString('pt-BR')} (${pct(r.desistencias / r.chegadas)})` : '0';
+  $('k-trocas').textContent = r.trocas.toLocaleString('pt-BR');
+  $('k-max').textContent = Number.isFinite(r.Wq) ? fmt(r.maxWq) + ' min' : SEM;
+}
+
+function atualizarRelogio() {
+  const p = sim.p;
+  const lam = sim.lambdaAgora();
+  if (p.perfil === 'sabado') {
+    const t = sim.t;
+    const txt = t < FECHA_SABADO ? `sábado, ${hora(t)}` : `depois das 22:00, terminando os últimos`;
+    $('relogio').textContent = `${txt} · λ = ${fmt(lam, 2)}/min · ${sim.nAbertos} caixas`;
+  } else {
+    $('relogio').textContent = `${duracao(sim.t, vel <= 60)} simulados · λ = ${fmt(lam, 2)}/min`;
+  }
+}
+
+function mostrarAviso() {
+  const r = sim.resumo();
+  $('aviso-titulo').textContent = 'O mercado fechou';
+  $('aviso-texto').textContent = `${r.atendidos.toLocaleString('pt-BR')} clientes atendidos, espera média de ${fmt(r.Wq)} min e maior espera de ${fmt(r.maxWq)} min` +
+    (r.desistencias ? `, com ${r.desistencias} desistências` : '') + '. O gráfico da fila ao longo do tempo mostra o dia inteiro.';
+  $('aviso').hidden = false;
+  avisoVisto = true;
+}
+
+// ---------- gráficos ----------
+const FONTE_EIXO = '11.5px JetBrains Mono, monospace';
+const FONTE_ROTULO = '600 13px Barlow, sans-serif';
+
+function prepGraf(cv, alt) {
+  const w = Math.round(cv.getBoundingClientRect().width) || 300;
+  const d = Math.min(2, window.devicePixelRatio || 1);
+  if (cv._w !== w || cv._h !== alt || cv._d !== d) {
+    cv.width = Math.round(w * d);
+    cv.height = Math.round(alt * d);
+    cv.style.height = alt + 'px';
+    cv._w = w;
+    cv._h = alt;
+    cv._d = d;
+  }
+  const g = cv.getContext('2d');
+  g.setTransform(d, 0, 0, d, 0, 0);
+  g.clearRect(0, 0, w, alt);
+  return { g, w, h: alt };
+}
+
+function passoBonito(max, n) {
+  if (!(max > 0) || !Number.isFinite(max)) return 1;
+  const bruto = max / n;
+  const pot = 10 ** Math.floor(Math.log10(bruto));
+  const f = bruto / pot;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * pot;
+}
+
+// Grade horizontal com rótulos à esquerda; devolve a escala y.
+function gradeY(g, area, max, fmtY, n = 4) {
+  const passo = passoBonito(max || 1, n);
+  const topo = Math.max(passo, Math.ceil((max || 1) / passo) * passo);
+  const y = (v) => area.y + area.h - (v / topo) * area.h;
+  g.font = FONTE_EIXO;
+  g.textAlign = 'right';
+  g.textBaseline = 'middle';
+  for (let v = 0; v <= topo + 1e-9; v += passo) {
+    g.strokeStyle = v === 0 ? C.apagado : C.grade;
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(area.x, Math.round(y(v)) + 0.5);
+    g.lineTo(area.x + area.w, Math.round(y(v)) + 0.5);
+    g.stroke();
+    g.fillStyle = C.apagado;
+    g.fillText(fmtY(v), area.x - 6, y(v));
+  }
+  return { y, topo };
+}
+
+function rotuloEixoX(g, area, txt) {
+  g.font = FONTE_ROTULO;
+  g.fillStyle = C.tinta2;
+  g.textAlign = 'right';
+  g.textBaseline = 'alphabetic';
+  g.fillText(txt, area.x + area.w, area.y + area.h + 32);
+}
+
+function barra(g, x, y0, w, y1, cor) {
+  const h = y0 - y1;
+  if (h <= 0.3) return;
+  g.fillStyle = cor;
+  g.beginPath();
+  g.roundRect(x, y1, w, h, [Math.min(4, w / 2, h), Math.min(4, w / 2, h), 0, 0]);
+  g.fill();
+}
+
+function ponto(g, x, y, cor, r = 4.5) {
+  g.fillStyle = C.placa;
+  g.beginPath();
+  g.arc(x, y, r + 2, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = cor;
+  g.beginPath();
+  g.arc(x, y, r, 0, Math.PI * 2);
+  g.fill();
+}
+
+function poisson(lam, k) {
+  let p = Math.exp(-lam);
+  for (let i = 1; i <= k; i++) p *= lam / i;
+  return p;
+}
+
+function desenharFita() {
+  const cv = $('c-fita');
+  const { g, w, h } = prepGraf(cv, 62);
+  const t = sim.t;
+  const area = { x: 4, y: 16, w: w - 8, h: h - 34 };
+  const x = (v) => area.x + ((v - (t - 10)) / 10) * area.w;
+  g.font = FONTE_EIXO;
+  g.textBaseline = 'alphabetic';
+  // minutos cheios
+  const m0 = Math.floor(t - 10);
+  for (let m = m0; m <= Math.floor(t); m++) {
+    const xa = x(Math.max(m, t - 10));
+    const xb = x(Math.min(m + 1, t));
+    if (m >= t - 10) {
+      g.strokeStyle = C.grade;
+      g.lineWidth = 1;
+      g.setLineDash([3, 3]);
+      g.beginPath();
+      g.moveTo(Math.round(xa) + 0.5, area.y - 2);
+      g.lineTo(Math.round(xa) + 0.5, area.y + area.h + 2);
+      g.stroke();
+      g.setLineDash([]);
+    }
+    if (m < 0) continue;
+    const n = sim.chegadasRecentes.filter((c) => c >= m && c < m + 1).length;
+    if (xb - xa > 12) {
+      g.fillStyle = n ? C.tinta2 : C.apagado;
+      g.textAlign = 'center';
+      g.fillText(String(n), (xa + xb) / 2, area.y - 4);
+    }
+  }
+  g.strokeStyle = C.apagado;
+  g.beginPath();
+  g.moveTo(area.x, area.y + area.h + 0.5);
+  g.lineTo(area.x + area.w, area.y + area.h + 0.5);
+  g.stroke();
+  g.strokeStyle = C.s1;
+  g.lineWidth = 2;
+  g.lineCap = 'round';
+  for (const c of sim.chegadasRecentes) {
+    if (c < t - 10) continue;
+    g.beginPath();
+    g.moveTo(x(c), area.y + 3);
+    g.lineTo(x(c), area.y + area.h - 1);
+    g.stroke();
+  }
+  g.fillStyle = C.apagado;
+  g.textAlign = 'left';
+  g.fillText('10 min atrás', area.x, h - 3);
+  g.textAlign = 'right';
+  g.fillText('agora', area.x + area.w, h - 3);
+}
+
+// λ usado como referência nos gráficos de chegada; no sábado, a média medida até agora.
+function lambdaReferencia() {
+  if (sim.p.perfil === 'sabado') {
+    const media = sim.nMinutos ? sim.somaPorMinuto / sim.nMinutos : 0;
+    return media > 0.05 ? media : Math.max(0.1, sim.lambdaAgora());
+  }
+  return Math.max(0.05, sim.p.lambda);
+}
+
+function desenharHist() {
+  const cv = $('c-hist');
+  const { g, w, h } = prepGraf(cv, 170);
+  const area = { x: 40, y: 8, w: w - 48, h: h - 46 };
+  const N = sim.nMinutos;
+  const lam = lambdaReferencia();
+  let kmax = 2;
+  while (kmax < 30 && (poisson(lam, kmax) > 0.002 || kmax < lam + 2)) kmax++;
+  for (let k = 0; k < sim.histMin.length; k++) if (sim.histMin[k]) kmax = Math.max(kmax, Math.min(30, k));
+  const obs = [];
+  const teo = [];
+  let maxv = 0;
+  for (let k = 0; k <= kmax; k++) {
+    obs.push(N ? (sim.histMin[k] || 0) / N : 0);
+    teo.push(poisson(lam, k));
+    maxv = Math.max(maxv, obs[k], teo[k]);
+  }
+  const { y } = gradeY(g, area, maxv * 1.08, (v) => Math.round(v * 100) + '%');
+  const bw = area.w / (kmax + 1);
+  const larg = Math.max(2, bw - 2);
+  g.font = FONTE_EIXO;
+  g.textAlign = 'center';
+  g.textBaseline = 'top';
+  const pulo = bw < 16 ? Math.ceil(16 / bw) : 1;
+  for (let k = 0; k <= kmax; k++) {
+    const x0 = area.x + k * bw + 1;
+    barra(g, x0, y(0), larg, y(obs[k]), C.s1);
+    if (k % pulo === 0) {
+      g.fillStyle = C.apagado;
+      g.fillText(String(k), x0 + larg / 2, area.y + area.h + 5);
+    }
+  }
+  for (let k = 0; k <= kmax; k++) ponto(g, area.x + k * bw + 1 + larg / 2, y(teo[k]), C.s2, Math.min(4.5, Math.max(3, bw / 5)));
+  rotuloEixoX(g, area, 'clientes que chegaram no minuto');
+  $('lg-min').textContent = N.toLocaleString('pt-BR');
+  $('lg-pois').textContent = sim.p.perfil === 'sabado' ? `Poisson de média ${fmt(lam, 2)} (λ muda no dia)` : `Poisson, λ = ${fmt(lam, 2)}`;
+  cv._hover = (mx) => {
+    const k = Math.floor((mx - area.x) / bw);
+    if (k < 0 || k > kmax) return null;
+    return `${k} chegada${k === 1 ? '' : 's'} no minuto<br>medido: ${fmt(obs[k] * 100, 1)}% dos minutos<br>Poisson: ${fmt(teo[k] * 100, 1)}%`;
+  };
+}
+
+function desenharIntervalos() {
+  const cv = $('c-interv');
+  const { g, w, h } = prepGraf(cv, 190);
+  const area = { x: 40, y: 8, w: w - 48, h: h - 46 };
+  const lam = lambdaReferencia();
+  const xmax = 4 / lam;
+  const nb = 24;
+  const bwT = xmax / nb;
+  const cont = new Array(nb).fill(0);
+  const iv = sim.intervalos;
+  for (const d of iv) {
+    const b = Math.floor(d / bwT);
+    if (b < nb) cont[b]++;
+  }
+  const N = iv.length;
+  const obs = cont.map((n) => (N ? n / N : 0));
+  const teo = (x) => lam * Math.exp(-lam * x) * bwT;
+  const maxv = Math.max(...obs, teo(0));
+  const { y } = gradeY(g, area, maxv * 1.08, (v) => Math.round(v * 100) + '%');
+  const x = (v) => area.x + (v / xmax) * area.w;
+  const bw = area.w / nb;
+  for (let b = 0; b < nb; b++) barra(g, area.x + b * bw + 1, y(0), Math.max(1.5, bw - 2), y(obs[b]), C.s1);
+  g.strokeStyle = C.s2;
+  g.lineWidth = 2;
+  g.lineJoin = 'round';
+  g.beginPath();
+  for (let i = 0; i <= 120; i++) {
+    const v = (i / 120) * xmax;
+    const yy = y(lam * Math.exp(-lam * (v + bwT / 2)) * bwT);
+    if (i) g.lineTo(x(v), yy);
+    else g.moveTo(x(v), yy);
+  }
+  g.stroke();
+  // rótulos do eixo x em minutos
+  g.font = FONTE_EIXO;
+  g.fillStyle = C.apagado;
+  g.textAlign = 'center';
+  g.textBaseline = 'top';
+  const passo = passoBonito(xmax, 4);
+  for (let v = 0; v <= xmax + 1e-9; v += passo) g.fillText(fmt(v, passo < 1 ? 1 : 0), x(v), area.y + area.h + 5);
+  rotuloEixoX(g, area, 'minutos até a próxima chegada');
+  $('lg-int').textContent = N.toLocaleString('pt-BR');
+  $('lg-exp').textContent = `exponencial, média 1/λ = ${fmt(1 / lam, 2)} min`;
+  cv._hover = (mx) => {
+    const b = Math.floor((mx - area.x) / bw);
+    if (b < 0 || b >= nb) return null;
+    const a0 = b * bwT;
+    const a1 = a0 + bwT;
+    const pt = Math.exp(-lam * a0) - Math.exp(-lam * a1);
+    return `de ${fmt(a0, 2)} a ${fmt(a1, 2)} min<br>medido: ${fmt(obs[b] * 100, 1)}% dos intervalos<br>exponencial: ${fmt(pt * 100, 1)}%`;
+  };
+}
+
+function rotuloMin(v) {
+  const m = Math.round(v);
+  if (m < 60) return m + 'min';
+  return Math.floor(m / 60) + 'h' + (m % 60 ? String(m % 60).padStart(2, '0') : '');
+}
+
+function janelaTempo() {
+  const t = sim.t;
+  if (sim.p.perfil === 'sabado') return [0, Math.max(FECHA_SABADO, t)];
+  return t > 180 ? [t - 180, t] : [0, 180];
+}
+
+function eixoTempo(g, area, t0, t1, comRotulos) {
+  const x = (v) => area.x + ((v - t0) / (t1 - t0)) * area.w;
+  g.font = FONTE_EIXO;
+  g.fillStyle = C.apagado;
+  g.textAlign = 'center';
+  g.textBaseline = 'top';
+  const sab = sim.p.perfil === 'sabado';
+  const passo = sab ? (area.w < 360 ? 240 : 120) : 30;
+  const inicio = Math.ceil(t0 / passo) * passo;
+  for (let v = inicio; v <= t1 + 1e-9; v += passo) {
+    g.strokeStyle = C.grade;
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(Math.round(x(v)) + 0.5, area.y);
+    g.lineTo(Math.round(x(v)) + 0.5, area.y + area.h);
+    g.stroke();
+    if (comRotulos) g.fillText(sab ? hora(v).replace(':00', 'h') : rotuloMin(v), x(v), area.y + area.h + 5);
+  }
+  return x;
+}
+
+function desenharTempo() {
+  const [t0, t1] = janelaTempo();
+  const serie = sim.serie.filter((s) => s.t >= t0 - 0.5);
+  // taxa e capacidade
+  {
+    const cv = $('c-taxa');
+    const { g, w, h } = prepGraf(cv, 120);
+    const area = { x: 40, y: 8, w: w - 48, h: h - 30 };
+    let max = 0.5;
+    for (const s of serie) max = Math.max(max, s.lam, s.cap);
+    const { y } = gradeY(g, area, max * 1.1, (v) => fmt(v, v % 1 ? 1 : 0), 3);
+    const x = eixoTempo(g, area, t0, t1, true);
+    // sobrecarga: chegada acima da capacidade
+    g.fillStyle = C.vermelho;
+    g.globalAlpha = 0.28;
+    for (let i = 1; i < serie.length; i++) {
+      const a = serie[i - 1];
+      const b = serie[i];
+      if (a.lam > a.cap) {
+        g.beginPath();
+        g.moveTo(x(a.t), y(a.cap));
+        g.lineTo(x(a.t), y(a.lam));
+        g.lineTo(x(b.t), y(b.lam));
+        g.lineTo(x(b.t), y(a.cap));
+        g.closePath();
+        g.fill();
+      }
+    }
+    g.globalAlpha = 1;
+    linhaSerie(g, serie, x, (s) => y(s.cap), C.s2, true);
+    linhaSerie(g, serie, x, (s) => y(s.lam), C.s1, false);
+    cruz(g, area, x);
+    cv._hover = (mx) => dicaTempo(mx, area, t0, t1, serie);
+  }
+  // pessoas na fila
+  {
+    const cv = $('c-fila');
+    const { g, w, h } = prepGraf(cv, 150);
+    const area = { x: 40, y: 8, w: w - 48, h: h - 30 };
+    let max = 4;
+    for (const s of serie) max = Math.max(max, s.fila);
+    const p = sim.p;
+    const th = teoria(p, sim.lambdaAgora(), sim.nAbertos);
+    let lqTeo = null;
+    const semFormula = sim.caixas.some((cx) => cx.rapido) || p.desistencia || p.perfil === 'sabado';
+    if (!semFormula && th.rho < 1) {
+      if (p.fila === 'unica' || sim.nAbertos === 1) lqTeo = th.unica.Lq;
+      else if (p.fila === 'aleatoria' && !p.troca) lqTeo = th.separadas.Lq;
+    }
+    $('lg-fila-teo').hidden = lqTeo === null;
+    if (lqTeo !== null) max = Math.max(max, lqTeo * 1.3);
+    const { y } = gradeY(g, area, max * 1.08, (v) => String(Math.round(v)), 4);
+    const x = eixoTempo(g, area, t0, t1, true);
+    if (lqTeo !== null) {
+      g.strokeStyle = C.apagado;
+      g.lineWidth = 2;
+      g.setLineDash([5, 4]);
+      g.beginPath();
+      g.moveTo(area.x, y(lqTeo));
+      g.lineTo(area.x + area.w, y(lqTeo));
+      g.stroke();
+      g.setLineDash([]);
+    }
+    linhaSerie(g, serie, x, (s) => y(s.fila), C.s1, false);
+    cruz(g, area, x);
+    cv._hover = (mx) => dicaTempo(mx, area, t0, t1, serie);
+  }
+}
+
+function linhaSerie(g, serie, x, fy, cor, degrau) {
+  if (!serie.length) return;
+  g.strokeStyle = cor;
+  g.lineWidth = 2;
+  g.lineJoin = 'round';
+  g.beginPath();
+  serie.forEach((s, i) => {
+    if (!i) g.moveTo(x(s.t), fy(s));
+    else {
+      if (degrau) g.lineTo(x(s.t), fy(serie[i - 1]));
+      g.lineTo(x(s.t), fy(s));
+    }
+  });
+  g.stroke();
+}
+
+function cruz(g, area, x) {
+  if (hoverT === null) return;
+  const xx = x(hoverT);
+  if (xx < area.x || xx > area.x + area.w) return;
+  g.strokeStyle = C.tinta2;
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(Math.round(xx) + 0.5, area.y);
+  g.lineTo(Math.round(xx) + 0.5, area.y + area.h);
+  g.stroke();
+}
+
+function dicaTempo(mx, area, t0, t1, serie) {
+  if (!serie.length || mx < area.x - 4 || mx > area.x + area.w + 4) {
+    hoverT = null;
+    return null;
+  }
+  const t = t0 + ((mx - area.x) / area.w) * (t1 - t0);
+  let melhor = serie[0];
+  for (const s of serie) if (Math.abs(s.t - t) < Math.abs(melhor.t - t)) melhor = s;
+  hoverT = melhor.t;
+  const quando = sim.p.perfil === 'sabado' ? hora(melhor.t) : duracao(melhor.t);
+  return `${quando}<br>chegada λ: ${fmt(melhor.lam, 2)}/min<br>capacidade: ${fmt(melhor.cap, 2)}/min (${melhor.abertos} caixa${melhor.abertos > 1 ? 's' : ''})<br>na fila: ${melhor.fila}`;
+}
+
+function desenharTaco() {
+  const cv = $('c-taco');
+  const { g, w, h } = prepGraf(cv, 240);
+  const area = { x: 44, y: 10, w: w - 56, h: h - 48 };
+  const p = sim.p;
+  const c = sim.nAbertos;
+  const lamAgora = sim.lambdaAgora();
+  const thAgora = teoria(p, lamAgora, c);
+  const r = sim.resumo();
+  const wqDe = (rho, qual) => {
+    const th = teoria(p, (rho * c) / p.tm, c);
+    return th[qual].Wq;
+  };
+  const curvaSep = c > 1;
+  const sab = p.perfil === 'sabado';
+  const mostraMedido = !sab && r.dur > 20 && Number.isFinite(r.Wq);
+  const refAgora = p.fila === 'unica' || c === 1 ? 'unica' : p.fila === 'aleatoria' ? 'separadas' : null;
+  let pts = [];
+  if (thAgora.rho < 1) pts.push(thAgora.unica.Wq, curvaSep && refAgora !== 'unica' ? thAgora.separadas.Wq : 0);
+  if (mostraMedido) pts.push(r.Wq);
+  const base = Math.max(...pts.filter(Number.isFinite), 0);
+  const ymax = clamp(base * 1.35, 6 * p.tm, 40 * p.tm);
+  const { y, topo } = gradeY(g, area, ymax, (v) => fmt(v, v % 1 ? 1 : 0), 4);
+  const x = (rho) => area.x + rho * area.w;
+  // eixo x
+  g.font = FONTE_EIXO;
+  g.fillStyle = C.apagado;
+  g.textAlign = 'center';
+  g.textBaseline = 'top';
+  for (const v of [0, 0.25, 0.5, 0.75, 1]) g.fillText(Math.round(v * 100) + '%', x(v), area.y + area.h + 5);
+  rotuloEixoX(g, area, 'ocupação ρ');
+  g.save();
+  g.translate(12, area.y + area.h / 2);
+  g.rotate(-Math.PI / 2);
+  g.font = FONTE_ROTULO;
+  g.fillStyle = C.tinta2;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText('espera média (min)', 0, 0);
+  g.restore();
+  // 100%
+  g.strokeStyle = C.apagado;
+  g.lineWidth = 1.5;
+  g.setLineDash([4, 4]);
+  g.beginPath();
+  g.moveTo(Math.round(x(1)) + 0.5, area.y);
+  g.lineTo(Math.round(x(1)) + 0.5, area.y + area.h);
+  g.stroke();
+  g.setLineDash([]);
+  // curvas
+  g.save();
+  g.beginPath();
+  g.rect(area.x, area.y - 2, area.w + 2, area.h + 2);
+  g.clip();
+  const curva = (qual, cor) => {
+    g.strokeStyle = cor;
+    g.lineWidth = 2;
+    g.lineJoin = 'round';
+    g.beginPath();
+    let inicio = true;
+    for (let i = 1; i <= 400; i++) {
+      const rho = (i / 400) * 0.999;
+      const v = wqDe(rho, qual);
+      if (!Number.isFinite(v)) break;
+      const yy = Math.max(area.y - 4, y(v));
+      if (inicio) g.moveTo(x(rho), yy);
+      else g.lineTo(x(rho), yy);
+      inicio = false;
+      if (v > topo) break;
+    }
+    g.stroke();
+  };
+  if (curvaSep) curva('separadas', C.s2);
+  curva('unica', C.s1);
+  g.restore();
+  // agora
+  const rhoA = thAgora.rho;
+  if (rhoA < 1 && rhoA > 0) {
+    if (refAgora) {
+      const v = thAgora[refAgora].Wq;
+      if (v <= topo) ponto(g, x(rhoA), y(v), C.tinta, 5);
+    } else {
+      const a = thAgora.unica.Wq;
+      const b = Math.min(thAgora.separadas.Wq, topo);
+      g.strokeStyle = C.tinta;
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(x(rhoA), y(a));
+      g.lineTo(x(rhoA), y(b));
+      g.stroke();
+      ponto(g, x(rhoA), y(a), C.tinta, 4);
+      ponto(g, x(rhoA), y(b), C.tinta, 4);
+    }
+  } else if (rhoA >= 1) {
+    g.font = FONTE_ROTULO;
+    g.fillStyle = C.vermelho;
+    g.textAlign = 'right';
+    g.textBaseline = 'top';
+    g.fillText(`agora: ρ = ${pct(rhoA)}, sem equilíbrio →`, x(1) - 6, area.y + 2);
+  }
+  if (mostraMedido && r.rho > 0) {
+    const yy = Math.max(area.y, y(Math.min(r.Wq, topo)));
+    g.strokeStyle = C.tinta;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.arc(x(Math.min(r.rho, 1)), yy, 6, 0, Math.PI * 2);
+    g.stroke();
+  }
+  $('lg-sep').hidden = !curvaSep;
+  $('lg-med').hidden = !mostraMedido;
+  cv._hover = (mx) => {
+    const rho = (mx - area.x) / area.w;
+    if (rho <= 0 || rho > 1.02) return null;
+    if (rho >= 1) return 'ρ ≥ 100%: sem equilíbrio, a fila cresce sem parar';
+    const lam = (rho * c) / p.tm;
+    let s = `ocupação ${pct(rho)} (λ = ${fmt(lam, 2)}/min)<br>fila única: ${fmt(wqDe(rho, 'unica'))} min`;
+    if (curvaSep) s += `<br>uma por caixa, ao acaso: ${fmt(wqDe(rho, 'separadas'))} min`;
+    return s;
+  };
+}
+
+function desenharGraficos() {
+  if (!C.s1) return;
+  desenharFita();
+  desenharHist();
+  desenharIntervalos();
+  desenharTempo();
+  desenharTaco();
+}
+
+// Dica flutuante dos gráficos e do mercado.
+const dica = $('dica');
+function mostrarDica(html, cx, cy) {
+  if (!html) {
+    dica.hidden = true;
+    return;
+  }
+  dica.innerHTML = html;
+  dica.hidden = false;
+  const r = dica.getBoundingClientRect();
+  let x = cx + 14;
+  let y = cy + 14;
+  if (x + r.width > window.innerWidth - 8) x = cx - r.width - 14;
+  if (y + r.height > window.innerHeight - 8) y = cy - r.height - 14;
+  dica.style.left = Math.max(4, x) + 'px';
+  dica.style.top = Math.max(4, y) + 'px';
+}
+
+function ligarDicas() {
+  for (const id of ['c-hist', 'c-interv', 'c-taxa', 'c-fila', 'c-taco']) {
+    const cv = $(id);
+    const mover = (ev) => {
+      const r = cv.getBoundingClientRect();
+      const html = cv._hover ? cv._hover(ev.clientX - r.left, ev.clientY - r.top) : null;
+      mostrarDica(html, ev.clientX, ev.clientY);
+      if (id === 'c-taxa' || id === 'c-fila') desenharTempo();
+    };
+    cv.addEventListener('pointermove', mover);
+    cv.addEventListener('pointerdown', mover);
+    cv.addEventListener('pointerleave', () => {
+      mostrarDica(null);
+      if (hoverT !== null) {
+        hoverT = null;
+        desenharTempo();
+      }
+    });
+  }
+  const sobre = (ev) => {
+    if (!L) return;
+    const r = tela.getBoundingClientRect();
+    const mx = ev.clientX - r.left;
+    const my = ev.clientY - r.top;
+    let melhor = null;
+    let dm = 14 * L.e + 4;
+    for (const s of sprites.values()) {
+      if (s.a < 0.5) continue;
+      const d = Math.hypot(s.x - mx, s.y - my);
+      if (d < dm) {
+        dm = d;
+        melhor = s;
+      }
+    }
+    if (!melhor) {
+      for (let i = 0; i < MAX_CAIXAS; i++) {
+        const g = L.caixas[i];
+        if (mx >= g.x0 && mx < g.x0 + L.larg && my >= L.yCaixa - 18 && my <= L.yCaixa + L.altCaixa) {
+          const cx = sim.caixas[i];
+          const estado = cx.aberto ? (cx.rapido ? 'aberto, caixa rápido (até 10 volumes)' : 'aberto') : cx.atendendo || cx.fila.length ? 'fechando: atende quem já está na fila' : 'fechado';
+          mostrarDica(`caixa ${i + 1}: ${estado}<br>${cx.fila.length} na fila · ${cx.atendidos} atendidos`, ev.clientX, ev.clientY);
+          return;
+        }
+      }
+      mostrarDica(null);
+      return;
+    }
+    const c = melhor.cli;
+    const espera = c.inicio !== null ? `esperou ${fmt(c.inicio - c.chegada)} min, no caixa ${c.caixa + 1}` : `esperando há ${fmt(sim.t - c.chegada)} min`;
+    mostrarDica(`cliente ${c.id}: ${c.itens} volume${c.itens > 1 ? 's' : ''} (${c.pequeno ? 'cestinha' : 'carrinho'})<br>compra de ${fmt(c.S)} min<br>${espera}` + (c.trocas ? `<br>trocou de fila ${c.trocas}×` : ''), ev.clientX, ev.clientY);
+  };
+  tela.addEventListener('pointermove', sobre);
+  tela.addEventListener('pointerdown', sobre);
+  tela.addEventListener('pointerleave', () => mostrarDica(null));
+}
+
+// ---------- o laço ----------
+let ultimo = performance.now();
+let acum = 1;
+function quadro(agora) {
+  const dt = Math.min(0.1, Math.max(0, (agora - ultimo) / 1000));
+  ultimo = agora;
+  if (L) {
+    if (rodando && !sim.encerrado) sim.avancar((dt * vel) / 60);
+    consumirEventos();
+    moverSprites(dt);
+    desenharMercado();
+    acum += dt;
+    if (acum > 0.25) {
+      acum = 0;
+      atualizarCupom();
+      atualizarRelogio();
+      atualizarValores();
+      if (sim.p.perfil === 'sabado' && sim.p.gerente) $('r-caixas').value = sim.nAbertos;
+      desenharGraficos();
+    }
+    if (sim.encerrado && !avisoVisto) mostrarAviso();
+  }
+  requestAnimationFrame(quadro);
+}
+
+function iniciar() {
+  lerCores();
+  medirPalco();
+  montarCapitulos();
+  ligarControles();
+  ligarDicas();
+  const m = /cap-(\d+)/.exec(location.hash);
+  irPara(m ? Number(m[1]) - 1 : 0, true);
+  new ResizeObserver(() => {
+    medirPalco();
+    desenharGraficos();
+  }).observe(tela.parentElement);
+  const tema = window.matchMedia('(prefers-color-scheme: dark)');
+  tema.addEventListener('change', () => {
+    lerCores();
+    fundoCache = null;
+    desenharGraficos();
+  });
+  if (document.fonts) document.fonts.ready.then(() => {
+    fundoCache = null;
+    desenharGraficos();
+  });
+  requestAnimationFrame(quadro);
+}
+iniciar();
+</script>
+</body>
+</html>
