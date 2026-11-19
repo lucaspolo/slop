@@ -204,6 +204,10 @@ button{font:inherit;color:inherit}
 .vaga.levando{background:#fff1b8}
 .vaga.livre{background:transparent;border-style:dashed;color:var(--tinta-suave)}
 .vaga.livre .vazio{width:28px;height:28px;margin:0 auto 1px;border:2px dashed #c9b9a0;border-radius:8px}
+.vagas.muitas{grid-template-columns:repeat(4,1fr);gap:4px}
+.vagas.muitas .vaga{padding:3px 2px 4px;font-size:10px}
+.vagas.muitas .vaga img,.vagas.muitas .vaga.livre .vazio{width:22px;height:22px}
+.vagas.muitas .vaga .t{font-size:9px}
 .vagas-resumo{display:flex;justify-content:space-between;font-weight:800;font-size:12px;margin:0 0 3px}
 .vagas-resumo .pronto{color:var(--verde-escuro)}
 .menu .itens{display:grid;gap:5px;max-height:min(340px,calc(100vh - 150px));overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:1px 3px 1px 1px}
@@ -921,16 +925,17 @@ const FABRICAS = {
   chocolateria: { nome: 'Chocolateria', fem: true, nivel: 22, preco: 14000, alto: 2.6, desc: 'Faz bombom de cupuaçu e chocolate com castanha com as barras da fábrica de barras.', receitas: ['bombom', 'chococastanha'] },
   oficina:   { nome: 'Oficina de borracha', fem: true, nivel: 23, preco: 16000, alto: 2.5, desc: 'Faz bolas e botas de chuva com o látex da seringueira.', receitas: ['bola', 'botas'] },
 };
-// as fábricas novas: outra queijaria, padaria e cozinha de doces no gramado depois da cozinha, com as receitas da original
-// (base) e fila, esteira e repetidor próprios. Precisam da original e não têm reforma. O lote (a obra com a placa) aparece
-// um nível antes de liberar (fabNovaVisivel); antes disso o lugar fica gramado
-const FAB_NOVAS = {
-  queijaria2: { base: 'queijaria', nome: 'Queijaria nova', nivel: 38, preco: 90000 },
-  padaria2:   { base: 'padaria', nome: 'Padaria nova', nivel: 40, preco: 135000 },
-  cozinha2:   { base: 'cozinha', nome: 'Cozinha de doces nova', nivel: 42, preco: 180000 },
-};
-for (const id in FAB_NOVAS){ const N = FAB_NOVAS[id], B = FABRICAS[N.base]; FABRICAS[id] = { ...N, fem: B.fem, alto: B.alto, receitas: B.receitas, desc: `Mais uma ${B.nome.toLowerCase()}, com fila própria. ${B.desc}` }; }
-const fabNovaVisivel = id => !FAB_NOVAS[id] || (!!S && (nivel() >= FAB_NOVAS[id].nivel - 1 || estFab(id).feita));
+// a ampliação das fábricas (o Lucas pediu, no lugar das fábricas novas, que eram cópias da queijaria, da padaria e da
+// cozinha de doces): a original ganha uma ala à direita e passa a valer por duas, com o dobro de vagas (vagasFab). É uma
+// obra do Maurinho, no nível e pelo preço que a fábrica nova tinha, mais o das reformas que a original já tem (a ala vem
+// reformada igual, precoAmpliacao); depois dela, cada reforma custa o dobro (precoReforma). O lote da ala, os dois
+// ladrilhos à direita, aparece um nível antes (loteAlaVisivel); S.ampliadas guarda as que já foram ampliadas
+const AMPLIACAO = { queijaria: { nivel: 38, preco: 90000 }, padaria: { nivel: 40, preco: 135000 }, cozinha: { nivel: 42, preco: 180000 } };
+const AMPLIA_OBRA = { minutos: 6, xp: 200 };
+const ampliada = id => !!(S && S.ampliadas && S.ampliadas[id]);
+const emAmpliacao = id => !!(S && S.obra && S.obra.amplia && S.obra.id === id);
+const fabLarga = id => ampliada(id) || emAmpliacao(id);
+const loteAlaVisivel = id => !!AMPLIACAO[id] && !!S && estFab(id).feita && nivel() >= AMPLIACAO[id].nivel - 1;
 const RECEITAS = {
   fuba:        { nome: 'Fubá', entra: { milho: 3 }, sai: { fuba: 1 }, tempo: 60, xp: 4 },
   racaoMilho:  { nome: 'Ração de milho', entra: { milho: 2 }, sai: { racao: 8 }, tempo: 40, xp: 2 },
@@ -975,11 +980,14 @@ const maxReforma = id => id === 'casa' ? 1 : FABRICAS[id] ? REFORMA.max : 2;
 const PRECO_REFORMA = { moinho: [13500, 24000, 36000], queijaria: [22500, 30000, 45000], padaria: [36000, 48000, 72000], cozinha: [54000, 72000, 108000], terreiro: [22500, 36000, 54000], torrador: [81000, 108000, 162000], chocobarra: [81000, 108000, 162000], chocolateria: [126000, 168000, 252000], oficina: [144000, 192000, 288000], galinheiro: [27000, 45000], curral: [36000, 60000], patos: [36000, 60000], casa: [45000, 90000], celeiro: [45000, 90000], poco: [13500, 24000] };
 const nivelReforma = id => (S && S.reformas && S.reformas[id]) || 0;
 // as construções novas reformam pelo mesmo preço das originais
-Object.assign(PRECO_REFORMA, { galinheiro2: PRECO_REFORMA.galinheiro, curral2: PRECO_REFORMA.curral, queijaria2: PRECO_REFORMA.queijaria, padaria2: PRECO_REFORMA.padaria, cozinha2: PRECO_REFORMA.cozinha });
+Object.assign(PRECO_REFORMA, { galinheiro2: PRECO_REFORMA.galinheiro, curral2: PRECO_REFORMA.curral });
+// a fábrica ampliada vale por duas: a reforma custa o dobro, e a ampliação paga também as reformas que a ala já ganha
+const precoReforma = (id, n) => PRECO_REFORMA[id][n] * (ampliada(id) ? 2 : 1);
+const precoAmpliacao = id => AMPLIACAO[id].preco + PRECO_REFORMA[id].slice(0, nivelReforma(id)).reduce((a, b) => a + b, 0);
 // o galinheiro dos patos chega depois (nível 32), então a reforma dele libera no 36, o primeiro nível livre depois da 2ª reforma
 const NIVEL_REFORMA = { patos: [36, 40] };
 const nivelDaReforma = (id, n) => (NIVEL_REFORMA[id] || REFORMA.nivel)[n];
-const vagasFab = id => VAGAS_FAB + nivelReforma(id);
+const vagasFab = id => (VAGAS_FAB + nivelReforma(id)) * (ampliada(id) ? 2 : 1);
 // ================= obras novas do Maurinho (nível 39 em diante): construções grandes, feitas do zero num lote demarcado
 // (predio: o lugar delas em PREDIOS, com obra: a chave daqui). Cada obra tem uma ou mais etapas, pagas e esperadas uma de
 // cada vez; S.obrasFeitas guarda quantas etapas de cada uma já terminaram. A obra em andamento usa o mesmo S.obra das
@@ -1194,14 +1202,12 @@ const PREDIOS = [
   // área de produção: as construções ficam de frente para a estradinha de terra (z = 5)
   { id:'moinho',     nome:'Moinho',              x0:21, z0:2,  x1:22, z1:3,  porta:[21, 4], fab:'moinho' },
   { id:'queijaria',  nome:'Queijaria',           x0:25, z0:2,  x1:26, z1:3,  porta:[25, 4], fab:'queijaria' },
-  { id:'padaria',    nome:'Padaria',             x0:29, z0:2,  x1:30, z1:3,  porta:[29, 4], fab:'padaria' },
-  { id:'cozinha',    nome:'Cozinha de doces',    x0:33, z0:2,  x1:34, z1:3,  porta:[33, 4], fab:'cozinha' },
+  // a queijaria, a padaria e a cozinha ficam a 8 ladrilhos uma da outra: ampliadas (AMPLIACAO), cada uma ganha os dois
+  // ladrilhos da direita (x1 passa a x0 + 3, ajustarLargura) e ainda sobram quatro de gramado entre elas
+  { id:'padaria',    nome:'Padaria',             x0:33, z0:2,  x1:34, z1:3,  porta:[33, 4], fab:'padaria' },
+  { id:'cozinha',    nome:'Cozinha de doces',    x0:41, z0:2,  x1:42, z1:3,  porta:[41, 4], fab:'cozinha' },
   { id:'terreiro',   nome:'Terreiro de café',    x0:38, z0:8,  x1:40, z1:9,  porta:[39, 7], fab:'terreiro' },
   { id:'torrador',   nome:'Torrador de café',    x0:43, z0:8,  x1:44, z1:9,  porta:[44, 7], fab:'torrador', ry: Math.PI },
-  // as fábricas novas (FAB_NOVAS), na mesma fileira, depois da cozinha: o lote só vira construção perto do nível delas
-  { id:'queijaria2', nome:'Queijaria nova',      x0:37, z0:2,  x1:38, z1:3,  porta:[37, 4], fab:'queijaria2', nova: true },
-  { id:'padaria2',   nome:'Padaria nova',        x0:41, z0:2,  x1:42, z1:3,  porta:[41, 4], fab:'padaria2', nova: true },
-  { id:'cozinha2',   nome:'Cozinha de doces nova', x0:45, z0:2, x1:46, z1:3, porta:[45, 4], fab:'cozinha2', nova: true },
   // as construções da mata ficam numa clareira do outro lado da estrada, de frente para ela, perto da floresta
   { id:'chocolateria', nome:'Chocolateria',      x0:25, z0:22, x1:26, z1:23, porta:[24, 22], fab:'chocolateria', ry: -Math.PI / 2 },
   { id:'oficina',    nome:'Oficina de borracha', x0:25, z0:27, x1:26, z1:28, porta:[24, 27], fab:'oficina', ry: -Math.PI / 2 },
@@ -1227,7 +1233,8 @@ const PREDIOS = [
   { id:'hangar',     nome:'Hangar do PIG-MTP',   x0:47, z0:-6, x1:51, z1:-5, porta:[49, -4], obra: 'hangar', fora: true },
 ];
 const PREDIO = {}; PREDIOS.forEach(p => { PREDIO[p.id] = p; });
-const ARVORES = [[0,1,0],[1,5,1],[0,10,2],[1,18,0],[13,1,1],[24,0,0],[28,4,1],[37,9,0],[37,18,2],[2,0,1],[9,0,0],[28,0,1],[0,20,1],[31,0,2],[35,4,1],[35,0,0],[45,13,1],[51,20,0],[16,13,2]];
+// as da fileira das fábricas saíram para a queijaria, a padaria e a cozinha caberem ampliadas (o Lucas pediu)
+const ARVORES = [[0,1,0],[1,5,1],[0,10,2],[1,18,0],[13,1,1],[24,0,0],[37,9,0],[37,18,2],[2,0,1],[9,0,0],[0,20,1],[45,13,1],[51,20,0],[16,13,2]];
 const ARBUSTOS = [[8,1],[14,7],[1,11]];
 // a cerca da fazenda (Z_CERCA), com a porteira (X_PORTEIRA); a estrada passa logo abaixo e dobra para o sul na coluna COL_CURVA.
 // A orla vai de Z_ORLA até a mata, e a mata vai de Z_MATA até o fim do mapa
@@ -8269,23 +8276,13 @@ function vBandeirinhas(){
 // A reforma é o desenho original com acréscimos, no mesmo lugar: a fazenda não tem espaço para crescer para os lados
 const MODELO_BASE = { casa: () => vCasa(true), celeiro: vCeleiro, poco: vPoco, galinheiro: vGalinheiro, curral: vAbrigo,
   moinho: vMoinho, queijaria: vQueijaria, padaria: vPadaria, cozinha: vCozinha, terreiro: () => vTerreiro(false), torrador: vTorrador, chocolateria: vChocolateria, oficina: vOficina, chocobarra: vFabBarras,
-  galinheiro2: () => vGalinheiroNovo(), curral2: () => vCurralNovo(), patos: vCasaPatos,
-  queijaria2: () => vFabNova('queijaria'), padaria2: () => vFabNova('padaria'), cozinha2: () => vFabNova('cozinha') };
+  galinheiro2: () => vGalinheiroNovo(), curral2: () => vCurralNovo(), patos: vCasaPatos };
 const recolorir = (v, mapa) => { for (const e of v.m.values()) if (mapa[e.c] != null) e.c = mapa[e.c]; };
-// as fábricas novas (FAB_NOVAS): o desenho da primeira reforma da original com outras cores, para não confundir com ela.
-// A queijaria nova é amarelinha de telhado verde-água; a padaria nova, caiada de telhado verde; a cozinha nova, verde-menta
-// de telhado coral
-const CORES_FAB_NOVA = {
-  queijaria: { 0xf6f0e0: 0xf7e6a8, 0x4a8fc0: 0x2f8a83, 0x5f9fd6: 0x3fa59c, 0x6aa7da: 0x46a99a },
-  padaria: { 0xb5603c: 0xe6dfcf, 0xc8734c: 0xf3eee3, 0xa04e30: 0xd6cdbb, 0xb8433a: 0x3f7f4a, 0xd0503f: 0x4f9a5a },
-  cozinha: { 0xf7c9d9: 0xcfeedc, 0x8f5bbf: 0xe0663f, 0xa35ccf: 0xf0805a },
-};
-function vFabNova(base, n = 0){ return vReforma(base + '2', n); }
 // o galinheiro e o curral do canto Sul: o desenho dos primeiros com outras cores, para não confundir com eles.
 // O galinheiro é caiado, de telhado azul e com um cata-vento de galo dourado na cumeeira; o curral tem esteios brancos e telhado verde
 function vGalinheiroNovo(n = 0){ return vReforma('galinheiro2', n); }
 function vCurralNovo(n = 0){ return vReforma('curral2', n); }
-// as construções novas (o galinheiro e o curral novos, as fábricas novas) usam o desenho da original, com a reforma dela
+// as construções novas (o galinheiro e o curral novos) usam o desenho da original, com a reforma dela
 // quando reformadas, e depois vestem as cores e os detalhes próprios (vReforma)
 const COPIAS = {
   galinheiro2: { base: 'galinheiro', vestir(v){
@@ -8300,9 +8297,6 @@ const COPIAS = {
   } },
   // o curral novo: esteios brancos e telhado verde, também o telhado de telha da reforma
   curral2: { base: 'curral', vestir: v => recolorir(v, { 0x9c5a3c: 0x3f7f4a, 0xb06a48: 0x4f9358, 0x7a5232: 0xece4d2, 0xb8433a: 0x3f7f4a, 0xd0503f: 0x4f9358, 0xa03a32: 0x356b3e }) },
-  queijaria2: { base: 'queijaria', vestir: v => recolorir(v, CORES_FAB_NOVA.queijaria) },
-  padaria2: { base: 'padaria', vestir: v => recolorir(v, CORES_FAB_NOVA.padaria) },
-  cozinha2: { base: 'cozinha', vestir: v => recolorir(v, CORES_FAB_NOVA.cozinha) },
 };
 const vasinho = (v, x, z, flor) => { v.box(x, 0, z, x + 1, 1, z + 1, 0xb5603c); v.box(x, 2, z, x + 1, 2, z + 1, (X, Y, Z) => (X + Z) % 2 ? flor : 0x4f9a3d); v.set(x + (z % 2), 3, z, flor); };
 const toldo = (v, x0, x1, y, z, cor) => {
@@ -8565,6 +8559,28 @@ function vReforma(id, n){
   if (n >= 2) REFORMA_2[b](v);
   if (n >= 3) REFORMA_3[b](v);
   if (C) C.vestir(v);
+  return v;
+}
+// ================= a ampliação das fábricas (o Lucas pediu, no lugar das fábricas novas): a queijaria, a padaria e a
+// cozinha de doces ganham uma ala do lado direito e passam de 2 para 4 ladrilhos de largura (AMPLIACAO). O desenho é o da
+// original esticado: o que fica à direita da coluna x 14 (a empena, o forno, a trepadeira) vai 16 cubinhos para a direita
+// e o vão é preenchido com cópias da coluna 14 (parede e telhado; da frente só o que está do toldo para cima, para não
+// repetir vaso nem placa), e a frente da ala ganha três janelas copiadas da janela da direita do desenho sem reforma
+function vAmpliada(id, n){
+  const o = vReforma(id, n), base = MODELO_BASE[id](), v = new Vox();
+  for (const e of o.m.values()){
+    v.set(e.x >= 15 ? e.x + 16 : e.x, e.y, e.z, e.c);
+    if (e.x === 14 && (e.z <= 13 || e.y >= 7)) for (let x = 15; x <= 30; x++) v.set(x, e.y, e.z, e.c);
+  }
+  for (const e of base.m.values()) if (e.x >= 11 && e.x <= 13 && e.z >= 14 && e.y <= 6) for (const dx of [5, 10, 15]) v.set(e.x + dx, e.y, e.z, e.c);
+  // na 3ª reforma a ala também ganha placas solares
+  if (n >= 3) placasSolares(v, false, [[17, 20], [25, 28]]);
+  return v;
+}
+// durante a obra da ampliação: a original na metade da esquerda e o monte da obra no lugar da ala
+function vEmAmpliacao(id, n){
+  const v = vReforma(id, n);
+  for (const e of vObra().m.values()) if (!v.has(e.x + 16, e.y, e.z)) v.set(e.x + 16, e.y, e.z, e.c);
   return v;
 }
 // moinho com as pás (para o visualizador e o ícone)
@@ -10057,7 +10073,6 @@ const VI = {
   torrado(){ const v = new Vox(); v.box(-3, 0, -2, 3, 8, 2, 0x5a3a2c); v.box(-2, 9, -1, 2, 9, 1, 0x4a2e22); v.box(-2, 3, 3, 2, 5, 3, 0xe0408a); v.set(0, 4, 4, 0xfdf8ef); return v; },
   moinho(){ const v = vMoinho(); for (const e of vPas().m.values()) v.set(e.x + 8, e.y + 19, 15, e.c); return v; },
   queijaria(){ return vQueijaria(); }, padaria(){ return vPadaria(); }, cozinha(){ return vCozinha(); },
-  queijaria2(){ return vFabNova('queijaria'); }, padaria2(){ return vFabNova('padaria'); }, cozinha2(){ return vFabNova('cozinha'); },
   terreiro(){ return vTerreiro(true); }, torrador(){ return vTorrador(); }, obra(){ return vObra(); },
   rabanete(){ const v = new Vox(); v.ell(0, 3, 0, 3.2, 3, 3.2, (x, y) => y <= 1 ? 0xf7e7ec : 0xd8315b); v.box(0, 6, 0, 0, 9, 0, 0x4f9a3d); v.box(-1, 8, 0, -1, 9, 0, 0x6cbf52); v.box(1, 7, 0, 1, 9, 0, 0x6cbf52); return v; },
   couve(){ const v = new Vox(); v.ell(0, 6, 0, 4.4, 5, 1.6, (x, y) => x === 0 ? 0xbfe59a : (y % 2 ? 0x2f7d3a : 0x3c8f45)); v.box(0, 0, 0, 0, 1, 0, 0xa9c98a); return v; },
@@ -10560,7 +10575,28 @@ function migrar(){
     S.parcelas.length = PARCELAS.length;
   }
   if (Array.isArray(S.mata) && S.mata.length > MATA_SLOTS.length) S.mata.length = MATA_SLOTS.length;
+  // as fábricas novas viraram a ampliação da original (o Lucas pediu): quem tinha a cópia fica com a original ampliada, na
+  // reforma maior das duas, e a fila, o que estava pronto, a esteira e o repetidor da cópia passam para a original. A obra
+  // que estava em andamento na cópia entra pronta
+  for (const [dup, id] of [['queijaria2', 'queijaria'], ['padaria2', 'padaria'], ['cozinha2', 'cozinha']]){
+    if (!S.reformas) S.reformas = {};
+    if (S.obra && S.obra.id === dup){ S.reformas[dup] = Math.max(S.reformas[dup] || 0, S.obra.n || 0); S.obra = null; }
+    const D = S.fabricas && S.fabricas[dup];
+    if (D && D.feita){
+      const B = S.fabricas[id] || (S.fabricas[id] = { feita: true, fila: [], feitos: [] });
+      if (!S.ampliadas) S.ampliadas = {};
+      S.ampliadas[id] = true; B.feita = true;
+      S.reformas[id] = Math.max(S.reformas[id] || 0, S.reformas[dup] || 0);
+      B.fila = (B.fila || []).concat(D.fila || []).sort((a, b) => a.fim - b.fim);
+      B.feitos = (B.feitos || []).concat(D.feitos || []);
+      if (D.esteira) B.esteira = true; if (D.repetidor) B.repetidor = true; if (!B.repetir && D.repetir) B.repetir = D.repetir;
+      amplMigrada.push(id);
+    }
+    if (S.fabricas) delete S.fabricas[dup];
+    delete S.reformas[dup];
+  }
 }
+const amplMigrada = [];
 let parcelaDevolvida = false;
 // o mapa da primeira versão tinha 36 x 37 ladrilhos. No maior, entraram colunas e linhas entre as zonas, o galinheiro e o
 // curral se separaram e o leste ganhou espaço para os cercados novos: cada ponto anda com a sua zona (a fileira das
@@ -11745,6 +11781,7 @@ function vPredio(id){
     if (obraEmAndamento(k)) return vObraSubindo(k, n, passoObra());
     if (n > 0) return modeloObra(k, n);
   }
+  if (AMPLIACAO[id] && fabLarga(id)) return ampliada(id) ? vAmpliada(id, nivelReforma(id)) : vEmAmpliacao(id, nivelReforma(id));
   return vReforma(id, nivelReforma(id));
 }
 // quanto da obra em andamento já subiu, em oitavos (o desenho muda a cada oitavo do tempo)
@@ -11779,6 +11816,7 @@ function caixaAndaime(id){
     for (const e of v.m.values()){ mnx = Math.min(mnx, e.x); mxx = Math.max(mxx, e.x); mnz = Math.min(mnz, e.z); mxz = Math.max(mxz, e.z); mxy = Math.max(mxy, e.y); }
     return [mnx, mxx, mnz, mxz, Math.min(mxy, O.andaimeAlto || 99)];
   }
+  if (AMPLIACAO[id] && fabLarga(id)) return [1, 30, 2, 13, 15];
   return ANDAIME[id] || ANDAIME[(COPIAS[id] || {}).base] || ANDAIME_FAB;
 }
 // o andaime da obra em andamento, por cima da construção (mesma origem e mesmo giro do desenho dela)
@@ -11788,16 +11826,16 @@ function montarAndaime(){
   if (!S.obra) return;
   const id = S.obra.id, p = PREDIO[id], [cx, cz] = centroPredio(p);
   const origem = FABRICAS[id] ? [(p.x1 - p.x0 + 1) * 4, 0, 8] : ORIGEM_PREDIO[id];
-  andaimeVis = colocar(malha(geo('andaime' + id + (S.obra.obra ? S.obra.obra + S.obra.n : ''), () => vAndaime(id).build(1 / 8, { origin: origem }))), cx, 0, cz, p.ry || 0);
+  andaimeVis = colocar(malha(geo('andaime' + id + (S.obra.obra ? S.obra.obra + S.obra.n : '') + (fabLarga(id) ? 'L' : ''), () => vAndaime(id).build(1 / 8, { origin: origem }))), cx, 0, cz, p.ry || 0);
   andaimeVis.userData.alvo = { k: 'predio', p }; pickaveis.push(andaimeVis);
 }
 // ================= a obra do Maurinho
 const artigoPredio = id => (id === 'casa' || (FABRICAS[id] && FABRICAS[id].fem)) ? 'a' : 'o';
 // o que o Maurinho está fazendo agora, para os menus: "reformando a padaria", "construindo o resort das aposentadas"
-const oQueOMaurinhoFaz = () => !S.obra ? '' : S.obra.obra ? `construindo ${textoEtapa(S.obra.obra, S.obra.n)}` : `reformando ${artigoPredio(S.obra.id)} ${nomePredio(S.obra.id)}`;
+const oQueOMaurinhoFaz = () => !S.obra ? '' : S.obra.obra ? `construindo ${textoEtapa(S.obra.obra, S.obra.n)}` : `${S.obra.amplia ? 'ampliando' : 'reformando'} ${artigoPredio(S.obra.id)} ${nomePredio(S.obra.id)}`;
 const textoEtapa = (k, n) => { const O = OBRAS[k], E = O.etapas[n - 1]; return E.nome ? `${E.nome} ${O.de || 'do'} ${O.nome.toLowerCase()}` : `${O.artigo || 'o'} ${O.nome.toLowerCase()}`; };
 const nomePredio = id => id === 'casa' ? 'casa' : (FABRICAS[id] ? FABRICAS[id].nome : PREDIO[id].nome).toLowerCase();
-const efeitoReforma = (id, n) => FABRICAS[id] ? `fica com ${VAGAS_FAB + n} vagas de produção e visual novo`
+const efeitoReforma = (id, n) => FABRICAS[id] ? `fica com ${(VAGAS_FAB + n) * (ampliada(id) ? 2 : 1)} vagas de produção e visual novo`
   : n >= 2 && (/^galinheiro|^curral/.test(id) || id === 'patos') ? 'visual novo e mais conforto para os bichos'
   : /^galinheiro/.test(id) ? `cabem ${ANIMAIS.galinha.max * ESPACO_REFORMA[n]} galinhas e visual novo` : /^curral/.test(id) ? `cabem ${ANIMAIS.vaca.max * ESPACO_REFORMA[n]} vacas e visual novo`
   : id === 'patos' ? `cabem ${ANIMAIS.pato.max * ESPACO_REFORMA[n]} patos e visual novo` : 'visual novo';
@@ -11806,7 +11844,7 @@ function itensReforma(id, r){
   const n = nivelReforma(id);
   if (S.obra && S.obra.id === id){ r.estado = (r.estado ? r.estado + ' ' : '') + `Em obra com o Maurinho: falta ${tempo(Math.max(0, (S.obra.fim - Date.now()) / 1000))}.`; return; }
   if (n >= maxReforma(id)) return;
-  const preco = PRECO_REFORMA[id][n], nv = nivelDaReforma(id, n), ocupado = S.obra ? `o Maurinho está ${oQueOMaurinhoFaz()}` : '';
+  const preco = precoReforma(id, n), nv = nivelDaReforma(id, n), ocupado = S.obra ? `o Maurinho está ${oQueOMaurinhoFaz()}` : '';
   r.itens.push({ rotulo: n ? `${n + 1}ª reforma com o Maurinho` : 'Reformar com o Maurinho', sub: nivel() < nv ? `nível ${nv}` : ocupado || `${efeitoReforma(id, n + 1)} · ${REFORMA.minutos[n]} min de obra`,
     icone: 'maurinho', preco: reais(preco), off: nivel() < nv || !!ocupado || S.dinheiro < preco, fn: () => reformar(id) });
 }
@@ -11879,13 +11917,35 @@ function pararMaurinhoObra(){
 function reformar(id){
   const n = nivelReforma(id) + 1;
   if (S.obra || n > maxReforma(id)) return;
-  const preco = PRECO_REFORMA[id][n - 1];
+  const preco = precoReforma(id, n - 1);
   if (nivel() < nivelDaReforma(id, n - 1)){ aviso(`A reforma libera no nível ${nivelDaReforma(id, n - 1)}`, 'ruim'); Som.erro(); return; }
   if (S.dinheiro < preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return; }
   gastar(preco); chipPulsa('chipDinheiro'); Som.moeda();
   S.obra = { id, n, fim: Date.now() + REFORMA.minutos[n - 1] * 60000 };
   chamarMaurinho(FALAS_MAURINHO_CHEGA);
   aviso(`O Maurinho já vem reformar ${artigoPredio(id)} ${nomePredio(id)}! A obra leva ${REFORMA.minutos[n - 1]} minutos.`, 'grande', 4);
+  hud(); salvar();
+}
+// a ampliação no menu da fábrica (aparece dois níveis antes, apagada até o nível)
+function itensAmpliacao(id, r){
+  const A = AMPLIACAO[id];
+  if (!A || !S.viuCineMaurinho || !estFab(id).feita || fabLarga(id) || nivel() < A.nivel - 2) return;
+  const preco = precoAmpliacao(id), ocupado = S.obra ? `o Maurinho está ${oQueOMaurinhoFaz()}` : '';
+  r.itens.push({ rotulo: 'Ampliar com o Maurinho', sub: nivel() < A.nivel ? `nível ${A.nivel}` : ocupado || `ganha uma ala e fica com ${vagasFab(id) * 2} vagas · ${AMPLIA_OBRA.minutos} min de obra`,
+    icone: 'maurinho', preco: reais(preco), off: nivel() < A.nivel || !!ocupado || S.dinheiro < preco, fn: () => ampliar(id) });
+}
+function ampliar(id){
+  const A = AMPLIACAO[id];
+  if (!A || S.obra || fabLarga(id) || !estFab(id).feita) return;
+  const preco = precoAmpliacao(id);
+  if (nivel() < A.nivel){ aviso(`A ampliação libera no nível ${A.nivel}`, 'ruim'); Som.erro(); return; }
+  if (S.dinheiro < preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return; }
+  gastar(preco); chipPulsa('chipDinheiro'); Som.moeda();
+  S.obra = { id, n: nivelReforma(id), amplia: true, fim: Date.now() + AMPLIA_OBRA.minutos * 60000 };
+  ajustarLargura(id); refazerChao(); ladrilhoDeBeirada(0, 0); montarFabrica(id);
+  tirarDeLadrilhoFechado(ed); tirarDeLadrilhoFechado(irmaoHud); tirarDeLadrilhoFechado(irmaoDani);
+  chamarMaurinho(FALAS_MAURINHO_CHEGA);
+  aviso(`O Maurinho já vem ampliar ${artigoPredio(id)} ${nomePredio(id)}! A obra leva ${AMPLIA_OBRA.minutos} minutos, e ela continua funcionando.`, 'grande', 4);
   hud(); salvar();
 }
 // o Maurinho entra pela porteira e vai até a obra que acabou de começar (S.obra)
@@ -11899,8 +11959,8 @@ function chamarMaurinho(falas){
   M.ir([[PARADA, Z_CERCA - 0.4]], () => andarAte(M, q[0], q[1], () => { obraVis.estado = 'trabalhando'; obraVis.aqui = q; acaoObra('prancheta'); falar(M, variar(falas), 3); }));
 }
 function terminarObra(){
-  const { id, n, obra: k } = S.obra, p = PREDIO[id], [cx, cz] = centroPredio(p);
-  if (k){ if (!S.obrasFeitas) S.obrasFeitas = {}; S.obrasFeitas[k] = n; } else S.reformas[id] = n;
+  const { id, n, obra: k, amplia } = S.obra, p = PREDIO[id], [cx, cz] = centroPredio(p);
+  if (k){ if (!S.obrasFeitas) S.obrasFeitas = {}; S.obrasFeitas[k] = n; } else if (amplia){ if (!S.ampliadas) S.ampliadas = {}; S.ampliadas[id] = true; } else S.reformas[id] = n;
   S.obra = null;
   ladrilhoDeBeirada(0, 0);
   montarAndaime();
@@ -11913,6 +11973,9 @@ function terminarObra(){
     ganharXP(O.etapas[n - 1].xp, new THREE.Vector3(cx, 2, cz));
     aviso(O.etapas[n - 1].aviso || (O.etapas.length > 1 && n < O.etapas.length ? `${textoEtapa(k, n).replace(/^./, c => c.toUpperCase())} ficou pronto! Faltam ${O.etapas.length - n} etapa${O.etapas.length - n > 1 ? 's' : ''}.` : `${O.nome} pronto! ${O.pronto || ''}`), 'grande', 5);
     if (O.aoTerminar) O.aoTerminar(n);
+  } else if (amplia){
+    ganharXP(AMPLIA_OBRA.xp, new THREE.Vector3(cx, 2, cz));
+    aviso(`${artigoPredio(id) === 'a' ? 'A' : 'O'} ${nomePredio(id)} ficou ampliad${artigoPredio(id)}! Agora são ${vagasFab(id)} vagas de produção.`, 'grande', 4.5);
   } else {
     ganharXP(REFORMA.xp[n - 1], new THREE.Vector3(cx, 2, cz));
     aviso(`${artigoPredio(id) === 'a' ? 'A' : 'O'} ${nomePredio(id)} ficou reformad${artigoPredio(id)}! ${efeitoReforma(id, n).replace(/^./, c => c.toUpperCase())}.`, 'grande', 4.5);
@@ -12099,20 +12162,22 @@ function comprarLote(i){
 }
 
 // ================= construções de processamento
-// o lote de uma fábrica nova vira construção: os enfeites que estavam nele ou na porta voltam para a loja
-const LOTES_FAB = new Set();
-function abrirLoteFabrica(id){
-  if (LOTES_FAB.has(id)) return false;
-  LOTES_FAB.add(id);
-  const p = PREDIO[id], dentro = (x, z) => (x >= p.x0 && x <= p.x1 && z >= p.z0 && z <= p.z1) || (x === p.porta[0] && z === p.porta[1]);
-  if (Array.isArray(S.enfeites)){ if (!S.guardados) S.guardados = {}; devolverEnfeites(dentro, `da ${FABRICAS[id].nome.toLowerCase()}`); }
-  for (let x = p.x0; x <= p.x1; x++) for (let z = p.z0; z <= p.z1; z++){ setT(x, z, 'predio'); PREDIO_EM[iT(x, z)] = p; }
+// a ala da ampliação: os dois ladrilhos à direita da fábrica viram construção (o lote aparece um nível antes, com estacas e a
+// placa; na obra e depois dela, x1 passa a x0 + 3, ajustarLargura). Os enfeites que estavam ali voltam para a loja
+const ALAS = new Set();
+function abrirAla(id){
+  if (ALAS.has(id)) return false;
+  ALAS.add(id);
+  const p = PREDIO[id], x0 = p.x0 + 2, x1 = p.x0 + 3, dentro = (x, z) => x >= x0 && x <= x1 && z >= p.z0 && z <= p.z1;
+  if (Array.isArray(S.enfeites)){ if (!S.guardados) S.guardados = {}; devolverEnfeites(dentro, `da ampliação ${artigoPredio(id) === 'a' ? 'da' : 'do'} ${nomePredio(id)}`); }
+  for (let x = x0; x <= x1; x++) for (let z = p.z0; z <= p.z1; z++){ setT(x, z, 'predio'); PREDIO_EM[iT(x, z)] = p; }
   return true;
 }
-// ao subir de nível: o lote que chegou perto do nível aparece com a obra e a placa
+function ajustarLargura(id){ const p = PREDIO[id]; p.x1 = p.x0 + (fabLarga(id) ? 3 : 1); if (fabLarga(id)) abrirAla(id); }
+// ao subir de nível ou construir a fábrica: o lote da ala que chegou perto do nível aparece
 function abrirLotesFabricas(){
   let abriu = false;
-  for (const id in FAB_NOVAS) if (fabNovaVisivel(id) && abrirLoteFabrica(id)){ abriu = true; montarFabrica(id); }
+  for (const id in AMPLIACAO) if ((loteAlaVisivel(id) || fabLarga(id)) && abrirAla(id)){ abriu = true; montarFabrica(id); }
   if (!abriu) return;
   refazerChao(); ladrilhoDeBeirada(0, 0);
   tirarDeLadrilhoFechado(ed); tirarDeLadrilhoFechado(irmaoHud); tirarDeLadrilhoFechado(irmaoDani);
@@ -12121,11 +12186,20 @@ const estFab = id => { if (!S.fabricas) S.fabricas = {}; return S.fabricas[id] |
 const FAB_VIS = {};
 const centroPredio = p => [(p.x0 + p.x1 + 1) / 2, (p.z0 + p.z1 + 1) / 2];
 function montarFabrica(id){
-  if (!fabNovaVisivel(id)) return;
   const p = PREDIO[id], F = FABRICAS[id], st = estFab(id), V = FAB_VIS[id] || (FAB_VIS[id] = {});
   const [cx, cz] = centroPredio(p);
-  for (const m of [V.mesh, V.placa]) if (m){ scene.remove(m); const i = pickaveis.indexOf(m); if (i >= 0) pickaveis.splice(i, 1); }
-  V.mesh = V.placa = V.pas = V.luz = null;
+  for (const m of [V.mesh, V.placa, V.ala]) if (m){ scene.remove(m); const i = pickaveis.indexOf(m); if (i >= 0) pickaveis.splice(i, 1); }
+  V.mesh = V.placa = V.pas = V.luz = V.ala = null;
+  // o lote da ala, antes da obra: estacas com a linha e a placa com o nível
+  if (st.feita && AMPLIACAO[id] && !fabLarga(id) && ALAS.has(id)){
+    const A = AMPLIACAO[id], g = new THREE.Group(), x = p.x0 + 3, z = p.z0 + 1;
+    g.add(malha(geo('estacasAla', () => vEstacas(2, 2).build(1 / 16, { origin: [16, 0, 16] }))));
+    const pl = malha(geo('placa', () => vPlaca().build(1 / 16, { origin: [8, 0, 8] })));
+    const tx = placaDeTexto(texturaTexto([['AMPLIAÇÃO', 1, '#7a4a2a'], [`nível ${A.nivel}`, 0.7, '#c2365f']], 256, 112, '#f3e3c3'), 13 / 16, 6 / 16);
+    tx.position.set(0, 11 / 16, 1.1 / 16); pl.add(tx); pl.position.set(0, 0, 0.85); g.add(pl);
+    g.position.set(x, 0, z); scene.add(g); V.ala = g;
+    g.traverse(o => { o.userData.alvo = { k: 'predio', p }; }); pickaveis.push(g);
+  }
   if (!st.feita){
     V.mesh = colocar(malha(geo('obra', () => vObra().build(1 / 8, { origin: [8, 0, 8] }))), cx, 0, cz);
     const pl = malha(geo('placa', () => vPlaca().build(1 / 16, { origin: [8, 0, 8] })));
@@ -12137,14 +12211,14 @@ function montarFabrica(id){
     scene.add(pl); V.placa = pl;
     pl.traverse(o => { o.userData.alvo = { k: 'predio', p }; }); pickaveis.push(pl);
   } else {
-    const larg = (p.x1 - p.x0 + 1) * 8, n = nivelReforma(id);
-    V.mesh = colocar(malha(geo('fab' + id + n, () => vReforma(id, n).build(1 / 8, { origin: [larg / 2, 0, 8] }))), cx, 0, cz, p.ry || 0);
+    const larg = (p.x1 - p.x0 + 1) * 8, n = nivelReforma(id), larga = AMPLIACAO[id] && fabLarga(id), chave = larga ? (ampliada(id) ? 'A' : 'O') : '';
+    V.mesh = colocar(malha(geo('fab' + id + n + chave, () => vPredio(id).build(1 / 8, { origin: [larg / 2, 0, 8] }))), cx, 0, cz, p.ry || 0);
     if (id === 'moinho'){ V.pas = malha(geo('pas' + n, () => vPas(n).build(1 / 8, { origin: [0, 0, 0] }))); V.pas.position.set(0, 19.5 / 8, 0.62); V.mesh.add(V.pas); }
     if (st.esteira){
       // esteira curta saindo da frente, do lado oposto à porta
       const e = malha(geo('esteira', () => vEsteira().build(1 / 16, { origin: [2, 0, 0] })));
       // o terreiro é um pátio baixo com a porta no lado de menor z: a esteira vira para lá e começa na borda do pátio
-      const pat = id === 'terreiro', sg = pat ? -1 : 1, ex = pat ? 0.9 : 0.6, ez = pat ? 0.88 : 0.62;
+      const pat = id === 'terreiro', sg = pat ? -1 : 1, ex = pat ? 0.9 : larg > 16 ? 1.6 : 0.6, ez = pat ? 0.88 : 0.62;
       e.position.set(ex, 0, sg * ez); if (pat) e.rotation.y = Math.PI; V.mesh.add(e);
       if (st.repetidor){ V.luz = new THREE.Mesh(geoPart, new THREE.MeshBasicMaterial({ color: 0x5ad16a })); V.luz.scale.setScalar(1.6); V.luz.position.set(ex, 0.36, sg * (ez + 0.81)); V.mesh.add(V.luz); }
     }
@@ -12170,7 +12244,7 @@ function construirFabrica(id){
   if (F.base && !estFab(F.base).feita){ aviso(`Construa primeiro ${artigoPredio(F.base)} ${FABRICAS[F.base].nome.toLowerCase()}`, 'ruim'); Som.erro(); return; }
   if (S.dinheiro < F.preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return; }
   if (F.preco){ gastar(F.preco); chipPulsa('chipDinheiro'); }
-  st.feita = true; montarFabrica(id);
+  st.feita = true; montarFabrica(id); abrirLotesFabricas();
   const [cx, cz] = centroPredio(PREDIO[id]);
   for (let i = 0; i < 30; i++) particula(cx + rnd(-1, 1), 0.3, cz + rnd(-1, 1), [0xffffff, 0xe2cfa0, 0xffe066][i % 3], 1.4);
   Som.moeda(); Som.nivel();
@@ -12283,7 +12357,7 @@ function itensFabrica(id){
     } else vagas += `<div class="vaga livre"><div class="vazio"></div><span class="n">livre</span><span class="t">escolha abaixo</span></div>`;
   }
   const prontos = st.feitos.length;
-  r.extraHTML = `<div class="vagas-resumo"><span>Vagas: ${ocupadas} de ${vagasFab(id)} ocupadas</span><span class="${prontos ? 'pronto' : ''}">${prontos ? `Prontos: ${prontos}` : st.esteira ? 'Esteira ligada' : 'Prontos: 0'}</span></div><div class="vagas">${vagas}</div>`;
+  r.extraHTML = `<div class="vagas-resumo"><span>Vagas: ${ocupadas} de ${vagasFab(id)} ocupadas</span><span class="${prontos ? 'pronto' : ''}">${prontos ? `Prontos: ${prontos}` : st.esteira ? 'Esteira ligada' : 'Prontos: 0'}</span></div><div class="vagas${vagasFab(id) > 6 ? ' muitas' : ''}">${vagas}</div>`;
   if (st.feitos.length){
     const recolhendo = fila.some(t => t.tipo === 'recolher' && t.alvo.id === id);
     r.classe = 'bom';
@@ -12311,7 +12385,7 @@ function itensFabrica(id){
       r.itens.push({ rotulo: ativo ? `Parar de repetir ${RECEITAS[rid].nome.toLowerCase()}` : `Repetir sempre: ${RECEITAS[rid].nome.toLowerCase()}`, sub: ativo ? 'está repetindo agora' : 'usa os ingredientes do celeiro', icone: 'repetir', leve: !ativo, fn: () => escolherRepeticao(id, rid) });
     }
   }
-  itensReforma(id, r);
+  itensReforma(id, r); itensAmpliacao(id, r);
   return r;
 }
 function executarFabrica(tarefa){
@@ -17389,11 +17463,11 @@ function livreSemColetor(x, z){
 // cabe enfeite nem passa ninguém. Refeito quando muda uma reforma
 let beiradasChave = '';
 function ladrilhoDeBeirada(x, z){
-  const chave = JSON.stringify([S.reformas || {}, S.cercados || {}, [...LOTES_FAB], S.obrasFeitas || {}, S.obra && S.obra.obra]);
+  const chave = JSON.stringify([S.reformas || {}, S.cercados || {}, [...ALAS], S.ampliadas || {}, S.obrasFeitas || {}, S.obra && (S.obra.obra || S.obra.amplia && S.obra.id)]);
   if (!beiradas || beiradasChave !== chave){
     beiradas = new Set(); beiradasChave = chave;
     for (const p of PREDIOS){
-      if ((!ORIGEM_PREDIO[p.id] && !FABRICAS[p.id]) || (p.lote && !cercadoFeito(p.id)) || (p.nova && !LOTES_FAB.has(p.id)) || (p.obra && !loteObraAberto(p.obra))) continue;
+      if ((!ORIGEM_PREDIO[p.id] && !FABRICAS[p.id]) || (p.lote && !cercadoFeito(p.id)) || (p.obra && !loteObraAberto(p.obra))) continue;
       for (const [bx, bz] of cubinhosBaixos(p.id, false)){
         if (bx > p.x0 - 0.13 && bx < p.x1 + 1.13 && bz > p.z0 - 0.13 && bz < p.z1 + 1.13) continue;
         beiradas.add(Math.floor(bx) + ',' + Math.floor(bz));
@@ -20325,6 +20399,7 @@ function subiuNivel(n){
   if (n === REFORMA.nivel[2] && S.viuCineMaurinho) libs.push('a 3ª reforma das fábricas, com 6 vagas');
   if (DESTINO.niveis.includes(n)) libs.push(n === DESTINO.niveis[0] ? 'destinar um terreno de canteiros' : 'mais uma vaga de destino de terreno');
   for (const id in FABRICAS) if (FABRICAS[id].nivel === n && FABRICAS[id].preco) libs.push(FABRICAS[id].nome.toLowerCase());
+  for (const id in AMPLIACAO) if (AMPLIACAO[id].nivel === n && S.viuCineMaurinho && estFab(id).feita) libs.push(`ampliação ${artigoPredio(id) === 'a' ? 'da' : 'do'} ${nomePredio(id)}`);
   abrirLotesFabricas();
   montarPlacasObras();
   for (const k in OBRAS) if (OBRAS[k].nivel === n && S.viuCineMaurinho) libs.push(`obra nova: ${OBRAS[k].nome.toLowerCase()}`);
@@ -21391,7 +21466,7 @@ function lembretes(){
 // como o Ed anota cada coisa no caderno; o que não tiver apelido aqui entra com o nome normal
 const APELIDOS = {
   galinha: 'Galinhas botando ovinhos', vaca: 'Vaquinhas de leite fresquinho', pato: 'Patinhos nadando no lago',
-  moinho: 'Moinho girando fubá', queijaria: 'Queijaria de dar água na boca', queijaria2: 'Mais uma queijaria, queijo em dobro', padaria2: 'Mais uma padaria, fornada em dobro', cozinha2: 'Mais uma cozinha de docinhos', padaria: 'Padaria com cheirinho de bolo', cozinha: 'Cozinha dos docinhos', terreiro: 'Terreiro pro café pegar sol', torrador: 'Torrador de café cheiroso', chocobarra: 'Fábrica de barrinhas de chocolate',
+  moinho: 'Moinho girando fubá', queijaria: 'Queijaria de dar água na boca', ampliaqueijaria: 'Queijaria ampliada, queijo em dobro', ampliapadaria: 'Padaria ampliada, fornada em dobro', ampliacozinha: 'Cozinha de doces ampliada, docinho em dobro', padaria: 'Padaria com cheirinho de bolo', cozinha: 'Cozinha dos docinhos', terreiro: 'Terreiro pro café pegar sol', torrador: 'Torrador de café cheiroso', chocobarra: 'Fábrica de barrinhas de chocolate',
   'Enxada afiada': 'Enxada que ara de montão', 'Botas de borracha': 'Botas pra correr mais', 'Botas de corrida': 'Botas de foguete', 'Regador grande': 'Regador caprichado', 'Regador gigante': 'Regador chuva de verão', 'Carrinho de mão': 'Carrinho pra colher mais', 'Carrinho grande': 'Carrinhão de colheita',
   canteiroFlor: 'Florzinhas pra enfeitar', banco: 'Banco pra tirar uma soneca', espantalho: 'Espantalho espanta-mato', poste: 'Poste pra iluminar a noite', fonte: 'Chafariz de respingar', casinhaLuma: 'Casinha pra Luma dormir', carriola: 'Carriola cheia de flores', mesaPiquenique: 'Mesa pro piquenique e pro cafezinho', relogioSol: 'Relógio de sol', pergola: 'Pérgola florida', balanco: 'Balanço de pneu pros irmãos', comedouro: 'Comedouro pros passarinhos da mata', estatua: 'Estátua do Ed, o famoso!', fogueira: 'Fogueira pras noites de inverno', laguinho: 'Laguinho do sapinho', topiaria: 'Arbusto podado com jeitinho', pocoDesejos: 'Poço dos desejos', estatuaFamilia: 'Estátua da família', bandeirinhas: 'Bandeirinhas do ArraiEd',
 };
@@ -21413,6 +21488,7 @@ function objetivosPorNivel(){
   for (const k in ANIMAIS) add(ANIMAIS[k].nivel, k, apelido(k, ANIMAIS[k].nome), ANIMAIS[k].preco);
   NIVEL_LOTE.forEach((n, i) => { if (i) add(n, 'enxada', 'Mais um pedacinho de horta', PRECO_LOTE[i]); });
   for (const k in FABRICAS) add(FABRICAS[k].nivel, k, apelido(k, FABRICAS[k].nome), FABRICAS[k].preco);
+  if (S.viuCineMaurinho) for (const k in AMPLIACAO) add(AMPLIACAO[k].nivel, k, apelido('amplia' + k, `${FABRICAS[k].nome} ampliada`), AMPLIACAO[k].preco);
   for (const k in MELHORIAS) for (const d of MELHORIAS[k].degraus) add(d.nivel, MELHORIAS[k].icone, apelido(d.nome, d.nome), d.preco);
   add(IRRIGADOR.nivel, 'irrigador', 'Chuvinha automática na horta', IRRIGADOR.preco);
   DESTINO.niveis.forEach((n, i) => add(n, 'semente', i ? 'Mais uma vaga para destinar um terreno' : 'Destinar um terreno: os ajudantes plantam sempre a mesma coisa nele'));
@@ -21880,7 +21956,7 @@ function mostrarAjuda(intro, aba){
   if (abaAjuda === 'producao') corpo = `
     <ul class="passos">
       <li><b>Construções:</b> moinho${nv(FABRICAS.moinho.nivel)}, queijaria${nv(FABRICAS.queijaria.nivel)}, padaria${nv(FABRICAS.padaria.nivel)}, cozinha de doces${nv(FABRICAS.cozinha.nivel)} e torrador${nv(FABRICAS.torrador.nivel)} ficam na área à direita. Toque numa delas, escolha a receita e o Ed leva os ingredientes. Cada uma faz até ${VAGAS_FAB} receitas em fila e continua com o jogo fechado; depois o Ed recolhe o que ficou pronto. Os produtos valem mais que os ingredientes.</li>
-      <li><b>Fábricas novas</b>${nv(FAB_NOVAS.queijaria2.nivel)}: no gramado depois da cozinha de doces cabem mais uma queijaria (nível ${FAB_NOVAS.queijaria2.nivel}, ${reais(FAB_NOVAS.queijaria2.preco)}), mais uma padaria (nível ${FAB_NOVAS.padaria2.nivel}, ${reais(FAB_NOVAS.padaria2.preco)}) e mais uma cozinha de doces (nível ${FAB_NOVAS.cozinha2.nivel}, ${reais(FAB_NOVAS.cozinha2.preco)}). Fazem as mesmas receitas da primeira, com fila, esteira e repetidor próprios: dá para cada uma repetir uma receita diferente. O lote aparece um nível antes, e o Maurinho reforma as novas como as outras.</li>
+      <li><b>Ampliação</b>${nv(AMPLIACAO.queijaria.nivel)}: o Maurinho amplia a queijaria (nível ${AMPLIACAO.queijaria.nivel}), a padaria (nível ${AMPLIACAO.padaria.nivel}) e a cozinha de doces (nível ${AMPLIACAO.cozinha.nivel}). Cada uma ganha uma ala e passa a valer por duas: o dobro de vagas, até ${(VAGAS_FAB + REFORMA.max) * 2} com as três reformas. A ampliação custa ${reais(AMPLIACAO.queijaria.preco)}, ${reais(AMPLIACAO.padaria.preco)} e ${reais(AMPLIACAO.cozinha.preco)}, mais o preço das reformas que a fábrica já tem, e depois dela cada reforma custa o dobro.</li>
       <li><b>Pomar:</b> ${(l => l.slice(0, -1).join(', ') + ' e ' + l[l.length - 1])(Object.values(FRUTIFERAS).map(F => F.nome.toLowerCase() + nv(F.nivel)))} dão frutas de novo e de novo, sem replantar nem regar. Nos níveis ${POMAR_BLOCOS[1].nivel}, ${POMAR_BLOCOS[2].nivel} e ${POMAR_BLOCOS[5].nivel} dá para comprar terrenos de pomar com mais seis covas cada (o do ${POMAR_BLOCOS[5].nivel} é a fileira entre o pomar e a cerca), mais dois no terreno novo depois de arrendado, e uma árvore pode ser cortada para dar lugar a outra.</li>
       <li><b>Colmeias</b>${nv(COLMEIA.nivel)}: dão mel, e cada colmeia deixa o pomar do mesmo lado da fazenda ${Math.round(COLMEIA.ajuda * 100)}% mais rápido.</li>
       <li><b>Café</b>${nv(CULTURAS.cafe.nivel)}: sai do pé em cereja e seca no terreiro. Só o Pelúcio, da Joli Coffee, compra o café seco, e o torrado, feito no torrador, vale ${reais(PRODUTOS.torrado.venda)}.</li>
@@ -22386,15 +22462,26 @@ async function iniciar(){
   if (!S.cercados) S.cercados = {};
   for (const id in CERCADOS) if (cercadoFeito(id)) aplicarCercado(id);
   if (S.canto === 2) liberarTilesDoCanto();
-  // os lotes das fábricas novas que já chegaram perto do nível
-  for (const id in FAB_NOVAS) if (fabNovaVisivel(id)) abrirLoteFabrica(id);
   // reformas do Maurinho: a obra que terminou com o jogo fechado já entra pronta
   if (!S.reformas) S.reformas = {};
   if (!S.obrasFeitas) S.obrasFeitas = {};
-  let obraPronta = null, obraNovaPronta = null;
+  let obraPronta = null, obraNovaPronta = null, obraAmpliaPronta = null;
   if (S.obra && Date.now() >= S.obra.fim){
-    if (S.obra.obra){ S.obrasFeitas[S.obra.obra] = S.obra.n; obraNovaPronta = S.obra; } else { S.reformas[S.obra.id] = S.obra.n; obraPronta = S.obra; }
+    if (S.obra.obra){ S.obrasFeitas[S.obra.obra] = S.obra.n; obraNovaPronta = S.obra; }
+    else if (S.obra.amplia){ if (!S.ampliadas) S.ampliadas = {}; S.ampliadas[S.obra.id] = true; obraAmpliaPronta = S.obra; }
+    else { S.reformas[S.obra.id] = S.obra.n; obraPronta = S.obra; }
     S.obra = null;
+  }
+  // a fábrica ampliada (ou em obra de ampliação) fica com 4 ladrilhos; o lote da ala que chegou perto do nível aparece
+  for (const id in AMPLIACAO){ ajustarLargura(id); if (loteAlaVisivel(id)) abrirAla(id); }
+  // a padaria e a cozinha de doces mudaram de lugar, e as árvores da fileira saíram, para caberem ampliadas (o Lucas
+  // pediu): o enfeite que estava no lugar novo volta para a loja, e a trufa ou a maçã que ficou sem árvore do lado some, uma vez
+  if (!S.fabEspacadas){
+    if (Array.isArray(S.enfeites)){ if (!S.guardados) S.guardados = {}; for (const id of ['padaria', 'cozinha']){ const P = PREDIO[id]; devolverEnfeites((x, z) => (x >= P.x0 && x <= P.x1 && z >= P.z0 && z <= P.z1) || (x === P.porta[0] && z === P.porta[1]), `novo ${artigoPredio(id) === 'a' ? 'da' : 'do'} ${nomePredio(id)}`); } }
+    const pertoDeArvore = (x, z) => tipo(x, z) === 'grama' && ARVORES.some(([ax, az]) => Math.abs(ax - x) + Math.abs(az - z) === 1);
+    if (Array.isArray(S.trufas)) S.trufas = S.trufas.filter(t => pertoDeArvore(t.x, t.z));
+    if (S.maca && !pertoDeArvore(S.maca.x, S.maca.z)) S.maca = null;
+    S.fabEspacadas = true;
   }
   // o observatório subiu para trás do spa (no lugar antigo dele fica o spa): o enfeite que estava no lugar novo volta
   // para a loja, uma vez
@@ -22461,6 +22548,8 @@ async function iniciar(){
   montarAndaime();
   // a obra que terminou com o jogo fechado também dá o XP dela
   if (obraPronta){ const { id, n } = obraPronta; setTimeout(() => { ganharXP(REFORMA.xp[n - 1]); aviso(`O Maurinho terminou a reforma ${artigoPredio(id) === 'a' ? 'da' : 'do'} ${nomePredio(id)} enquanto você estava fora!`, 'grande', 4); }, 1500); }
+  if (obraAmpliaPronta){ const { id } = obraAmpliaPronta; setTimeout(() => { ganharXP(AMPLIA_OBRA.xp); aviso(`O Maurinho terminou a ampliação ${artigoPredio(id) === 'a' ? 'da' : 'do'} ${nomePredio(id)} enquanto você estava fora! Agora são ${vagasFab(id)} vagas.`, 'grande', 4); }, 1500); }
+  if (amplMigrada.length) setTimeout(() => aviso(`As fábricas novas viraram ampliações: ${amplMigrada.map(id => `${artigoPredio(id)} ${nomePredio(id)}`).join(', ').replace(/, ([^,]*)$/, ' e $1')} ganhou uma ala, com as vagas, a fila e o que estava pronto das duas juntas.`, 'grande', 7), 3000);
   if (obraNovaPronta){
     const { obra: k, n } = obraNovaPronta, O = OBRAS[k];
     setTimeout(() => { ganharXP(O.etapas[n - 1].xp); aviso(`O Maurinho terminou ${textoEtapa(k, n)} enquanto você estava fora!`, 'grande', 4); if (O.aoTerminar) O.aoTerminar(n, true); }, 1500);
@@ -22512,7 +22601,7 @@ async function iniciar(){
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
   window.__fazenda = { flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
     galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { circulo: { forcar: () => { discoJogo.forcarCirculo = true; discoJogo.prox = 0; }, fazer: fazerCirculo, lote: loteParaCirculo, grupo: () => grupoCirculo, soltar: soltarGrupoCirculo, CIRCULO }, sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao, visita: { forcar: () => { discoJogo.forcarVisita = true; discoJogo.prox = 0; }, obj: () => etVisita, itens: itensEt, trocar: trocarEt, pedido: pedidoEt, temDisco: temDiscoJardim, VISITA_ET } }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
-      precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(FAB_NOVAS).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
+      precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(AMPLIACAO).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
     trator: () => trator, TRATOR, filaTipos: () => fila.map(t => t.tipo), checar: (t, a, q) => checar(t, a, q), enfileirarTrator: (lote, acao, semente) => enfileirar('trator', { k: 'trator', lote }, { acao, semente }), tratorVis: () => tratorVis,
     resort: { hospedes: () => hospedes, montar: montarHospedes, grade: () => gradeResort, lugares: () => lugaresResort, cena: () => inauguracao, aberto: resortAberto, HOSP },
@@ -22588,7 +22677,7 @@ async function iniciar(){
     },
     varalBaixo(){ const R = RES_VARAL; let m = 99; for (const L of VARAL.linhas) for (let i = 0; i + 1 < L.pos.length; i++){ const a0 = Math.round(L.pos[i] * R) - 1, a1 = Math.round(L.pos[i + 1] * R) - 1, caida = Math.max(3, Math.round((a1 - a0) / 12)); m = Math.min(m, (VARAL.alto - 2 - caida - 4) / R); } return m; },
     edObj: () => ed,
-    alturas: () => Object.fromEntries([['ed', ed], ['hud', irmaoHud], ['dani', irmaoDani], ['beto', beto], ['jaca', jaca], ['pelucio', pelucio], ['patrinho', patrinho], ['maurinho', maurinho], ['milton', milton]].filter(([, P]) => P && P.g).map(([n, P]) => { const b = new THREE.Box3().setFromObject(P.g); return [n, +(b.max.y - P.g.position.y).toFixed(3)]; })) }, plantio: { todos: plantarTodosVazios, vazios: vaziosParaPlantar, modo: () => modo, ligar: k => ligarModo({ tipo: 'plantar', param: k }, { icone: k }) }, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, ganharXP, nivel, fabNovas: { FAB_NOVAS, visivel: fabNovaVisivel, lotes: () => [...LOTES_FAB] }, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, irrigadorJato, volumeNaTela, Som, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+    alturas: () => Object.fromEntries([['ed', ed], ['hud', irmaoHud], ['dani', irmaoDani], ['beto', beto], ['jaca', jaca], ['pelucio', pelucio], ['patrinho', patrinho], ['maurinho', maurinho], ['milton', milton]].filter(([, P]) => P && P.g).map(([n, P]) => { const b = new THREE.Box3().setFromObject(P.g); return [n, +(b.max.y - P.g.position.y).toFixed(3)]; })) }, plantio: { todos: plantarTodosVazios, vazios: vaziosParaPlantar, modo: () => modo, ligar: k => ligarModo({ tipo: 'plantar', param: k }, { icone: k }) }, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, ganharXP, nivel, ampliacao: { AMPLIACAO, AMPLIA_OBRA, ampliar, ampliada, larga: fabLarga, preco: precoAmpliacao, precoReforma, itens: id => { const r = { itens: [], estado: '' }; itensAmpliacao(id, r); return r; }, alas: () => [...ALAS], visivel: loteAlaVisivel, terminar: () => { if (S.obra) S.obra.fim = 0; } }, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, irrigadorJato, volumeNaTela, Som, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
@@ -22665,10 +22754,11 @@ function catalogoModelos(){
     { nome: 'Canteiros', itens: [...Object.keys(CULTURAS).map(k => { const C = CULTURAS[k]; return varios(C.nome, [['Semente', () => vPlanta(k, 0)], ['Muda', () => vPlanta(k, 1)], ['Crescendo', () => vPlanta(k, 2)], ['Pronta', () => vPlanta(k, 3)], ...produto(uso(C.produto || k))], 3); }), um('Mato', vMato), varios('Solo', [['Seco', () => vSolo(false, false)], ['Molhado', () => vSolo(true, false)], ['Adubado', () => vSolo(false, true)]])] },
     { nome: 'Pomar', itens: Object.keys(FRUTIFERAS).map(k => { uso(k); return varios(FRUTIFERAS[k].nome, [['Com fruta', () => vFrutifera(k, true)], ['Sem fruta', () => vFrutifera(k, false)], ...produto(uso(FRUTIFERAS[k].fruta))]); }) },
     { nome: 'Floresta', itens: [varios('Matagal', [['Capim alto', () => vMatagal(0)], ['Moita', () => vMatagal(1)], ['Capim e pedra', () => vMatagal(2)], ['Tronco caído', () => vMatagal(3)]]), ...Object.keys(NATIVAS).map(k => { uso(k); return varios(NATIVAS[k].nome, [['Com fruto', () => vNativa(k, true)], ['Sem fruto', () => vNativa(k, false)], ...produto(uso(NATIVAS[k].produto))]); }), varios('Mata', [[ 'Copa redonda', () => vCopa(0)], ['Copa alta', () => vCopa(1)], ['Copa larga', () => vCopa(2)]])] },
-    { nome: 'Construções', itens: [um('Casa', vCasa), um('Celeiro', vCeleiro), um('Galinheiro', vGalinheiro), um('Curral', vAbrigo), um('Galinheiro novo', vGalinheiroNovo), um('Curral novo', vCurralNovo), um('Galinheiro dos patos', vCasaPatos), um('Queijaria nova', () => vFabNova('queijaria')), um('Padaria nova', () => vFabNova('padaria')), um('Cozinha de doces nova', () => vFabNova('cozinha')), um('Poço', vPoco), um('Moinho', VI.moinho), um('Queijaria', vQueijaria), um('Padaria', vPadaria), um('Cozinha de doces', vCozinha), varios('Terreiro de café', [['Cheio', () => vTerreiro(true)], ['Vazio', () => vTerreiro(false)]]), um('Torrador', vTorrador), um('Composteira', () => vComposteira(false)), um('Hangar', vHangar), um('Obra', vObra)] },
+    { nome: 'Construções', itens: [um('Casa', vCasa), um('Celeiro', vCeleiro), um('Galinheiro', vGalinheiro), um('Curral', vAbrigo), um('Galinheiro novo', vGalinheiroNovo), um('Curral novo', vCurralNovo), um('Galinheiro dos patos', vCasaPatos), um('Queijaria ampliada', () => vAmpliada('queijaria', 0)), um('Padaria ampliada', () => vAmpliada('padaria', 0)), um('Cozinha de doces ampliada', () => vAmpliada('cozinha', 0)), um('Poço', vPoco), um('Moinho', VI.moinho), um('Queijaria', vQueijaria), um('Padaria', vPadaria), um('Cozinha de doces', vCozinha), varios('Terreiro de café', [['Cheio', () => vTerreiro(true)], ['Vazio', () => vTerreiro(false)]]), um('Torrador', vTorrador), um('Composteira', () => vComposteira(false)), um('Hangar', vHangar), um('Obra', vObra)] },
     { nome: 'Reformas do Maurinho', itens: [
-      ...[['casa', 'Casa'], ['celeiro', 'Celeiro'], ['poco', 'Poço'], ['galinheiro', 'Galinheiro'], ['curral', 'Curral'], ['patos', 'Galinheiro dos patos'], ['galinheiro2', 'Galinheiro novo'], ['curral2', 'Curral novo'], ['moinho', 'Moinho'], ['queijaria', 'Queijaria'], ['padaria', 'Padaria'], ['cozinha', 'Cozinha de doces'], ['terreiro', 'Terreiro de café'], ['torrador', 'Torrador'], ['chocobarra', 'Fábrica de barras'], ['chocolateria', 'Chocolateria'], ['oficina', 'Oficina de borracha'], ['queijaria2', 'Queijaria nova'], ['padaria2', 'Padaria nova'], ['cozinha2', 'Cozinha de doces nova']]
+      ...[['casa', 'Casa'], ['celeiro', 'Celeiro'], ['poco', 'Poço'], ['galinheiro', 'Galinheiro'], ['curral', 'Curral'], ['patos', 'Galinheiro dos patos'], ['galinheiro2', 'Galinheiro novo'], ['curral2', 'Curral novo'], ['moinho', 'Moinho'], ['queijaria', 'Queijaria'], ['padaria', 'Padaria'], ['cozinha', 'Cozinha de doces'], ['terreiro', 'Terreiro de café'], ['torrador', 'Torrador'], ['chocobarra', 'Fábrica de barras'], ['chocolateria', 'Chocolateria'], ['oficina', 'Oficina de borracha']]
         .map(([id, nome]) => varios('Reforma: ' + nome, [['Original', () => id === 'moinho' ? vMoinhoCompleto(0) : vReforma(id, 0)], ['Em obra', () => vEmObra(id)], ['1ª reforma', () => id === 'moinho' ? vMoinhoCompleto(1) : vReforma(id, 1)], ...(id === 'casa' ? [] : [['2ª reforma', () => id === 'moinho' ? vMoinhoCompleto(2) : vReforma(id, 2)]]), ...(FABRICAS[id] ? [['3ª reforma', () => id === 'moinho' ? vMoinhoCompleto(3) : vReforma(id, 3)]] : [])], id === 'casa' ? 2 : FABRICAS[id] ? 4 : 3)),
+      ...[['queijaria', 'Queijaria'], ['padaria', 'Padaria'], ['cozinha', 'Cozinha de doces']].map(([id, nome]) => varios('Ampliação: ' + nome, [['Em obra', () => vEmAmpliacao(id, 0)], ['Ampliada', () => vAmpliada(id, 0)], ['1ª reforma', () => vAmpliada(id, 1)], ['2ª reforma', () => vAmpliada(id, 2)], ['3ª reforma', () => vAmpliada(id, 3)]], 4)),
       um('Prancheta', vPrancheta), um('Trena', vTrena), um('Martelo', vMartelo)] },
     { nome: 'Obras do Maurinho', itens: [
       varios('Spa dos pigs', [['Pronto', () => vSpa()], ['Com a ala nova', () => vSpa(true)], ['Obra no começo', () => vObraSubindo('spa', 0, 1)], ['Obra na metade', () => vObraSubindo('spa', 0, 4)], ['Ala nova na metade', () => vObraSubindo('spa', 1, 4)]]),
