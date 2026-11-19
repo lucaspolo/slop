@@ -19815,7 +19815,8 @@ function alvosHud(){
   }
   S.pomar.forEach((d, i) => { const alvo = { k: 'pomar', i }; if (d && d.pronto && !reservado(alvo)){ const [x, z] = POMAR_SLOTS[i]; out.push(['colherFruta', alvo, x + 0.5, z + 1.5]); } });
   S.colmeias.forEach((d, i) => { const alvo = { k: 'colmeia', i }; if (d && d.pronto && !reservado(alvo)){ const [x, z] = COLMEIA_SLOTS[i]; out.push(['coletarMel', alvo, x + 0.5, z + 1.5]); } });
-  (S.mata || []).forEach((d, i) => { const alvo = { k: 'mata', i }; if (d && d.pronto && !reservado(alvo)){ const [x, z] = MATA_SLOTS[i].pe; out.push(['coletarMata', alvo, x + 0.5, z + 0.5]); } });
+  // com um galho caído fechando a trilha, as nativas de trás dele ficam para depois (o Lucas viu os dois travados ali)
+  (S.mata || []).forEach((d, i) => { const alvo = { k: 'mata', i }; if (d && d.pronto && !reservado(alvo) && !galhoFecha(MATA_SLOTS[i].p)){ const [x, z] = MATA_SLOTS[i].pe; out.push(['coletarMata', alvo, x + 0.5, z + 0.5]); } });
   // nos terrenos destinados: ara a grama e planta a cultura escolhida nos canteiros vazios (o 5º item é a cultura)
   for (const l of lotesDestinados()){
     const k = S.destinos[l];
@@ -19890,12 +19891,13 @@ function atualizarAjudante(A, dt, t){
   Hd.ir(pts, () => {
     const sl = alvo.k === 'pomar' ? POMAR_SLOTS[alvo.i] : alvo.k === 'colmeia' ? COLMEIA_SLOTS[alvo.i] : alvo.k === 'mata' ? MATA_XZ[alvo.i] : null;
     Hd.olhar(sl ? sl[0] + 0.5 : tx, sl ? sl[1] + 0.5 : tz);
-    if (!checar(tipo, alvo, param).ok){ setReserva(alvo, null); A.tarefa = null; return; }
+    // não deu (um galho fechou a trilha, outro colheu antes): esquece esse alvo por um tempo, senão ele escolhe o mesmo de novo
+    if (!checar(tipo, alvo, param).ok){ setReserva(alvo, null); A.tarefa = null; ignoradosHud.set(tipo + JSON.stringify(alvo), Date.now() + 20000); return; }
     efeitoDuranteTrabalho(tarefa);
     Hd.trabalhar(DUR[tipo] * A.ritmo, FERR[tipo], () => {
       setReserva(alvo, null); A.tarefa = null;
       const r = checar(tipo, alvo, param);
-      if (!r.ok) return;
+      if (!r.ok){ ignoradosHud.set(tipo + JSON.stringify(alvo), Date.now() + 20000); return; }
       // a semente sai da bolsa; sem ela, o ajudante compra com o dinheiro da fazenda, como o Ed
       if (tipo === 'plantar'){ const c = r.custo || {}; if (c.semente) S.bolsa[c.semente]--; if (c.dinheiro) S.dinheiro -= c.dinheiro; hud(); }
       executar(tarefa);
@@ -23165,7 +23167,7 @@ async function iniciar(){
     },
     varalBaixo(){ const R = RES_VARAL; let m = 99; for (const L of linhasVaral()) for (let i = 0; i + 1 < L.pos.length; i++){ const a0 = Math.round(L.pos[i] * R) - 1, a1 = Math.round(L.pos[i + 1] * R) - 1, caida = Math.max(3, Math.round((a1 - a0) / 12)); m = Math.min(m, (VARAL.alto - 2 - caida - 4) / R); } return m; },
     edObj: () => ed,
-    alturas: () => Object.fromEntries([['ed', ed], ['hud', irmaoHud], ['dani', irmaoDani], ['beto', beto], ['jaca', jaca], ['pelucio', pelucio], ['patrinho', patrinho], ['maurinho', maurinho], ['milton', milton]].filter(([, P]) => P && P.g).map(([n, P]) => { const b = new THREE.Box3().setFromObject(P.g); return [n, +(b.max.y - P.g.position.y).toFixed(3)]; })) }, plantio: { todos: plantarTodosVazios, vazios: vaziosParaPlantar, modo: () => modo, ligar: k => ligarModo({ tipo: 'plantar', param: k }, { icone: k }) }, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, ganharXP, nivel, fichas: { FICHAS_BICHOS, abrir: abrirFicha, retrato: retratoBicho, tela: (x, y, z) => tela(new THREE.Vector3(x, y, z)) }, ampliacao: { AMPLIACAO, AMPLIA_OBRA, ampliar, ampliada, larga: fabLarga, preco: precoAmpliacao, precoReforma, itens: id => { const r = { itens: [], estado: '' }; itensAmpliacao(id, r); return r; }, alas: () => [...ALAS], visivel: loteAlaVisivel, terminar: () => { if (S.obra) S.obra.fim = 0; } }, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, irrigadorJato, volumeNaTela, Som, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+    alturas: () => Object.fromEntries([['ed', ed], ['hud', irmaoHud], ['dani', irmaoDani], ['beto', beto], ['jaca', jaca], ['pelucio', pelucio], ['patrinho', patrinho], ['maurinho', maurinho], ['milton', milton]].filter(([, P]) => P && P.g).map(([n, P]) => { const b = new THREE.Box3().setFromObject(P.g); return [n, +(b.max.y - P.g.position.y).toFixed(3)]; })) }, plantio: { todos: plantarTodosVazios, vazios: vaziosParaPlantar, modo: () => modo, ligar: k => ligarModo({ tipo: 'plantar', param: k }, { icone: k }) }, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, ganharXP, nivel, ajudantes: { tarefa: q => (q === 'dani' ? tarefaDani : tarefaHud), alvos: () => alvosHud() }, fichas: { FICHAS_BICHOS, abrir: abrirFicha, retrato: retratoBicho, tela: (x, y, z) => tela(new THREE.Vector3(x, y, z)) }, ampliacao: { AMPLIACAO, AMPLIA_OBRA, ampliar, ampliada, larga: fabLarga, preco: precoAmpliacao, precoReforma, itens: id => { const r = { itens: [], estado: '' }; itensAmpliacao(id, r); return r; }, alas: () => [...ALAS], visivel: loteAlaVisivel, terminar: () => { if (S.obra) S.obra.fim = 0; } }, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, irrigadorJato, volumeNaTela, Som, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
