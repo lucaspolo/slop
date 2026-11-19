@@ -4665,11 +4665,15 @@ const BICHOS_MATA = { primeira: [30, 90], intervalo: [45, 120],
   pesos: { bugio: 3, tucano: 3, papagaio: 3, jaguatirica: 2, cobra: 2, cutia: 3, tatu: 2, quati: 2, tamandua: 1.5, anta: 1.2, jabuti: 1.5, onca: 0.4, preguica: 1.5, arara: 2.5, mico: 2, borboletas: 2.5 },
   modelos: { bugio: [() => vBugio(), 1 / 22], tucano: [() => vTucano(true), 1 / 22], papagaio: [() => vPapagaio(true), 1 / 22], jaguatirica: [() => vJaguatirica(), 1 / 20], cobra: [() => vCobraCoralEsticada(), 1 / 22],
     cutia: [() => vCutia(), 1 / 24], tatu: [() => vTatu(), 1 / 24], quati: [() => vBandoQuati(), 1 / 26], tamandua: [() => vTamandua(), 1 / 24], anta: [() => vAnta(), 1 / 24], jabuti: [() => vJabuti(), 1 / 26],
-    onca: [() => vOnca(), 1 / 22], preguica: [() => vPreguica(true), 1 / 24], arara: [() => vCasalArara(), 1 / 22], mico: [() => vMicoLeao(), 1 / 26], borboletas: [() => vBorboleta(), 1 / 34] },
+    onca: [() => vOnca(), 1 / 22], preguica: [() => vPreguica(true), 1 / 24], arara: [() => vCasalArara(), 1 / 22], mico: [() => vMicoLeao(), 1 / 26], borboletas: [() => vBorboleta(), 1 / 34],
+    // o bando de porcos-do-rio-vermelho só aparece na cachoeira (VISITA_CACHOEIRA)
+    porcoRio: [() => vPorcoRio(), 1 / 40] },
   // as três borboletas, cada uma uma malha (para bater as asas sozinha), em volta do ponto do caminho
-  bando: { borboletas: [[0, 0, 0], [-0.28, 0.16, -0.2], [0.24, 0.3, -0.14]] },
+  bando: { borboletas: [[0, 0, 0], [-0.28, 0.16, -0.2], [0.24, 0.3, -0.14]],
+    // o casal e o filhote (o quarto número é a escala), cada um uma malha, para baixar a cabeça sozinho
+    porcoRio: [[-0.25, 0, 0.1], [0.25, 0, -0.1], [0, 0, -0.55, 0.72]] },
   // como cada um balança andando: [ritmo, altura do passo]
-  anda: { jaguatirica: [9, 0.03], cutia: [16, 0.05], quati: [10, 0.03], tamandua: [5, 0.02], anta: [4, 0.025], onca: [7, 0.03], tatu: [12, 0.015], jabuti: [3, 0.008] },
+  anda: { porcoRio: [9, 0.025], jaguatirica: [9, 0.03], cutia: [16, 0.05], quati: [10, 0.03], tamandua: [5, 0.02], anta: [4, 0.025], onca: [7, 0.03], tatu: [12, 0.015], jabuti: [3, 0.008] },
   // a chance de a cutia deixar uma castanha (com a castanheira liberada); quanto tempo o tatu cava; até quando ele espera a Luma
   castanha: 0.35, cava: [12, 16], esperaLuma: 40 };
 BICHOS_MATA.tipos = Object.keys(BICHOS_MATA.pesos);
@@ -4759,7 +4763,7 @@ function soltarBichoMata(tipo){
 // o bicho (ou o bando) que anda pelos pontos de um caminho (caminhoBicho, caminhoCachoeira)
 function criarBicho(tipo, pts){
   const [fn, esc] = BICHOS_MATA.modelos[tipo], g = new THREE.Group(), gm = geo('bichoMata' + tipo, () => fn().build(esc, { origin: [0.5, 0, 0.5], jitter: 0.03 }));
-  const ms = (BICHOS_MATA.bando[tipo] || [[0, 0, 0]]).map(([x, y, z]) => { const m = malha(gm); m.position.set(x, y, z); g.add(m); return m; });
+  const ms = (BICHOS_MATA.bando[tipo] || [[0, 0, 0]]).map(([x, y, z, e]) => { const m = malha(gm); m.position.set(x, y, z); if (e) m.scale.setScalar(e); g.add(m); return m; });
   g.position.copy(pts[0].p); g.rotation.y = cam.az; scene.add(g);
   return { tipo, g, m: ms[0], ms, pts, i: 1, tt: 0, falou: false, nome: 'bicho', topo(){ return this.g.position.clone().add(new THREE.Vector3(0, 1.1, 0)); } };
 }
@@ -4883,7 +4887,7 @@ function passoBicho(B, dt, t){
   if (!P) return true;
   B.tt += dt;
   const de = B.pts[B.i - 1].p, g = B.g, m = B.m, borb = B.tipo === 'borboletas';
-  m.rotation.set(0, 0, 0);
+  for (const q of B.ms) q.rotation.set(0, 0, 0);
   // as borboletas batem as asas o tempo todo, cada uma no seu ritmo (mais devagar paradas no ar)
   if (borb) B.ms.forEach((q, i) => { q.scale.x = 0.3 + 0.7 * Math.abs(Math.sin(t * (B.tt < P.dur ? 13 : 8) + i * 1.7)); });
   if (B.tt < P.dur){
@@ -4919,6 +4923,8 @@ function passoBicho(B, dt, t){
     if (borb) g.position.y += Math.sin(q * 2) * 0.08;
     if (B.tipo === 'preguica') m.rotation.z = Math.sin(q * 0.5) * 0.08;
     if (P.fareja) m.rotation.x = 0.1 + Math.sin(q * 3) * 0.05;
+    // no bando que não é de borboletas, os outros abaixam a cabeça junto, cada um num ritmo
+    if (!borb) B.ms.forEach((o, i) => { if (i) o.rotation.x = m.rotation.x * (0.85 + 0.15 * Math.sin(q * 2 + i * 1.9)); });
     // a cutia às vezes deixa uma castanha para a fazenda
     if (P.castanha && !B.castanha && q > 1.2){
       B.castanha = true;
@@ -4929,6 +4935,7 @@ function passoBicho(B, dt, t){
       if (B.tipo === 'bugio') Som.tom(150, 0.8, 'sawtooth', 0.02, 230);
       else if (B.tipo === 'onca') Som.tom(95, 0.9, 'sawtooth', 0.025, 70);
       else if (B.tipo === 'mico') Som.tom(1700, 0.12, 'square', 0.015, 2200);
+      else if (B.tipo === 'porcoRio') Som.tom(130, 0.35, 'sawtooth', 0.02, 95);
       else if (B.tipo === 'arara') Som.tom(900, 0.16, 'sawtooth', 0.02, 620);
       else Som.tom(1300, 0.09, 'square', 0.02, 850);
     }
@@ -4943,9 +4950,9 @@ function passoBicho(B, dt, t){
 // tucanos e os papagaios pousam numa pedra da beira para beber. Um de cada vez, à parte dos bichos da beira da mata, e só
 // quando a beira escolhida aparece na tela. Não mexe no save
 const VISITA_CACHOEIRA = { primeira: [6, 14], intervalo: [18, 40],
-  pesos: { anta: 2, onca: 0.8, jaguatirica: 1.5, quati: 2, cutia: 2, tamandua: 1.2, jabuti: 0.8, tatu: 1, arara: 2, tucano: 1.5, papagaio: 1 },
+  pesos: { porcoRio: 2, anta: 2, onca: 0.8, jaguatirica: 1.5, quati: 2, cutia: 2, tamandua: 1.2, jabuti: 0.8, tatu: 1, arara: 2, tucano: 1.5, papagaio: 1 },
   // a velocidade de cada um pela margem, em ladrilhos por segundo
-  vel: { anta: 0.45, onca: 0.6, jaguatirica: 0.7, quati: 0.65, cutia: 1.1, tamandua: 0.4, jabuti: 0.12, tatu: 0.45 },
+  vel: { porcoRio: 0.55, anta: 0.45, onca: 0.6, jaguatirica: 0.7, quati: 0.65, cutia: 1.1, tamandua: 0.4, jabuti: 0.12, tatu: 0.45 },
   bebe: [5, 9], molho: [8, 13], agua: -0.3, centro: [5, 46.5] };
 let visitaCachoeira = null, proxVisitaCachoeira = null, beirasCach = null;
 // os lugares de beber: cada ladrilho de margem encostado na água, virado para ela, com o caminho pela margem até a mata
@@ -4993,7 +5000,9 @@ function caminhoCachoeira(tipo){
   if (!l.length) return null;
   const b = sorteia(l), vel = VC.vel[tipo] || 0.6, n = b.pts.length, pts = [{ p: b.pts[0] }];
   for (let i = 1; i < n; i++) pts.push({ p: b.pts[i], dur: b.pts[i].distanceTo(b.pts[i - 1]) / vel });
-  Object.assign(pts[n - 1], { para: rnd(...VC.bebe), bebe: true, olha: b.ang, fala: tipo === 'onca' ? 'Grrr...' : null });
+  Object.assign(pts[n - 1], { para: rnd(...VC.bebe), bebe: true, olha: b.ang, fala: tipo === 'onca' ? 'Grrr...' : tipo === 'porcoRio' ? 'Ronc, ronc!' : null });
+  // o bando de porcos-do-rio-vermelho, depois de beber, fuça a margem um pouco antes de voltar
+  if (tipo === 'porcoRio' && n > 1){ const q = b.pts[n - 1].clone().lerp(b.pts[n - 2], 0.5); pts.push({ p: q, dur: q.distanceTo(b.pts[n - 1]) / vel, para: rnd(3, 5), fareja: true }); }
   // a anta entra na água, fica de molho e sai pela mesma beira
   if (tipo === 'anta' && b.agua) pts.push({ p: b.agua, dur: 2.6, para: rnd(...VC.molho) }, { p: b.pts[n - 1].clone(), dur: 2.6 });
   for (let i = n - 2; i >= 0; i--) pts.push({ p: b.pts[i].clone(), dur: b.pts[i].distanceTo(b.pts[i + 1]) / vel });
