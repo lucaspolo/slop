@@ -322,7 +322,12 @@ body.primeira-pessoa .hud-topo,body.primeira-pessoa .hud-base,body.primeira-pess
 .vista-ed{position:absolute;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;gap:14px;padding:8px 8px 8px 16px;font-weight:700;z-index:6;max-width:calc(100vw - 24px)}
 .vista-ed span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .vista-ed .botao{flex:none}
-.vista-ed[hidden],.vista-ed-legenda[hidden]{display:none}
+.vista-ed[hidden],.vista-ed-legenda[hidden],.controle-ed[hidden]{display:none}
+.controle-ed{position:absolute;right:max(18px,env(safe-area-inset-right));bottom:calc(86px + env(safe-area-inset-bottom));width:124px;height:124px;border-radius:50%;background:rgba(32,22,16,.32);border:3px solid rgba(253,248,239,.85);box-shadow:0 3px 0 rgba(32,22,16,.35);touch-action:none;z-index:7;display:grid;place-items:center;cursor:grab;-webkit-user-select:none;user-select:none}
+.controle-ed::before{content:'';position:absolute;inset:16px;border-radius:50%;border:2px dashed rgba(253,248,239,.55);pointer-events:none}
+.controle-ed .manche{width:56px;height:56px;border-radius:50%;background:var(--amarelo);border:3px solid var(--borda);box-shadow:0 3px 0 var(--borda);pointer-events:none;transition:transform .12s}
+.controle-ed.ativo .manche{transition:none}
+body.com-controle .vista-ed-legenda{bottom:calc(224px + env(safe-area-inset-bottom))}
 .vista-ed-legenda{position:absolute;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);max-width:min(520px,calc(100vw - 32px));padding:8px 14px;background:rgba(32,22,16,.78);color:#fff;border-radius:12px;font-weight:700;font-size:15px;line-height:1.3;text-align:center;pointer-events:none;z-index:6}
 @media (max-width:520px){.vista-ed{gap:10px;padding-left:12px}.vista-ed span{font-size:13px}.vista-ed .botao{font-size:13px}}
 .janela-topo.rosa2{background:#f7c9c3}
@@ -534,6 +539,7 @@ body.modelos #tela{position:absolute;top:var(--md-topo,84px);left:300px;width:ca
     </div>
   </div>
 
+  <div class="controle-ed" id="controleEd" hidden aria-label="Controle para o Ed andar"><div class="manche"></div></div>
   <div class="vista-ed painel" id="vistaEd" hidden><span id="vistaEdFaz"></span><button class="botao" id="vistaEdSair" type="button">Voltar para a vista de cima</button></div>
   <div class="vista-ed-legenda" id="vistaEdLegenda" hidden></div>
   <div class="mirante-1p painel" id="mirante1p" hidden><span>Arraste para olhar</span><div class="cam-grupo"><button class="cam" id="miranteMenos" type="button" aria-label="Afastar" title="Afastar (-)"><svg viewBox="0 0 24 24" fill="none" stroke="#3b2a20" stroke-width="3.4" stroke-linecap="round"><path d="M5 12h14"/></svg></button><button class="cam" id="miranteMais" type="button" aria-label="Aproximar" title="Aproximar (+)"><svg viewBox="0 0 24 24" fill="none" stroke="#3b2a20" stroke-width="3.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button></div><button class="botao" id="miranteDescer" type="button">Descer</button></div>
@@ -7536,14 +7542,16 @@ function entrarVistaEd(){
   Som.clique(); fecharMenu(); desligarModo();
   abrirPrimeiraPessoa(VISTA_ED.fov, VISTA_ED.nevoa, true);
   vistaEd = { yaw: ed.ang + Math.PI, pitch: VISTA_ED.pitch, dyaw: 0, dpitch: 0, d: VISTA_ED.dist, mexeu: 0, ceu: '', txt: '', legendaAte: 0 };
-  $('vistaEd').hidden = false; $('vistaEdLegenda').hidden = true;
+  $('vistaEd').hidden = false; $('vistaEdLegenda').hidden = true; $('controleEd').hidden = false; document.body.classList.add('com-controle'); soltarControleEd();
   atualizarVistaEd(0);
 }
 function sairVistaEd(){
   if (!vistaEd) return;
   vistaEd = null;
   fecharPrimeiraPessoa();
-  $('vistaEd').hidden = true; $('vistaEdLegenda').hidden = true;
+  $('vistaEd').hidden = true; $('vistaEdLegenda').hidden = true; $('controleEd').hidden = true; document.body.classList.remove('com-controle');
+  if (controleEd.andando && ed.estado === 'andando' && !tarefaAtual){ ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; }
+  soltarControleEd(); controleEd.ultimo = -1e9;
   cam.alvo.set(ed.pos.x, 0, ed.pos.y);
 }
 function girarVistaEd(dx, dy){
@@ -7558,11 +7566,59 @@ function oQueOEdFaz(){
   if (balancoEd) return 'No balanço';
   if (passeio) return passeio.fase === 'voando' ? 'Voando com o Milton' : 'Indo passear de avião';
   if (miranteFP) return 'No mirante';
+  if (controleManual()){ const nf = fila.filter(f => f.tipo !== 'andar').length; return 'Andando com o controle' + (nf ? ` · ${nf} na fila esperando` : ''); }
   const t = tarefaAtual, nf = fila.filter(f => f.tipo !== 'andar' && f !== t).length;
   let txt = t && t.tipo !== 'andar' && NOMES_ACAO[t.tipo] ? NOMES_ACAO[t.tipo] + (typeof t.param === 'string' && CULTURAS[t.param] ? ' ' + CULTURAS[t.param].nome.toLowerCase() : '')
     : ed.estado === 'andando' ? 'Andando pela fazenda' : 'Esperando uma tarefa';
   if (nf) txt += ` · mais ${nf} na fila`;
   return txt;
+}
+// o controle de andar (o Lucas pediu): na vista do Ed, um manche na tela (e W, A, S, D no teclado) leva o Ed para onde
+// apontar, em relação à câmera. Enquanto ele é usado, e por CONTROLE_ED.espera segundos depois de soltar, a fila espera
+// (segurarFila); se o Ed ia para uma tarefa, ela volta para o começo da fila e ele a retoma depois. Trabalhando, no trator,
+// nadando, no balanço, no banho ou no passeio de avião o controle não mexe nele. Com o controle a câmera para de seguir as
+// voltas do Ed (senão andar para trás viraria a câmera junto) e volta a seguir CONTROLE_ED.olhar segundos depois
+const CONTROLE_ED = { raio: 46, morto: 0.2, espera: 2.5, olhar: 1.2, frente: 0.4 };
+const controleEd = { x: 0, y: 0, id: null, ultimo: -1e9, andando: false, teclas: new Set() };
+const controleManual = () => !!vistaEd && performance.now() - controleEd.ultimo < CONTROLE_ED.espera * 1000;
+const podeControlarEd = () => !cine && !trator && !banhoEd && !nadoDe(ed) && !balancoEd && !passeio && !miranteFP && ed.g.visible && (ed.estado === 'parado' || ed.estado === 'andando');
+function montarControleEd(){
+  const base = $('controleEd'), manche = base.querySelector('.manche');
+  const mover = e => {
+    const r = base.getBoundingClientRect(), R = CONTROLE_ED.raio;
+    let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+    const d = Math.hypot(dx, dy); if (d > R){ dx *= R / d; dy *= R / d; }
+    controleEd.x = dx / R; controleEd.y = dy / R; manche.style.transform = `translate(${dx}px, ${dy}px)`;
+  };
+  base.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); base.setPointerCapture(e.pointerId); controleEd.id = e.pointerId; base.classList.add('ativo'); mover(e); });
+  base.addEventListener('pointermove', e => { if (e.pointerId === controleEd.id){ e.preventDefault(); mover(e); } });
+  const solta = e => { if (e.pointerId !== controleEd.id) return; controleEd.id = null; controleEd.x = controleEd.y = 0; manche.style.transform = ''; base.classList.remove('ativo'); };
+  base.addEventListener('pointerup', solta); base.addEventListener('pointercancel', solta); base.addEventListener('lostpointercapture', solta);
+}
+function soltarControleEd(){ controleEd.x = controleEd.y = 0; controleEd.id = null; controleEd.teclas.clear(); controleEd.andando = false; const b = $('controleEd'); b.classList.remove('ativo'); b.querySelector('.manche').style.transform = ''; }
+function passoControleEd(V){
+  const T = controleEd.teclas;
+  let jx = controleEd.x + (T.has('d') ? 1 : 0) - (T.has('a') ? 1 : 0), jy = controleEd.y + (T.has('s') ? 1 : 0) - (T.has('w') ? 1 : 0);
+  const m = Math.hypot(jx, jy);
+  if (m < CONTROLE_ED.morto || !podeControlarEd()){
+    // soltou: o Ed para onde está
+    if (controleEd.andando){ controleEd.andando = false; if (ed.estado === 'andando' && !tarefaAtual){ ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; } }
+    return;
+  }
+  if (m > 1){ jx /= m; jy /= m; }
+  controleEd.ultimo = performance.now();
+  // ia para uma tarefa: ela fica esperando no começo da fila
+  if (tarefaAtual){ if (ed.estado !== 'andando') return; tarefaAtual = null; ed.aoChegar = null; ed.ferramenta(null); hud(); }
+  const yaw = V.yaw + V.dyaw, fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+  let dx = fx * -jy + rx * jx, dz = fz * -jy + rz * jx; const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
+  const F = CONTROLE_ED.frente, livre = (x, z) => x >= 0 && z >= 0 && x < W && z < H && andavel(Math.floor(x), Math.floor(z));
+  // contra uma parede, escorrega pelo lado que dá
+  for (const [ax, az] of [[dx, dz], [dx, 0], [0, dz]]){
+    if (!ax && !az) continue;
+    const tx = ed.pos.x + ax * F, tz = ed.pos.y + az * F;
+    if (livre(tx, tz) && livre(ed.pos.x + ax * 0.2, ed.pos.y + az * 0.2)){ ed.ir([[tx, tz]], null); controleEd.andando = true; return; }
+  }
+  if (ed.estado === 'andando'){ ed.pontos = []; ed.estado = 'parado'; }
 }
 // até onde a câmera pode ir para trás do ombro sem passar por dentro de uma construção, árvore ou enfeite (o Ed e os
 // bichos não contam); o chão também segura, para ela não descer abaixo da grama olhando para cima
@@ -7590,7 +7646,8 @@ function atualizarVistaEd(dt){
   const V = vistaEd; if (!V) return;
   if (cine || miranteFP){ sairVistaEd(); return; }
   const R = VISTA_ED, trab = ed.estado === 'trabalhando', k = Math.min(1, dt * 3);
-  V.yaw = anguloPerto(V.yaw, ed.ang + Math.PI, Math.min(1, dt * R.segue));
+  passoControleEd(V);
+  if (performance.now() - controleEd.ultimo > CONTROLE_ED.olhar * 1000) V.yaw = anguloPerto(V.yaw, ed.ang + Math.PI, Math.min(1, dt * R.segue));
   V.pitch += ((trab ? R.olharBaixo : R.pitch) - V.pitch) * k;
   if (performance.now() - V.mexeu > R.volta * 1000){ const q = Math.min(1, dt * R.voltaVel); V.dyaw -= V.dyaw * q; V.dpitch -= V.dpitch * q; }
   const yaw = V.yaw + V.dyaw, pitch = V.pitch + V.dpitch;
@@ -18758,7 +18815,7 @@ function precisaNanar(){
   return S.relogio >= NANAR.hora || dormirPedido;
 }
 // na hora de nanar o Ed termina o que está fazendo e não pega a próxima tarefa da fila (ela fica para a manhã)
-const segurarFila = () => precisaNanar();
+const segurarFila = () => precisaNanar() || controleManual();
 function fatorEd(){
   if (!S) return 1;
   if (S.descansado === diaAtual() && (S.relogio || 0) < 0.4) return NANAR.rapido;
@@ -22670,10 +22727,11 @@ function eventos(){
       else if (k === 'arrowup' || k === 'w') girarMirante(0, -30); else if (k === 'arrowdown' || k === 's') girarMirante(0, 30);
       return;
     }
-    // na vista do Ed as setas viram a cabeça dele
+    // na vista do Ed as setas giram a câmera e W, A, S, D fazem o Ed andar (passoControleEd)
     if (vistaEd){
-      if (k === 'arrowleft' || k === 'a') girarVistaEd(-40, 0); else if (k === 'arrowright' || k === 'd') girarVistaEd(40, 0);
-      else if (k === 'arrowup' || k === 'w') girarVistaEd(0, -30); else if (k === 'arrowdown' || k === 's') girarVistaEd(0, 30);
+      if ('wasd'.includes(k) && k.length === 1){ controleEd.teclas.add(k); return; }
+      if (k === 'arrowleft') girarVistaEd(-40, 0); else if (k === 'arrowright') girarVistaEd(40, 0);
+      else if (k === 'arrowup') girarVistaEd(0, -30); else if (k === 'arrowdown') girarVistaEd(0, 30);
       return;
     }
     if (k === 'q') girar(-1); else if (k === 'e') girar(1);
@@ -22681,6 +22739,9 @@ function eventos(){
     else if (k === 'arrowleft' || k === 'a') arrastar(passo, 0); else if (k === 'arrowright' || k === 'd') arrastar(-passo, 0);
     else if (k === 'arrowup' || k === 'w') arrastar(0, passo); else if (k === 'arrowdown' || k === 's') arrastar(0, -passo);
   });
+  addEventListener('keyup', e => controleEd.teclas.delete(e.key.toLowerCase()));
+  addEventListener('blur', () => controleEd.teclas.clear());
+  montarControleEd();
   // com a aba escondida o jogo não anda: ao voltar, pausa o Hud e os pedidos pelo tempo que ficou fora
   let escondidoEm = 0;
   document.addEventListener('visibilitychange', () => {
