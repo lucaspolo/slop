@@ -803,6 +803,9 @@ const CULTURAS = {
   cafe:     { nome:'Café',     plural:'cerejas de café', semente:70, tempo:720, venda:40, rend:4, xp:22, nivel:15, produto:'cereja' },
   alcachofra:{ nome:'Alcachofra', plural:'alcachofras', semente:100, tempo:780, venda:52, rend:4, xp:22, nivel:16 },
   pitaya:   { nome:'Pitaya', plural:'pitayas', semente:120, tempo:840, venda:60, rend:4, xp:24, nivel:18 },
+  // a semente espacial (o Lucas pediu): só vem do ETzinho (presenteEt, a visita dele), não está na loja e não libera por
+  // nível (999 deixa ela fora de todas as listas por nível); planta-se da bolsa, cresce rápido, vale muito e brilha de noite
+  melanciaLunar: { nome:'Melancia lunar', plural:'melancias lunares', semente:0, tempo:240, venda:420, rend:1, xp:30, nivel:999, espacial:true },
 };
 const ORDEM_CULTURAS = Object.keys(CULTURAS);
 const ANIMAIS = {
@@ -2128,7 +2131,19 @@ function vSolo(molhado, adubado){
   return v;
 }
 const P4 = [[4, 4], [11, 4], [4, 11], [11, 11]];
+// a melancia lunar: a rama da melancia em verde-azulado e, madura, a fruta azul-escura com listras e pintinhas que brilham
+const LUNAR = { folha: [0x3a9f9a, 0x2f7f8a, 0x4fb8b0], casca: 0x2a2f6a, listra: 0x6fe3ff, pinta: 0xfff3a0 };
+function vPlantaLunar(est){
+  const v = vPlanta('melancia', Math.min(est, 2)), troca = { [COR.verde]: LUNAR.folha[0], [COR.verde2]: LUNAR.folha[2], 0x3e7f2b: LUNAR.folha[1], 0x2f7d32: LUNAR.folha[1], 0x58aa48: LUNAR.folha[0] };
+  for (const e of v.m.values()) if (troca[e.c] != null) e.c = troca[e.c]; else if (e.c === SEMENTE.melancia) e.c = LUNAR.listra;
+  if (est < 3) return v;
+  v.m.clear(); folhagemLunar(v);
+  v.ell(7.5, 3, 7.5, 5.6, 3.3, 4.3, (X, Y, Z) => hash(X, Y, Z) < 0.06 ? LUNAR.pinta : ((X % 3) + 3) % 3 === 0 ? LUNAR.listra : LUNAR.casca);
+  return v;
+}
+function folhagemLunar(v){ for (const [x, z] of [[2, 2], [13, 3], [2, 13], [13, 12], [8, 1], [1, 8], [14, 8], [8, 14]]) v.ell(x, 0.6, z, 1.6, 1, 1.6, hash(x, 0, z) < 0.5 ? LUNAR.folha[0] : LUNAR.folha[2]); }
 function vPlanta(cult, est){
+  if (cult === 'melanciaLunar') return vPlantaLunar(est);
   const v = new Vox();
   const grande = cult === 'abobora' || cult === 'melancia';
   if (est < 3){ plantaJovem(v, cult, est); return v; }
@@ -4276,8 +4291,10 @@ function presenteEt(){
   for (let i = 0; i < 16; i++) particula(o.x + rnd(-0.3, 0.3), Math.max(0.2, o.y - 0.4), o.z + rnd(-0.3, 0.3), [0xffd84d, 0xff7ac8, 0x6fe3ff][i % 3], -1);
   const r = Math.random(), alvo = ed.g.visible ? ed.topo() : o.clone().setY(1);
   let txt;
-  if (r < 0.4){ const v = 150 * nivel(); S.dinheiro += v; chipPulsa('chipDinheiro'); flutuar(alvo, '+' + reais(v), 'ouro'); txt = reais(v); }
-  else if (r < 0.75 || !ANI.length){
+  // metade das vezes, as sementes que só o ETzinho tem
+  if (r < 0.5){ const q = 3 + Math.floor(Math.random() * 3); S.bolsa.melanciaLunar = (S.bolsa.melanciaLunar || 0) + q; flutuar(alvo, '+' + q, '', 'melanciaLunar'); txt = `${q} sementes de melancia lunar, que só ele tem`; }
+  else if (r < 0.7){ const v = 150 * nivel(); S.dinheiro += v; chipPulsa('chipDinheiro'); flutuar(alvo, '+' + reais(v), 'ouro'); txt = reais(v); }
+  else if (r < 0.88 || !ANI.length){
     const l = ORDEM_CULTURAS.filter(c => CULTURAS[c].nivel <= nivel()), k = sorteia(l), q = 12;
     S.bolsa[k] = (S.bolsa[k] || 0) + q; flutuar(alvo, '+' + q, '', k); txt = `${q} sementes de ${CULTURAS[k].nome.toLowerCase()}`;
   } else { const q = 40; S.racao += q; chipPulsa('chipRacao'); flutuar(alvo, '+' + q, '', 'racao'); txt = `${q} rações`; }
@@ -4383,6 +4400,21 @@ function soltarGrupoCirculo(){
   });
   grupoCirculo = { gente, t: 0, fase: 'indo', centro: [L.x + 2, L.z + 2], falou: false };
   C.visitas++; return true;
+}
+// a melancia lunar madura brilha de noite: faíscas azuis e amarelas subindo das que aparecem na tela
+let brilhoLunar = 0;
+function atualizarLunar(dt){
+  if (LUZ.noite < 0.3 || (brilhoLunar -= dt) > 0) return;
+  brilhoLunar = 0.05;
+  const l = [];
+  for (const k in S.campo){ const t = S.campo[k]; if (t.c === 'melanciaLunar' && t.e === 'plantado' && estagio(t) >= 3) l.push(k); }
+  if (!l.length) return;
+  const [x, z] = sorteia(l).split(',').map(Number), p = new THREE.Vector3(x + 0.5, 0.4, z + 0.5);
+  if (!naTelaBicho(p)) return;
+  for (let i = 0; i < 2; i++){
+    const f = faisca(p.x + rnd(-0.35, 0.35), rnd(0.2, 0.45), p.z + rnd(-0.35, 0.35), Math.random() < 0.7 ? LUNAR.listra : LUNAR.pinta);
+    f.v.set(rnd(-0.05, 0.05), rnd(0.2, 0.4), rnd(-0.05, 0.05)); f.g = 0; f.vida = 1.4;
+  }
 }
 function atualizarCirculo(dt, t){
   // de tempos em tempos tira do desenho os canteiros que mudaram (arrancados, replantados); sem nenhum, ele acaba
@@ -9755,6 +9787,7 @@ const VI = {
   abobora(){ const v = new Vox(); v.ell(0, 3, 0, 4.5, 3.2, 4.5, (x) => ((x % 3) + 3) % 3 === 0 ? 0xd9711f : 0xef8a2b); v.box(0, 6, 0, 0, 8, 0, 0x6b8a3a); return v; },
   morango(){ const v = new Vox(); for (let y = 0; y <= 5; y++){ const r = 0.6 + y * 0.5; v.ell(0, y, 0, r, 0.6, r, (x, Y, z) => hash(x, Y, z) < 0.15 ? 0xffe066 : 0xe8344a); } v.ell(0, 6, 0, 2.5, 0.6, 2.5, COR.verde); v.set(0, 7, 0, COR.verdeE); return v; },
   melancia(){ const v = new Vox(); v.ell(0, 3, 0, 5, 3.4, 3.8, (x) => ((x % 3) + 3) % 3 === 0 ? 0x2f7d32 : 0x58aa48); return v; },
+  melanciaLunar(){ const v = new Vox(); v.ell(0, 3, 0, 5, 3.4, 3.8, (x, y, z) => hash(x, y, z) < 0.07 ? LUNAR.pinta : ((x % 3) + 3) % 3 === 0 ? LUNAR.listra : LUNAR.casca); return v; },
   ovo(){ const v = new Vox(); v.ell(0, 4, 0, 2.8, 3.8, 2.8, (x, y) => y > 5 ? 0xfdf3e2 : 0xf3e2c6); return v; },
   leite(){ const v = new Vox(); v.box(-2, 0, -2, 2, 7, 2, 0xfdfcf8); v.box(-1, 8, -1, 1, 9, 1, 0xfdfcf8); v.box(-1, 10, -1, 1, 10, 1, 0x4a8fd6); v.box(-2, 3, -2, 2, 4, 2, 0x8ec1ec); return v; },
   racao(){ return (() => { const v = new Vox(); v.box(-3, 0, -2, 3, 7, 2, 0xe2cfa0); v.box(-2, 8, -1, 2, 8, 1, 0xd2bd8a); v.box(-1, 9, -1, 1, 9, 1, 0xf5d142); v.box(-2, 2, 3, 2, 4, 3, 0xf0a33a); v.set(0, 3, 4, 0xf5d142); return v; })(); },
@@ -17616,7 +17649,7 @@ const daEstacao = c => estacaoAtual().culturas.includes(c);
 const rendCultura = c => CULTURAS[c].rend < 2 ? CULTURAS[c].rend : Math.round(CULTURAS[c].rend * (daEstacao(c) ? BONUS_ESTACAO : 1));
 // "Abóbora e melancia": as culturas que rendem 1 por colheita
 const nomesRend1 = () => {
-  const n = ORDEM_CULTURAS.filter(c => CULTURAS[c].rend < 2).map((c, i) => i ? CULTURAS[c].nome.toLowerCase() : CULTURAS[c].nome);
+  const n = ORDEM_CULTURAS.filter(c => CULTURAS[c].rend < 2 && !CULTURAS[c].espacial).map((c, i) => i ? CULTURAS[c].nome.toLowerCase() : CULTURAS[c].nome);
   return n.length > 1 ? n.slice(0, -1).join(', ') + ' e ' + n[n.length - 1] : n.join('');
 };
 const vendeMaisNaEstacao = p => !!CULTURAS[p] && CULTURAS[p].rend < 2 && daEstacao(p);
@@ -19272,6 +19305,8 @@ function checar(tipoA, alvo, param){
     case 'plantar': {
       if (t.e !== 'arado') return { ok: false };
       const c = CULTURAS[param];
+      if ((S.bolsa[param] || 0) > 0 && c.espacial) return { ok: true, custo: { semente: param } };
+      if (c.espacial) return { ok: false, motivo: 'Acabaram as sementes do ETzinho' };
       if (nivel() < c.nivel) return { ok: false, motivo: `${c.nome} libera no nível ${c.nivel}` };
       if ((S.bolsa[param] || 0) > 0) return { ok: true, custo: { semente: param } };
       if (S.dinheiro >= c.semente) return { ok: true, custo: { dinheiro: c.semente } };
@@ -20496,14 +20531,14 @@ function itensDoAlvoBase(alvo){
         else itemTrator(r, lote, 'plantar', alvo);
         // ao lado do nome: quantos canteiros já têm a planta e a estrela no que rende mais por canteiro hoje; o que falta para os pedidos ganha outra cor
         const cont = canteirosPorCultura(), falta = faltaPedidos(cont);
-        const disp = ORDEM_CULTURAS.filter(k => CULTURAS[k].nivel <= nivel());
+        const disp = ORDEM_CULTURAS.filter(k => CULTURAS[k].nivel <= nivel() || (CULTURAS[k].espacial && S.bolsa[k] > 0));
         const top = disp.reduce((a, k) => lucroColheita(k) > (a ? lucroColheita(a) : 0) ? k : a, null);
         // a lista é longa: primeiro o que falta para os pedidos, depois a estrela, depois o resto em ordem alfabética; a do próximo nível fica no fim
         const alfabetica = (a, b) => CULTURAS[a].nome.localeCompare(CULTURAS[b].nome, 'pt-BR');
         const liberadas = [...disp.filter(k => falta[k]).sort(alfabetica), ...(top && !falta[top] ? [top] : []), ...disp.filter(k => !falta[k] && k !== top).sort(alfabetica)];
         for (const k of [...liberadas, ...ORDEM_CULTURAS.filter(k => CULTURAS[k].nivel === nivel() + 1)]){
           const c = CULTURAS[k], tem = S.bolsa[k] || 0;
-          const bloq = c.nivel > nivel(), f = bloq ? 0 : falta[k] || 0;
+          const bloq = c.nivel > nivel() && !c.espacial, f = bloq ? 0 : falta[k] || 0;
           r.itens.push({
             rotulo: c.nome, icone: k,
             canteiros: bloq ? 0 : cont[k] || 0, estrela: k === top, encomenda: f > 0,
@@ -20895,6 +20930,7 @@ function abrirLoja(aba){
   if (abaLoja === 'sementes'){
     for (const k of ORDEM_CULTURAS){
       const c = CULTURAS[k], bloq = c.nivel > n, tem = S.bolsa[k] || 0;
+      if (c.espacial) continue;
       corpo += `<div class="cartao${bloq ? ' bloq' : ''}${daEstacao(k) && !bloq ? ' oferta' : ''}"><div class="cab"><img src="${icone(k)}" alt=""><div><h4>${c.nome}${daEstacao(k) ? `<span class="selo">${estacaoAtual().nome.toLowerCase()}</span>` : ''}</h4><div class="info">${bloq ? `libera no nível ${c.nivel}` : `${tem} na bolsa`}</div></div></div>
         <div class="info">${reais(c.semente)} a semente · cresce em ${tempo(c.tempo)} · ${c.produto ? `dá ${rendCultura(k)} ${c.plural}; secas valem ${reais(c.venda)} cada` : `dá ${rendCultura(k)} × ${vendeMaisNaEstacao(k) ? reais(Math.round(c.venda * BONUS_ESTACAO)) + ' (preço da estação)' : reais(c.venda)}`}</div>
         <div class="botoes">${bloq ? '' : `<button class="botao mini" data-comprar="${k}" data-q="1" type="button"${S.dinheiro < c.semente ? ' disabled' : ''}>+1</button><button class="botao mini" data-comprar="${k}" data-q="5" type="button"${S.dinheiro < c.semente * 5 ? ' disabled' : ''}>+5 · ${reais(c.semente * 5)}</button>`}</div></div>`;
@@ -21156,7 +21192,7 @@ function objetivosPorNivel(){
   if (S.viuCineDani) add(DANI.nivel, 'dani', 'O Dani também ajuda, com passo de gigante', DANI.preco);
   if (S.viuCinePatrinho) add(CENAS.patrinho.nivel(), 'trufa', 'Caçar trufas pelo cheirinho');
   if (S.viuCineLucia) add(CENAS.lucia.nivel(), 'envelope', 'Aluguel do Nano Hostel na porta');
-  for (const n of new Set(ORDEM_CULTURAS.map(k => CULTURAS[k].nivel))) add(n, 'semente', 'Novas frutinhas e legumes');
+  for (const n of new Set(ORDEM_CULTURAS.filter(k => !CULTURAS[k].espacial).map(k => CULTURAS[k].nivel))) add(n, 'semente', 'Novas frutinhas e legumes');
   for (const k in ANIMAIS) add(ANIMAIS[k].nivel, k, apelido(k, ANIMAIS[k].nome), ANIMAIS[k].preco);
   NIVEL_LOTE.forEach((n, i) => { if (i) add(n, 'enxada', 'Mais um pedacinho de horta', PRECO_LOTE[i]); });
   for (const k in FABRICAS) add(FABRICAS[k].nivel, k, apelido(k, FABRICAS[k].nome), FABRICAS[k].preco);
@@ -22049,7 +22085,7 @@ function quadro(agoraP){
   atualizarDani(dt, t);
   if (irmaoDani.g.visible || daniAtivo()){ porOculto($('daniPill'), !daniAtivo()); if (daniAtivo()){ porTexto($('daniTexto'), 'Dani ajudando'); porTexto($('daniTempo'), tempo((S.daniAte - Date.now()) / 1000)); } }
   else if (!$('daniPill').hidden) $('daniPill').hidden = true;
-  atualizarNados(dt, t); atualizarBalancoEd(dt); atualizarPasseio(dt); atualizarCirculo(dt, t);
+  atualizarNados(dt, t); atualizarBalancoEd(dt); atualizarPasseio(dt); atualizarCirculo(dt, t); atualizarLunar(dt);
   arrumarAndamento();
   if (beto.g.visible) beto.update(dt, t);
   if (jaca.g.visible) jaca.update(dt, t);
