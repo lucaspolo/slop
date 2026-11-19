@@ -224,6 +224,13 @@ button{font:inherit;color:inherit}
 .item.perigo.confirmar{background:#f8d2c9;border-style:solid}
 
 /* falas e números flutuantes */
+.sinal-et{position:fixed;left:50%;bottom:calc(172px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:30;display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 14px;background:#fff;border:3px solid var(--borda);border-radius:18px;box-shadow:0 4px 0 var(--sombra)}
+.sinal-txt{font-weight:800;font-size:14px;text-align:center}
+.sinal-bts{display:flex;gap:14px}
+.sinal-bts button{width:58px;height:58px;border-radius:50%;border:3px solid var(--borda);box-shadow:0 3px 0 var(--sombra);cursor:pointer;opacity:.45;transition:transform .08s}
+.sinal-et.ativo .sinal-bts button,.sinal-bts button.aceso{opacity:1}
+.sinal-bts button.aceso{transform:scale(1.18)}
+.sinal-et.ativo .sinal-bts button:active{transform:translateY(2px) scale(.94)}
 .fala{position:absolute;left:0;top:0;z-index:5;max-width:220px;padding:7px 11px;background:#fff;border:3px solid var(--borda);border-radius:14px;font-weight:700;font-size:13px;line-height:1.25;pointer-events:none;transform:translate(-50%,-100%);box-shadow:0 3px 0 var(--sombra);text-align:center}
 .fala::after{content:"";position:absolute;left:50%;bottom:-11px;margin-left:-8px;border:8px solid transparent;border-top-color:var(--borda);border-bottom:0}
 .fala.beto{background:#e6f1fb}
@@ -4111,6 +4118,9 @@ function criarDiscoJogo(){
   raiz.traverse(o => { if (o.isMesh) o.castShadow = false; });
   scene.add(raiz);
   discoJogo = { D, g: raiz, prox: rnd(...DISCO_JOGO.primeira), t: -1, trechos: [], i: 0, tt: 0, reagiu: false };
+  // tocar no disco (sinal para o ETzinho): uma bola invisível maior que ele, para ser fácil de acertar no céu
+  const alvo = new THREE.Mesh(new THREE.SphereGeometry(1.6, 8, 6), new THREE.MeshBasicMaterial({ visible: false })); alvo.position.y = 0.3; raiz.add(alvo);
+  raiz.traverse(o => { o.userData.alvo = { k: 'disco' }; }); pickaveis.push(raiz);
 }
 // um ponto no céu a partir da tela: u vai de -1 (borda esquerda) a 1 (direita); v de 0 (topo) a 1 (pé da tela)
 function pontoCeuDisco(u, v){
@@ -4186,6 +4196,111 @@ function passoFaxina(P, T, q){
   }
 }
 function fimFaxina(T){ const F = T && T.faxina; if (F && F.raio){ scene.remove(F.raio); F.raio.geometry.dispose(); F.raio.material.dispose(); F.raio = null; } }
+// ================= o sinal para o ETzinho (o Lucas pediu): com o disco passando, tocar nele abre "Fazer sinal". O disco
+// para no ar e pisca as luzes numa sequência de cores (amarelo, rosa e azul, com um bip para cada); o jogador repete a
+// sequência nos três botões que aparecem embaixo, e o Ed pisca a lanterna na cor de cada toque. São SINAL.rodadas rodadas,
+// cada uma uma cor mais comprida. Acertando tudo, o ETzinho joga um presente (presenteEt); errando, ou sem tocar por
+// SINAL.espera s, ele responde "Bip?" e segue o passeio. Não acontece durante a abdução, a devolução ou a faxina
+const SINAL = { rodadas: [3, 4, 5], pisca: 0.55, pausa: 0.2, espera: 12, tons: [660, 880, 1100] };
+const FALAS_ED_SINAL = ['Ô de cima! Pisca aí, ETzinho!', 'Vou fazer sinal com a lanterna!', 'Oinc! Será que ele responde?', 'Alô, disco! Aqui embaixo!', 'ETzinho, vamos conversar de luzinha?', 'Pisca, pisca! Oi, vizinho do espaço!', 'Atenção, disco: mensagem da fazenda!', 'Aoooa! Ele parou pra me ver!', 'Luz amarela, luz rosa... vamos lá!', 'Bora brincar de sinal, ETzinho!'];
+const FALAS_ET_ACERTO = ['Bip bip! (as luzes dançam)', 'Biiip! (pisca de alegria)', 'Bip! Bip! Bip! (comemora)', 'Bi-bip! (acena da janelinha)', 'Biiip bip! (gira de felicidade)', 'Bip! (manda um beijinho de antena)', 'Bip bip bip! (faz um loop)', 'Bip! (acende tudo de uma vez)', 'Biiiip! (amigo da Terra!)', 'Bip bip! (joga confete espacial)', 'Bip! (dá uma cambalhota)', 'Bi-bip bip! (que alegria!)', 'Bip! (as luzes piscam um coração)', 'Biiip! (dança no ar)', 'Bip bip! (acena com as duas mãos)', 'Bip! (rodopia três vezes)', 'Bip bip bip! (que demais!)', 'Biiip! (pisca o farol de alegria)', 'Bip! (manda um presentinho)', 'Bi-bip! (melhor amigo da fazenda!)', 'Bip bip! (uhuu espacial!)'];
+const FALAS_ET_ERRO = ['Bip? (inclina a antena)', 'Bip... bip? (não entendeu)', 'Biiip? (pisca confuso)', 'Bip? Bip? (coça a cabeça)', 'Bip... (fica pensativo)', 'Bip? (dá de ombros e vai embora)', 'Bi-bip? (tenta de novo outro dia?)', 'Bip... (sorri e acena)', 'Bip? (as luzes ficam bagunçadas)', 'Biiip... (tchau, Ed!)', 'Bip? (cadê a mensagem?)', 'Bip bip? (era outra cor!)', 'Bip... (pisca devagarinho)', 'Bip? (vira o disco de lado)', 'Bip... (fica com sono)', 'Bip? (antena em forma de interrogação)', 'Bi... bip? (fala outra língua?)', 'Bip! (acena e sai voando)', 'Bip... (amanhã a gente treina)', 'Bip? (essa luz não existe!)', 'Bip bip... (até a próxima)'];
+let sinal = null;
+const podeSinal = () => { const P = discoJogo; return !!P && P.t >= 0 && P.g.visible && !sinal && !cine && !P.querAbduzir && !P.querDevolver && !(P.trechos[P.i] && P.trechos[P.i].faxina) && !P.trechos[P.i]?.sai; };
+function itensDisco(){
+  const r = { titulo: 'Disco voador', icone: 'disco', itens: [], estado: 'O ETzinho está passeando pelo céu da fazenda.' };
+  if (podeSinal()) r.itens.push({ rotulo: 'Fazer sinal', sub: 'repita as luzes do disco com a lanterna do Ed', icone: 'disco', fn: comecarSinal });
+  else if (sinal) r.estado = 'O Ed e o ETzinho estão conversando de luzinha.';
+  return r;
+}
+function comecarSinal(){
+  if (!podeSinal()) return;
+  sinal = { rodada: 0, seq: [], mostra: -1, t: 0, toques: [], fase: 'mostra', espera: 0 };
+  novaRodada();
+  if (ed.g.visible){ if (ed.estado === 'parado' && !tarefaAtual) ed.olhar(discoJogo.g.position.x, discoJogo.g.position.z); edFala(FALAS_ED_SINAL); }
+  painelSinal(true);
+}
+function novaRodada(){
+  const S2 = sinal, n = SINAL.rodadas[S2.rodada];
+  while (S2.seq.length < n) S2.seq.push(Math.floor(Math.random() * 3));
+  S2.fase = 'mostra'; S2.t = -0.8; S2.toques = []; S2.espera = 0; painelSinal(true, false);
+}
+// o painel com os três botões, embaixo da tela
+function painelSinal(mostrar, ativo){
+  let el = $('sinalEt');
+  if (!el){
+    el = document.createElement('div'); el.id = 'sinalEt'; el.className = 'sinal-et';
+    el.innerHTML = '<div class="sinal-txt"></div><div class="sinal-bts">' + CDV.luzes.map((c, i) => `<button type="button" data-cor="${i}" style="background:#${c.toString(16).padStart(6, '0')}" aria-label="${['Amarelo', 'Rosa', 'Azul'][i]}"></button>`).join('') + '</div>';
+    document.body.appendChild(el);
+    el.querySelectorAll('button').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); tocarSinal(+b.dataset.cor); }));
+  }
+  el.hidden = !mostrar;
+  if (!mostrar) return;
+  el.classList.toggle('ativo', !!ativo);
+  el.querySelector('.sinal-txt').textContent = ativo ? `Sua vez: repita as ${sinal.seq.length} luzes` : `Rodada ${sinal.rodada + 1} de ${SINAL.rodadas.length}: olhe as luzes do disco`;
+}
+// a lanterna do Ed: um clarão da cor na mão dele
+function lanternaEd(c){
+  if (!ed.g.visible) return;
+  const p = ed.topo(); p.y -= 0.35;
+  for (let i = 0; i < 8; i++){ particula(p.x + rnd(-0.1, 0.1), p.y, p.z + rnd(-0.1, 0.1), CDV.luzes[c], 0.6); }
+}
+function brilhoSinal(P, c){
+  if (!P.brilho){ P.brilho = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 12), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.38, depthWrite: false })); P.brilho.position.y = 0.3; P.g.add(P.brilho); }
+  P.brilho.visible = c >= 0; if (c >= 0) P.brilho.material.color.setHex(CDV.luzes[c]);
+  const el = $('sinalEt'); if (el) el.querySelectorAll('button').forEach(b => b.classList.toggle('aceso', +b.dataset.cor === c));
+}
+function tocarSinal(c){
+  const S2 = sinal; if (!S2 || S2.fase !== 'vez') return;
+  S2.eco = 0.3; S2.ecoCor = c;
+  Som.tom(SINAL.tons[c], 0.18, 'square', 0.03); lanternaEd(c); S2.espera = 0;
+  if (S2.seq[S2.toques.length] !== c){ fimSinal(false); return; }
+  S2.toques.push(c);
+  if (S2.toques.length < S2.seq.length) return;
+  S2.rodada++;
+  if (S2.rodada >= SINAL.rodadas.length){ fimSinal(true); return; }
+  falar(radioDisco, 'Bip bip!', 1.2); novaRodada();
+}
+function fimSinal(acertou){
+  const S2 = sinal; if (!S2) return;
+  sinal = null; painelSinal(false); if (discoJogo) brilhoSinal(discoJogo, -1);
+  if (acertou){ falar(radioDisco, variar(FALAS_ET_ACERTO), 2.4); Som.tom(1300, 0.1, 'square', 0.03, 1900); setTimeout(presenteEt, 900); S.sinaisEt = (S.sinaisEt || 0) + 1; salvar(); }
+  else { falar(radioDisco, variar(FALAS_ET_ERRO), 2.4); Som.tom(500, 0.3, 'sine', 0.03, 250); }
+}
+// o presente cai do disco perto do Ed: um pouco de dinheiro, sementes ou ração
+function presenteEt(){
+  const P = discoJogo, o = P && P.g.visible ? P.g.position.clone() : (ed.topo ? ed.topo() : new THREE.Vector3());
+  for (let i = 0; i < 16; i++) particula(o.x + rnd(-0.3, 0.3), Math.max(0.2, o.y - 0.4), o.z + rnd(-0.3, 0.3), [0xffd84d, 0xff7ac8, 0x6fe3ff][i % 3], -1);
+  const r = Math.random(), alvo = ed.g.visible ? ed.topo() : o.clone().setY(1);
+  let txt;
+  if (r < 0.4){ const v = 150 * nivel(); S.dinheiro += v; chipPulsa('chipDinheiro'); flutuar(alvo, '+' + reais(v), 'ouro'); txt = reais(v); }
+  else if (r < 0.75 || !ANI.length){
+    const l = ORDEM_CULTURAS.filter(c => CULTURAS[c].nivel <= nivel()), k = sorteia(l), q = 12;
+    S.bolsa[k] = (S.bolsa[k] || 0) + q; flutuar(alvo, '+' + q, '', k); txt = `${q} sementes de ${CULTURAS[k].nome.toLowerCase()}`;
+  } else { const q = 40; S.racao += q; chipPulsa('chipRacao'); flutuar(alvo, '+' + q, '', 'racao'); txt = `${q} rações`; }
+  aviso(`O ETzinho jogou um presente: ${txt}!`, '', 3.5); Som.moeda(); hud(); salvar();
+}
+// a cada quadro, com o disco parado no ar: mostra a sequência piscando as luzes e espera os toques
+function passoSinal(P, dt){
+  const S2 = sinal;
+  if (cine || !P.g.visible){ sinal = null; painelSinal(false); brilhoSinal(P, -1); return; }
+  S2.t += dt;
+  const D = P.D, passo = SINAL.pisca + SINAL.pausa;
+  if (S2.fase === 'mostra'){
+    const i = Math.floor(S2.t / passo), dentro = S2.t - i * passo < SINAL.pisca && S2.t >= 0;
+    if (i >= S2.seq.length){ S2.fase = 'vez'; S2.espera = 0; painelSinal(true, true); return; }
+    const c = dentro && i >= 0 ? S2.seq[i] : -1;
+    for (const m of D.luzes) m.material = c >= 0 ? D.acesa[c] : D.apagada[m.userData.cor];
+    // o disco é pequeno lá no alto: um brilho da cor em volta dele e o botão da mesma cor aceso no painel
+    brilhoSinal(P, c);
+    if (c >= 0 && S2.mostra !== i){ S2.mostra = i; Som.tom(SINAL.tons[c], 0.18, 'square', 0.03); }
+    if (c < 0) S2.mostra = -1;
+  } else {
+    for (const m of D.luzes) m.material = D.apagada[m.userData.cor];
+    brilhoSinal(P, S2.eco != null && S2.eco > 0 ? S2.ecoCor : -1); if (S2.eco > 0) S2.eco -= dt;
+    if ((S2.espera += dt) > SINAL.espera) fimSinal(false);
+  }
+}
 function sustoDoEd(){
   if (!ed.g.visible) return;
   ed.pulo = 0.45; Som.oinc();
@@ -4209,6 +4324,8 @@ function atualizarDisco(dt, t){
     }
     return;
   }
+  // com o sinal, o disco fica parado no ar piscando as luzes
+  if (sinal){ animarDisco(P.D, t); passoSinal(P, dt); return; }
   P.t += dt; P.tt += dt;
   let T = P.trechos[P.i];
   if (T && P.tt > T.dur + T.para){ fimFaxina(T); P.tt -= T.dur + T.para; P.i++; T = P.trechos[P.i]; }
@@ -20351,6 +20468,7 @@ function itensDoAlvoBase(alvo){
   if (alvo.k === 'hud') return itensHud();
   if (alvo.k === 'dani') return itensDani();
   if (alvo.k === 'milton') return itensMilton();
+  if (alvo.k === 'disco') return itensDisco();
   if (alvo.k === 'pista') return itensPista();
   if (alvo.k === 'enfeite') return itensEnfeite(alvo.e);
   if (alvo.k === 'nanoHostel') return itensNanoHostel();
@@ -22015,7 +22133,7 @@ async function iniciar(){
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
   window.__fazenda = { flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
-    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
+    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(FAB_NOVAS).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
     trator: () => trator, TRATOR, filaTipos: () => fila.map(t => t.tipo), checar: (t, a, q) => checar(t, a, q), enfileirarTrator: (lote, acao, semente) => enfileirar('trator', { k: 'trator', lote }, { acao, semente }), tratorVis: () => tratorVis,
