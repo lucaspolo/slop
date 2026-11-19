@@ -18240,6 +18240,70 @@ function passoPerseguicao(v, dt){
   }
   if (v.modelo === 'jato'){ v.rastro = (v.rastro || 0) + dt; while (v.rastro > 0.06){ v.rastro -= 0.06; soltarRastro(); } }
 }
+// ================= a rega do alto (o Lucas pediu): uma vez por dia, pelo menu da pista, o Milton vem com o teco-teco de
+// avião agrícola (o teco-teco também depois do jatinho) e passa rasante por cima de cada fileira de terrenos de canteiros
+// comprados, em zigue-zague, soltando água: todo canteiro com sede embaixo dele fica regado, como na chuva (sem XP, e a
+// tarefa de regar do Ed naquele canteiro é cancelada). Só com o avião fora e fora das cenas; voo.estado 'rega' segura as
+// visitas e as cenas. S.regaAereaDia guarda o dia (diaAtual)
+const REGA_AEREA = { alto: 1.3, entre: 2.8, vel: 4.6, margem: 1.8, longe: 12, gotas: 0.02 };
+const FALAS_MILTON_REGA = ['PIG-MTP agrícola na área! Abre o guarda-chuva, Ed!', 'Lá vai água! Câmbio!', 'Rega aérea saindo do forno!', 'Segura o chapéu, que lá vem chuva de avião!', 'Hoje o regador sou eu!', 'Fileira por fileira, nenhum canteiro fica com sede!', 'Ed, pode descansar o regador!', 'Rasante molhado, câmbio!', 'Isso que é irrigação de primeira classe!', 'Água pra todo mundo, das cenouras às melancias!', 'O teco-teco também sabe trabalhar na roça!', 'Atenção, horta: chuva programada!', 'Milton na área... e na horta!', 'Uma passada só e tá tudo regado!', 'Chuva sob encomenda, cortesia do PIG-MTP!', 'Lá vou eu, bem baixinho!', 'Molhando as plantinhas lá de cima!', 'Pode guardar o regador, irmão!', 'Rega aérea concluída em três, dois, um...', 'Abre caminho, que o avião-pipa tá passando!', 'Água fresquinha do céu!'];
+const regaAereaHoje = () => S.regaAereaDia === diaAtual();
+// as passadas: uma por fileira de terrenos (mesmo z), cobrindo do primeiro ao último, em zigue-zague
+function passadasRega(){
+  const ls = LOTES.filter((L, i) => S.lotes[i] && loteAberto(i)), filas = {};
+  for (const L of ls) (filas[L.z] = filas[L.z] || []).push(L);
+  return Object.keys(filas).map(Number).sort((a, b) => a - b).map((z, k) => {
+    const xs = filas[z].map(L => L.x), x0 = Math.min(...xs) - REGA_AEREA.margem, x1 = Math.max(...xs) + 4 + REGA_AEREA.margem;
+    return { z: z + 2, de: k % 2 ? x1 : x0, ate: k % 2 ? x0 : x1, lotes: filas[z] };
+  });
+}
+function comecarRegaAerea(){
+  if (!aviao || voo.estado !== 'fora' || cine || cenaPedida || regaAereaHoje() || !S.conheceuMilton) return false;
+  const P = passadasRega(); if (!P.length) return false;
+  const V = (x, y, z) => new THREE.Vector3(x, y, z), A = REGA_AEREA, pts = [];
+  P.forEach((q, k) => {
+    const s = Math.sign(q.ate - q.de);
+    if (!k) pts.push({ p: V(q.de - s * A.longe, A.entre + 1.5, q.z) });
+    else pts.push({ p: V(q.de - s * 2.5, A.entre, q.z) });
+    pts.push({ p: V(q.de, A.alto, q.z), molha: q }, { p: V(q.ate, A.alto, q.z) });
+    pts.push({ p: V(q.ate + s * 2.5, A.entre, q.z) });
+  });
+  const u = P[P.length - 1], su = Math.sign(u.ate - u.de);
+  pts.push({ p: V(u.ate + su * A.longe, A.entre + 2, u.z) });
+  voo = { estado: 'rega', t: 0, modelo: 'teco', pts, seg: 0, s: 0, molhados: new Set() };
+  S.regaAereaDia = diaAtual(); salvar();
+  aviao.visible = true; aviao.position.copy(pts[0].p); motor(true);
+  setTimeout(() => { if (voo.estado === 'rega') falar(radioMilton, variar(FALAS_MILTON_REGA), 2.6); }, 1200);
+  return true;
+}
+function regarDoAlto(x, z){
+  const k = chave(x, z), t = S.campo[k];
+  if (!t || t.e !== 'plantado' || t.p !== 'sede') return;
+  const res = VIS[k] && VIS[k].res;
+  if (res && res.tipo === 'regar'){ if (res === tarefaAtual) return; cancelar(res); }
+  t.p = null; t.ev++; avancar(t, 0, 'chuva'); atualizarCampo(x, z);
+}
+function passoRega(v, dt){
+  const A = REGA_AEREA;
+  v.s += A.vel * dt;
+  let a = v.pts[v.seg], b = v.pts[v.seg + 1];
+  while (b && v.s > a.p.distanceTo(b.p)){ v.s -= a.p.distanceTo(b.p); v.seg++; a = v.pts[v.seg]; b = v.pts[v.seg + 1]; }
+  if (!b){ voo = { estado: 'fora', t: 0 }; aviao.visible = false; aviao.rotation.set(0, 0, 0); motor(false); salvar(); return; }
+  const k = v.s / a.p.distanceTo(b.p), d = b.p.clone().sub(a.p);
+  aviao.position.lerpVectors(a.p, b.p, k);
+  const rumo = Math.atan2(d.z, d.x);
+  aviao.rotation.set(0, -rumo, Math.atan2(d.y, Math.hypot(d.x, d.z)) * 0.8);
+  // na passada: a água cai embaixo das asas e rega a fileira inteira do terreno em que ele está
+  if (a.molha){
+    const x = aviao.position.x, z = aviao.position.z;
+    for (let i = 0; i < 5; i++){ particula(x + rnd(-0.4, 0.2), A.alto - 0.15, z + rnd(-1.9, 1.9), [0x6fc3f5, 0xa8dcfa, 0xffffff][i % 3], -1); }
+    const tx = Math.floor(x);
+    for (const L of a.molha.lotes) if (tx >= L.x && tx < L.x + 4 && !v.molhados.has(tx + ',' + L.z)){
+      v.molhados.add(tx + ',' + L.z);
+      for (let zz = L.z; zz < L.z + 4; zz++) regarDoAlto(tx, zz);
+    }
+  }
+}
 function chamarMilton(){ if (voo.estado === 'fora'){ voo = { estado: 'chegando', t: 0, modelo: temJato() ? 'jato' : 'teco' }; aviao.visible = true; motor(true); } }
 // a cena do jatinho espera o relógio da visita: enquanto ela não acontece, o Milton não vem de teco-teco
 const jatoPendente = () => !temJato() && nivel() >= JATO_VOO.nivel && !!S.conheceuMilton;
@@ -18302,6 +18366,7 @@ function atualizarPista(dt){
     if (v.estado === 'parado' && v.porta >= 1 && !v.cena && !v.desceu){ v.desceu = true; desembarcar(); }
   }
   if (v.estado === 'persegue'){ passoPerseguicao(v, dt); return; }
+  if (v.estado === 'rega'){ passoRega(v, dt); return; }
   if (v.estado === 'faixa'){
     // atravessa a tela devagar, balançando de leve, com a faixa ondulando atrás
     const k = Math.min(1, v.t / FAIXA.dur);
@@ -18545,6 +18610,10 @@ function itensPista(){
   const r = { titulo: 'Pista de pouso', icone: temJato() ? 'jato' : 'aviao', itens: [] };
   if (!loteObraAberto('hangar')) itensDaObra('hangar', r);
   r.estado = !S.conheceuMilton ? 'Ainda ninguém pousou aqui. O Milton aparece depois da sua primeira venda ao Joli Market.' : voo.estado !== 'fora' ? 'O Milton está na fazenda agora!' : `O Milton pousa por aqui de tempos em tempos, com o jogo aberto. Próxima visita em uns ${min} min.` + (S.pistaGanho ? ` A pista já rendeu ${reais(S.pistaGanho)}.` : '');
+  if (S.conheceuMilton){
+    const hoje = regaAereaHoje(), ocupado = voo.estado !== 'fora' || !passadasRega().length;
+    r.itens.push({ rotulo: 'Rega do alto', sub: hoje ? 'já foi hoje; amanhã tem de novo' : voo.estado !== 'fora' ? 'quando o avião estiver livre' : !passadasRega().length ? 'precisa de um terreno de canteiros' : 'o Milton passa de teco-teco regando os canteiros, uma vez por dia', icone: 'regador', off: hoje || ocupado, fn: comecarRegaAerea });
+  }
   itensEncomenda(r);
   return r;
 }
@@ -21816,7 +21885,7 @@ async function iniciar(){
       noLugar: (v, tipo, i = 0, t = 999) => { if (!gradeSpa) montarGradeSpa(); const q = lugaresSpa.filter(l => l.tipo === tipo)[i], [x, z] = mundoSpa(q.x, q.z); Object.assign(v, { x, z, y: q.y, lugar: q, vai: 'lugar', estado: 'atividade', t, ang: q.ang, pagou: true, pts: [] }); v.g.visible = true; if (tipo === 'cadeira' && v.pep) v.pep.visible = true; } },
     observatorio: { OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
-    luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, foguete: { FOGUETE, prox: () => proxFoguete, zerar: () => { proxFoguete = 0; }, obj: () => foguete, falas: falasFoguete }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { faixa: passarFaixa, FAIXA, voo: () => voo, JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, encomenda: { ENCOMENDAS, encomendar, cancelar: cancelarEncomenda, itens: () => { const r = { estado: '', itens: [] }; itensEncomenda(r); return r; } }, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, dormir: pedirDormir, item: itemDormir, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
+    luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, foguete: { FOGUETE, prox: () => proxFoguete, zerar: () => { proxFoguete = 0; }, obj: () => foguete, falas: falasFoguete }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { rega: comecarRegaAerea, faixa: passarFaixa, FAIXA, voo: () => voo, JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, encomenda: { ENCOMENDAS, encomendar, cancelar: cancelarEncomenda, itens: () => { const r = { estado: '', itens: [] }; itensEncomenda(r); return r; } }, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, dormir: pedirDormir, item: itemDormir, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
     // auditoria de colisões: o que o desenho de uma construção (n = nível da reforma, ou 'andaime') põe fora do terreno dela
     fora(id, n){
       const p = PREDIO[id], fab = !!FABRICAS[id], v = n === 'andaime' ? vAndaime(id) : vReforma(id, n), s = 1 / 8, h = s / 2;
