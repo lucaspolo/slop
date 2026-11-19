@@ -3162,6 +3162,8 @@ function atualizarLuma(dt, t){
   else if (a === 'mato' && L.passo === 2){ C.rotation.set(0.5, Math.sin(t * 22) * 0.35, 0); R.rotation.z = Math.sin(t * 16) * 0.4; }
   // testando a água com o focinho antes de pular
   else if (a === 'cachoeira' && L.passo === 2 && !anda){ C.rotation.set(0.5, Math.sin(t * 4) * 0.2, 0); R.rotation.z = Math.sin(t * 10) * 0.3; }
+  // cheirando o ETzinho, com o focinho mexendo
+  else if (a === 'et' && L.passo === 2 && !anda){ C.rotation.set(0.3 + Math.sin(t * 20) * 0.07, Math.sin(t * 3.5) * 0.3, 0); R.rotation.z = Math.sin(t * 18) * 0.5; }
   else if (a === 'vaca' && L.passo === 2){ C.rotation.set(-0.12 + Math.sin(t * 14) * 0.06, 0, 0); R.rotation.z = Math.sin(t * 16) * 0.45; }
   // degrau da porta: o chão da casa e o degrau ficam a 0,25; na frente dele ela desce para a grama
   const naPorta = Math.abs(L.pos.x - PORTINHA.x) < 0.6, z = L.pos.y;
@@ -3182,7 +3184,7 @@ function atualizarLuma(dt, t){
 // Saindo de casa para uma aventura, ela deixa a bolinha lá dentro; brincando, larga a bolinha e busca na volta
 const LUMA_SITU = {
   missao: 0.5, pesos: { cava: 3, mato: 3, cenoura: 2, vaca: 2, patos: 1.5, soneca: 3, cachoeira: 1.5 },
-  carteira: 40, disco: 0.7, saci: 0.7, chuva: 0.75, visita: 0.5, raio: 0.6, cafe: 0.5, tatu: 0.6, capivara: 0.6, nado: 0.5,
+  carteira: 40, disco: 0.7, et: 0.8, saci: 0.7, chuva: 0.75, visita: 0.5, raio: 0.6, cafe: 0.5, tatu: 0.6, capivara: 0.6, nado: 0.5,
   manha: [0.03, 0.35], soneca: [30, 45], achado: { moeda: 0.5, osso: 0.3 },
 };
 const SAIDAS_LUMA = ['cava', 'mato', 'cenoura', 'vaca', 'patos', 'soneca', 'cachoeira'];
@@ -3433,6 +3435,13 @@ function gatilhosLuma(dt){
   const P = discoJogo, disco = !!P && P.t >= 0;
   if (disco && !L.discoVisto){ L.discoVisto = true; const f = L.forcar === 'disco'; if (f) L.forcar = null; if (livre() && (f || Math.random() < LUMA_SITU.disco)) lumaSaiPara('disco'); }
   if (!disco) L.discoVisto = false;
+  // o ETzinho desceu do disco: ela larga o latido para o céu (ou sai de casa) e vai cheirar ele
+  const Vet = etVisita;
+  if (Vet && Vet.fase === 'passeia' && !Vet.lumaViu){
+    Vet.lumaViu = true;
+    if (L.estado === 'fora' && L.acao === 'disco' && !L.cena) Object.assign(L, { acao: 'et', aventura: 'et', passo: 1, ta: 0, tRota: 0 });
+    else if (livre() && (Vet.forcarLuma || Math.random() < LUMA_SITU.et)) lumaSaiPara('et');
+  }
   // o redemoinho do Saci entrou na fazenda
   if (rd && rd.estado === 'vagando' && !rd.caminho.length && !rd.lumaViu){ rd.lumaViu = true; const f = L.forcar === 'saci'; if (f) L.forcar = null; if (livre() && (f || Math.random() < LUMA_SITU.saci)) lumaSaiPara('saci'); }
   // começou a chover (uma vez por chuva)
@@ -3624,6 +3633,21 @@ const AVENTURAS = {
       if (E) L.angAlvo = Math.atan2(E.g.position.x - L.pos.x, E.g.position.z - L.pos.y);
       if (L.ta > 4.5) lumaFim();
     }
+  },
+  // o ETzinho desceu para passear: ela corre até ele, cheira, abana o rabo e volta para casa
+  et(L, dt, t, chegou){
+    const V = etVisita, E = V && V.fase === 'passeia' ? V.et : null;
+    if (L.passo === 0){ if (!chegou) return; L.passo = 1; L.tRota = 0; L.ta = 0; return; }
+    if (!E || L.passo === 3){ if (L.passo !== 3){ L.passo = 3; L.ta = 0; L.pontos = []; } if (L.ta > 1.6) lumaFim(); return; }
+    const ex = E.pos.x, ez = E.pos.y;
+    if (L.passo === 1){
+      if (Math.hypot(ex - L.pos.x, ez - L.pos.y) < 0.6){ L.passo = 2; L.ta = 0; L.pontos = []; lumaFala(FALAS_LUMA_ET); setTimeout(() => etFala(FALAS_ET_LUMA), 1500); return; }
+      if ((L.tRota -= dt) <= 0){ L.tRota = 0.4; const p = ladoDe(ex, ez, 0.45); if (!p || !lumaIr(p[0], p[1], LUMA_JOGO.corre)) L.pontos = []; }
+      if (L.ta > 30) lumaFim();
+      return;
+    }
+    L.angAlvo = Math.atan2(ex - L.pos.x, ez - L.pos.y);
+    if (L.ta > 5.5){ L.passo = 3; L.ta = 0; L.salto = 0.45; Som.au(); }
   },
   // corre embaixo do disco voador latindo para o céu
   disco(L, dt, t, chegou){
@@ -4162,10 +4186,10 @@ function passarDisco(){
   P.i = 0; P.tt = 0; P.t = 0; P.reagiu = false; P.g.visible = true; Som.disco();
   // de vez em quando, no meio do passeio, ele desce no curral e leva uma vaca (a cena da abdução)
   // com o observatório pronto, de noite, ele às vezes vem devolver uma vaca que estava de férias (CENAS.volta)
-  P.querDevolver = podeDevolverVaca() && (P.forcarVolta || !S.viuVoltaFerias || Math.random() < VOLTA.chance);
-  P.querAbduzir = !P.querDevolver && !!vacaParaAbduzir() && (P.forcarAbducao || Math.random() < DISCO_JOGO.abducao);
+  P.querDevolver = !P.forcarVisita && podeDevolverVaca() && (P.forcarVolta || !S.viuVoltaFerias || Math.random() < VOLTA.chance);
+  P.querAbduzir = !P.querDevolver && !P.forcarVisita && !!vacaParaAbduzir() && (P.forcarAbducao || Math.random() < DISCO_JOGO.abducao);
   // a faxina: o terceiro ponto do passeio vira o alto do canteiro com mato, e ele fica lá o tempo do raio
-  const mato = !P.querAbduzir && !P.querDevolver && (P.forcarFaxina || Math.random() < FAXINA.chance) ? matoParaFaxina() : null;
+  const mato = !P.querAbduzir && !P.querDevolver && !P.forcarVisita && (P.forcarFaxina || Math.random() < FAXINA.chance) ? matoParaFaxina() : null;
   if (mato){
     const [x, z] = mato[0], T1 = P.trechos[1], T2 = P.trechos[2], alvo = new THREE.Vector3(x + 0.5, FAXINA.alto, z + 0.5);
     T1.ate = alvo; T2.de = alvo; T1.dur = Math.max(0.9, T1.de.distanceTo(alvo) / vel); T2.dur = Math.max(0.9, alvo.distanceTo(T2.ate) / vel);
@@ -4175,7 +4199,18 @@ function passarDisco(){
   // os círculos na plantação: de noite, sem abdução nem devolução, ficam marcados para quando ele for embora
   P.circulo = !P.querAbduzir && !P.querDevolver && !S.circulo && (P.forcarCirculo || (periodo().id === 'noite' && Math.random() < CIRCULO.chance)) ? loteParaCirculo() : null;
   P.forcarCirculo = false;
-  if (!P.querAbduzir && !P.querDevolver && !mato && aviao && voo.estado === 'fora' && S.conheceuMilton && !jatoPendente() && !cine
+  // a visita do ETzinho: o trecho que passaria em cima do Ed vai até em cima do pouso do observatório, e ele fica lá o
+  // tempo da visita (passoVisitaEt marca a saída)
+  const chaoEt = !P.querAbduzir && !P.querDevolver && !mato && P.circulo == null && obraConcluida('observatorio') && (P.forcarVisita || Math.random() < VISITA_ET.chance)
+    ? chaoPerto(...pousoMundo(), 3) : null;
+  if (chaoEt){
+    const [px, pz] = pousoMundo(), T1 = P.trechos[1], T2 = P.trechos[2], alto = new THREE.Vector3(px, VISITA_ET.alto, pz);
+    T1.ate = alto; T2.de = alto; T1.dur = Math.max(0.9, T1.de.distanceTo(alto) / vel); T2.dur = Math.max(0.9, alto.distanceTo(T2.ate) / vel);
+    T1.para = 9999; T1.susto = false;
+    T1.visita = etVisita = { fase: 'desce', t: 0, tempo: 0, px, pz, chao: chaoEt, alto, baixo: new THREE.Vector3(px, VISITA_ET.baixo, pz), ...pedidoEt() };
+  }
+  P.forcarVisita = false;
+  if (!P.querAbduzir && !P.querDevolver && !mato && !chaoEt && aviao && voo.estado === 'fora' && S.conheceuMilton && !jatoPendente() && !cine
     && (P.forcarPersegue || (S.proxMilton - Date.now() < 3 * 60000 && Math.random() < PERSEGUE.chance))) comecarPerseguicao();
   P.forcarAbducao = false; P.forcarVolta = false; P.forcarFaxina = false; P.forcarPersegue = false;
 }
@@ -4224,8 +4259,9 @@ const FALAS_ED_SINAL = ['Ô de cima! Pisca aí, ETzinho!', 'Vou fazer sinal com 
 const FALAS_ET_ACERTO = ['Bip bip! (as luzes dançam)', 'Biiip! (pisca de alegria)', 'Bip! Bip! Bip! (comemora)', 'Bi-bip! (acena da janelinha)', 'Biiip bip! (gira de felicidade)', 'Bip! (manda um beijinho de antena)', 'Bip bip bip! (faz um loop)', 'Bip! (acende tudo de uma vez)', 'Biiiip! (amigo da Terra!)', 'Bip bip! (joga confete espacial)', 'Bip! (dá uma cambalhota)', 'Bi-bip bip! (que alegria!)', 'Bip! (as luzes piscam um coração)', 'Biiip! (dança no ar)', 'Bip bip! (acena com as duas mãos)', 'Bip! (rodopia três vezes)', 'Bip bip bip! (que demais!)', 'Biiip! (pisca o farol de alegria)', 'Bip! (manda um presentinho)', 'Bi-bip! (melhor amigo da fazenda!)', 'Bip bip! (uhuu espacial!)'];
 const FALAS_ET_ERRO = ['Bip? (inclina a antena)', 'Bip... bip? (não entendeu)', 'Biiip? (pisca confuso)', 'Bip? Bip? (coça a cabeça)', 'Bip... (fica pensativo)', 'Bip? (dá de ombros e vai embora)', 'Bi-bip? (tenta de novo outro dia?)', 'Bip... (sorri e acena)', 'Bip? (as luzes ficam bagunçadas)', 'Biiip... (tchau, Ed!)', 'Bip? (cadê a mensagem?)', 'Bip bip? (era outra cor!)', 'Bip... (pisca devagarinho)', 'Bip? (vira o disco de lado)', 'Bip... (fica com sono)', 'Bip? (antena em forma de interrogação)', 'Bi... bip? (fala outra língua?)', 'Bip! (acena e sai voando)', 'Bip... (amanhã a gente treina)', 'Bip? (essa luz não existe!)', 'Bip bip... (até a próxima)'];
 let sinal = null;
-const podeSinal = () => { const P = discoJogo; return !!P && P.t >= 0 && P.g.visible && !sinal && !cine && !P.querAbduzir && !P.querDevolver && !(P.trechos[P.i] && P.trechos[P.i].faxina) && !P.trechos[P.i]?.sai; };
+const podeSinal = () => { const P = discoJogo; return !!P && P.t >= 0 && P.g.visible && !sinal && !etVisita && !cine && !P.querAbduzir && !P.querDevolver && !(P.trechos[P.i] && P.trechos[P.i].faxina) && !P.trechos[P.i]?.sai; };
 function itensDisco(){
+  if (etVisita) return itensEt();
   const r = { titulo: 'Disco voador', icone: 'disco', itens: [], estado: 'O ETzinho está passeando pelo céu da fazenda.' };
   if (podeSinal()) r.itens.push({ rotulo: 'Fazer sinal', sub: 'repita as luzes do disco com a lanterna do Ed', icone: 'disco', fn: comecarSinal });
   else if (sinal) r.estado = 'O Ed e o ETzinho estão conversando de luzinha.';
@@ -4484,8 +4520,8 @@ function atualizarDisco(dt, t){
   if (sinal){ animarDisco(P.D, t); passoSinal(P, dt); return; }
   P.t += dt; P.tt += dt;
   let T = P.trechos[P.i];
-  if (T && P.tt > T.dur + T.para){ fimFaxina(T); P.tt -= T.dur + T.para; P.i++; T = P.trechos[P.i]; }
-  if (!T || cine){ fimFaxina(T); if (!T && P.circulo != null && !cine) fazerCirculo(P.circulo); P.circulo = null; P.g.visible = false; P.t = -1; P.prox = rnd(...DISCO_JOGO.intervalo); return; }
+  if (T && P.tt > T.dur + T.para){ fimFaxina(T); fimVisitaEt(T); P.tt -= T.dur + T.para; P.i++; T = P.trechos[P.i]; }
+  if (!T || cine){ fimFaxina(T); fimVisitaEt(T); if (!T && P.circulo != null && !cine) fazerCirculo(P.circulo); P.circulo = null; P.g.visible = false; P.t = -1; P.prox = rnd(...DISCO_JOGO.intervalo); return; }
   if (P.tt < T.dur){
     // vai de um ponto ao outro suavemente; no último trecho, acelera para ir embora
     const k = P.tt / T.dur, e = T.sai ? k * k : k * k * (3 - 2 * k);
@@ -4498,8 +4534,180 @@ function atualizarDisco(dt, t){
     P.g.position.x += Math.sin(q * 3) * 0.12; P.g.position.z += Math.cos(q * 3) * 0.12; P.g.position.y += Math.sin(q * 4) * 0.06;
     if (T.susto && !P.reagiu){ P.reagiu = true; sustoDoEd(); }
     if (T.faxina){ P.g.position.x = lerp(P.g.position.x, T.ate.x, 0.8); P.g.position.z = lerp(P.g.position.z, T.ate.z, 0.8); passoFaxina(P, T, q); }
+    if (T.visita) passoVisitaEt(P, T, q, dt);
   }
   animarDisco(P.D, t);
+}
+// ================= a visita do ETzinho (o Lucas pediu): com o observatório pronto, numa passagem sem abdução, devolução,
+// faxina nem círculo, em VISITA_ET.chance das vezes o disco desce em cima do pouso do observatório e o ETzinho desce no raio
+// para dar uma volta a pé pela fazenda (VISITA_ET.tempo s, sem contar o tempo com o menu dele aberto). Ele anda aos pulinhos
+// por lugares sorteados perto do pouso, para olhando em volta e bipando; a Luma às vezes vem correndo cheirar ele. Tocando
+// nele (ou no disco) abre a troca: ele quer um produto da fazenda (sorteado na visita, de preferência um que tem no
+// celeiro) e dá VISITA_ET.sementes sementes de melancia lunar (uma vez por visita) ou o disco voador de jardim, um enfeite
+// que só ele tem (uma vez só). No fim ele volta para o pouso, sobe no raio e o disco segue o passeio. Não fica no save:
+// uma cena no meio, ou fechar o jogo, acaba a visita na hora
+const VISITA_ET = { chance: 0.3, alto: 2.6, baixo: 1.25, escala: 0.7, tempo: 45, vel: 0.9, tam: 1 / 26, raio: [3, 8], valor: 800, sementes: 5, discoX: 4, jardim: 0.27,
+  quer: ['leite', 'queijo', 'mel', 'bolo', 'doce', 'goiabada', 'paodequeijo', 'bolomel'] };
+const FALAS_ED_ET = ['Aoooa! O ETzinho desceu pra passear!', 'Olha só quem veio visitar a fazenda a pé!', 'Bem-vindo, ETzinho! Fica à vontade!', 'Oinc! Um visitante do espaço na horta!', 'O ETzinho pousou no observatório!', 'Que visita especial! Cuidado com o mato, ETzinho!', 'Ele é pequenininho de perto!', 'Oi, vizinho do espaço! Quer conhecer a fazenda?', 'Aoooa! O pouso do observatório funcionou!', 'Olha ele pulando pela grama!', 'Será que ele quer trocar alguma coisa?', 'ETzinho na área! Alguém avisa a Luma.', 'Que honra, uma visita lá de cima!', 'Oinc oinc! Ele veio de disco e tudo!', 'Bem-vindo à Fazenda Joli Pig, ETzinho!', 'Ele desceu no raio! Que chique!', 'Olha as anteninhas dele balançando!', 'Faz de conta que é sua casa, ETzinho!', 'Vem ver as galinhas, ETzinho!', 'Aoooa! Turismo espacial na fazenda!', 'Oi, ETzinho! Trouxe novidades do espaço?'];
+const FALAS_ET_PASSEIO = ['Bip? (olha tudo com atenção)', 'Bip bip! (que planeta verdinho)', 'Bop! (cheira uma florzinha)', 'Bip! (acena para as galinhas)', 'Bi-bip! (anota tudo num caderninho)', 'Bip bop? (o que é capim?)', 'Bip! (pula de alegria)', 'Bop bop! (que cheirinho de terra)', 'Bip? (cutuca a grama com a antena)', 'Bip bip bip! (tudo aqui é tão grande)', 'Bop! (tira uma foto com o olho)', 'Bip! (gostou do barulho do vento)', 'Bi-bip? (onde fica o queijo?)', 'Bip! (a gravidade daqui é pesadinha)', 'Bop bip! (dá um pulinho mais alto)', 'Bip? (as nuvens aqui são de verdade?)', 'Bip bop! (manda um oi pro disco)', 'Bip! (quer levar um pouco de grama)', 'Bop! (rodopia de felicidade)', 'Bip bip! (que fazenda bonita)', 'Bip? (os porquinhos falam bip?)'];
+const FALAS_ET_TROCA = ['Bip bip! (negócio fechado)', 'Bop! (aperta a mão do Ed com a antena)', 'Bip! (guarda tudo no bolsinho)', 'Bi-bip! (troca justa, troca boa)', 'Bip bop bip! (lá no espaço não tem disso)', 'Bip! (pula de contente)', 'Bop bop! (vai levar pra família)', 'Bip! (obrigado, fazendeiro)', 'Bip bip bip! (que delícia da Terra)', 'Bop! (pisca as antenas de alegria)', 'Bip! (amanhã volta pra trocar mais)', 'Bi-bip! (ótimo negócio)', 'Bip! (cheira e aprova)', 'Bop bip! (o disco vai ficar cheiroso)', 'Bip! (faz uma reverência)', 'Bip bip! (vai contar pros amigos)', 'Bop! (dá uma cambalhota)', 'Bip! (isso vale uma estrela)', 'Bip bop! (o melhor comércio da galáxia)', 'Bip! (manda um beijinho de antena)', 'Bi-bip bip! (troca intergaláctica!)'];
+const FALAS_ED_TROCA_ET = ['Bom negócio, ETzinho!', 'Aoooa! Comércio com o espaço!', 'Isso que é exportação!', 'Pode levar, ETzinho! Tem mais de onde veio.', 'Oinc! A primeira troca intergaláctica da fazenda!', 'Valeu, ETzinho! Volta sempre.', 'Ele gostou! Vou caprichar ainda mais.', 'Agora a Fazenda Joli Pig vende até pro espaço!', 'Que troca boa! Obrigado!', 'Leva com cuidado na viagem, hein!', 'Oinc oinc! Cliente novo, lá de cima!', 'Isso vai fazer sucesso no espaço!', 'Fechado! Aperta aqui, ETzinho.', 'Aoooa! Que coisa diferente ele trouxe!', 'Depois conta o que acharam lá em cima!', 'Negócio fechado com um ET. Quem diria!', 'Volta logo, ETzinho! Vou separar mais.', 'Que vizinho bom de troca!', 'O Beto vai ficar com inveja desse freguês!', 'Hehe, até o ETzinho gosta da nossa roça!', 'Isso merece um aviso no museu!'];
+const FALAS_LUMA_ET = ['Snif snif? (cheira o ETzinho)', 'Au? (que bicho verde é esse?)', 'Snif! (cheira as anteninhas)', 'Au! Au! (abana o rabo)', 'Snif snif snif! (cheiro de estrela)', 'Au? (inclina a cabeça)', 'Snif! (lambe o ETzinho)', 'Au au! (quer brincar)', 'Snif? (cheira o pezinho dele)', 'Auuu! (amigo novo!)', 'Snif snif! (cheirinho de disco)', 'Au! (traz a bolinha?)', 'Snif! (espirra com a antena)', 'Au au au! (pula em volta dele)', 'Snif? (ele cheira a queijo)', 'Au! (late baixinho, pra não assustar)', 'Snif snif! (aprovado!)', 'Au? (você também gosta de osso?)', 'Snif! (dá uma lambida na cabeça dele)', 'Au au! (vem brincar!)', 'Snif snif? (tem bichinho lá no espaço?)'];
+const FALAS_ET_LUMA = ['Bip?! (faz cosquinha)', 'Bip bip! (que bichinho peludo)', 'Bop! (faz carinho na Luma)', 'Bip! (ri da lambida)', 'Bi-bip! (as antenas ficaram molhadas)', 'Bip? (o que é au?)', 'Bop bop! (amiga nova)', 'Bip! (pisca as antenas pra ela)', 'Bip bip bip! (que rabo animado)', 'Bop? (ela vai pro espaço também?)', 'Bip! (dá um pulinho de susto)', 'Bip bop! (cheira ela de volta)', 'Bip! (gostou da Luma)', 'Bi-bip! (hihi, cosquinha!)', 'Bop! (faz uma reverência pra ela)', 'Bip? (ela também fala bip?)', 'Bip bip! (o bicho mais fofo da Terra)', 'Bop! (quer levar uma foto dela)', 'Bip! (acaricia a orelha dela)', 'Bip bop bip! (que recepção!)', 'Bip! (aperta a patinha dela)'];
+const FALAS_ET_TCHAU = ['Bip bip! (hora de voltar)', 'Bop! (acena tchau)', 'Bip! (o disco está chamando)', 'Bi-bip! (até a próxima visita)', 'Bip bop! (obrigado pelo passeio)', 'Bip! (volta pro pouso)', 'Bop bop! (tchau, fazenda)', 'Bip! (manda beijo pras galinhas)', 'Bip bip bip! (que passeio bom)', 'Bop! (a mãe dele está esperando)', 'Bip! (já está ficando tarde lá no espaço)', 'Bi-bip! (volta logo!)', 'Bip? (pode voltar amanhã?)', 'Bop bip! (leva saudade)', 'Bip! (tchau, Ed!)', 'Bip bip! (tchau, Luma!)', 'Bop! (pulinho de despedida)', 'Bip! (o disco vai partir)', 'Bip bop! (próxima parada: Lua)', 'Bip! (foi um prazer)', 'Bi-bip bop! (melhor fazenda da galáxia)'];
+let etVisita = null;
+const temDiscoJardim = () => ((S.guardados && S.guardados.discoJardim) || 0) + S.enfeites.filter(e => e.tipo === 'discoJardim').length > 0;
+// o que o ETzinho quer nesta visita: um dos produtos da lista, de preferência um que dá para pagar
+function pedidoEt(){
+  const qt = k => Math.max(3, Math.round(VISITA_ET.valor / PRODUTOS[k].venda)), l = VISITA_ET.quer.filter(k => PRODUTOS[k] && PRODUTOS[k].nivel <= nivel());
+  const tem = l.filter(k => (S.celeiro[k] || 0) >= qt(k)), algum = l.filter(k => S.celeiro[k] > 0);
+  const quer = tem.length ? sorteia(tem) : algum.length ? sorteia(algum) : l.length ? sorteia(l) : 'leite';
+  return { quer, q: qt(quer) };
+}
+const nomeProdutoQ = (k, q) => `${q} ${q === 1 ? PRODUTOS[k].nome.toLowerCase() : PRODUTOS[k].plural}`;
+// o ETzinho a pé: o mesmo desenho do domo, em cubinhos maiores; anda aos pulinhos (andarEt)
+function criarEtAndando(V){
+  const g = new THREE.Group(), m = malha(geo('etAndando', () => vDiscoEt().build(VISITA_ET.tam, { origin: [0.5, 0, 0.5] })));
+  g.add(m); scene.add(g);
+  g.traverse(o => { o.userData.alvo = { k: 'et' }; }); pickaveis.push(g);
+  const E = { nome: 'et', g, m, pos: new THREE.Vector2(V.px, V.pz), ang: 0, pontos: [], passo: 0, espera: 0, pulo: 0, topo(){ return g.position.clone().add(new THREE.Vector3(0, 0.75, 0)); } };
+  return E;
+}
+function etFala(lista){ const V = etVisita; if (!V || !V.et || !V.et.g.visible) return; const f = variar(lista); falar(V.et, f, tempoDeLeitura(f)); Som.tom(1250, 0.07, 'square', 0.02, 1650); Som.tom(900, 0.07, 'square', 0.02, 1300, 0.12); }
+// anda até o próximo ponto; devolve true quando chegou no último
+function andarEt(E, dt){
+  if (!E.pontos.length) return true;
+  const [x, z] = E.pontos[0], dx = x - E.pos.x, dz = z - E.pos.y, d = Math.hypot(dx, dz), s = VISITA_ET.vel * dt;
+  if (d > 0.01) E.ang = anguloPerto(E.ang, Math.atan2(dx, dz), Math.min(1, dt * 8));
+  if (d <= s){ E.pos.set(x, z); E.pontos.shift(); } else { E.pos.x += dx / d * s; E.pos.y += dz / d * s; }
+  E.passo += dt * 11;
+  return !E.pontos.length;
+}
+function caminhoEt(E, x, z){
+  const pts = rota(clamp(Math.floor(E.pos.x), 0, W - 1), clamp(Math.floor(E.pos.y), 0, H - 1), Math.floor(x), Math.floor(z));
+  if (!pts) return false;
+  if (pts.length) pts.pop(); pts.push([x, z]); E.pontos = pts; return true;
+}
+// um lugar sorteado perto do pouso, onde dá para andar
+function destinoEt(V){
+  const E = V.et, [a, b] = VISITA_ET.raio;
+  for (let i = 0; i < 14; i++){
+    const ang = Math.random() * Math.PI * 2, r = rnd(a, b), x = Math.floor(V.chao[0] + Math.sin(ang) * r), z = Math.floor(V.chao[1] + Math.cos(ang) * r);
+    if (x < 0 || z < 0 || x >= W || z >= H || !andavel(x, z)) continue;
+    if (caminhoEt(E, x + rnd(0.3, 0.7), z + rnd(0.3, 0.7)) && E.pontos.length < 20) return true;
+  }
+  return false;
+}
+// o disco e o ETzinho, a cada quadro, com o disco parado em cima do pouso (q: o tempo parado)
+function passoVisitaEt(P, T, q, dt){
+  const V = T.visita, ease = k => k * k * (3 - 2 * k), E = V.et;
+  V.t += dt;
+  const embaixo = () => { P.g.position.set(V.px + Math.sin(q * 2) * 0.04, V.baixo.y + Math.sin(q * 3) * 0.05, V.pz + Math.cos(q * 2) * 0.04); };
+  if (V.fase === 'desce'){
+    const k = Math.min(1, V.t / 1.6);
+    P.g.position.lerpVectors(V.alto, V.baixo, ease(k)); P.g.scale.setScalar(lerp(DISCO_JOGO.escala, VISITA_ET.escala, ease(k)));
+    if (k >= 1){ V.fase = 'raio'; V.t = 0; V.raio = raioAbducao(); Som.disco(); P.D.et.visible = false; V.et = criarEtAndando(V); V.et.g.scale.setScalar(0.15); }
+    return;
+  }
+  const topo = V.baixo.y - 0.2, R = V.raio;
+  const luz = h => { R.visible = h > 0.01; R.scale.set(1, Math.max(0.01, h), 1); R.position.set(V.px, topo - h / 2, V.pz); R.material.opacity = 0.32 + Math.sin(q * 9) * 0.07; };
+  if (V.fase === 'raio' || V.fase === 'sobe'){
+    embaixo();
+    const ida = V.fase === 'raio', k = Math.min(1, Math.max(0, (V.t - 0.4) / 1.4)), e = ease(ida ? k : 1 - k);
+    luz(topo * Math.min(1, V.t / 0.4) * (ida ? 1 : 1 - Math.max(0, (V.t - 1.9) / 0.4)));
+    E.g.visible = ida || k < 1;
+    E.g.position.set(V.px, (1 - e) * (topo - 0.15), V.pz); E.g.scale.setScalar(0.15 + e * 0.85); E.g.rotation.y = (1 - e) * 6 + E.ang;
+    if (ida && V.t >= 2.1){
+      R.visible = false; V.fase = 'passeia'; V.t = 0; E.pos.set(V.px, V.pz); E.pontos = [V.chao.slice()];
+      S.visitasEt = (S.visitasEt || 0) + 1; salvar();
+      aviso('O ETzinho pousou no observatório e desceu para passear. Toque nele para fazer uma troca!', '', 4.5);
+      if (ed.g.visible && !cine){ if (ed.estado === 'parado' && !tarefaAtual) ed.olhar(V.px, V.pz); setTimeout(() => { if (!cine) edFala(FALAS_ED_ET); }, 900); }
+    }
+    if (!ida && V.t >= 2.3){
+      scene.remove(E.g); const i = pickaveis.indexOf(E.g); if (i >= 0) pickaveis.splice(i, 1); V.et = null;
+      P.D.et.visible = true; R.visible = false; V.fase = 'decola'; V.t = 0; Som.disco();
+    }
+    return;
+  }
+  if (V.fase === 'decola'){
+    const k = Math.min(1, V.t / 1.5);
+    P.g.position.lerpVectors(V.baixo, V.alto, ease(k)); P.g.scale.setScalar(lerp(VISITA_ET.escala, DISCO_JOGO.escala, ease(k)));
+    if (k >= 1){ V.fim = true; T.para = Math.max(0, q - 0.001); }
+    return;
+  }
+  // passeando ou voltando: o disco espera embaixo, e o ETzinho anda aos pulinhos
+  embaixo();
+  const chegou = andarEt(E, dt);
+  if (E.pulo > 0) E.pulo = Math.max(0, E.pulo - dt);
+  const anda = E.pontos.length > 0;
+  E.g.position.set(E.pos.x, anda ? Math.abs(Math.sin(E.passo)) * 0.07 : E.pulo > 0 ? Math.sin((1 - E.pulo / 0.5) * Math.PI) * 0.2 : 0, E.pos.y);
+  E.g.rotation.set(0, E.ang, anda ? Math.sin(E.passo) * 0.12 : 0);
+  E.g.scale.setScalar(1);
+  if (V.fase === 'volta'){ if (chegou){ V.fase = 'sobe'; V.t = 0; E.ang = 0; Som.disco(); } return; }
+  // a Luma cheirando: ele para e olha para ela
+  const L = luma, cheira = L && L.acao === 'et' && L.passo === 2;
+  if (cheira){ E.pontos = []; E.ang = anguloPerto(E.ang, Math.atan2(L.pos.x - E.pos.x, L.pos.y - E.pos.y), Math.min(1, dt * 6)); return; }
+  if (!(menuAberto && menuAberto.k === 'et')) V.tempo += dt;
+  if (chegou && !E.parou){ E.parou = true; E.espera = rnd(2, 3.6); if (Math.random() < 0.45) etFala(FALAS_ET_PASSEIO); }
+  if (E.espera > 0){ E.espera -= dt; E.ang += Math.sin(V.t * 1.7) * dt * 0.8; return; }
+  if (V.tempo > VISITA_ET.tempo){
+    V.fase = 'volta'; E.parou = false; etFala(FALAS_ET_TCHAU);
+    if (menuAberto && menuAberto.k === 'et') fecharMenu();
+    if (!caminhoEt(E, ...V.chao)) E.pontos = [];
+    E.pontos.push([V.px, V.pz]); return;
+  }
+  if (!E.pontos.length){ E.parou = false; if (!destinoEt(V)) E.espera = 1; }
+}
+function fimVisitaEt(T){
+  const V = T && T.visita;
+  if (!V || V.limpa) return;
+  V.limpa = true;
+  if (V.raio){ scene.remove(V.raio); V.raio.geometry.dispose(); V.raio.material.dispose(); }
+  if (V.et){ scene.remove(V.et.g); const i = pickaveis.indexOf(V.et.g); if (i >= 0) pickaveis.splice(i, 1); V.et = null; }
+  const P = discoJogo; if (P){ P.D.et.visible = true; P.g.scale.setScalar(DISCO_JOGO.escala); }
+  if (etVisita === V) etVisita = null;
+  if (menuAberto && (menuAberto.k === 'et' || menuAberto.k === 'disco')) fecharMenu();
+}
+// a troca, no menu do ETzinho (ou do disco, enquanto ele passeia)
+function itensEt(){
+  const V = etVisita, r = { titulo: 'ETzinho', icone: 'disco', itens: [], estado: '' };
+  if (!V || V.fase !== 'passeia'){ r.estado = V ? 'O ETzinho está no raio do disco.' : 'O ETzinho já foi embora.'; return r; }
+  const p = V.quer, tem = S.celeiro[p] || 0, n2 = V.q * VISITA_ET.discoX;
+  r.estado = `O ETzinho veio dar uma volta na fazenda. Ele troca coisas do espaço por ${PRODUTOS[p].plural}: você tem ${tem}.`;
+  if (!V.sementes) r.itens.push({ rotulo: `${VISITA_ET.sementes} sementes de melancia lunar`, sub: `em troca de ${nomeProdutoQ(p, V.q)}; só ele tem`, icone: 'melanciaLunar', off: tem < V.q, fn: () => trocarEt('sementes') });
+  if (!temDiscoJardim()) r.itens.push({ rotulo: ENFEITES.discoJardim.nome, sub: `enfeite que não tem na loja, em troca de ${nomeProdutoQ(p, n2)}`, icone: 'discoJardim', off: tem < n2, fn: () => trocarEt('disco') });
+  if (!r.itens.length) r.estado = 'O ETzinho já fez a troca desta visita. Ele está só passeando.';
+  return r;
+}
+function trocarEt(tipo){
+  const V = etVisita; if (!V || V.fase !== 'passeia' || !V.et) return false;
+  const p = V.quer, n = tipo === 'disco' ? V.q * VISITA_ET.discoX : V.q;
+  if (tipo === 'sementes' ? V.sementes : temDiscoJardim()) return false;
+  if ((S.celeiro[p] || 0) < n){ aviso(`Faltam ${PRODUTOS[p].plural} para a troca`, 'ruim'); Som.erro(); return false; }
+  S.celeiro[p] -= n; if (!S.celeiro[p]) delete S.celeiro[p];
+  const E = V.et, alvo = E.topo();
+  if (tipo === 'sementes'){
+    V.sementes = true; S.bolsa.melanciaLunar = (S.bolsa.melanciaLunar || 0) + VISITA_ET.sementes; flutuar(alvo, '+' + VISITA_ET.sementes, '', 'melanciaLunar');
+    aviso(`O ETzinho levou ${nomeProdutoQ(p, n)} e deixou ${VISITA_ET.sementes} sementes de melancia lunar.`, '', 4);
+  } else {
+    S.guardados.discoJardim = (S.guardados.discoJardim || 0) + 1; flutuar(alvo, ENFEITES.discoJardim.nome, '', 'discoJardim');
+    aviso(`O ETzinho levou ${nomeProdutoQ(p, n)} e deixou o disco voador de jardim. Ele está guardado na loja, em Enfeites.`, '', 4.5);
+  }
+  for (let i = 0; i < 14; i++) particula(E.pos.x + rnd(-0.2, 0.2), 0.5, E.pos.y + rnd(-0.2, 0.2), CDV.luzes[i % 3], 0.8);
+  S.trocasEt = (S.trocasEt || 0) + 1; E.pulo = 0.5; E.espera = Math.max(E.espera, 2); E.pontos = [];
+  if (ed.g.visible) E.ang = Math.atan2(ed.pos.x - E.pos.x, ed.pos.y - E.pos.y);
+  etFala(FALAS_ET_TROCA); Som.moeda(); hud(); salvar();
+  if (ed.g.visible && !cine) setTimeout(() => { if (!cine) edFala(FALAS_ED_TROCA_ET); }, 1600);
+  return true;
+}
+// o disco voador de jardim: o pé de pedra com a haste; o disquinho de verdade (montarDisco) vai em cima, girando com as
+// luzes piscando (atualizarEnfeites)
+function vDiscoJardimBase(){
+  const v = new Vox();
+  v.ell(0, 0, 0, 4.5, 1.4, 4.5, (x, y, z) => hash(x, y, z) < 0.3 ? 0x8a929a : 0x9aa3ab, (x, y) => y >= 0);
+  v.box(-1, 1, -1, 0, 6, 0, CDV.borda);
+  for (const [x, z] of [[2, 1], [-3, -2], [1, -3]]) v.set(x, 1, z, CDV.et);
+  return v;
 }
 // ================= abdução: às vezes, no meio do passeio, o disco desce em cima do curral e leva uma vaca num raio de luz,
 // com uma musiquinha de suspense em estilo midi. A vaca sai do save (o Ed tem que comprar outra). Na reprise da janela
@@ -9897,7 +10105,7 @@ const VI = {
   casinhaLuma(){ return vCasinhaLuma(); }, carriola(){ return vCarriola(); }, mesaPiquenique(){ return vMesaPiquenique(); }, relogioSol(){ return vRelogioSol(); }, pergola(){ return vPergola(); },
   fogueira(){ return vFogueiraRoda(); }, laguinho(){ return vLaguinho(); }, pocoDesejos(){ return vPocoDesejos(); }, bandeirinhas(){ return vBandeirinhas(); },
   topiaria(){ return vTopiaria(); }, estatuaFamilia(){ return vEstatuaFamilia(); },
-  malasViagem(){ return vMalasViagem(); }, placaViagem(){ return vPlacaViagem(); }, globoViagem(){ return vGloboViagem(); },
+  malasViagem(){ return vMalasViagem(); }, placaViagem(){ return vPlacaViagem(); }, globoViagem(){ return vGloboViagem(); }, discoJardim(){ return VI.disco(); },
   balanco(){ const v = vBalanco(); const [px, py, pz] = BALANCO.pivo; for (const e of vPneuBalanco().m.values()) v.set(e.x + Math.floor(px), e.y + py, e.z + Math.floor(pz), e.c); return v; }, comedouro(){ return vComedouro(); },
   flores(){ return vCanteiroFlor(); }, banco(){ return vBanco(); }, espantalho(){ return vEspantalho(); }, poste(){ return vPoste(); }, varal(){ return vVaralTrecho(); }, fonte(){ return vFonte(); }, estatua(){ const v = vEstatua(); return v; },
   laranjeira(){ return vFrutifera('laranjeira', true); }, goiabeira(){ return vFrutifera('goiabeira', true); }, mangueira(){ return vFrutifera('mangueira', true); },
@@ -17160,6 +17368,8 @@ const ENFEITES = {
   malasViagem:  { nome: 'Malas de viagem', art: 'as', encomenda: true, xp: 0, desc: 'As malas do Milton, cheias de adesivos de viagem. Só por encomenda ao Milton.' },
   placaViagem:  { nome: 'Poste de placas', art: 'o', encomenda: true, xp: 0, desc: 'As setas coloridas apontam para longe, para onde o Milton já voou. Só por encomenda ao Milton.' },
   globoViagem:  { nome: 'Globo terrestre', art: 'o', encomenda: true, xp: 0, desc: 'Um globo no pé de madeira, que gira devagar. Só por encomenda ao Milton.' },
+  // também fora da loja: só na troca com o ETzinho, quando ele desce do disco (VISITA_ET)
+  discoJardim:  { nome: 'Disco voador de jardim', art: 'o', encomenda: true, xp: 0, desc: 'Um disquinho com o ETzinho no domo, girando com as luzes piscando. Só na troca com o ETzinho.' },
 };
 const RAIO_ESPANTALHO = 3;
 const ENF_VIS = {};
@@ -17214,7 +17424,7 @@ function montarEnfeite(e){
   const modelos = { canteiroFlor: () => vCanteiroFlor(), banco: vBanco, espantalho: vEspantalho, poste: vPoste, fonte: vFonte, estatua: vEstatua,
     casinhaLuma: vCasinhaLuma, carriola: vCarriola, mesaPiquenique: vMesaPiquenique, relogioSol: vRelogioSol, pergola: vPergola, balanco: vBalanco, comedouro: vComedouro,
     fogueira: vFogueiraRoda, laguinho: vLaguinho, pocoDesejos: vPocoDesejos, bandeirinhas: vBandeirinhasMastros,
-    malasViagem: () => noMeio(vMalasViagem()), placaViagem: () => noMeio(vPlacaViagem()), globoViagem: () => noMeio(vGloboBase()) };
+    malasViagem: () => noMeio(vMalasViagem()), placaViagem: () => noMeio(vPlacaViagem()), globoViagem: () => noMeio(vGloboBase()), discoJardim: () => noMeio(vDiscoJardimBase()) };
   const escala = e.tipo === 'estatua' ? 1 / 40 : 1 / 16;
   let m;
   // a topiaria e a estátua da família: a base numa escala e a forma escolhida (e.forma) na escala do desenho dela
@@ -17229,6 +17439,11 @@ function montarEnfeite(e){
   }
   // a esfera do globo, que gira devagar (atualizarEnfeites)
   if (e.tipo === 'globoViagem'){ const g = malha(geo('globoEsfera', () => vGloboEsfera().build(1 / 16, { origin: [0, 0, 0] }))); g.position.set(0, 13 / 16, 0); m.add(g); m.userData.globo = g; }
+  // o disquinho em cima da haste, que gira com as luzes (atualizarEnfeites)
+  if (e.tipo === 'discoJardim'){
+    const D = montarDisco(false), h = new THREE.Group(); h.add(D.g); h.scale.setScalar(VISITA_ET.jardim); h.position.y = 7 / 16; m.add(h);
+    m.userData.discoJ = D; m.userData.fase = hash(e.x, 5, e.z) * 6;
+  }
   // o pneu do balanço, pendurado no gancho
   if (e.tipo === 'balanco'){
     const p = malha(geo('pneuBalanco', () => vPneuBalanco().build(1 / 16, { origin: [0, 0, 0] })));
@@ -17344,6 +17559,7 @@ function atualizarEnfeites(dt, t){
     if (U.sapo) atualizarSapinho(m, U, dt, t);
     if (U.cordao) U.cordao.rotation.x = Math.sin(t * 1.7 + U.fase) * 0.14;
     if (U.globo) U.globo.rotateOnAxis(EIXO_GLOBO, dt * 0.35);
+    if (U.discoJ) animarDisco(U.discoJ, t + U.fase);
   }
   atualizarComedouro(dt, t);
   atualizarFogueiraEd();
@@ -20629,6 +20845,7 @@ function itensDoAlvoBase(alvo){
   if (alvo.k === 'dani') return itensDani();
   if (alvo.k === 'milton') return itensMilton();
   if (alvo.k === 'disco') return itensDisco();
+  if (alvo.k === 'et') return itensEt();
   if (alvo.k === 'pista') return itensPista();
   if (alvo.k === 'enfeite') return itensEnfeite(alvo.e);
   if (alvo.k === 'nanoHostel') return itensNanoHostel();
@@ -22294,7 +22511,7 @@ async function iniciar(){
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
   window.__fazenda = { flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
-    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { circulo: { forcar: () => { discoJogo.forcarCirculo = true; discoJogo.prox = 0; }, fazer: fazerCirculo, lote: loteParaCirculo, grupo: () => grupoCirculo, soltar: soltarGrupoCirculo, CIRCULO }, sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
+    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { circulo: { forcar: () => { discoJogo.forcarCirculo = true; discoJogo.prox = 0; }, fazer: fazerCirculo, lote: loteParaCirculo, grupo: () => grupoCirculo, soltar: soltarGrupoCirculo, CIRCULO }, sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao, visita: { forcar: () => { discoJogo.forcarVisita = true; discoJogo.prox = 0; }, obj: () => etVisita, itens: itensEt, trocar: trocarEt, pedido: pedidoEt, temDisco: temDiscoJardim, VISITA_ET } }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(FAB_NOVAS).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
     trator: () => trator, TRATOR, filaTipos: () => fila.map(t => t.tipo), checar: (t, a, q) => checar(t, a, q), enfileirarTrator: (lote, acao, semente) => enfileirar('trator', { k: 'trator', lote }, { acao, semente }), tratorVis: () => tratorVis,
