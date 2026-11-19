@@ -4157,6 +4157,9 @@ function passarDisco(){
     T1.para = FAXINA.tempo; T1.susto = false; T1.faxina = { tiles: mato };
   }
   // a perseguição: sem abdução, devolução nem faxina, com a visita do Milton para logo (ou forçada nos testes)
+  // os círculos na plantação: de noite, sem abdução nem devolução, ficam marcados para quando ele for embora
+  P.circulo = !P.querAbduzir && !P.querDevolver && !S.circulo && (P.forcarCirculo || (periodo().id === 'noite' && Math.random() < CIRCULO.chance)) ? loteParaCirculo() : null;
+  P.forcarCirculo = false;
   if (!P.querAbduzir && !P.querDevolver && !mato && aviao && voo.estado === 'fora' && S.conheceuMilton && !jatoPendente() && !cine
     && (P.forcarPersegue || (S.proxMilton - Date.now() < 3 * 60000 && Math.random() < PERSEGUE.chance))) comecarPerseguicao();
   P.forcarAbducao = false; P.forcarVolta = false; P.forcarFaxina = false; P.forcarPersegue = false;
@@ -4301,6 +4304,127 @@ function passoSinal(P, dt){
     if ((S2.espera += dt) > SINAL.espera) fimSinal(false);
   }
 }
+// ================= os círculos na plantação (o Lucas pediu): numa passagem do disco de noite, sem abdução nem devolução,
+// em CIRCULO.chance das vezes, quando ele vai embora fica um desenho amassado num terreno de canteiros com pelo menos
+// CIRCULO.minimo canteiros plantados (de preferência o com mais milho). S.circulo guarda o terreno, o desenho e os
+// canteiros (com a cultura de cada um); o desenho vale enquanto o canteiro tiver a mesma cultura e não for colhido. Na
+// planta desses canteiros (atualizarCampo), as colunas de cubinhos dentro do desenho deitam no chão em palha
+// (plantaNoCirculo). Colher um canteiro do círculo rende CIRCULO.bonus vezes. De dia, de tempos em tempos, um grupo de
+// visitantes vem da porteira até a beira do terreno, tira fotos (com flash) e deixa uma gorjeta
+const CIRCULO = { chance: 0.45, minimo: 8, bonus: 2, visitas: 3, espera: [40, 90], fotos: 14, gorjeta: 30, vel: 1.3 };
+const FALAS_ED_CIRCULO = ['Aoooa! Quem desenhou na minha plantação?', 'Oinc! Isso tem cara de ETzinho!', 'Que desenho bonito no terreno!', 'O disco passou por aqui essa noite...', 'As plantinhas amanheceram deitadas em círculo!', 'Isso vai virar atração turística!', 'Arte espacial na horta!', 'Será que é um recado do espaço?', 'Ninguém da fazenda fez isso, juro!', 'Que capricho! Até parece régua.', 'Os ETs também gostam de jardinagem!', 'Vou colher com cuidado pra não estragar!', 'Aoooa! Visto do mirante deve ficar lindo!', 'É um círculo perfeito!', 'O ETzinho deixou uma assinatura!', 'Diz que plantação com círculo rende mais!', 'Que mistério na Joli Pig!', 'Oinc oinc! Vou tirar uma foto também!', 'Isso dá até reportagem!', 'Que bonito! Mas quem vai acreditar?', 'Obrigado pelo desenho, ETzinho!'];
+const FALAS_VISITA_CIRCULO = ['Olha só! Um círculo de verdade!', 'Que foto! Vou mandar pra família.', 'Será que foram os ETs?', 'Nunca vi nada igual!', 'Faz uma pose aqui na frente!', 'Isso é obra de outro planeta!', 'Vim de longe só pra ver!', 'Que perfeição de desenho!', 'Flash! Mais uma!', 'Olha que lindo visto daqui!', 'Dizem que o disco passa toda noite...', 'Vou postar agora mesmo!', 'Que mistério essa fazenda!', 'Tira uma comigo e o círculo!', 'Isso merece um selfie!', 'Que coisa mais linda!', 'É verdade o que falaram!', 'Vale a viagem!', 'O desenho é ainda maior ao vivo!', 'Obrigado por deixar a gente ver!', 'Que fazenda incrível!'];
+let grupoCirculo = null, proxGrupoCirculo = null, circuloLimpa = 0;
+// o desenho em cubinhos do terreno inteiro (64 × 64, quatro canteiros de 16 de cada lado): true onde a planta está deitada
+function noDesenho(d, gx, gz){
+  const x = gx - 31.5, z = gz - 31.5, r = Math.hypot(x, z);
+  if (d === 0){
+    if ((r >= 22.5 && r <= 26.5) || r < 8) return true;
+    for (let k = 0; k < 4; k++){ const a = Math.PI / 4 + k * Math.PI / 2; if (Math.hypot(x - Math.cos(a) * 16, z - Math.sin(a) * 16) < 4.5) return true; }
+    return false;
+  }
+  if (d === 1) return (r >= 6 && r <= 8.5) || (r >= 14 && r <= 16.5) || (r >= 22 && r <= 24.5) || r < 2.5;
+  // o rosto do ETzinho: a cabeça, os dois olhos e o sorriso
+  if (r >= 24 && r <= 27) return true;
+  for (const s of [-1, 1]) if (((x - s * 9) / 4.2) ** 2 + ((z + 6) / 6.5) ** 2 <= 1) return true;
+  const rs = Math.hypot(x, z - 1);
+  return z > 4 && rs >= 11 && rs <= 14;
+}
+const noCirculo = (x, z) => { const C = S.circulo, t = campo(x, z); return !!C && !!t && t.e === 'plantado' && C.tiles[chave(x, z)] === t.c; };
+// a planta do canteiro (lx, lz dentro do terreno) com as colunas do desenho deitadas: tira os cubinhos de pé e põe a palha
+function plantaNoCirculo(c, est, d, lx, lz){
+  const v = vPlanta(c, est), w = new Vox();
+  const dentro = (x, z) => noDesenho(d, lx * 16 + x, lz * 16 + z);
+  for (const e of v.m.values()) if (!dentro(e.x, e.z)) w.set(e.x, e.y, e.z, e.c);
+  for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++) if (dentro(x, z)){ const h = hash(x + lx * 16, 5, z + lz * 16); w.set(x, 0, z, h < 0.4 ? 0xf6e19a : h < 0.75 ? 0xead07a : 0xd8c06a); }
+  return w;
+}
+// o terreno com mais canteiros plantados (o milho conta em dobro)
+function loteParaCirculo(){
+  let melhor = null, nota = 0;
+  LOTES.forEach((L, i) => {
+    if (!S.lotes[i] || !loteAberto(i)) return;
+    let n = 0, m = 0;
+    for (let x = L.x; x < L.x + 4; x++) for (let z = L.z; z < L.z + 4; z++){ const t = campo(x, z); if (t && t.e === 'plantado'){ n++; if (t.c === 'milho') m++; } }
+    if (n >= CIRCULO.minimo && n + m > nota){ nota = n + m; melhor = i; }
+  });
+  return melhor;
+}
+function fazerCirculo(i){
+  const L = LOTES[i], tiles = {};
+  for (let x = L.x; x < L.x + 4; x++) for (let z = L.z; z < L.z + 4; z++){ const t = campo(x, z); if (t && t.e === 'plantado') tiles[chave(x, z)] = t.c; }
+  S.circulo = { lote: i, desenho: Math.floor(Math.random() * 3), tiles, visitas: 0, falou: false };
+  for (const k in tiles){ const [x, z] = k.split(',').map(Number); atualizarCampo(x, z); }
+  proxGrupoCirculo = rnd(...CIRCULO.espera);
+  aviso('O disco deixou um desenho amassado na plantação!', '', 4); salvar();
+}
+// a colheita de um canteiro do círculo: rende mais e sai do desenho
+function colheuNoCirculo(x, z){
+  const C = S.circulo, k = chave(x, z);
+  if (!C || !(k in C.tiles)) return 1;
+  const vale = noCirculo(x, z);
+  delete C.tiles[k];
+  if (!Object.keys(C.tiles).length){ S.circulo = null; if (grupoCirculo) grupoCirculo.vai = true; }
+  return vale ? CIRCULO.bonus : 1;
+}
+// os visitantes: três pessoas saem da porteira, param na beira do terreno, tiram fotos e voltam
+function soltarGrupoCirculo(){
+  const C = S.circulo, L = LOTES[C.lote];
+  // a beira do terreno: o primeiro ladrilho andável em volta dele, do lado de baixo da tela
+  let beira = null;
+  for (let d = 0; d < 4 && !beira; d++) for (const [x, z] of [[L.x + 1 + d % 2, L.z + 4], [L.x + 4, L.z + 1 + d % 2], [L.x - 1, L.z + 2], [L.x + 2, L.z - 1]]) if (andavel(x, z) && rota(X_PORTEIRA, Z_CERCA - 1, x, z)){ beira = [x, z]; break; }
+  if (!beira) return false;
+  const pts = rota(X_PORTEIRA, Z_CERCA - 1, beira[0], beira[1]);
+  const gente = [0, 1, 2].map(i => {
+    const k = Math.floor(Math.random() * 1000), g = malha(geo('visitante' + (k % 12), () => vVisitante(k % 12).build(MIRANTE.sV, { origin: [0.5, 0, 0.5], jitter: 0.02 })));
+    g.position.set(X_PORTEIRA + 0.5, 0, Z_CERCA - 0.5); scene.add(g);
+    const off = [[-0.3, 0.2], [0.25, -0.15], [0.05, 0.4]][i];
+    return { g, off, pts: [...pts.slice(0, -1), [beira[0] + 0.5 + off[0], beira[1] + 0.5 + off[1]]], i: 0, flash: rnd(0.5, 2), nome: 'visitante', topo(){ return this.g.position.clone().add(new THREE.Vector3(0, 1, 0)); } };
+  });
+  grupoCirculo = { gente, t: 0, fase: 'indo', centro: [L.x + 2, L.z + 2], falou: false };
+  C.visitas++; return true;
+}
+function atualizarCirculo(dt, t){
+  // de tempos em tempos tira do desenho os canteiros que mudaram (arrancados, replantados); sem nenhum, ele acaba
+  if (S.circulo && (circuloLimpa = (circuloLimpa || 0) - dt) <= 0){
+    circuloLimpa = 5;
+    for (const k in S.circulo.tiles){ const [x, z] = k.split(',').map(Number); if (!noCirculo(x, z)) delete S.circulo.tiles[k]; }
+    if (!Object.keys(S.circulo.tiles).length){ S.circulo = null; salvar(); }
+  }
+  const C = S.circulo;
+  if (C && !C.falou && ed.g.visible && !cine && periodo().id !== 'noite'){ C.falou = true; setTimeout(() => edFala(FALAS_ED_CIRCULO), 1500); }
+  const G = grupoCirculo;
+  if (!G){
+    if (!C || cine || periodo().id === 'noite' || C.visitas >= CIRCULO.visitas) return;
+    if (proxGrupoCirculo == null) proxGrupoCirculo = rnd(...CIRCULO.espera);
+    if ((proxGrupoCirculo -= dt) <= 0){ proxGrupoCirculo = soltarGrupoCirculo() ? rnd(...CIRCULO.espera) : 20; }
+    return;
+  }
+  if (cine){ for (const p of G.gente) scene.remove(p.g); grupoCirculo = null; return; }
+  G.t += dt;
+  let todos = true;
+  for (const p of G.gente){
+    const alvo = p.pts[p.i];
+    if (alvo){
+      todos = false;
+      const dx = alvo[0] - p.g.position.x, dz = alvo[1] - p.g.position.z, d = Math.hypot(dx, dz), passo = CIRCULO.vel * dt;
+      if (d <= passo){ p.g.position.x = alvo[0]; p.g.position.z = alvo[1]; p.i++; }
+      else { p.g.position.x += dx / d * passo; p.g.position.z += dz / d * passo; p.g.rotation.y = Math.atan2(dx, dz); }
+      p.g.position.y = Math.abs(Math.sin(t * 9 + p.off[0] * 9)) * 0.03;
+    } else if (G.fase === 'fotos'){
+      p.g.rotation.y = anguloPerto(p.g.rotation.y, Math.atan2(G.centro[0] - p.g.position.x, G.centro[1] - p.g.position.z), Math.min(1, dt * 4));
+      if ((p.flash -= dt) <= 0){ p.flash = rnd(1.5, 3); const q = p.topo(); q.y -= 0.25; for (let i = 0; i < 6; i++) particula(q.x, q.y, q.z, 0xffffff, 0.4); Som.tom(2400, 0.04, 'square', 0.01); }
+    }
+  }
+  if (G.fase === 'indo' && todos){ G.fase = 'fotos'; G.t = 0; const p = sorteia(G.gente); falar(p, variar(FALAS_VISITA_CIRCULO), 2.6); }
+  if (G.fase === 'fotos' && (G.t > CIRCULO.fotos || G.vai)){
+    // a gorjeta e a volta pela mesma rota
+    const v = CIRCULO.gorjeta * nivel(); S.dinheiro += v; chipPulsa('chipDinheiro'); flutuar(G.gente[0].topo(), '+' + reais(v), 'ouro'); Som.moeda(); salvar();
+    G.fase = 'volta';
+    for (const p of G.gente) { p.pts = [...p.pts.slice(0, -1).reverse(), [X_PORTEIRA + 0.5, Z_CERCA - 0.5]]; p.i = 0; }
+  }
+  if (G.fase === 'volta' && todos){ for (const p of G.gente) scene.remove(p.g); grupoCirculo = null; }
+}
 function sustoDoEd(){
   if (!ed.g.visible) return;
   ed.pulo = 0.45; Som.oinc();
@@ -4329,7 +4453,7 @@ function atualizarDisco(dt, t){
   P.t += dt; P.tt += dt;
   let T = P.trechos[P.i];
   if (T && P.tt > T.dur + T.para){ fimFaxina(T); P.tt -= T.dur + T.para; P.i++; T = P.trechos[P.i]; }
-  if (!T || cine){ fimFaxina(T); P.g.visible = false; P.t = -1; P.prox = rnd(...DISCO_JOGO.intervalo); return; }
+  if (!T || cine){ fimFaxina(T); if (!T && P.circulo != null && !cine) fazerCirculo(P.circulo); P.circulo = null; P.g.visible = false; P.t = -1; P.prox = rnd(...DISCO_JOGO.intervalo); return; }
   if (P.tt < T.dur){
     // vai de um ponto ao outro suavemente; no último trecho, acelera para ir embora
     const k = P.tt / T.dur, e = T.sai ? k * k : k * k * (3 - 2 * k);
@@ -12576,13 +12700,14 @@ function atualizarCampo(x, z){
     }
     vis.cs = cs;
   }
-  const est = t ? estagio(t) : -1;
-  const cp = est >= 0 ? t.c + est : '';
+  const est = t ? estagio(t) : -1, circ = est >= 0 && noCirculo(x, z) ? S.circulo : null;
+  const lx = circ ? x - LOTES[circ.lote].x : 0, lz = circ ? z - LOTES[circ.lote].z : 0;
+  const cp = est >= 0 ? t.c + est + (circ ? `~${circ.desenho}.${lx}.${lz}` : '') : '';
   if (cp !== vis.cp){
     if (vis.planta){ tirarCanteiro(vis.planta); const i = pickaveis.indexOf(vis.planta); if (i >= 0) pickaveis.splice(i, 1); }
     vis.planta = null;
     if (cp){
-      const m = malha(geo('planta' + cp, () => vPlanta(t.c, est).build(1 / 16, { origin: [8, 0, 8] })));
+      const m = malha(geo('planta' + cp, () => (circ ? plantaNoCirculo(t.c, est, circ.desenho, lx, lz) : vPlanta(t.c, est)).build(1 / 16, { origin: [8, 0, 8] })));
       m.position.set(px, 2 / 16, pz);
       if (vis.cp && est > 0) m.scale.setScalar(0.6);
       m.userData.alvo = { k: 'tile', x, z }; m.userData.canteiro = true; pickaveis.push(m);
@@ -19502,7 +19627,7 @@ function aplicarCanteiro(tipo, x, z){
   if (tipo === 'arar'){ t.e = 'arado'; ganharXP(1, pos); }
   if (tipo === 'regar'){ t.p = null; t.ev++; avancar(t, 0, irrigado(x, z)); ganharXP(1, pos); pagarRegas(pos); avancarTut(1); }
   if (tipo === 'colher'){
-    const c = CULTURAS[t.c], prod = c.produto || t.c, rend = rendCultura(t.c);
+    const c = CULTURAS[t.c], prod = c.produto || t.c, rend = rendCultura(t.c) * colheuNoCirculo(x, z);
     S.celeiro[prod] = (S.celeiro[prod] || 0) + rend; contar('colhido', prod, rend);
     flutuar(pos, '+' + rend, '', prod);
     ganharXP(c.xp, pos.clone().add(new THREE.Vector3(0, 0.25, 0)));
@@ -21924,7 +22049,7 @@ function quadro(agoraP){
   atualizarDani(dt, t);
   if (irmaoDani.g.visible || daniAtivo()){ porOculto($('daniPill'), !daniAtivo()); if (daniAtivo()){ porTexto($('daniTexto'), 'Dani ajudando'); porTexto($('daniTempo'), tempo((S.daniAte - Date.now()) / 1000)); } }
   else if (!$('daniPill').hidden) $('daniPill').hidden = true;
-  atualizarNados(dt, t); atualizarBalancoEd(dt); atualizarPasseio(dt);
+  atualizarNados(dt, t); atualizarBalancoEd(dt); atualizarPasseio(dt); atualizarCirculo(dt, t);
   arrumarAndamento();
   if (beto.g.visible) beto.update(dt, t);
   if (jaca.g.visible) jaca.update(dt, t);
@@ -22133,7 +22258,7 @@ async function iniciar(){
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
   window.__fazenda = { flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
-    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
+    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { circulo: { forcar: () => { discoJogo.forcarCirculo = true; discoJogo.prox = 0; }, fazer: fazerCirculo, lote: loteParaCirculo, grupo: () => grupoCirculo, soltar: soltarGrupoCirculo, CIRCULO }, sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(FAB_NOVAS).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
     trator: () => trator, TRATOR, filaTipos: () => fila.map(t => t.tipo), checar: (t, a, q) => checar(t, a, q), enfileirarTrator: (lote, acao, semente) => enfileirar('trator', { k: 'trator', lote }, { acao, semente }), tratorVis: () => tratorVis,
