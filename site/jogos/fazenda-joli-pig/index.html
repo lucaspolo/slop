@@ -323,7 +323,7 @@ body.primeira-pessoa .hud-topo,body.primeira-pessoa .hud-base,body.primeira-pess
 .vista-ed span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .vista-ed .botao{flex:none}
 .vista-ed[hidden],.vista-ed-legenda[hidden],.controle-ed[hidden]{display:none}
-.controle-ed{position:absolute;right:max(18px,env(safe-area-inset-right));bottom:calc(86px + env(safe-area-inset-bottom));width:124px;height:124px;border-radius:50%;background:rgba(32,22,16,.32);border:3px solid rgba(253,248,239,.85);box-shadow:0 3px 0 rgba(32,22,16,.35);touch-action:none;z-index:7;display:grid;place-items:center;cursor:grab;-webkit-user-select:none;user-select:none}
+.controle-ed{position:absolute;left:max(18px,env(safe-area-inset-left));bottom:calc(86px + env(safe-area-inset-bottom));width:124px;height:124px;border-radius:50%;background:rgba(32,22,16,.32);border:3px solid rgba(253,248,239,.85);box-shadow:0 3px 0 rgba(32,22,16,.35);touch-action:none;z-index:7;display:grid;place-items:center;cursor:grab;-webkit-user-select:none;user-select:none}
 .controle-ed::before{content:'';position:absolute;inset:16px;border-radius:50%;border:2px dashed rgba(253,248,239,.55);pointer-events:none}
 .controle-ed .manche{width:56px;height:56px;border-radius:50%;background:var(--amarelo);border:3px solid var(--borda);box-shadow:0 3px 0 var(--borda);pointer-events:none;transition:transform .12s}
 .controle-ed.ativo .manche{transition:none}
@@ -7526,15 +7526,15 @@ function atualizarMirante1P(dt){
 }
 // ================= a vista do Ed (o Lucas pediu): tocar no Ed abre o menu dele, com "Ver pela vista do Ed". A vista troca
 // para a câmera em perspectiva do mirante (cameraFP). Primeiro era nos olhos dele; depois o Lucas pediu terceira pessoa por
-// cima do ombro, como no GTA: a câmera fica atrás do Ed, um pouco para a direita (lado) e acima do ombro (ombro), olhando
-// para a frente dele, e o Ed aparece na esquerda da tela. Ela vira junto com ele, devagar (segue), porque ele vira seco nas
+// cima do ombro, como no GTA: a câmera fica atrás do Ed, por cima do ombro esquerdo (lado negativo; o Lucas pediu o esquerdo,
+// com o manche à esquerda e a câmera mais afastada), olhando para a frente dele, e o Ed aparece na direita da tela. Ela vira junto com ele, devagar (segue), porque ele vira seco nas
 // curvas do caminho. Arrastar gira a câmera em volta dele e a deixa olhar para cima e para baixo; depois de VISTA_ED.volta
 // segundos ela volta sozinha para trás dele. Se uma parede, uma árvore ou um telhado fica entre o ombro e a câmera, ela
 // chega mais perto (colisaoVistaEd), como no GTA. Trabalhando ele olha um pouco para baixo. A fazenda continua andando e
 // o Ed continua a fila, mas não dá para tocar em nada. Embaixo aparece o que ele está fazendo, e as falas dele viram
 // legenda. Quando começa uma cena (a hora de nanar também é cena), a vista volta para a de cima e a cena usa a câmera dela;
 // se ele sobe no mirante, vale a vista do mirante
-const VISTA_ED = { ombro: 1.4, lado: 0.36, dist: 2.8, minDist: 0.6, fov: 62, nevoa: [14, 46], segue: 3, pitch: -0.17, olharBaixo: -0.32,
+const VISTA_ED = { ombro: 1.5, lado: -0.38, dist: 3.5, minDist: 0.6, fov: 62, nevoa: [14, 46], segue: 3, pitch: -0.17, olharBaixo: -0.32,
   volta: 3, voltaVel: 2.5, sens: 0.006, legenda: 3.2, balanco: 0.3 };
 let vistaEd = null;
 function entrarVistaEd(){
@@ -7623,6 +7623,7 @@ function passoControleEd(V){
 // até onde a câmera pode ir para trás do ombro sem passar por dentro de uma construção, árvore ou enfeite (o Ed e os
 // bichos não contam); o chão também segura, para ela não descer abaixo da grama olhando para cima
 const _ombroEd = new THREE.Vector3(), _trasEd = new THREE.Vector3(), _raioVista = new THREE.Raycaster();
+let colisaoVista = '';
 function colisaoVistaEd(de, dir, max){
   let d = max;
   if (dir.y < -0.01) d = Math.min(d, (de.y - 0.15) / -dir.y);
@@ -7633,7 +7634,7 @@ function colisaoVistaEd(de, dir, max){
     if (!a || a.k === 'ed' || a.k === 'animal' || a.k === 'bicho' || a.k === 'galo' || a.k === 'ocorrencia' || a.k === 'tile') continue;
     let vis = true; for (let q = h.object; q; q = q.parent) if (q.visible === false) vis = false;
     if (!vis || (h.object.material && h.object.material.visible === false)) continue;
-    d = Math.min(d, h.distance - 0.25); break;
+    d = Math.min(d, h.distance - 0.25); colisaoVista = a.k; break;
   }
   return Math.max(VISTA_ED.minDist, d);
 }
@@ -7651,7 +7652,7 @@ function atualizarVistaEd(dt){
   V.pitch += ((trab ? R.olharBaixo : R.pitch) - V.pitch) * k;
   if (performance.now() - V.mexeu > R.volta * 1000){ const q = Math.min(1, dt * R.voltaVel); V.dyaw -= V.dyaw * q; V.dpitch -= V.dpitch * q; }
   const yaw = V.yaw + V.dyaw, pitch = V.pitch + V.dpitch;
-  // o ombro: acima do Ed e um pouco para a direita de quem olha; a câmera fica atrás dele, na direção do olhar
+  // o ombro: acima do Ed e um pouco para o lado (lado: positivo é o direito, negativo o esquerdo); a câmera fica atrás dele, na direção do olhar
   const fx = -Math.sin(yaw) * Math.cos(pitch), fy = Math.sin(pitch), fz = -Math.cos(yaw) * Math.cos(pitch), rx = Math.cos(yaw), rz = -Math.sin(yaw);
   _ombroEd.set(ed.pos.x + rx * R.lado, ed.g.position.y + R.ombro + ed.corpo.position.y * R.balanco, ed.pos.y + rz * R.lado);
   _trasEd.set(-fx, -fy, -fz);
@@ -23099,7 +23100,7 @@ async function iniciar(){
     abrirMenu: (alvo, x = 300, y = 300) => abrirMenu(alvo, x, y),
     miranteVisao: { V: visaoMirante, cobre: () => miranteCobre(), topo: () => miranteTopo, MIRANTE_VISAO },
     otim: { OTIM, RITMO, SOMBRA_VISTA, MEDIDOR, pular: pularQuadro, luzes: () => luzesNaCena, lanternas: () => LANTERNAS.map(q => +q.luz.intensity.toFixed(2)), porLuzes, luzesPontuais, aquecer: aquecerLuzes, mata: v => { OTIM.mata = v; scene.traverse(o => { if (o.isInstancedMesh && o.userData.mata) o.frustumCulled = v; }); }, cercas: v => { OTIM.cercas = v; refazerCercas(); }, lotes: v => { OTIM.lotes = v; refazerCanteiros(); }, part: particulasJuntas, juntar: juntarParticulas, particula, jato: irrigadorJato, CERCA_VIS, CERCA_BLOCOS, LOTE_DES, PART_DES, PART, ABELHAS, VIS, pickaveis, render: () => ({ renderer, scene, camera, sol }), cineBusca },
-    vistaEd: { entrar: entrarVistaEd, sair: sairVistaEd, girar: girarVistaEd, obj: () => vistaEd, cam: () => cameraFP, faz: oQueOEdFaz, VISTA_ED },
+    vistaEd: { colisao: () => colisaoVista, entrar: entrarVistaEd, sair: sairVistaEd, girar: girarVistaEd, obj: () => vistaEd, cam: () => cameraFP, faz: oQueOEdFaz, VISTA_ED },
     mirante1p: { subir: subirMirante, descer: descerMirante, girar: girarMirante, zoom: zoomMirante, obj: () => miranteFP, cam: () => cameraFP, M1P: MIRANTE_1P },
     enfeitesNovos: { aves, ave: () => { aves.prox = 0; }, AJUDA, vis: () => ENF_VIS, casinha: () => casinhaParaLuma(), piquenique: () => lugarPiquenique(), montar: e => montarEnfeite(e), FOGUEIRA, LAGUINHO, DESEJO, aquecer, inverno: invernoAgora, assento: assentoFogueira, frentePoco, fazerDesejo, itens: e => itensEnfeite(e), formas: formasLiberadas, grupoComForma },
     cartaoEspaco: { chegar: chegarCartaoEspaco, nomes: nomesNoEspaco, CARTAO_ESPACO },
