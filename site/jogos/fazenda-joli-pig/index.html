@@ -4139,8 +4139,50 @@ function passarDisco(){
   // com o observatório pronto, de noite, ele às vezes vem devolver uma vaca que estava de férias (CENAS.volta)
   P.querDevolver = podeDevolverVaca() && (P.forcarVolta || !S.viuVoltaFerias || Math.random() < VOLTA.chance);
   P.querAbduzir = !P.querDevolver && !!vacaParaAbduzir() && (P.forcarAbducao || Math.random() < DISCO_JOGO.abducao);
-  P.forcarAbducao = false; P.forcarVolta = false;
+  // a faxina: o terceiro ponto do passeio vira o alto do canteiro com mato, e ele fica lá o tempo do raio
+  const mato = !P.querAbduzir && !P.querDevolver && (P.forcarFaxina || Math.random() < FAXINA.chance) ? matoParaFaxina() : null;
+  if (mato){
+    const [x, z] = mato[0], T1 = P.trechos[1], T2 = P.trechos[2], alvo = new THREE.Vector3(x + 0.5, FAXINA.alto, z + 0.5);
+    T1.ate = alvo; T2.de = alvo; T1.dur = Math.max(0.9, T1.de.distanceTo(alvo) / vel); T2.dur = Math.max(0.9, alvo.distanceTo(T2.ate) / vel);
+    T1.para = FAXINA.tempo; T1.susto = false; T1.faxina = { tiles: mato };
+  }
+  P.forcarAbducao = false; P.forcarVolta = false; P.forcarFaxina = false;
 }
+// ================= a faxina do raio (o Lucas pediu): às vezes, numa passagem sem abdução nem devolução, o disco para em
+// cima de um canteiro com mato que aparece na tela e o raio puxa o mato dele e dos vizinhos (até FAXINA.max), que sobe em
+// folhinhas até o disco. O canteiro fica limpo como se o Ed tivesse capinado, sem XP e sem restos para a composteira
+const FAXINA = { chance: 0.35, alto: 2.3, tempo: 3.4, puxa: 1.8, max: 3 };
+const FALAS_ED_FAXINA = ['O ETzinho tirou o mato pra mim!', 'Aoooa! Capina espacial!', 'Obrigado, ETzinho! Menos trabalho pro Ed.', 'Oinc! O raio levou o mato todinho!', 'Que vizinho prestativo esse do espaço!', 'Olha só, o disco capinou o canteiro!', 'Mato abduzido! Essa é nova.', 'Valeu, ETzinho! Volta sempre.', 'Será que lá no espaço eles plantam mato?', 'Aoooa! Nem precisei da enxada.', 'O disco veio fazer faxina na horta!', 'Que serviço caprichado, ETzinho!', 'Oinc oinc! Canteiro limpinho do céu!', 'Agora sim, a horta respira!', 'Os ETs também ajudam na roça!', 'Hehe, o mato foi passear no disco.', 'Obrigado pela ajuda, lá de cima!', 'Isso que é tecnologia na fazenda!', 'O mato foi pro espaço!', 'Aoooa! Que raio mais útil!', 'Ô, ETzinho! Volta amanhã que tem mais.'];
+// o canteiro com mato na tela que o raio pega, com os vizinhos com mato (sem tarefa do Ed marcada neles)
+function matoParaFaxina(){
+  const livre = (x, z) => { const t = campo(x, z); return t && t.e === 'plantado' && t.p === 'mato' && !fila.some(q => q.alvo && q.alvo.k === 'tile' && q.alvo.x === x && q.alvo.z === z); };
+  const l = [];
+  for (const k in S.campo){ const [x, z] = k.split(',').map(Number); if (livre(x, z) && naTelaBicho(new THREE.Vector3(x + 0.5, 0, z + 0.5))) l.push([x, z]); }
+  if (!l.length) return null;
+  const [cx, cz] = sorteia(l), tiles = [[cx, cz]];
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if ((dx || dz) && tiles.length < FAXINA.max && livre(cx + dx, cz + dz)) tiles.push([cx + dx, cz + dz]);
+  return tiles;
+}
+function passoFaxina(P, T, q){
+  const F = T.faxina, [cx, cz] = F.tiles[0];
+  if (!F.raio){ F.raio = raioAbducao(); F.raio.material.color.set(0xb8ffb0); Som.disco(); }
+  const topo = P.g.position.y - 0.25, R = F.raio;
+  R.visible = true; R.scale.set(1, topo, 1); R.position.set(cx + 0.5, topo / 2, cz + 0.5);
+  R.material.opacity = 0.42 * Math.min(1, q * 3, (T.para - q) * 3);
+  // as folhinhas do mato sobem rodando até o disco
+  if (!F.limpou && Math.random() < 0.6){
+    const [x, z] = sorteia(F.tiles);
+    particula(x + rnd(0.15, 0.85), 0.1, z + rnd(0.15, 0.85), [0x5aa845, 0x3c8f45, 0x8fcf5a][(Math.random() * 3) | 0], 0);
+    const p = PART[PART.length - 1]; p.v.set((cx + 0.5 - x - 0.5) * 0.3, rnd(1.1, 1.5), (cz + 0.5 - z - 0.5) * 0.3); p.g = 0; p.vida = topo / 1.3;
+  }
+  if (!F.limpou && q > FAXINA.puxa){
+    F.limpou = true;
+    for (const [x, z] of F.tiles){ const t = campo(x, z); if (t && t.p === 'mato'){ t.p = null; t.ev++; if (avancar(t, 0, irrigado(x, z))) irrigadorJato(loteDe(x, z)); atualizarCampo(x, z); } }
+    salvar(); Som.pop();
+    if (ed.g.visible && !cine) setTimeout(() => { if (!cine) edFala(FALAS_ED_FAXINA); }, 600);
+  }
+}
+function fimFaxina(T){ const F = T && T.faxina; if (F && F.raio){ scene.remove(F.raio); F.raio.geometry.dispose(); F.raio.material.dispose(); F.raio = null; } }
 function sustoDoEd(){
   if (!ed.g.visible) return;
   ed.pulo = 0.45; Som.oinc();
@@ -4166,8 +4208,8 @@ function atualizarDisco(dt, t){
   }
   P.t += dt; P.tt += dt;
   let T = P.trechos[P.i];
-  if (T && P.tt > T.dur + T.para){ P.tt -= T.dur + T.para; P.i++; T = P.trechos[P.i]; }
-  if (!T || cine){ P.g.visible = false; P.t = -1; P.prox = rnd(...DISCO_JOGO.intervalo); return; }
+  if (T && P.tt > T.dur + T.para){ fimFaxina(T); P.tt -= T.dur + T.para; P.i++; T = P.trechos[P.i]; }
+  if (!T || cine){ fimFaxina(T); P.g.visible = false; P.t = -1; P.prox = rnd(...DISCO_JOGO.intervalo); return; }
   if (P.tt < T.dur){
     // vai de um ponto ao outro suavemente; no último trecho, acelera para ir embora
     const k = P.tt / T.dur, e = T.sai ? k * k : k * k * (3 - 2 * k);
@@ -4179,6 +4221,7 @@ function atualizarDisco(dt, t){
     P.g.position.copy(T.ate);
     P.g.position.x += Math.sin(q * 3) * 0.12; P.g.position.z += Math.cos(q * 3) * 0.12; P.g.position.y += Math.sin(q * 4) * 0.06;
     if (T.susto && !P.reagiu){ P.reagiu = true; sustoDoEd(); }
+    if (T.faxina){ P.g.position.x = lerp(P.g.position.x, T.ate.x, 0.8); P.g.position.z = lerp(P.g.position.z, T.ate.z, 0.8); passoFaxina(P, T, q); }
   }
   animarDisco(P.D, t);
 }
@@ -21579,7 +21622,7 @@ async function iniciar(){
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
   window.__fazenda = { flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
-    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
+    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(FAB_NOVAS).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
     trator: () => trator, TRATOR, filaTipos: () => fila.map(t => t.tipo), checar: (t, a, q) => checar(t, a, q), enfileirarTrator: (lote, acao, semente) => enfileirar('trator', { k: 'trator', lote }, { acao, semente }), tratorVis: () => tratorVis,
