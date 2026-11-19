@@ -4336,20 +4336,127 @@ function fimSinal(acertou){
   if (acertou){ falar(radioDisco, variar(FALAS_ET_ACERTO), 2.4); Som.tom(1300, 0.1, 'square', 0.03, 1900); setTimeout(presenteEt, 900); S.sinaisEt = (S.sinaisEt || 0) + 1; salvar(); }
   else { falar(radioDisco, variar(FALAS_ET_ERRO), 2.4); Som.tom(500, 0.3, 'sine', 0.03, 250); }
 }
-// o presente cai do disco perto do Ed: um pouco de dinheiro, sementes ou ração
+// o presente do ETzinho (o Lucas pediu a caixinha): o disco solta uma caixa de presente de paraquedas, que cai num gramado
+// livre perto do Ed (lugarCaixaEt). O que tem dentro é sorteado na hora e fica no save (S.caixaEt, com x, z e premio),
+// mas só entra no estoque quando o Ed vai buscar e abre (tarefa abrirPresente, abrirCaixaEt). Uma caixa por vez: se já
+// tem uma no chão, ou não há lugar, o presente entra direto, como antes
+const CAIXA_ET = { queda: 3.4, sobe: 3.2, raio: [1, 4] };
+const FALAS_ED_PRESENTE_ET = ['Oba! Presente do espaço!', 'Valeu, ETzinho! Que surpresa boa.', 'Aoooa! Vamos ver o que tem aqui dentro.', 'Obrigado, vizinho lá de cima!', 'Oinc! Adoro presente de paraquedas.', 'Que caixinha caprichada!', 'Hehe, chegou certinho no gramado.', 'Valeu! Vou guardar com carinho.', 'Presente intergaláctico! Que chique.', 'Aoooa! Até laço tem!', 'Obrigado, ETzinho! Volta sempre.', 'Será que é queijo da Lua? Hehe.', 'Que entrega rápida!', 'Oba! Correio do espaço!', 'Valeu, ETzinho! Você é um amigão.', 'Olha só o que o céu mandou!', 'Hmm, cheirinho de estrela.', 'Abrindo com cuidado... pronto!', 'Obrigado pelo presente, ETzinho!', 'Que delícia de surpresa!', 'O melhor vizinho do universo!'];
+let caixaEt = null;
+function sortearPresenteEt(){
+  const r = Math.random();
+  if (r < 0.5) return { tipo: 'lunar', q: 3 + Math.floor(Math.random() * 3) };
+  if (r < 0.7) return { tipo: 'dinheiro', q: 150 * nivel() };
+  if (r < 0.88 || !ANI.length){ const l = ORDEM_CULTURAS.filter(c => CULTURAS[c].nivel <= nivel()); return { tipo: 'sementes', k: sorteia(l), q: 12 }; }
+  return { tipo: 'racao', q: 40 };
+}
+// entrega o que tem dentro: põe no estoque, mostra o número subindo e devolve o texto do aviso
+function darPresenteEt(pr, alvo){
+  if (pr.tipo === 'lunar'){ S.bolsa.melanciaLunar = (S.bolsa.melanciaLunar || 0) + pr.q; flutuar(alvo, '+' + pr.q, '', 'melanciaLunar'); return `${pr.q} sementes de melancia lunar, que só ele tem`; }
+  if (pr.tipo === 'dinheiro'){ S.dinheiro += pr.q; chipPulsa('chipDinheiro'); flutuar(alvo, '+' + reais(pr.q), 'ouro'); return reais(pr.q); }
+  if (pr.tipo === 'sementes' && CULTURAS[pr.k]){ S.bolsa[pr.k] = (S.bolsa[pr.k] || 0) + pr.q; flutuar(alvo, '+' + pr.q, '', pr.k); return `${pr.q} sementes de ${CULTURAS[pr.k].nome.toLowerCase()}`; }
+  S.racao += pr.q; chipPulsa('chipRacao'); flutuar(alvo, '+' + pr.q, '', 'racao'); return `${pr.q} rações`;
+}
+// um gramado livre, que dá para o Ed alcançar, a uns passos dele (de preferência na tela)
+function lugarCaixaEt(){
+  const sx = clamp(Math.floor(ed.pos.x), 0, W - 1), sz = clamp(Math.floor(ed.pos.y), 0, H - 1), ops = [], [a, b] = CAIXA_ET.raio;
+  for (let dx = -b; dx <= b; dx++) for (let dz = -b; dz <= b; dz++){
+    const x = sx + dx, z = sz + dz, d = Math.hypot(dx, dz);
+    if (d < a || d > b || x < 0 || z < 0 || x >= W || z >= H) continue;
+    if (!livreParaEnfeite(x, z) || (S.maca && S.maca.x === x && S.maca.z === z) || S.trufas.some(t => t.x === x && t.z === z) || !rota(sx, sz, x, z)) continue;
+    ops.push({ x, z, tela: naTelaBicho(new THREE.Vector3(x + 0.5, 0, z + 0.5)) });
+  }
+  const naTela = ops.filter(o => o.tela);
+  return naTela.length ? sorteia(naTela) : ops.length ? sorteia(ops) : null;
+}
 function presenteEt(){
   const P = discoJogo, o = P && P.g.visible ? P.g.position.clone() : (ed.topo ? ed.topo() : new THREE.Vector3());
   for (let i = 0; i < 16; i++) particula(o.x + rnd(-0.3, 0.3), Math.max(0.2, o.y - 0.4), o.z + rnd(-0.3, 0.3), [0xffd84d, 0xff7ac8, 0x6fe3ff][i % 3], -1);
-  const r = Math.random(), alvo = ed.g.visible ? ed.topo() : o.clone().setY(1);
-  let txt;
-  // metade das vezes, as sementes que só o ETzinho tem
-  if (r < 0.5){ const q = 3 + Math.floor(Math.random() * 3); S.bolsa.melanciaLunar = (S.bolsa.melanciaLunar || 0) + q; flutuar(alvo, '+' + q, '', 'melanciaLunar'); txt = `${q} sementes de melancia lunar, que só ele tem`; }
-  else if (r < 0.7){ const v = 150 * nivel(); S.dinheiro += v; chipPulsa('chipDinheiro'); flutuar(alvo, '+' + reais(v), 'ouro'); txt = reais(v); }
-  else if (r < 0.88 || !ANI.length){
-    const l = ORDEM_CULTURAS.filter(c => CULTURAS[c].nivel <= nivel()), k = sorteia(l), q = 12;
-    S.bolsa[k] = (S.bolsa[k] || 0) + q; flutuar(alvo, '+' + q, '', k); txt = `${q} sementes de ${CULTURAS[k].nome.toLowerCase()}`;
-  } else { const q = 40; S.racao += q; chipPulsa('chipRacao'); flutuar(alvo, '+' + q, '', 'racao'); txt = `${q} rações`; }
-  aviso(`O ETzinho jogou um presente: ${txt}!`, '', 3.5); Som.moeda(); hud(); salvar();
+  const pr = sortearPresenteEt(), l = !S.caixaEt && ed.g.visible ? lugarCaixaEt() : null;
+  if (!l){
+    const txt = darPresenteEt(pr, ed.g.visible ? ed.topo() : o.clone().setY(1));
+    aviso(`O ETzinho jogou um presente: ${txt}!`, '', 3.5); Som.moeda(); hud(); salvar();
+    return;
+  }
+  S.caixaEt = { x: l.x, z: l.z, premio: pr };
+  montarCaixaEt(o);
+  aviso('O ETzinho soltou um presente de paraquedas! Toque na caixinha para o Ed buscar.', '', 4);
+  Som.tom(900, 0.12, 'sine', 0.03, 1400); salvar();
+}
+// a caixa, com o paraquedas listrado por cima enquanto cai (de: de onde sai; sem ele, já no chão)
+function vCaixaPresente(){
+  const v = new Vox(), papel = 0xff7ac8, fita = 0xffd84d;
+  v.box(-4, 0, -4, 4, 7, 4, (x, y, z) => (x === 0 || z === 0) ? fita : (hash(x, y, z) < 0.12 ? 0x6fe3ff : papel));
+  v.box(-4, 7, -4, 4, 7, 4, (x, y, z) => (x === 0 || z === 0) ? fita : 0xff5cb0);
+  for (const [x, z] of [[-2, 0], [-3, 0], [2, 0], [3, 0], [0, -1], [0, 1]]) v.set(x, 8, z, fita);
+  v.set(-2, 9, 0, fita); v.set(2, 9, 0, fita); v.set(0, 8, 0, 0xf2b81d);
+  return v;
+}
+function vParaquedas(){
+  const v = new Vox();
+  for (let x = -9; x <= 9; x++) for (let z = -9; z <= 9; z++){
+    const d = Math.hypot(x, z); if (d > 9.4) continue;
+    const y = Math.round(6 - d * d / 16), cor = Math.floor((Math.atan2(z, x) + Math.PI) / (Math.PI / 4)) % 2 ? 0xffffff : 0x6fb8ff;
+    v.set(x, y, z, cor); if (d > 8.4) v.set(x, y - 1, z, cor);
+  }
+  for (const [x, z] of [[-6, -6], [6, -6], [-6, 6], [6, 6]]) for (let i = 1; i <= 14; i++){ const k = i / 14; v.set(Math.round(x * (1 - k) * 0.95), Math.round(-1 - i * 0.7), Math.round(z * (1 - k) * 0.95), 0xe8e2d0); }
+  return v;
+}
+function montarCaixaEt(de){
+  tirarCaixaEt();
+  const C = S.caixaEt; if (!C) return;
+  const g = new THREE.Group(), cx = malha(geo('caixaEt', () => vCaixaPresente().build(1 / 26, { origin: [0.5, 0, 0.5] })));
+  g.add(cx);
+  const pq = malha(geo('paraquedasEt', () => vParaquedas().build(1 / 26, { origin: [0.5, 0, 0.5] })), false);
+  pq.position.y = 0.95; g.add(pq);
+  const hit = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshBasicMaterial({ visible: false })); hit.position.y = 0.35; g.add(hit);
+  scene.add(g);
+  const fim = new THREE.Vector3(C.x + 0.5, 0, C.z + 0.5);
+  const b = novaBolha('presenteEt'); b.position.set(fim.x, 0.95, fim.z); b.userData.base = 0.95; b.userData.fase = 1.3; b.visible = false; scene.add(b); BOLHAS.push(b);
+  caixaEt = { g, cx, pq, hit, bolha: b, fim, de: de ? de.clone().setY(Math.max(de.y - 0.4, CAIXA_ET.sobe)) : null, t: 0, chao: !de, lado: Math.random() < 0.5 ? 1 : -1 };
+  if (!de){ g.position.copy(fim); pq.visible = false; ligarCaixaEt(); }
+  else g.position.copy(caixaEt.de);
+}
+function ligarCaixaEt(){
+  const c = caixaEt; c.chao = true;
+  c.g.traverse(o => { o.userData.alvo = { k: 'caixaEt', x: S.caixaEt.x, z: S.caixaEt.z }; });
+  pickaveis.push(c.g);
+}
+function tirarCaixaEt(){
+  const c = caixaEt; if (!c) return;
+  scene.remove(c.g); const i = pickaveis.indexOf(c.g); if (i >= 0) pickaveis.splice(i, 1);
+  scene.remove(c.bolha); const k = BOLHAS.indexOf(c.bolha); if (k >= 0) BOLHAS.splice(k, 1);
+  if (menuAberto && menuAberto.alvo.k === 'caixaEt') fecharMenu();
+  caixaEt = null;
+}
+function atualizarCaixaEt(dt, t){
+  const c = caixaEt; if (!c) return;
+  if (!c.chao){
+    c.t += cine ? 99 : dt;
+    const k = Math.min(1, c.t / CAIXA_ET.queda), e = 1 - (1 - k) * (1 - k) * 0.4 - (1 - k) * 0.6;
+    c.g.position.lerpVectors(c.de, c.fim, e);
+    c.g.position.x += Math.sin(c.t * 2.2) * 0.25 * (1 - k) * c.lado;
+    c.g.rotation.z = Math.sin(c.t * 2.2 + 0.6) * 0.18 * (1 - k);
+    if (k >= 1){
+      c.g.position.copy(c.fim); c.g.rotation.z = 0; c.t = 0; ligarCaixaEt(); Som.pop();
+      for (let i = 0; i < 10; i++) particula(c.fim.x + rnd(-0.3, 0.3), 0.1, c.fim.z + rnd(-0.3, 0.3), 0xc9b48a, 0.4);
+    }
+    return;
+  }
+  // no chão: o paraquedas murcha e some, e a bolha aparece enquanto o Ed não foi chamado
+  if (c.pq.visible){ c.t += dt; const k = Math.min(1, c.t / 0.8); c.pq.scale.set(1 + k * 0.3, Math.max(0.05, 1 - k), 1 + k * 0.3); c.pq.position.y = 0.95 * (1 - k) + 0.05; if (k >= 1) c.pq.visible = false; }
+  c.bolha.visible = !c.pq.visible && !fila.some(f => f.tipo === 'abrirPresente');
+}
+function abrirCaixaEt(){
+  const C = S.caixaEt; if (!C) return;
+  const pos = new THREE.Vector3(C.x + 0.5, 0.9, C.z + 0.5);
+  for (let i = 0; i < 18; i++) particula(pos.x + rnd(-0.25, 0.25), 0.5, pos.z + rnd(-0.25, 0.25), [0xffd84d, 0xff7ac8, 0x6fe3ff][i % 3], 1);
+  const txt = darPresenteEt(C.premio, pos);
+  S.caixaEt = null; tirarCaixaEt();
+  const fala = variar(FALAS_ED_PRESENTE_ET), dur = tempoDeLeitura(fala);
+  ed.olhar(pos.x, pos.z); ed.pulo = 0.45; falar(ed, fala, dur);
+  ed.trabalhar(Math.min(dur, 1.6), 'agradecer', () => aviso(`Dentro do presente do ETzinho: ${txt}!`, '', 3.5));
+  Som.moeda(); hud(); salvar();
 }
 // a cada quadro, com o disco parado no ar: mostra a sequência piscando as luzes e espera os toques
 function passoSinal(P, dt){
@@ -10130,7 +10237,7 @@ const VI = {
   casinhaLuma(){ return vCasinhaLuma(); }, carriola(){ return vCarriola(); }, mesaPiquenique(){ return vMesaPiquenique(); }, relogioSol(){ return vRelogioSol(); }, pergola(){ return vPergola(); },
   fogueira(){ return vFogueiraRoda(); }, laguinho(){ return vLaguinho(); }, pocoDesejos(){ return vPocoDesejos(); }, bandeirinhas(){ return vBandeirinhas(); },
   topiaria(){ return vTopiaria(); }, estatuaFamilia(){ return vEstatuaFamilia(); },
-  malasViagem(){ return vMalasViagem(); }, placaViagem(){ return vPlacaViagem(); }, globoViagem(){ return vGloboViagem(); }, discoJardim(){ return VI.disco(); },
+  malasViagem(){ return vMalasViagem(); }, placaViagem(){ return vPlacaViagem(); }, globoViagem(){ return vGloboViagem(); }, discoJardim(){ return VI.disco(); }, presenteEt(){ return vCaixaPresente(); },
   balanco(){ const v = vBalanco(); const [px, py, pz] = BALANCO.pivo; for (const e of vPneuBalanco().m.values()) v.set(e.x + Math.floor(px), e.y + py, e.z + Math.floor(pz), e.c); return v; }, comedouro(){ return vComedouro(); },
   flores(){ return vCanteiroFlor(); }, banco(){ return vBanco(); }, espantalho(){ return vEspantalho(); }, poste(){ return vPoste(); }, varal(){ return vVaralTrecho(); }, fonte(){ return vFonte(); }, estatua(){ const v = vEstatua(); return v; },
   laranjeira(){ return vFrutifera('laranjeira', true); }, goiabeira(){ return vFrutifera('goiabeira', true); }, mangueira(){ return vFrutifera('mangueira', true); },
@@ -19714,13 +19821,13 @@ function itensHud(){
 
 // ================= tarefas do Ed
 const fila = [];
-const NOMES_ACAO = { spa:'Banho de lama', desejo:'Fazer um pedido', museu:'Visitar o museu', subirMirante:'Subir no mirante', estrelas:'Olhar as estrelas', trator:'Sair com o trator', carinhoGalo:'Carinho no galo', pegarGalo:'Pegar o galo', soltarGalo:'Devolver o galo', apagarFogo:'Apagar o fogo', recolherLixo:'Recolher o lixo', tirarGalho:'Tirar o galho', pegarAluguel:'Pegar o aluguel', lerCartao:'Ler o cartão-postal', tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa', nadar:'Nadar na cachoeira', balancar:'Brincar no balanço', passeio:'Passeio de avião' };
-const DUR = { spa: 0.3, desejo: 1.4, museu: 0.5, subirMirante: 0.2, estrelas: 4.5, carinhoGalo: 2.4, pegarGalo: 0.5, soltarGalo: 0.7, apagarFogo: 2.2, recolherLixo: 0.8, tirarGalho: 2.4, pegarAluguel: 0.6, lerCartao: 0.6, tirarCerca: 2.4, colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, coletarMata: 1.0, cavarTrufa: 1.6, nadar: 0.2, balancar: 0.2, passeio: 0.2 };
-const FERR = { spa: null, desejo: null, museu: null, subirMirante: null, estrelas: null, carinhoGalo: 'carinho', pegarGalo: null, soltarGalo: 'soltar', apagarFogo: 'regador', recolherLixo: 'cesta', tirarGalho: null, pegarAluguel: null, lerCartao: null, tirarCerca: 'enxada', colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', coletarMata: 'cesta', cavarTrufa: 'enxada', nadar: null, balancar: null, passeio: null };
+const NOMES_ACAO = { spa:'Banho de lama', desejo:'Fazer um pedido', museu:'Visitar o museu', subirMirante:'Subir no mirante', estrelas:'Olhar as estrelas', trator:'Sair com o trator', carinhoGalo:'Carinho no galo', pegarGalo:'Pegar o galo', soltarGalo:'Devolver o galo', apagarFogo:'Apagar o fogo', recolherLixo:'Recolher o lixo', tirarGalho:'Tirar o galho', pegarAluguel:'Pegar o aluguel', lerCartao:'Ler o cartão-postal', tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', abrirPresente:'Abrir o presente', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa', nadar:'Nadar na cachoeira', balancar:'Brincar no balanço', passeio:'Passeio de avião' };
+const DUR = { spa: 0.3, desejo: 1.4, museu: 0.5, subirMirante: 0.2, estrelas: 4.5, carinhoGalo: 2.4, pegarGalo: 0.5, soltarGalo: 0.7, apagarFogo: 2.2, recolherLixo: 0.8, tirarGalho: 2.4, pegarAluguel: 0.6, lerCartao: 0.6, tirarCerca: 2.4, colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, abrirPresente: 0.2, coletarMata: 1.0, cavarTrufa: 1.6, nadar: 0.2, balancar: 0.2, passeio: 0.2 };
+const FERR = { spa: null, desejo: null, museu: null, subirMirante: null, estrelas: null, carinhoGalo: 'carinho', pegarGalo: null, soltarGalo: 'soltar', apagarFogo: 'regador', recolherLixo: 'cesta', tirarGalho: null, pegarAluguel: null, lerCartao: null, tirarCerca: 'enxada', colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', abrirPresente: null, coletarMata: 'cesta', cavarTrufa: 'enxada', nadar: null, balancar: null, passeio: null };
 const mesmoAlvo = (a, b) => a.k === b.k && (a.k === 'animal' ? a.a === b.a : a.x === b.x && a.z === b.z);
-function reservado(alvo){ if (alvo.k === 'passeio') return fila.some(t => t.tipo === 'passeio'); if (alvo.k === 'balanco') return fila.some(t => t.tipo === 'balancar'); if (alvo.k === 'cachoeira') return fila.some(t => t.tipo === 'nadar'); if (alvo.k === 'spa') return fila.some(t => t.tipo === 'spa'); if (alvo.k === 'poco') return fila.some(t => t.tipo === 'desejo'); if (alvo.k === 'museu') return fila.some(t => t.tipo === 'museu'); if (alvo.k === 'luneta') return fila.some(t => t.tipo === 'estrelas'); if (alvo.k === 'mirante') return fila.some(t => t.tipo === 'subirMirante'); if (alvo.k === 'trator') return fila.some(t => t.tipo === 'trator' && t.alvo.lote === alvo.lote); if (alvo.k === 'galo') return fila.some(t => t.alvo.k === 'galo' && t.alvo.id === alvo.id); if (alvo.k === 'ocorrencia') return fila.some(t => t.alvo.k === 'ocorrencia' && t.alvo.id === alvo.id && t.alvo.j === alvo.j); if (alvo.k === 'aluguel') return fila.some(t => t.tipo === 'pegarAluguel'); if (alvo.k === 'cartao') return fila.some(t => t.tipo === 'lerCartao'); if (alvo.k === 'cercaCanto') return fila.some(t => t.tipo === 'tirarCerca'); if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
+function reservado(alvo){ if (alvo.k === 'passeio') return fila.some(t => t.tipo === 'passeio'); if (alvo.k === 'balanco') return fila.some(t => t.tipo === 'balancar'); if (alvo.k === 'cachoeira') return fila.some(t => t.tipo === 'nadar'); if (alvo.k === 'spa') return fila.some(t => t.tipo === 'spa'); if (alvo.k === 'poco') return fila.some(t => t.tipo === 'desejo'); if (alvo.k === 'museu') return fila.some(t => t.tipo === 'museu'); if (alvo.k === 'luneta') return fila.some(t => t.tipo === 'estrelas'); if (alvo.k === 'mirante') return fila.some(t => t.tipo === 'subirMirante'); if (alvo.k === 'trator') return fila.some(t => t.tipo === 'trator' && t.alvo.lote === alvo.lote); if (alvo.k === 'galo') return fila.some(t => t.alvo.k === 'galo' && t.alvo.id === alvo.id); if (alvo.k === 'ocorrencia') return fila.some(t => t.alvo.k === 'ocorrencia' && t.alvo.id === alvo.id && t.alvo.j === alvo.j); if (alvo.k === 'aluguel') return fila.some(t => t.tipo === 'pegarAluguel'); if (alvo.k === 'cartao') return fila.some(t => t.tipo === 'lerCartao'); if (alvo.k === 'cercaCanto') return fila.some(t => t.tipo === 'tirarCerca'); if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'caixaEt') return fila.some(t => t.tipo === 'abrirPresente'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
 const visSlot = alvo => { const L = alvo.k === 'pomar' ? POMAR_VIS : alvo.k === 'mata' ? MATA_VIS : COLMEIA_VIS; return L[alvo.i] || (L[alvo.i] = {}); };
-function setReserva(alvo, v){ if (alvo.k === 'passeio' || alvo.k === 'balanco' || alvo.k === 'cachoeira' || alvo.k === 'trator' || alvo.k === 'luneta' || alvo.k === 'mirante' || alvo.k === 'museu' || alvo.k === 'poco' || alvo.k === 'spa') return; if (alvo.k === 'galo'){ if (GALOS[alvo.id]) GALOS[alvo.id].res = v; return; } if (alvo.k === 'ocorrencia' || alvo.k === 'aluguel' || alvo.k === 'cartao' || alvo.k === 'cercaCanto' || alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
+function setReserva(alvo, v){ if (alvo.k === 'passeio' || alvo.k === 'balanco' || alvo.k === 'cachoeira' || alvo.k === 'trator' || alvo.k === 'luneta' || alvo.k === 'mirante' || alvo.k === 'museu' || alvo.k === 'poco' || alvo.k === 'spa') return; if (alvo.k === 'galo'){ if (GALOS[alvo.id]) GALOS[alvo.id].res = v; return; } if (alvo.k === 'ocorrencia' || alvo.k === 'aluguel' || alvo.k === 'cartao' || alvo.k === 'cercaCanto' || alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'caixaEt' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
 // diz se a ação vale para o alvo; devolve o custo ou um motivo
 function checar(tipoA, alvo, param){
   if (alvo.k === 'galo'){
@@ -19745,6 +19852,7 @@ function checar(tipoA, alvo, param){
   if (alvo.k === 'cachoeira') return { ok: tipoA === 'nadar' && cachoeiraAberta() && !nadoDe(ed), motivo: galhoFecha(3) ? 'Um galho caído fecha a trilha. Tire ele primeiro.' : 'A trilha oeste ainda não chega lá', custo: {} };
   if (alvo.k === 'poco'){ const e = pocoEm(alvo.x, alvo.z); return { ok: tipoA === 'desejo' && !!e && !!frentePoco(e) && S.dinheiro >= DESEJO.preco, motivo: 'Falta uma moedinha', custo: {} }; }
   if (alvo.k === 'maca') return { ok: tipoA === 'comerMaca' && !!S.maca, custo: {} };
+  if (alvo.k === 'caixaEt') return { ok: tipoA === 'abrirPresente' && !!S.caixaEt, custo: {} };
   if (alvo.k === 'trufa') return { ok: tipoA === 'cavarTrufa' && S.trufas.some(t => t.x === alvo.x && t.z === alvo.z), custo: {} };
   if (alvo.k === 'composteira') return checarComposteira(tipoA, param);
   if (alvo.k === 'coletor') return { ok: tipoA === 'esvaziar' && !!S.coletor[alvo.tp] && naCaixa(alvo.tp) > 0, custo: {} };
@@ -20193,6 +20301,7 @@ function executar(tarefa){
   }
   if (alvo.k === 'galo'){ executarGalo(tarefa); return; }
   if (alvo.k === 'maca'){ comerMaca(); return; }
+  if (alvo.k === 'caixaEt'){ abrirCaixaEt(); return; }
   if (alvo.k === 'ocorrencia'){ executarOcorrencia(tarefa); return; }
   if (alvo.k === 'cercaCanto'){ executarTirarCerca(); return; }
   if (alvo.k === 'aluguel'){ pegarAluguel(); return; }
@@ -21188,6 +21297,13 @@ function itensDoAlvoBase(alvo){
     if (tarefa){ r.estado = 'Na fila do Ed: cavar a trufa.'; r.itens.push({ rotulo: 'Cancelar', icone: 'ed', fn: () => cancelar(tarefa) }); return r; }
     r.estado = 'Tem trufa aqui embaixo!'; r.classe = 'bom';
     r.itens.push({ rotulo: 'Cavar a trufa', sub: `+1 trufa · +${TRUFA.xp} xp`, icone: 'trufa', fn: () => enfileirar('cavarTrufa', alvo) });
+    return r;
+  }
+  if (alvo.k === 'caixaEt'){
+    r.titulo = 'Presente do ETzinho'; r.icone = 'presenteEt';
+    r.estado = 'Uma caixinha que caiu do disco voador, de paraquedas. O que tem dentro é surpresa.';
+    if (fila.some(t => t.tipo === 'abrirPresente')) r.estado += ' O Ed já vai buscar.';
+    else r.itens.push({ rotulo: 'Abrir o presente', sub: 'o Ed vai buscar a caixinha', icone: 'presenteEt', fn: () => enfileirar('abrirPresente', alvo) });
     return r;
   }
   if (alvo.k === 'maca'){
@@ -22256,7 +22372,7 @@ function atualizarDica(){
 
 // ================= entrada
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), planoChao = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), ptChao = new THREE.Vector3();
-const FUNDO_DE_CANTEIRO = ['irrigador', 'enfeite', 'arvore', 'alimentador', 'coletor', 'maca', 'trufa', 'ed'];
+const FUNDO_DE_CANTEIRO = ['irrigador', 'enfeite', 'arvore', 'alimentador', 'coletor', 'maca', 'trufa', 'caixaEt', 'ed'];
 const planoCanteiro = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.12), ptCanteiro = new THREE.Vector3();
 function canteiroAtras(obj){
   if (!ray.ray.intersectPlane(planoCanteiro, ptCanteiro)) return null;
@@ -22547,7 +22663,7 @@ function quadro(agoraP){
   if (cine) atualizarCine(dt); else { const cenaId = podeIniciarCine(); if (cenaId) iniciarCine(cenaId, cenaId === cenaPedida); }
   atualizarTrajes(dt);
   proximaTarefa();
-  atualizarMaca(dt, t);
+  atualizarMaca(dt, t); atualizarCaixaEt(dt, t);
   atualizarRedemoinho(dt, t);
   atualizarTransito(dt, t);
   atualizarTrufas(dt, t);
@@ -22768,6 +22884,7 @@ async function iniciar(){
     setTimeout(() => { ganharXP(O.etapas[n - 1].xp); aviso(`O Maurinho terminou ${textoEtapa(k, n)} enquanto você estava fora!`, 'grande', 4); if (O.aoTerminar) O.aoTerminar(n, true); }, 1500);
   }
   montarMaca();
+  if (S.caixaEt) montarCaixaEt(null);
   montarRedemoinho();
   montarTransito();
   // só aqui: terminar receitas com o jogo fechado pode subir de nível, e o aviso usa o Ed
@@ -22813,7 +22930,7 @@ async function iniciar(){
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
   window.__fazenda = { flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
-    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { circulo: { forcar: () => { discoJogo.forcarCirculo = true; discoJogo.prox = 0; }, fazer: fazerCirculo, lote: loteParaCirculo, grupo: () => grupoCirculo, soltar: soltarGrupoCirculo, CIRCULO }, sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao, visita: { forcar: () => { discoJogo.forcarVisita = true; discoJogo.prox = 0; }, obj: () => etVisita, itens: itensEt, trocar: trocarEt, pedido: pedidoEt, temDisco: temDiscoJardim, VISITA_ET } }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
+    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { circulo: { forcar: () => { discoJogo.forcarCirculo = true; discoJogo.prox = 0; }, fazer: fazerCirculo, lote: loteParaCirculo, grupo: () => grupoCirculo, soltar: soltarGrupoCirculo, CIRCULO }, sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao, presente: { soltar: presenteEt, obj: () => caixaEt, abrir: abrirCaixaEt }, visita: { forcar: () => { discoJogo.forcarVisita = true; discoJogo.prox = 0; }, obj: () => etVisita, itens: itensEt, trocar: trocarEt, pedido: pedidoEt, temDisco: temDiscoJardim, VISITA_ET } }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(AMPLIACAO).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
     trator: () => trator, TRATOR, filaTipos: () => fila.map(t => t.tipo), checar: (t, a, q) => checar(t, a, q), enfileirarTrator: (lote, acao, semente) => enfileirar('trator', { k: 'trator', lote }, { acao, semente }), tratorVis: () => tratorVis,
