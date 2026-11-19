@@ -7440,7 +7440,7 @@ function subirMirante(){
   fecharMenu(); desligarModo();
 }
 // a primeira pessoa, do mirante e da vista do Ed: a câmera em perspectiva, o chão grande, a névoa e o Ed escondido
-function abrirPrimeiraPessoa(fov, nevoa){
+function abrirPrimeiraPessoa(fov, nevoa, mostrarEd){
   if (!cameraFP){ cameraFP = new THREE.PerspectiveCamera(fov, innerWidth / innerHeight, 0.05, 300); cameraFP.rotation.order = 'YXZ'; }
   // o chão grande tem um buraco do tamanho do mapa: por cima da água do lago, que fica mais baixa, ele deixava o lago
   // verde (o Lucas viu). A borda do buraco fica um pouco para dentro, debaixo da grama, para não abrir fresta
@@ -7453,7 +7453,7 @@ function abrirPrimeiraPessoa(fov, nevoa){
   chaoLonge.visible = true;
   cameraFP.fov = fov; cameraFP.updateProjectionMatrix();
   [scene.fog.near, scene.fog.far] = nevoa;
-  ed.g.visible = false;
+  if (!mostrarEd) ed.g.visible = false;
   document.body.classList.add('primeira-pessoa');
 }
 function fecharPrimeiraPessoa(){
@@ -7519,21 +7519,23 @@ function atualizarMirante1P(dt){
   ceuPrimeiraPessoa(M, M.pitch);
 }
 // ================= a vista do Ed (o Lucas pediu): tocar no Ed abre o menu dele, com "Ver pela vista do Ed". A vista troca
-// para a câmera em perspectiva do mirante (cameraFP), nos olhos dele, virando junto com ele (devagar, porque ele vira seco
-// nas curvas do caminho). A fazenda continua andando e o Ed continua a fila, mas não dá para tocar em nada: arrastar só vira
-// a cabeça, que volta sozinha para a frente depois de VISTA_ED.volta segundos, e "Voltar para a vista de cima" (ou Esc)
-// sai. Trabalhando ele olha um pouco para baixo e a câmera recua um pouco, para a planta ou a cerca da frente não
-// atravessar a tela. A altura é a do corpo dele (no trator, sentado no banco). Embaixo aparece o que ele
-// está fazendo, e as falas dele viram legenda. Quando começa uma cena (a hora de nanar também é cena), a vista volta
-// para a de cima e a cena usa a câmera dela; se ele sobe no mirante, vale a vista do mirante
-const VISTA_ED = { olho: 0.96, fov: 70, nevoa: [12, 42], segue: 4, avanca: 0.1, recua: -0.28, pitch: -0.08, olharBaixo: -0.38,
-  volta: 3, voltaVel: 2.5, sens: 0.006, legenda: 3.2, balanco: 0.4 };
+// para a câmera em perspectiva do mirante (cameraFP). Primeiro era nos olhos dele; depois o Lucas pediu terceira pessoa por
+// cima do ombro, como no GTA: a câmera fica atrás do Ed, um pouco para a direita (lado) e acima do ombro (ombro), olhando
+// para a frente dele, e o Ed aparece na esquerda da tela. Ela vira junto com ele, devagar (segue), porque ele vira seco nas
+// curvas do caminho. Arrastar gira a câmera em volta dele e a deixa olhar para cima e para baixo; depois de VISTA_ED.volta
+// segundos ela volta sozinha para trás dele. Se uma parede, uma árvore ou um telhado fica entre o ombro e a câmera, ela
+// chega mais perto (colisaoVistaEd), como no GTA. Trabalhando ele olha um pouco para baixo. A fazenda continua andando e
+// o Ed continua a fila, mas não dá para tocar em nada. Embaixo aparece o que ele está fazendo, e as falas dele viram
+// legenda. Quando começa uma cena (a hora de nanar também é cena), a vista volta para a de cima e a cena usa a câmera dela;
+// se ele sobe no mirante, vale a vista do mirante
+const VISTA_ED = { ombro: 1.4, lado: 0.36, dist: 2.8, minDist: 0.6, fov: 62, nevoa: [14, 46], segue: 3, pitch: -0.17, olharBaixo: -0.32,
+  volta: 3, voltaVel: 2.5, sens: 0.006, legenda: 3.2, balanco: 0.3 };
 let vistaEd = null;
 function entrarVistaEd(){
   if (vistaEd || cine || miranteFP) return;
   Som.clique(); fecharMenu(); desligarModo();
-  abrirPrimeiraPessoa(VISTA_ED.fov, VISTA_ED.nevoa);
-  vistaEd = { yaw: ed.ang + Math.PI, pitch: VISTA_ED.pitch, dyaw: 0, dpitch: 0, av: VISTA_ED.avanca, mexeu: 0, ceu: '', txt: '', legendaAte: 0 };
+  abrirPrimeiraPessoa(VISTA_ED.fov, VISTA_ED.nevoa, true);
+  vistaEd = { yaw: ed.ang + Math.PI, pitch: VISTA_ED.pitch, dyaw: 0, dpitch: 0, d: VISTA_ED.dist, mexeu: 0, ceu: '', txt: '', legendaAte: 0 };
   $('vistaEd').hidden = false; $('vistaEdLegenda').hidden = true;
   atualizarVistaEd(0);
 }
@@ -7546,7 +7548,7 @@ function sairVistaEd(){
 }
 function girarVistaEd(dx, dy){
   const V = vistaEd; if (!V) return;
-  V.dyaw += dx * VISTA_ED.sens; V.dpitch = clamp(V.dpitch + dy * VISTA_ED.sens, -1.1, 0.8); V.mexeu = performance.now();
+  V.dyaw += dx * VISTA_ED.sens; V.dpitch = clamp(V.dpitch + dy * VISTA_ED.sens, -0.9, 0.7); V.mexeu = performance.now();
 }
 // o que o Ed está fazendo, em poucas palavras (embaixo da vista dele e no menu dele)
 function oQueOEdFaz(){
@@ -7562,6 +7564,23 @@ function oQueOEdFaz(){
   if (nf) txt += ` · mais ${nf} na fila`;
   return txt;
 }
+// até onde a câmera pode ir para trás do ombro sem passar por dentro de uma construção, árvore ou enfeite (o Ed e os
+// bichos não contam); o chão também segura, para ela não descer abaixo da grama olhando para cima
+const _ombroEd = new THREE.Vector3(), _trasEd = new THREE.Vector3(), _raioVista = new THREE.Raycaster();
+function colisaoVistaEd(de, dir, max){
+  let d = max;
+  if (dir.y < -0.01) d = Math.min(d, (de.y - 0.15) / -dir.y);
+  _raioVista.set(de, dir); _raioVista.far = max + 0.25; _raioVista.camera = cameraFP;
+  const hits = _raioVista.intersectObjects(pickaveis.filter(o => o.visible !== false), true);
+  for (const h of hits){
+    const a = h.object.userData.alvo;
+    if (!a || a.k === 'ed' || a.k === 'animal' || a.k === 'bicho' || a.k === 'galo' || a.k === 'ocorrencia' || a.k === 'tile') continue;
+    let vis = true; for (let q = h.object; q; q = q.parent) if (q.visible === false) vis = false;
+    if (!vis || (h.object.material && h.object.material.visible === false)) continue;
+    d = Math.min(d, h.distance - 0.25); break;
+  }
+  return Math.max(VISTA_ED.minDist, d);
+}
 function legendaVistaEd(txt, dur){
   if (!vistaEd) return;
   const e = $('vistaEdLegenda'); e.textContent = txt; e.hidden = false;
@@ -7570,15 +7589,20 @@ function legendaVistaEd(txt, dur){
 function atualizarVistaEd(dt){
   const V = vistaEd; if (!V) return;
   if (cine || miranteFP){ sairVistaEd(); return; }
-  ed.g.visible = false;
   const R = VISTA_ED, trab = ed.estado === 'trabalhando', k = Math.min(1, dt * 3);
   V.yaw = anguloPerto(V.yaw, ed.ang + Math.PI, Math.min(1, dt * R.segue));
   V.pitch += ((trab ? R.olharBaixo : R.pitch) - V.pitch) * k;
-  V.av += ((ed.estado === 'andando' ? R.avanca : trab ? R.recua : 0) - V.av) * k;
   if (performance.now() - V.mexeu > R.volta * 1000){ const q = Math.min(1, dt * R.voltaVel); V.dyaw -= V.dyaw * q; V.dpitch -= V.dpitch * q; }
-  const fx = -Math.sin(V.yaw), fz = -Math.cos(V.yaw);
-  cameraFP.position.set(ed.pos.x + fx * V.av, ed.g.position.y + R.olho + ed.corpo.position.y * R.balanco, ed.pos.y + fz * V.av);
-  cameraFP.rotation.set(V.pitch + V.dpitch, V.yaw + V.dyaw, 0);
+  const yaw = V.yaw + V.dyaw, pitch = V.pitch + V.dpitch;
+  // o ombro: acima do Ed e um pouco para a direita de quem olha; a câmera fica atrás dele, na direção do olhar
+  const fx = -Math.sin(yaw) * Math.cos(pitch), fy = Math.sin(pitch), fz = -Math.cos(yaw) * Math.cos(pitch), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+  _ombroEd.set(ed.pos.x + rx * R.lado, ed.g.position.y + R.ombro + ed.corpo.position.y * R.balanco, ed.pos.y + rz * R.lado);
+  _trasEd.set(-fx, -fy, -fz);
+  const quer = colisaoVistaEd(_ombroEd, _trasEd, R.dist);
+  // chega perto na hora (para não atravessar a parede) e volta para longe devagar
+  V.d = quer < V.d ? quer : V.d + (quer - V.d) * Math.min(1, dt * 2);
+  cameraFP.position.copy(_ombroEd).addScaledVector(_trasEd, V.d);
+  cameraFP.rotation.set(pitch, yaw, 0);
   cam.alvo.set(ed.pos.x, 0, ed.pos.y);
   ceuPrimeiraPessoa(V, V.pitch + V.dpitch);
   const txt = oQueOEdFaz(); if (txt !== V.txt){ V.txt = txt; $('vistaEdFaz').textContent = txt; }
@@ -21352,7 +21376,7 @@ function itensDoAlvoBase(alvo){
   if (alvo.k === 'ed'){
     falar(ed, variar(FALAS_ED), 2); Som.oinc();
     r.titulo = 'Ed'; r.icone = 'ed'; r.estado = oQueOEdFaz() + '.';
-    r.itens.push({ rotulo: 'Ver pela vista do Ed', sub: 'a fazenda na altura dele; ele continua o que estava fazendo', icone: 'ed', off: !!miranteFP, fn: entrarVistaEd });
+    r.itens.push({ rotulo: 'Ver pela vista do Ed', sub: 'a câmera atrás dele, por cima do ombro; ele continua o que estava fazendo', icone: 'ed', off: !!miranteFP, fn: entrarVistaEd });
     return r;
   }
   if (alvo.k === 'floresta') return itensFloresta(alvo.x, alvo.z);
