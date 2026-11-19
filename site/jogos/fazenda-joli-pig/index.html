@@ -187,6 +187,14 @@ button{font:inherit;color:inherit}
 @keyframes abre{from{transform:scale(.9);opacity:0}}
 .menu h3{margin:0 0 2px;font-family:var(--f-titulo);font-weight:400;font-size:19px;line-height:1.1;display:flex;align-items:center;gap:8px}
 .menu h3 img{width:32px;height:32px}
+.menu h3 .ficha-btn{all:unset;margin-left:auto;flex:none;width:28px;height:28px;display:grid;place-items:center;border-radius:50%;border:2px solid var(--borda);background:var(--amarelo);font-family:var(--f-titulo);font-size:18px;line-height:1;cursor:pointer;box-shadow:0 2px 0 var(--borda)}
+.menu h3 .ficha-btn:active{transform:translateY(2px);box-shadow:none}
+.menu h3 .ficha-btn:focus-visible{outline:3px solid var(--rosa);outline-offset:2px}
+.ficha-bicho .ficha-retrato{display:grid;place-items:center;margin:0 0 6px;background:#eef6e2;border:2px solid var(--borda);border-radius:14px;padding:6px}
+.ficha-bicho .ficha-retrato img{width:min(200px,55vw);height:auto;aspect-ratio:1}
+.ficha-bicho h3{margin:12px 0 4px;font-family:var(--f-titulo);font-weight:400;font-size:18px}
+.ficha-bicho .ficha-curio{margin-top:12px;padding:10px 12px;border:2px solid var(--borda);border-radius:12px;background:var(--amarelo);line-height:1.45;font-weight:500}
+.ficha-bicho .ficha-curio b{display:block;font-family:var(--f-titulo);font-weight:400;font-size:16px;margin-bottom:2px}
 .menu .estado{font-size:13px;font-weight:700;color:var(--tinta-suave);margin:2px 0 6px;line-height:1.3}
 .menu .estado.alerta{color:var(--vermelho)}
 .menu .estado.bom{color:var(--verde-escuro)}
@@ -5301,9 +5309,10 @@ function criarBicho(tipo, pts){
   const [fn, esc] = BICHOS_MATA.modelos[tipo], g = new THREE.Group(), gm = geo('bichoMata' + tipo, () => fn().build(esc, { origin: [0.5, 0, 0.5], jitter: 0.03 }));
   const ms = (BICHOS_MATA.bando[tipo] || [[0, 0, 0]]).map(([x, y, z, e]) => { const m = malha(gm); m.position.set(x, y, z); if (e) m.scale.setScalar(e); g.add(m); return m; });
   g.position.copy(pts[0].p); g.rotation.y = cam.az; scene.add(g);
+  if (FICHAS_BICHOS[tipo]) tornarClicavel(g, tipo);
   return { tipo, g, m: ms[0], ms, pts, i: 1, tt: 0, falou: false, nome: 'bicho', topo(){ return this.g.position.clone().add(new THREE.Vector3(0, 1.1, 0)); } };
 }
-function sumirBichoMata(){ if (bichoMata){ scene.remove(bichoMata.g); bichoMata = null; } proxBichoMata = rnd(...BICHOS_MATA.intervalo) * (parcelaComprada(0) ? estadoMata().bichos : 1); }
+function sumirBichoMata(){ if (bichoMata){ scene.remove(bichoMata.g); tirarClicavel(bichoMata.g); bichoMata = null; } proxBichoMata = rnd(...BICHOS_MATA.intervalo) * (parcelaComprada(0) ? estadoMata().bichos : 1); }
 // o tatu cavando na orla (para a Luma ir cavar junto)
 const tatuCavando = () => !!bichoMata && bichoMata.tipo === 'tatu' && !!bichoMata.cavando;
 const lumaNoTatu = () => !!luma && luma.estado === 'fora' && luma.acao === 'tatu';
@@ -5552,7 +5561,7 @@ function soltarVisitaCachoeira(tipo){
   visitaCachoeira = criarBicho(tipo, pts);
   return true;
 }
-function sumirVisitaCachoeira(){ if (visitaCachoeira){ scene.remove(visitaCachoeira.g); visitaCachoeira = null; } proxVisitaCachoeira = rnd(...VISITA_CACHOEIRA.intervalo); }
+function sumirVisitaCachoeira(){ if (visitaCachoeira){ scene.remove(visitaCachoeira.g); tirarClicavel(visitaCachoeira.g); visitaCachoeira = null; } proxVisitaCachoeira = rnd(...VISITA_CACHOEIRA.intervalo); }
 function atualizarVisitaCachoeira(dt, t){
   if (!visitaCachoeira){
     if (cine || !S.viuCineInicio) return;
@@ -5746,7 +5755,7 @@ function soltarCapivaras(){
     caminhos.forEach(c => { c[3].para = caminhos[0][3].para; });
     const fam = C.fam.map(([esc], i) => {
       const g = new THREE.Group(), m = malha(geo('capivara' + i, () => vCapivara().build(esc, { origin: [0.5, 0, 0.5], jitter: 0.03 })));
-      g.add(m); g.position.copy(caminhos[i][0].p); g.rotation.y = Math.atan2(-b.dx, -b.dz); g.visible = false; scene.add(g);
+      g.add(m); g.position.copy(caminhos[i][0].p); g.rotation.y = Math.atan2(-b.dx, -b.dz); g.visible = false; scene.add(g); tornarClicavel(g, 'capivara');
       return { g, m, pts: caminhos[i], i: 1, tt: -i * C.atraso, fase: rnd(0, 6), onda: 0 };
     });
     capivaras = { fam, beira: b, centro: b.p.clone(), lado: Math.random() < 0.5 ? 1 : -1, lumaViu: false, lumaFoi: false, nome: 'capivara', topo(){ return fam[0].g.position.clone().add(new THREE.Vector3(0, 0.9, 0)); } };
@@ -5755,7 +5764,7 @@ function soltarCapivaras(){
   return false;
 }
 function sumirCapivaras(){
-  if (capivaras) for (const q of capivaras.fam) scene.remove(q.g);
+  if (capivaras) for (const q of capivaras.fam){ scene.remove(q.g); tirarClicavel(q.g); }
   capivaras = null; proxCapivaras = rnd(...CAPIVARAS.intervalo);
 }
 const capivarasDescansando = () => !!capivaras && capivaras.fam.every(q => q.i === 3 && q.tt >= q.pts[3].dur);
@@ -5823,11 +5832,11 @@ function soltarBeijaFlor(){
   pts.push({ p: pts[pts.length - 1].p.clone().addScaledVector(direita, 6 * lado).add(V(0, 3, 0)) });
   for (let k = 1; k < pts.length; k++) pts[k].dur = Math.max(0.5, pts[k].p.distanceTo(pts[k - 1].p) / BEIJA_FLOR.vel);
   const g = new THREE.Group(), m = malha(geo('beijaFlor', () => vBeijaFlor().build(BEIJA_FLOR.escala, { origin: [0.5, 0, 0.5], jitter: 0.02 })));
-  g.add(m); g.position.copy(pts[0].p); scene.add(g);
+  g.add(m); g.position.copy(pts[0].p); scene.add(g); tornarClicavel(g, 'beijaFlor');
   beijaFlor = { g, m, pts, i: 1, tt: 0 };
   return true;
 }
-function sumirBeijaFlor(){ if (beijaFlor) scene.remove(beijaFlor.g); beijaFlor = null; proxBeijaFlor = rnd(...BEIJA_FLOR.intervalo); }
+function sumirBeijaFlor(){ if (beijaFlor){ scene.remove(beijaFlor.g); tirarClicavel(beijaFlor.g); } beijaFlor = null; proxBeijaFlor = rnd(...BEIJA_FLOR.intervalo); }
 function atualizarBeijaFlor(dt, t){
   if (!beijaFlor){
     if (!cine && S.viuCineInicio){ proxBeijaFlor -= dt; if (proxBeijaFlor <= 0 && !soltarBeijaFlor()) proxBeijaFlor = rnd(15, 30); }
@@ -6668,7 +6677,7 @@ function itensHospede(h){
   Som.co(); h.pulo = 0.3;
   const q = h.lugar, oque = h.estado === 'dentro' ? 'Está dormindo no chalé.' : h.estado === 'atividade' && q ? { cadeira: 'Está tomando sol na espreguiçadeira.', piscina: 'Está boiando na piscina.', quiosque: 'Está tomando água de coco no quiosque.' }[q.tipo] : 'Está passeando pelo resort.';
   falar(h, variar(FALAS_HOSPEDE), 2.4);
-  return { titulo: h.d.nome, icone: 'aposentada', estado: `Aposentada com ${h.d.ovos} ovos botados. ${oque}`, itens: [] };
+  return { titulo: h.d.nome, icone: 'aposentada', ficha: 'galinha', estado: `Aposentada com ${h.d.ovos} ovos botados. ${oque}`, itens: [] };
 }
 // ================= cena "Inauguração do resort": quando o Maurinho entrega o resort, a família se junta na frente do arco
 // da entrada, as aposentadas chegam pela ponte com as malinhas e fazem fila do lado, o Ed corta a fita e elas entram.
@@ -10367,6 +10376,166 @@ const Musica = {
     if (Math.abs(alvo - A.vol) > 0.01 && ctx.currentTime > A.prox - A.T.ciclo + 0.5){ A.vol = alvo; A.mestre.gain.setTargetAtTime(alvo, ctx.currentTime, 0.25); }
   },
 };
+// ================= as fichas dos bichos (o Lucas pediu): tocando num animal, além do que ele já faz, o menu mostra um "?"
+// que abre um cartão com o que é o bicho e onde ele vive (abrirFicha). Os da fazenda (galinha, pintinho, galo, vaca, pato;
+// as aposentadas do resort usam a da galinha) e os que aparecem sozinhos: os da floresta (BICHOS_MATA, também na
+// cachoeira), a família de capivaras, o beija-flor dos canteiros de flor e as aves do comedouro, que ficaram clicáveis
+// só para isso (alvo { k: 'bicho' }, tornarClicavel). O desenho do cartão é o próprio modelo do jogo (retratoBicho).
+// Campos: nome, cient (nome científico), oque, vive, fazenda (onde aparece no jogo) e curio (curiosidade)
+const FAZENDA_MATA = 'Aparece de vez em quando na beira da floresta da fazenda e depois volta para a mata.';
+const FICHAS_BICHOS = {
+  galinha: { nome: 'Galinha', cient: 'Gallus gallus domesticus', modelo: () => vGalinha(),
+    oque: 'Uma ave doméstica, criada no mundo todo pelos ovos e pela carne. É parente do galo-banquiva, uma ave selvagem das florestas do Sudeste Asiático, e convive com as pessoas há milhares de anos.',
+    vive: 'Não existe galinha selvagem: ela vive onde as pessoas criam, em sítios, fazendas e quintais de quase todos os países. Gosta de terreiro de terra para ciscar e de um poleiro alto e protegido para dormir.',
+    fazenda: 'Mora no galinheiro, com o pasto cercado do lado. Come ração e bota um ovo de cada vez. As aposentadas descansam no resort.',
+    curio: 'Ela não tem dentes. Engole pedrinhas, que ficam na moela, uma parte do estômago, e ajudam a moer os grãos.' },
+  pintinho: { nome: 'Pintinho', cient: 'Gallus gallus domesticus', modelo: () => vPintinho(),
+    oque: 'O filhote da galinha. Sai do ovo depois de uns 21 dias de choco, já coberto de penugem e capaz de andar e bicar sozinho.',
+    vive: 'Sempre perto da mãe, que o chama com um cacarejo baixinho e o esquenta embaixo das asas até as penas de verdade crescerem.',
+    fazenda: 'Anda atrás da mãe pelo galinheiro até virar galinha.',
+    curio: 'Pouco antes de nascer, ainda dentro do ovo, o pintinho já pia, e a galinha responde.' },
+  galo: { nome: 'Galo', cient: 'Gallus gallus domesticus', modelo: () => vGalo(),
+    oque: 'O macho da galinha. É maior que ela, tem a crista e a barbela vermelhas maiores e penas compridas e brilhantes no rabo.',
+    vive: 'Onde vivem as galinhas: em sítios, fazendas e quintais do mundo todo. Cuida do grupo, avisa quando vê perigo e chama as galinhas quando acha comida.',
+    fazenda: 'Fica no mourão do galinheiro, de olho na fazenda. De vez em quando foge para passear, e o Ed vai buscar.',
+    curio: 'Canta mais ao amanhecer, mas pode cantar a qualquer hora. Onde há vários galos, o primeiro canto do dia costuma ser do galo que manda no grupo.' },
+  vaca: { nome: 'Vaca', cient: 'Bos taurus', modelo: () => vVaca(),
+    oque: 'Um mamífero ruminante, criado pelo leite e pela carne. Descende do auroque, um boi selvagem da Europa, da Ásia e do norte da África que foi extinto em 1627.',
+    vive: 'Em pastos e fazendas do mundo todo. No Brasil há muitas raças, como a holandesa, de manchas pretas e brancas, e o gir, de orelhas compridas, que aguenta bem o calor.',
+    fazenda: 'Mora no curral. Come ração e dá leite.',
+    curio: 'O estômago tem quatro partes. Ela engole o capim quase sem mastigar, depois devolve à boca e mastiga de novo com calma: é a ruminação.' },
+  pato: { nome: 'Pato', cient: 'Anas platyrhynchos domesticus', modelo: () => vPato(),
+    oque: 'Um pato de Pequim, raça de pato doméstico de penas brancas criada na China. Os patos domésticos descendem do pato-real, um pato selvagem das lagoas e banhados do hemisfério norte.',
+    vive: 'Precisa de água por perto: nada em lagos, açudes e rios, e dorme e bota em terra firme. Hoje é criado em sítios e fazendas de muitos países.',
+    fazenda: 'Mora no galinheiro dos patos, na beira do lago do terreno novo, e sai para nadar enquanto bota.',
+    curio: 'Uma glândula perto do rabo produz um óleo que ele espalha nas penas com o bico. Por isso a água escorre e ele não fica encharcado.' },
+  bugio: { nome: 'Bugio-ruivo', cient: 'Alouatta guariba', modelo: () => vBugio(),
+    oque: 'Um macaco grande, de pelo avermelhado, que vive em grupos pequenos e come principalmente folhas. É famoso pelo ronco fortíssimo.',
+    vive: 'Nas copas das árvores da Mata Atlântica, do sul da Bahia até o Rio Grande do Sul. Quase nunca desce ao chão.',
+    curio: 'O ronco sai de um osso oco na garganta, que funciona como uma caixa de som. Dá para ouvir de muito longe, mesmo no meio da mata.' },
+  tucano: { nome: 'Tucano-toco', cient: 'Ramphastos toco', modelo: () => vTucano(true),
+    oque: 'O maior dos tucanos: preto, com o papo branco e um bico laranja enorme, de ponta preta. Come frutas, e às vezes ovos e filhotes de outras aves.',
+    vive: 'No Cerrado, no Pantanal e em beiras de mata e de rio de boa parte do Brasil, e também na Bolívia, no Paraguai e na Argentina. Anda em casais ou em grupos pequenos.',
+    fazenda: 'Aparece na beira da floresta e, quando tem comedouro na fazenda, vem bicar as sementes.',
+    curio: 'O bico é grande mas leve, porque por dentro parece uma esponja. Ele também ajuda o tucano a perder calor nos dias quentes.' },
+  papagaio: { nome: 'Papagaio-verdadeiro', cient: 'Amazona aestiva', modelo: () => vPapagaio(true),
+    oque: 'Um papagaio verde, de testa azul, cara amarela e vermelho no ombro da asa. Vive em casal e é bem barulhento.',
+    vive: 'Em matas, cerrados e caatingas do Nordeste, do Centro-Oeste, do Sudeste e do Sul do Brasil, e também no Paraguai, na Bolívia e na Argentina. Dorme em bandos e se espalha de dia atrás de frutas e sementes.',
+    fazenda: 'Aparece na beira da floresta e, quando tem comedouro na fazenda, vem bicar as sementes.',
+    curio: 'Aprende os chamados com o bando, e por isso imita sons tão bem. Comprar papagaio sem origem legal alimenta o tráfico de animais silvestres.' },
+  jaguatirica: { nome: 'Jaguatirica', cient: 'Leopardus pardalis', modelo: () => vJaguatirica(),
+    oque: 'Um gato selvagem de porte médio, do tamanho de um cachorro pequeno, com pelo cor de mel cheio de manchas e rosetas pretas.',
+    vive: 'Em florestas e matas fechadas, do sul dos Estados Unidos até o norte da Argentina. No Brasil, vive em todos os biomas. Anda sozinha e caça à noite.',
+    curio: 'Cada jaguatirica tem um desenho de manchas só dela, como uma impressão digital.' },
+  cobra: { nome: 'Cobra-coral', cient: 'Micrurus corallinus', modelo: () => vCobraCoralEsticada(),
+    oque: 'Uma cobra de anéis vermelhos, pretos e brancos. É venenosa, mas tímida: passa quase o tempo todo escondida e só morde quando é pega ou pisada.',
+    vive: 'No chão da Mata Atlântica, embaixo de folhas secas, troncos e pedras, do Nordeste ao Sul do Brasil.',
+    curio: 'Algumas cobras sem veneno, as falsas-corais, têm cores bem parecidas. Como é difícil saber qual é qual, o certo é nunca mexer em nenhuma.' },
+  cutia: { nome: 'Cutia', cient: 'gênero Dasyprocta', modelo: () => vCutia(),
+    oque: 'Um roedor de pernas finas e traseiro alto, do tamanho de um coelho grande. Anda de dia e corre muito quando se assusta.',
+    vive: 'Nas florestas da América do Sul. No Brasil, vive na Amazônia, na Mata Atlântica e nas matas do Cerrado.',
+    fazenda: 'Sai correndo da floresta, para e às vezes deixa uma castanha.',
+    curio: 'Enterra castanhas e sementes para comer depois e esquece de muitas. As que ficam no chão brotam, e assim a cutia planta árvores, como a castanheira.' },
+  tatu: { nome: 'Tatu-galinha', cient: 'Dasypus novemcinctus', modelo: () => vTatu(),
+    oque: 'Um mamífero coberto por uma carapaça de placas, com faixas que deixam o corpo dobrar. Tem focinho comprido, orelhas em pé e unhas fortes para cavar.',
+    vive: 'Do sul dos Estados Unidos à Argentina, em florestas, cerrados e campos. Passa o dia em tocas que ele mesmo cava e sai mais à noite para comer insetos.',
+    fazenda: 'Sai da floresta para cavar na orla, e às vezes a Luma vai cavar junto.',
+    curio: 'A fêmea quase sempre tem quatro filhotes idênticos, que nascem do mesmo óvulo.' },
+  quati: { nome: 'Quati', cient: 'Nasua nasua', modelo: () => vBandoQuati(),
+    oque: 'Um parente do guaxinim, de focinho comprido e mexido e rabo peludo com anéis, que ele carrega levantado.',
+    vive: 'Nas florestas da América do Sul, da Colômbia à Argentina. As fêmeas e os filhotes andam em bandos barulhentos; os machos adultos vivem sozinhos.',
+    curio: 'Desce das árvores de cabeça para baixo, porque consegue virar os tornozelos para trás.' },
+  tamandua: { nome: 'Tamanduá-bandeira', cient: 'Myrmecophaga tridactyla', modelo: () => vTamandua(),
+    oque: 'Um mamífero sem dentes, de focinho comprido e fino, faixa preta e branca no ombro e um rabo enorme e peludo que parece uma bandeira.',
+    vive: 'Em campos, cerrados, pantanais e florestas da América Central e do Sul. No Brasil, é mais fácil de ver no Cerrado e no Pantanal.',
+    curio: 'A língua chega a uns 60 centímetros, e ele come dezenas de milhares de formigas e cupins por dia.' },
+  anta: { nome: 'Anta', cient: 'Tapirus terrestris', modelo: () => vAnta(),
+    oque: 'O maior mamífero terrestre do Brasil: pode passar de 250 quilos. Tem o focinho em forma de tromba curta e é parente distante do cavalo e do rinoceronte.',
+    vive: 'Em florestas perto de rios e lagos, da Venezuela ao norte da Argentina. Nada muito bem e entra na água para se refrescar e para fugir do perigo.',
+    curio: 'Come muitas frutas e espalha as sementes nas fezes, ajudando a floresta a crescer. Por isso é chamada de jardineira da floresta.' },
+  jabuti: { nome: 'Jabuti-piranga', cient: 'Chelonoidis carbonarius', modelo: () => vJabuti(),
+    oque: 'Uma tartaruga que vive só em terra. Tem o casco alto, de placas escuras com o meio amarelado, e escamas vermelho-alaranjadas na cabeça e nas patas.',
+    vive: 'Em florestas, cerrados e caatingas da América do Sul. No Brasil, vai do Norte ao Sudeste. Come frutas caídas, folhas e flores.',
+    curio: 'Pode viver mais de 50 anos.' },
+  onca: { nome: 'Onça-pintada', cient: 'Panthera onca', modelo: () => vOnca(),
+    oque: 'O maior felino das Américas: amarela, com rosetas pretas, cabeça larga e mordida fortíssima. Está no topo da cadeia alimentar de onde vive.',
+    vive: 'Do México à Argentina. No Brasil, a maioria está na Amazônia e no Pantanal; na Mata Atlântica restam poucas. Precisa de matas grandes e de água por perto.',
+    curio: 'Ao contrário da maioria dos gatos, adora água: nada bem e caça até jacaré.' },
+  preguica: { nome: 'Preguiça-de-três-dedos', cient: 'Bradypus variegatus', modelo: () => vPreguica(true),
+    oque: 'Um mamífero que vive pendurado nas árvores e se move bem devagar. Tem três garras compridas em cada mão, pelo acinzentado e uma máscara escura em volta dos olhos.',
+    vive: 'Nas copas das florestas da América Central e da América do Sul, incluindo a Amazônia e a Mata Atlântica.',
+    curio: 'Desce da árvore mais ou menos uma vez por semana, só para fazer cocô no chão.' },
+  arara: { nome: 'Arara-canga', cient: 'Ara macao', modelo: () => vCasalArara(),
+    oque: 'Uma arara grande, também chamada de arara-vermelha: vermelha, com faixas amarelas e azuis nas asas, cara branca e um bico forte, que quebra cocos.',
+    vive: 'Em florestas altas da América Central e do Sul. No Brasil, vive na Amazônia. Anda em casais, que ficam juntos a vida toda, e voa longe atrás de frutas e sementes.',
+    curio: 'Come barro nos barrancos dos rios. A argila ajuda a aguentar as substâncias amargas de algumas sementes.' },
+  mico: { nome: 'Mico-leão-dourado', cient: 'Leontopithecus rosalia', modelo: () => vMicoLeao(),
+    oque: 'Um macaquinho de pelo laranja-dourado, com uma juba em volta da cara. Pesa pouco mais de meio quilo e vive em famílias.',
+    vive: 'Só existe na Mata Atlântica do estado do Rio de Janeiro, em matas de baixada. É um dos bichos símbolo da conservação no Brasil.',
+    curio: 'Quase foi extinto nos anos 1970, quando restavam uns 200 na natureza. Com a proteção das matas e a soltura de micos nascidos em zoológicos, hoje são alguns milhares.' },
+  borboletas: { nome: 'Borboleta-azul', cient: 'gênero Morpho', modelo: () => vBorboleta(),
+    oque: 'Uma borboleta grande, de asas azuis brilhantes. O azul não vem de tinta: são escamas minúsculas que refletem a luz.',
+    vive: 'Nas florestas tropicais da América Central e do Sul, incluindo a Amazônia e a Mata Atlântica. Voa perto de rios e de clareiras.',
+    curio: 'Por baixo, as asas são marrons, com manchas que parecem olhos. Quando pousa e fecha as asas, quase some.' },
+  porcoRio: { nome: 'Porco-do-rio-vermelho', cient: 'Potamochoerus porcus', modelo: () => vPorcoRio(),
+    oque: 'Um porco selvagem de pelo vermelho-alaranjado, com uma listra branca nas costas, cara preta e branca e tufos brancos na ponta das orelhas.',
+    vive: 'Nas florestas úmidas e beiras de rio da África Central e Ocidental. Anda em bandos e fuça o chão atrás de raízes, frutas e bichinhos. Na natureza, não vive no Brasil.',
+    fazenda: 'Um bando aparece de vez em quando para beber água na cachoeira da floresta.',
+    curio: 'Gosta de água e nada bem, daí o nome de porco-do-rio.' },
+  capivara: { nome: 'Capivara', cient: 'Hydrochoerus hydrochaeris', modelo: () => vCapivara(),
+    oque: 'O maior roedor do mundo: um adulto pode passar de 60 quilos. Tem pernas curtas, pelo marrom e uma pele entre os dedos que ajuda a nadar.',
+    vive: 'Na beira de rios, lagos e banhados de quase toda a América do Sul a leste dos Andes, até em lagos de cidade. Vive em grupos e passa boa parte do dia na água ou deitada perto dela.',
+    fazenda: 'Uma família vem de vez em quando tomar sol na beira do lago.',
+    curio: 'Fica uns cinco minutos debaixo d\'água e consegue cochilar dentro do rio, só com o focinho para fora.' },
+  beijaFlor: { nome: 'Beija-flor', cient: 'família Trochilidae', modelo: () => vBeijaFlor(),
+    oque: 'Uma ave pequenininha que bate as asas tão rápido que consegue parar no ar e até voar de ré. Toma o néctar das flores com a língua comprida.',
+    vive: 'Só nas Américas, do Alasca à Terra do Fogo. O Brasil tem mais de 80 espécies, em todos os biomas e também nas cidades.',
+    fazenda: 'Vem tomar néctar nos canteiros de flores.',
+    curio: 'Visitando uma flor atrás da outra, ele leva o pólen junto e ajuda as plantas a fazer sementes.' },
+};
+// o desenho do bicho para a ficha e para o menu: renderizado na hora, uma vez por bicho e tamanho
+const RETRATOS_BICHO = {};
+function retratoBicho(k, T){
+  const ch = k + '@' + T;
+  if (RETRATOS_BICHO[ch]) return RETRATOS_BICHO[ch];
+  const F = FICHAS_BICHOS[k];
+  try {
+    const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    r.setPixelRatio(1); r.setSize(T, T, false);
+    const sc = new THREE.Scene();
+    sc.add(new THREE.HemisphereLight(0xffffff, 0xb0a080, 0.62));
+    const l = new THREE.DirectionalLight(0xffffff, 0.62); l.position.set(3, 6, 5); sc.add(l);
+    const cm = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200), dir = new THREE.Vector3(1, 0.85, 1.6).normalize();
+    const g = F.modelo().build(1 / 16, { jitter: 0.03 }), m = new THREE.Mesh(g, MAT), c = new THREE.Vector3();
+    g.boundingBox.getCenter(c); m.position.copy(c).multiplyScalar(-1); sc.add(m);
+    const R = g.boundingSphere.radius * 1.02;
+    cm.left = -R; cm.right = R; cm.top = R; cm.bottom = -R; cm.updateProjectionMatrix();
+    cm.position.copy(dir).multiplyScalar(50); cm.lookAt(0, 0, 0);
+    r.render(sc, cm);
+    RETRATOS_BICHO[ch] = r.domElement.toDataURL();
+    g.dispose(); r.dispose(); if (r.forceContextLoss) r.forceContextLoss();
+  } catch (e){ RETRATOS_BICHO[ch] = icone('semente'); }
+  return RETRATOS_BICHO[ch];
+}
+function abrirFicha(k){
+  const F = FICHAS_BICHOS[k]; if (!F) return;
+  const fazenda = F.fazenda || FAZENDA_MATA;
+  abrirJanela(`<div class="janela-topo verde"><img src="${retratoBicho(k, 96)}" alt=""><div><h2>${esc(F.nome)}</h2><div class="sub"><i>${esc(F.cient)}</i></div></div><button class="fechar" type="button" data-fechar aria-label="Fechar">✕</button></div>
+    <div class="janela-corpo ficha-bicho">
+      <div class="ficha-retrato"><img src="${retratoBicho(k, 240)}" alt="${esc(F.nome)}"></div>
+      <h3>Que bicho é</h3><p>${esc(F.oque)}</p>
+      <h3>Onde vive</h3><p>${esc(F.vive)}</p>
+      <h3>Na fazenda</h3><p>${esc(fazenda)}</p>
+      ${F.curio ? `<div class="ficha-curio"><b>Curiosidade</b>${esc(F.curio)}</div>` : ''}
+    </div>`);
+  Som.tom(660, 0.08, 'sine', 0.03, 880);
+}
+// os bichos que só aparecem (sem tarefa nenhuma) ficam clicáveis para abrir o menu com o "?"
+function tornarClicavel(g, ficha, obj){ g.traverse(o => { o.userData.alvo = { k: 'bicho', ficha, obj, g }; }); pickaveis.push(g); }
+function tirarClicavel(g){
+  const i = pickaveis.indexOf(g); if (i >= 0) pickaveis.splice(i, 1);
+  if (menuAberto && menuAberto.alvo.k === 'bicho' && menuAberto.alvo.g === g) fecharMenu();
+}
 // ================= renderizador e cena
 const canvas = $('tela');
 let renderer, scene, camera, sol, ceuLuz;
@@ -17903,7 +18072,7 @@ function atualizarComedouro(dt, t){
       const ate = m.localToWorld(new THREE.Vector3((px - 8) / 16, py / 16, (pz - 8) / 16)), centro = m.localToWorld(new THREE.Vector3(0, py / 16, 0));
       const de = ate.clone().add(new THREE.Vector3(rnd(-4, 4), 4.5, rnd(6, 9)));
       const g = malha(geo('ave' + tipo, () => (tipo === 'tucano' ? vTucano(true) : vPapagaio(true)).build(1 / 34, { origin: [0, 2, 0] })));
-      g.position.copy(de); scene.add(g);
+      g.position.copy(de); scene.add(g); tornarClicavel(g, tipo);
       C.lista.push({ g, e, i, tipo, fase: 'vem', t: 0, de, ate, centro, fica: rnd(...COMEDOURO.fica), bica: 0 });
     }
   }
@@ -17916,7 +18085,7 @@ function atualizarComedouro(dt, t){
       a.g.rotation.set(0, Math.atan2(a.ate.x - a.de.x, a.ate.z - a.de.z), 0);
       a.g.scale.set(1, 1 + Math.sin(t * 30) * 0.08, 1);
       if (k >= 1){
-        if (a.fase === 'vai'){ scene.remove(a.g); C.lista.splice(j, 1); continue; }
+        if (a.fase === 'vai'){ scene.remove(a.g); tirarClicavel(a.g); C.lista.splice(j, 1); continue; }
         a.fase = 'come'; a.t = 0; a.g.scale.setScalar(1); Som.tom(2600, 0.05, 'sine', 0.018, 3400); Som.tom(3000, 0.05, 'sine', 0.015, 3600, 0.09);
       }
     } else {
@@ -20804,7 +20973,16 @@ function itensDoAlvo(alvo){
 function itensDoAlvoBase(alvo){
   // devolve { titulo, icone, estado, classe, prog, itens:[{rotulo, sub, icone, preco, fn, off, modo}] }
   const r = { itens: [] };
-  if (alvo.k === 'galo'){ tocarGalo(alvo.id); return null; }
+  if (alvo.k === 'galo'){
+    tocarGalo(alvo.id);
+    const G = GALOS[alvo.id];
+    return { titulo: 'Galo', icone: 'galo', ficha: 'galo', estado: !G ? '' : G.estado === 'poleiro' ? 'No mourão, de olho na fazenda.' : G.estado === 'colo' ? 'No colo do Ed, voltando para o mourão.' : 'Fugiu do mourão e está passeando. O Ed vai buscar.', itens: [] };
+  }
+  // os bichos que só aparecem: o menu é o nome e o "?" da ficha
+  if (alvo.k === 'bicho'){
+    const F = FICHAS_BICHOS[alvo.ficha]; if (!F) return null;
+    return { titulo: F.nome, iconeUrl: retratoBicho(alvo.ficha, 64), ficha: alvo.ficha, estado: alvo.g.parent ? 'Toque no ? para conhecer este bicho.' : 'Já foi embora.', itens: [] };
+  }
   if (alvo.k === 'maurinhoObra'){
     falar(maurinhoObra, variar(FALAS_MAURINHO_OBRA), 3);
     if (!S.obra) return null;
@@ -20904,9 +21082,9 @@ function itensDoAlvoBase(alvo){
     const a = alvo.a, A = ANIMAIS[a.d.tipo];
     if (a.d.pinto){
       const falta = Math.max(0, a.d.pinto + PINTINHO.cresce * 1000 - Date.now()) / 1000;
-      return { titulo: 'Pintinho', icone: 'pintinho', estado: `Anda atrás da mãe para todo lado. Vira galinha em ${tempo(falta)}.`, prog: 1 - falta / PINTINHO.cresce, itens: [] };
+      return { titulo: 'Pintinho', icone: 'pintinho', ficha: 'pintinho', estado: `Anda atrás da mãe para todo lado. Vira galinha em ${tempo(falta)}.`, prog: 1 - falta / PINTINHO.cresce, itens: [] };
     }
-    r.titulo = A.nome; r.icone = a.d.tipo;
+    r.titulo = A.nome; r.icone = a.d.tipo; r.ficha = a.d.tipo;
     if (a.nado && a.d.e !== 'produzindo'){ r.estado = a.d.e === 'pronto' ? 'Já botou e está voltando do lago para o pasto.' : 'Com fome, voltando do lago para o pasto.'; return r; }
     if (a.res){ r.estado = 'Na fila do Ed: ' + NOMES_ACAO[a.res.tipo].toLowerCase(); r.itens.push({ rotulo: 'Cancelar', icone: 'ed', fn: () => cancelar(a.res) }); return r; }
     if (a.d.e === 'fome'){
@@ -21097,7 +21275,7 @@ function abrirMenu(alvo, px, py, manter){
   if (!r) return;
   if (!r.itens.length && alvo.k === 'tile'){ enfileirar('andar', alvo); return; }
   const m = $('menu');
-  let h = `<h3>${r.icone ? `<img src="${icone(r.icone)}" alt="">` : ''}${esc(r.titulo)}</h3>`;
+  let h = `<h3>${r.iconeUrl || r.icone ? `<img src="${r.iconeUrl || icone(r.icone)}" alt="">` : ''}${esc(r.titulo)}${r.ficha && FICHAS_BICHOS[r.ficha] ? `<button class="ficha-btn" type="button" aria-label="Que bicho é esse?" title="Que bicho é esse?">?</button>` : ''}</h3>`;
   if (r.estado) h += `<div class="estado ${r.classe || ''}">${esc(r.estado)}</div>`;
   if (r.extraHTML) h += `<div class="extra">${r.extraHTML}</div>`;
   else if (r.prog != null && r.prog < 1) h += `<div class="prog"><i style="width:${Math.round(clamp(r.prog, 0, 1) * 100)}%"></i></div>`;
@@ -21132,6 +21310,8 @@ function abrirMenu(alvo, px, py, manter){
   };
   const bc = est.conf >= 0 && m.querySelector(`.item[data-i="${est.conf}"]`);
   if (bc && r.itens[est.conf].confirmar && !r.itens[est.conf].off) marcarConfirmar(bc); else est.conf = -1;
+  const fb = m.querySelector('.ficha-btn');
+  if (fb) fb.addEventListener('click', ev => { ev.stopPropagation(); if (performance.now() - est.abertoEm < 300) return; abrirFicha(r.ficha); });
   m.querySelectorAll('.item').forEach(b => b.addEventListener('click', ev => {
     ev.stopPropagation();
     // o mesmo toque que abriu o menu (ou um toque duplo sem querer) não escolhe nada
@@ -22084,6 +22264,9 @@ function alvoNaTela(cx, cy){
   // fogo, lixo e galho na frente de tudo: são urgentes e pequenos
   const hitOc = hits.find(h => h.object.userData.alvo && h.object.userData.alvo.k === 'ocorrencia');
   if (hitOc) return hitOc.object.userData.alvo;
+  // os bichos que só aparecem também: pequenos, de passagem e muitas vezes no meio das copas
+  const hitBicho = hits.find(h => h.object.userData.alvo && h.object.userData.alvo.k === 'bicho');
+  if (hitBicho) return hitBicho.object.userData.alvo;
   const hitTrufa = hits.find(h => h.object.userData.alvo && h.object.userData.alvo.k === 'trufa');
   if (hitTrufa && !canteiroAtras(hitTrufa.object)) return hitTrufa.object.userData.alvo;
   // a copa de uma árvore na frente não pode esconder a maçã, mas um canteiro atrás dela continua valendo
@@ -22697,7 +22880,7 @@ async function iniciar(){
     },
     varalBaixo(){ const R = RES_VARAL; let m = 99; for (const L of linhasVaral()) for (let i = 0; i + 1 < L.pos.length; i++){ const a0 = Math.round(L.pos[i] * R) - 1, a1 = Math.round(L.pos[i + 1] * R) - 1, caida = Math.max(3, Math.round((a1 - a0) / 12)); m = Math.min(m, (VARAL.alto - 2 - caida - 4) / R); } return m; },
     edObj: () => ed,
-    alturas: () => Object.fromEntries([['ed', ed], ['hud', irmaoHud], ['dani', irmaoDani], ['beto', beto], ['jaca', jaca], ['pelucio', pelucio], ['patrinho', patrinho], ['maurinho', maurinho], ['milton', milton]].filter(([, P]) => P && P.g).map(([n, P]) => { const b = new THREE.Box3().setFromObject(P.g); return [n, +(b.max.y - P.g.position.y).toFixed(3)]; })) }, plantio: { todos: plantarTodosVazios, vazios: vaziosParaPlantar, modo: () => modo, ligar: k => ligarModo({ tipo: 'plantar', param: k }, { icone: k }) }, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, ganharXP, nivel, ampliacao: { AMPLIACAO, AMPLIA_OBRA, ampliar, ampliada, larga: fabLarga, preco: precoAmpliacao, precoReforma, itens: id => { const r = { itens: [], estado: '' }; itensAmpliacao(id, r); return r; }, alas: () => [...ALAS], visivel: loteAlaVisivel, terminar: () => { if (S.obra) S.obra.fim = 0; } }, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, irrigadorJato, volumeNaTela, Som, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
+    alturas: () => Object.fromEntries([['ed', ed], ['hud', irmaoHud], ['dani', irmaoDani], ['beto', beto], ['jaca', jaca], ['pelucio', pelucio], ['patrinho', patrinho], ['maurinho', maurinho], ['milton', milton]].filter(([, P]) => P && P.g).map(([n, P]) => { const b = new THREE.Box3().setFromObject(P.g); return [n, +(b.max.y - P.g.position.y).toFixed(3)]; })) }, plantio: { todos: plantarTodosVazios, vazios: vaziosParaPlantar, modo: () => modo, ligar: k => ligarModo({ tipo: 'plantar', param: k }, { icone: k }) }, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, ganharXP, nivel, fichas: { FICHAS_BICHOS, abrir: abrirFicha, retrato: retratoBicho, tela: (x, y, z) => tela(new THREE.Vector3(x, y, z)) }, ampliacao: { AMPLIACAO, AMPLIA_OBRA, ampliar, ampliada, larga: fabLarga, preco: precoAmpliacao, precoReforma, itens: id => { const r = { itens: [], estado: '' }; itensAmpliacao(id, r); return r; }, alas: () => [...ALAS], visivel: loteAlaVisivel, terminar: () => { if (S.obra) S.obra.fim = 0; } }, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, irrigadorJato, volumeNaTela, Som, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){

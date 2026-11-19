@@ -412,6 +412,14 @@ O Lucas pediu otimizações sem mexer na imagem nem no jogo. O que foi medido e 
 - Saves de antes (`migrar`): quem tinha a fábrica nova fica com a original ampliada, na reforma maior das duas, com a fila, o que estava pronto, a esteira e o repetidor das duas juntos; a obra que estava em andamento na cópia entra pronta. Um aviso explica. Ao abrir uma vez (`S.fabEspacadas`), o enfeite que estava no lugar novo da padaria ou da cozinha volta para a loja, e a trufa ou a maçã que ficou sem árvore do lado some.
 - Para testar: `__fazenda.ampliacao` (`ampliar`, `preco`, `precoReforma`, `itens`, `alas`, `terminar`).
 
+## Fichas dos bichos
+
+- O Lucas pediu: tocando num animal, além do que ele já faz, o menu mostra um "?" no canto do título (`.ficha-btn`, quando o item do menu tem `ficha`), e o "?" abre um cartão (`abrirFicha`) com o desenho do bicho, o nome científico, "Que bicho é", "Onde vive", "Na fazenda" (onde ele aparece no jogo) e uma curiosidade. Os textos ficam em `FICHAS_BICHOS` (`nome`, `cient`, `oque`, `vive`, `fazenda`, `curio`, `modelo`); quem não tem `fazenda` usa `FAZENDA_MATA`. Texto informativo e conferido: bicho real, onde vive de verdade (o porco-do-rio-vermelho avisa que não vive no Brasil).
+- Da fazenda: galinha, pintinho, vaca e pato (o menu de sempre), as aposentadas do resort (ficha da galinha) e o galo, que agora também abre um menu curto com o que ele está fazendo, além do carinho ou da busca de sempre (`tocarGalo`).
+- Os que só aparecem ficaram clicáveis para isso (`tornarClicavel`, alvo `{ k: 'bicho', ficha, g }`, tirado em `tirarClicavel` quando somem): os bichos da floresta e da cachoeira (`criarBicho`), a família de capivaras, o beija-flor dos canteiros de flor e o tucano e o papagaio do comedouro. O menu deles é só o nome, o desenho e o "?". No toque eles passam na frente de tudo, menos das ocorrências (`alvoNaTela`), porque são pequenos e ficam no meio das copas.
+- O desenho é o modelo do jogo, renderizado na hora uma vez por bicho e tamanho (`retratoBicho`, 64 no menu, 96 no topo, 240 no cartão), sem gerar ícone na abertura do jogo.
+- Bicho novo no jogo: ganha uma entrada em `FICHAS_BICHOS` com a mesma chave do tipo dele, e quem só aparece chama `tornarClicavel` ao nascer e `tirarClicavel` ao sumir. Para testar: `__fazenda.fichas` (`abrir`, `retrato`, `tela`).
+
 ## Mapa
 
 - O mapa tem 52 × 51 ladrilhos (`W`, `H`), o dobro da área do primeiro (36 × 37). Ele cresceu em duas etapas: entraram colunas e linhas entre as zonas, para as construções não ficarem amontoadas, e o sul ganhou linhas a mais. A terra que sobra é para construções futuras: a fileira das fábricas tem quatro ladrilhos de gramado entre a queijaria, a padaria e a cozinha ampliadas e três entre a cozinha e a composteira, a floresta já está toda em parcelas (as duas do sul, z 43 a 50, entraram depois) e o canto Sul tem uma área grande livre abaixo das faixas de lotes.
