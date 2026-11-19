@@ -19825,11 +19825,21 @@ function enfileirar(tipoA, alvo, param, silencioso){
   } else {
     for (let i = fila.length - 1; i >= 0; i--) if (fila[i].tipo === 'andar') fila.splice(i, 1);
   }
-  fila.push(tarefa);
+  // fogo, lixo e galho na mata têm prazo (o Lucas pediu): passam na frente do resto da fila. O Ed termina o que está
+  // fazendo e vai direto para eles, na ordem em que foram pedidos; só o galo no colo é solto antes (soltarGalo)
+  if (tarefaUrgente(tarefa)){
+    let i = tarefaAtual && fila[0] === tarefaAtual ? 1 : 0;
+    while (i < fila.length && (tarefaUrgente(fila[i]) || fila[i].tipo === 'soltarGalo')) i++;
+    const pulou = fila.length - i, primeira = !fila.some(tarefaUrgente);
+    fila.splice(i, 0, tarefa);
+    if (pulou > 0 && primeira && !silencioso) aviso(`O Ed termina o que está fazendo e vai direto ${ACAO_URGENTE[ocorrencia && ocorrencia.tipo] || 'para a mata'}`, '', 2.6);
+  } else fila.push(tarefa);
   if (!silencioso) Som.clique();
   hud();
   return true;
 }
+const tarefaUrgente = t => t.alvo && t.alvo.k === 'ocorrencia';
+const ACAO_URGENTE = { fogo: 'apagar o fogo', lixo: 'recolher o lixo', galho: 'tirar o galho' };
 function liberar(tarefa, devolver){
   if (devolver && tarefa.custo){ const c = tarefa.custo; if (c.dinheiro) S.dinheiro += c.dinheiro; if (c.racao) S.racao += c.racao; if (c.semente) S.bolsa[c.semente] = (S.bolsa[c.semente] || 0) + 1; if (c.adubo) S.adubo = (S.adubo || 0) + c.adubo; if (c.itens) for (const [k, q] of Object.entries(c.itens)) S.celeiro[k] = (S.celeiro[k] || 0) + q; tarefa.custo = null; }
   if (tarefa.tipo !== 'andar') setReserva(tarefa.alvo, null);
