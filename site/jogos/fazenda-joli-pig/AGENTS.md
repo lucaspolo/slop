@@ -281,6 +281,7 @@ O Lucas pediu otimizações sem mexer na imagem nem no jogo. O que foi medido e 
 
 ## Interface
 
+- Um item do menu com `fica: true` não fecha o menu: depois da ação o menu é refeito no mesmo lugar e na mesma rolagem (`abrirMenu(..., true)`). É o caso das receitas da fábrica, para pôr várias seguidas (o Lucas pediu).
 - O HUD de cima é uma barra só (`.hud-topo`): nível com a barrinha de xp, dinheiro (sem o "R$", a moeda já diz), ração, adubo (só quando há algum) e a hora com a estação. Cada pedaço é um `.seg`, separados por `.sep`, e `chipPulsa` anima o pedaço.
 - No celular a barra ocupa a largura toda. Quando os números não cabem, `ajustarBarra` aperta em dois passos: `aperto1` tira as réguas e troca a barrinha de xp por um anel no selo do nível; `aperto2` diminui letras e ícones. Confira em 390, 360 e 320 px com números grandes.
 - O que está em andamento embaixo (maçã do Ed veloz, Hud, Dani e a fila do Ed) fica em `#andamento` (`arrumarAndamento`, chamada a cada quadro): com uma coisa só, a pílula de sempre; com duas ou mais, um resumo só ("4 em andamento" e o que acaba primeiro, com os ícones empilhados) que abre a lista num painel, com o que acaba primeiro em cima e a fila do Ed por último, com o "limpar". Tocar no resumo de novo ou no mapa fecha. Coisa nova com tempo entra em `ANDAMENTO` (id da pílula, nome curto, ícone e o fim), com o texto e o tempo em spans separados (`.tp`). O nome e o ícone podem ser funções.
