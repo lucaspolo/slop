@@ -11205,12 +11205,21 @@ function itensParcela(p){
 }
 // ================= o terreno do canto Sul
 let placaCanto = null, bolhaCanto = null;
+// os caminhos do canto Sul (o Lucas pediu, como os da fazenda): a rua da beira do lago, que sai da ponte para os dois
+// lados; a descida até a rua de baixo, que encontra o caminho do spa; a rua de baixo, que passa na porta do observatório e
+// do resort; e o ramal até a porta do museu. [x0, z0, x1, z1] de cada trecho. Ficam de terra, como a rua de cima, e o varal
+// de luzes vai por eles também (VARAL.canto)
+const CAMINHOS_CANTO = [[27, 27, 46, 27], [29, 28, 29, 42], [27, 40, 48, 40], [48, 39, 48, 39], [44, 41, 44, 47], [45, 47, 45, 47]];
+const noCaminhoCanto = (x, z) => CAMINHOS_CANTO.some(([x0, z0, x1, z1]) => x >= x0 && x <= x1 && z >= z0 && z <= z1);
 function liberarTilesDoCanto(){
   // as construções da clareira, o lago e a ponte continuam lá; os terrenos de canteiros e as colmeias de lá passam a existir
   for (let z = Z_CERCA + 1; z < H; z++) for (let x = COL_CURVA + 2; x < W; x++) if (tipo(x, z) === 'canto') setT(x, z, 'grama');
   for (let x = ARRENDAMENTO.xCerca; x < W; x++) setT(x, Z_CERCA, 'grama');
   LOTES.forEach(l => { if (l.canto) for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) setT(x, z, 'campo'); });
   for (const [x, z] of COLMEIA_SLOTS.slice(COLMEIA_CANTO)) setT(x, z, 'feno');
+  // os caminhos: o enfeite que estava num deles volta para a loja
+  if (Array.isArray(S.enfeites) && S.enfeites.some(e => noCaminhoCanto(e.x, e.z))){ if (!S.guardados) S.guardados = {}; devolverEnfeites(noCaminhoCanto, 'dos caminhos do terreno novo'); }
+  for (const [x0, z0, x1, z1] of CAMINHOS_CANTO) for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) if (tipo(x, z) === 'grama') setT(x, z, 'caminho');
   // a cerca de baixo do curral novo é a da fazenda: ela fica
   for (const id in CERCADOS) if (cercadoFeito(id)) aplicarCercado(id);
 }
@@ -11264,7 +11273,7 @@ function executarTirarCerca(){
   // a estaca que fica perde o vizinho e muda de desenho
   atualizarCercas(ARRENDAMENTO.xCerca, Z_CERCA, W - 1, Z_CERCA);
   MATAGAL.splice(0).forEach(m => scene.remove(m));
-  refazerChao();
+  refazerChao(); refazerVaral();
   montarPlacaCanto();
   const fala = 'Aoooa! A fazenda cresceu!';
   falar(ed, fala, tempoDeLeitura(fala)); Som.colher();
@@ -18165,7 +18174,17 @@ const VARAL = { nivel: 8, preco: 2000, xp: 10, alto: ALTO_VARAL, subida: 1.2,
   linhas: [
     { eixo: 'x', w: 5.92, pos: [4.1, 7, 10, 13.5, 17.08, 20, 23, 26, 29, 32, 35, 38, 41, 44, 47, 49.5, 51.85] },
     { eixo: 'z', w: 17.08, pos: [5.92, 9, 12, 15, 18, 20.85] },
+  ],
+  // no canto Sul, depois que a cerca sai (linhasVaral): a rua da beira do lago, a descida e a rua de baixo (CAMINHOS_CANTO),
+  // com os mourões dos cantos em comum, como na fazenda. O ramal do museu fica sem, para não esbarrar nos postes do ArraiEd
+  canto: [
+    { eixo: 'x', w: 27.08, pos: [27.1, 29.08, 32, 35, 38, 41, 44, 46.9] },
+    { eixo: 'z', w: 29.08, pos: [27.08, 30.5, 34, 37.5, 40.92] },
+    { eixo: 'x', w: 40.92, pos: [27.1, 29.08, 32, 35, 38, 41, 44.08] },
   ] };
+const linhasVaral = () => S && S.canto === 2 ? VARAL.linhas.concat(VARAL.canto) : VARAL.linhas;
+// o canto abriu com o varal já comprado: ele é montado de novo, com as linhas de lá
+function refazerVaral(){ if (!varalMalha) return; scene.remove(varalMalha); varalMalha.traverse(o => { if (o.geometry) o.geometry.dispose(); }); varalMalha = null; montarVaral(); }
 const MAT_VARAL_HALO = new THREE.PointsMaterial({ size: 10, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: false });
 // mapa de luz da noite: uma textura vista de cima com a luz que o varal espalha em volta. O material dos voxels (MAT)
 // soma essa luz à cor de tudo o que está perto (chão, construções, bichos, enfeites), mais fraca no alto e embaixo das coisas
@@ -18278,7 +18297,7 @@ function montarVaral(){
   if (varalMalha || !S.varalLuzes) return;
   const R = RES_VARAL, v = new Vox(), lamps = [];
   let k = 0;
-  for (const L of VARAL.linhas){
+  for (const L of linhasVaral()){
     const w = Math.round(L.w * R) - 1, ponto = L.eixo === 'x' ? (a, y, ww, c) => v.set(a, y, ww, c) : (a, y, ww, c) => v.set(ww, y, a, c);
     const as = L.pos.map(t => Math.round(t * R) - 1);
     as.forEach(a => mouraoVaral(v, ponto, a, w, VARAL.alto));
@@ -18306,7 +18325,7 @@ function comprarVaral(){
   if (nivel() < VARAL.nivel){ aviso(`O varal de luzes libera no nível ${VARAL.nivel}`, 'ruim'); Som.erro(); return false; }
   if (S.dinheiro < VARAL.preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return false; }
   gastar(VARAL.preco); S.varalLuzes = true; montarVaral(); ergueVaral = 0;
-  for (const L of VARAL.linhas) for (const t of L.pos) for (let i = 0; i < 6; i++){
+  for (const L of linhasVaral()) for (const t of L.pos) for (let i = 0; i < 6; i++){
     const x = L.eixo === 'x' ? t : L.w, z = L.eixo === 'x' ? L.w : t;
     particula(x + rnd(-0.2, 0.2), rnd(0.4, 1.3), z + rnd(-0.2, 0.2), CORES_VARAL[i % CORES_VARAL.length], 1.1);
   }
@@ -22641,7 +22660,7 @@ async function iniciar(){
       add('Ed na porta', p.porta[0] + 0.5, p.porta[1] + 0.5, 0.3);
       if (n !== 'andaime') for (const [x, z] of pontosObra(id)) add('Maurinho na obra', x, z, 0.28);
       add('envelope', ALUGUEL.porta[0], ALUGUEL.porta[1], 0.15);
-      for (const L of VARAL.linhas) for (const t of L.pos) add('mourão do varal', L.eixo === 'x' ? t : L.w, L.eixo === 'x' ? L.w : t, 0.04);
+      for (const L of linhasVaral()) for (const t of L.pos) add('mourão do varal', L.eixo === 'x' ? t : L.w, L.eixo === 'x' ? L.w : t, 0.04);
       for (const [mx, mz] of CAFE_LUGARES){ add('mesa do cafezinho', mx, mz, 0.3); for (const [ax, az] of Object.values(CAFE_ASSENTO)) add('banco do cafezinho', mx + ax, mz + az, 0.13); }
       for (let i = 1; i < CAMINHO_ALUGUEL.length; i++){ const [a0, b0] = CAMINHO_ALUGUEL[i - 1], [a1, b1] = CAMINHO_ALUGUEL[i]; for (let k = 0; k <= 10; k++) add('caminho da Lúcia', a0 + (a1 - a0) * k / 10, b0 + (b1 - b0) * k / 10, 0.08); }
       const achou = {};
@@ -22675,7 +22694,7 @@ async function iniciar(){
       }
       return linhas.join('\n');
     },
-    varalBaixo(){ const R = RES_VARAL; let m = 99; for (const L of VARAL.linhas) for (let i = 0; i + 1 < L.pos.length; i++){ const a0 = Math.round(L.pos[i] * R) - 1, a1 = Math.round(L.pos[i + 1] * R) - 1, caida = Math.max(3, Math.round((a1 - a0) / 12)); m = Math.min(m, (VARAL.alto - 2 - caida - 4) / R); } return m; },
+    varalBaixo(){ const R = RES_VARAL; let m = 99; for (const L of linhasVaral()) for (let i = 0; i + 1 < L.pos.length; i++){ const a0 = Math.round(L.pos[i] * R) - 1, a1 = Math.round(L.pos[i + 1] * R) - 1, caida = Math.max(3, Math.round((a1 - a0) / 12)); m = Math.min(m, (VARAL.alto - 2 - caida - 4) / R); } return m; },
     edObj: () => ed,
     alturas: () => Object.fromEntries([['ed', ed], ['hud', irmaoHud], ['dani', irmaoDani], ['beto', beto], ['jaca', jaca], ['pelucio', pelucio], ['patrinho', patrinho], ['maurinho', maurinho], ['milton', milton]].filter(([, P]) => P && P.g).map(([n, P]) => { const b = new THREE.Box3().setFromObject(P.g); return [n, +(b.max.y - P.g.position.y).toFixed(3)]; })) }, plantio: { todos: plantarTodosVazios, vazios: vaziosParaPlantar, modo: () => modo, ligar: k => ligarModo({ tipo: 'plantar', param: k }, { icone: k }) }, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, ganharXP, nivel, ampliacao: { AMPLIACAO, AMPLIA_OBRA, ampliar, ampliada, larga: fabLarga, preco: precoAmpliacao, precoReforma, itens: id => { const r = { itens: [], estado: '' }; itensAmpliacao(id, r); return r; }, alas: () => [...ALAS], visivel: loteAlaVisivel, terminar: () => { if (S.obra) S.obra.fim = 0; } }, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, irrigadorJato, volumeNaTela, Som, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
