@@ -4146,7 +4146,10 @@ function passarDisco(){
     T1.ate = alvo; T2.de = alvo; T1.dur = Math.max(0.9, T1.de.distanceTo(alvo) / vel); T2.dur = Math.max(0.9, alvo.distanceTo(T2.ate) / vel);
     T1.para = FAXINA.tempo; T1.susto = false; T1.faxina = { tiles: mato };
   }
-  P.forcarAbducao = false; P.forcarVolta = false; P.forcarFaxina = false;
+  // a perseguição: sem abdução, devolução nem faxina, com a visita do Milton para logo (ou forçada nos testes)
+  if (!P.querAbduzir && !P.querDevolver && !mato && aviao && voo.estado === 'fora' && S.conheceuMilton && !jatoPendente() && !cine
+    && (P.forcarPersegue || (S.proxMilton - Date.now() < 3 * 60000 && Math.random() < PERSEGUE.chance))) comecarPerseguicao();
+  P.forcarAbducao = false; P.forcarVolta = false; P.forcarFaxina = false; P.forcarPersegue = false;
 }
 // ================= a faxina do raio (o Lucas pediu): às vezes, numa passagem sem abdução nem devolução, o disco para em
 // cima de um canteiro com mato que aparece na tela e o raio puxa o mato dele e dos vizinhos (até FAXINA.max), que sobe em
@@ -18098,6 +18101,8 @@ function construirPista(){
     jato.add(pl);
   }
   aviao.visible = false;
+  // o rumo (y) por fora e a inclinação (x, z) já no rumo do avião: as curvas da perseguição inclinam a asa certa
+  aviao.rotation.order = 'YXZ';
   aviao.traverse(o => { o.userData.alvo = { k: 'milton' }; }); pickaveis.push(aviao);
   scene.add(aviao);
   milton.g.traverse(o => { o.userData.alvo = { k: 'milton' }; }); pickaveis.push(milton.g);
@@ -18181,6 +18186,51 @@ function fimDaFaixa(v){
   v.faixa.children.forEach(c => c.geometry.dispose());
   voo = { estado: 'fora', t: 0 }; aviao.visible = false; aviao.rotation.set(0, 0, 0); motor(false);
 }
+// ================= a perseguição no céu (o Lucas pediu): às vezes, quando o disco começa um passeio sem abdução, devolução
+// nem faxina e a visita do Milton não está longe, o avião chega antes da hora correndo atrás do disco: segue o disco pelo
+// céu, faz curvas em volta dele quando ele para, o Milton fala pelo rádio e o ETzinho responde. Quando o disco vai embora (ou
+// o tempo acaba), o avião sai da tela e volta para pousar, e a visita segue como sempre. Não mexe no save
+const PERSEGUE = { chance: 0.3, max: 16, vel: 4.2, virada: 2.6, abaixo: 0.25, perto: 1.1, falas: 3 };
+const FALAS_MILTON_RADIO = ['PIG-MTP chamando disco não identificado! Câmbio!', 'Volta aqui, disco! Só quero uma foto!', 'Torre, estou em perseguição! Câmbio!', 'Esse disco faz curva melhor que eu!', 'Milton na área... e no céu!', 'Ei, ETzinho! Me dá uma carona nesse disco?', 'Aoooa! Que velocidade é essa?', 'PIG-MTP colado na cauda! Ou na borda!', 'Disco, identifique-se! Câmbio!', 'Não adianta fugir, eu conheço esse céu!', 'Ed, tá vendo isso? Câmbio!', 'Quase! Mais uma curva!', 'Esse ET pilota bem, hein!', 'Perseguição autorizada pela torre da fazenda!', 'Rodopio de disco não vale!', 'PIG-MTP em alta velocidade!', 'Tá devolvendo as vacas direitinho, ETzinho?', 'Vou contar pro Ed que você fugiu!', 'Uhuu! Que manobra!', 'Um dia eu te alcanço, disco!', 'Desisto! Vou pousar. Câmbio, desligo!'];
+const FALAS_ET_FOGE = ['Bip bip!', 'Bip! Bip bip bip!', 'Biiip! (rodopia)', 'Bip? Bip!', 'Zuuum!', 'Bip bip bip! (pisca todas as luzes)', 'Bi-bip! (acena da janelinha)', 'Biiiip! (dá uma cambalhota)', 'Bip! (some e aparece do outro lado)', 'Bip bip! (risadinha espacial)', 'Bip... bip! (provoca)', 'Bzzz bip!', 'Bip! (faz zigue-zague)', 'Bip bip bip bip!', 'Bip! (dá tchauzinho)', 'Biiip! (acelera)', 'Bip? (vira a antena)', 'Bip bip! (pisca o farol)', 'Zuuum! Bip!', 'Bip! (pega carona no vento)', 'Biiip bip! (tchau, PIG-MTP!)'];
+// quem fala de dentro do avião e do disco: o balão fica em cima deles
+const radioMilton = { nome: 'milton', g: { get visible(){ return !!aviao && aviao.visible; } }, topo(){ return aviao.position.clone().add(new THREE.Vector3(0, 0.75, 0)); } };
+const radioDisco = { nome: 'et', g: { get visible(){ return !!discoJogo && discoJogo.g.visible; } }, topo(){ return discoJogo.g.position.clone().add(new THREE.Vector3(0, 0.7, 0)); } };
+// começa junto com o passeio do disco: o avião entra pelo lado oposto ao do disco, fora da tela
+function comecarPerseguicao(){
+  const P = discoJogo, ini = P.trechos[0].de, fim = P.trechos[P.trechos.length - 1].ate, d = new THREE.Vector3().subVectors(ini, fim).setY(0).normalize();
+  voo = { estado: 'persegue', t: 0, modelo: temJato() ? 'jato' : 'teco', dir: d.clone().negate(), falas: 0, prox: 1.5, fala: 'milton' };
+  aviao.visible = true; aviao.position.copy(ini).addScaledVector(d, 4); aviao.position.y = ini.y - PERSEGUE.abaixo; motor(true);
+}
+function passoPerseguicao(v, dt){
+  const P = discoJogo, ativo = P && P.t >= 0 && P.g.visible;
+  // o alvo é o disco, um pouco abaixo dele; sem disco, sai reto até sumir e vem pousar
+  if (ativo && v.t < PERSEGUE.max){
+    const alvo = P.g.position.clone(); alvo.y -= PERSEGUE.abaixo;
+    const para = alvo.clone().sub(aviao.position), dist = para.length(); para.setY(0).normalize();
+    const a0 = Math.atan2(v.dir.z, v.dir.x), a1 = Math.atan2(para.z, para.x);
+    let da = a1 - a0; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+    const giro = clamp(da, -PERSEGUE.virada * dt, PERSEGUE.virada * dt), a = a0 + giro;
+    v.dir.set(Math.cos(a), 0, Math.sin(a));
+    const vel = PERSEGUE.vel * (dist < PERSEGUE.perto ? 0.7 : 1);
+    aviao.position.addScaledVector(v.dir, vel * dt);
+    aviao.position.y += (alvo.y - aviao.position.y) * Math.min(1, dt * 2);
+    aviao.rotation.set(-giro / dt * 0.18, -a, 0);
+    // o rádio: o Milton e o ETzinho se revezam
+    if (v.falas < PERSEGUE.falas * 2 && (v.prox -= dt) <= 0){
+      v.prox = 2.2;
+      if (v.fala === 'milton'){ const f = variar(FALAS_MILTON_RADIO); falar(radioMilton, f, 2.4); v.fala = 'et'; }
+      else { falar(radioDisco, variar(FALAS_ET_FOGE), 1.8); Som.tom(1400, 0.08, 'square', 0.02, 1900); v.fala = 'milton'; }
+      v.falas++;
+    }
+  } else {
+    // vai embora pelo rumo em que estava, subindo; fora da tela, vira a chegada de sempre
+    v.sai = (v.sai || 0) + dt;
+    aviao.position.addScaledVector(v.dir, PERSEGUE.vel * 1.3 * dt); aviao.position.y += dt * 0.8;
+    if (v.sai > 3.5){ voo = { estado: 'chegando', t: 0, modelo: v.modelo }; aviao.rotation.set(0, 0, 0); }
+  }
+  if (v.modelo === 'jato'){ v.rastro = (v.rastro || 0) + dt; while (v.rastro > 0.06){ v.rastro -= 0.06; soltarRastro(); } }
+}
 function chamarMilton(){ if (voo.estado === 'fora'){ voo = { estado: 'chegando', t: 0, modelo: temJato() ? 'jato' : 'teco' }; aviao.visible = true; motor(true); } }
 // a cena do jatinho espera o relógio da visita: enquanto ela não acontece, o Milton não vem de teco-teco
 const jatoPendente = () => !temJato() && nivel() >= JATO_VOO.nivel && !!S.conheceuMilton;
@@ -18242,6 +18292,7 @@ function atualizarPista(dt){
     // com a escada no chão, o Milton desce (nas visitas; na cena quem manda é ela)
     if (v.estado === 'parado' && v.porta >= 1 && !v.cena && !v.desceu){ v.desceu = true; desembarcar(); }
   }
+  if (v.estado === 'persegue'){ passoPerseguicao(v, dt); return; }
   if (v.estado === 'faixa'){
     // atravessa a tela devagar, balançando de leve, com a faixa ondulando atrás
     const k = Math.min(1, v.t / FAIXA.dur);
@@ -21622,7 +21673,7 @@ async function iniciar(){
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
   window.__fazenda = { flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
-    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
+    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, obj: () => discoJogo, abducao: () => abducao }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(FAB_NOVAS).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
     trator: () => trator, TRATOR, filaTipos: () => fila.map(t => t.tipo), checar: (t, a, q) => checar(t, a, q), enfileirarTrator: (lote, acao, semente) => enfileirar('trator', { k: 'trator', lote }, { acao, semente }), tratorVis: () => tratorVis,
