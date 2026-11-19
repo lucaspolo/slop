@@ -6939,6 +6939,7 @@ function oQueOEdFaz(){
   if (banhoEd) return 'No banho de lama';
   if (nadoDe(ed)) return 'Nadando na cachoeira';
   if (balancoEd) return 'No balanço';
+  if (passeio) return passeio.fase === 'voando' ? 'Voando com o Milton' : 'Indo passear de avião';
   if (miranteFP) return 'No mirante';
   const t = tarefaAtual, nf = fila.filter(f => f.tipo !== 'andar' && f !== t).length;
   let txt = t && t.tipo !== 'andar' && NOMES_ACAO[t.tipo] ? NOMES_ACAO[t.tipo] + (typeof t.param === 'string' && CULTURAS[t.param] ? ' ' + CULTURAS[t.param].nome.toLowerCase() : '')
@@ -18073,6 +18074,8 @@ const cafeDoMilton = () => voo.estado === 'pernoite' && diaSeguinte() && periodo
 function pernoitarAgora(){ return obraConcluida('hangar') && voo.modelo === 'jato' && !voo.cena && !voo.reprise && periodo().id !== 'dia' && Math.random() < PERNOITE.chance; }
 // o fim da visita: decola, ou (às vezes, com o hangar novo) vai dormir no hangar
 function fimDaVisita(porta){
+  // o Ed vai dar uma volta: o Milton espera ele no avião (atualizarPasseio)
+  if (passeio){ milton.g.visible = false; passeio.miltonPronto = true; return; }
   if (!pernoitarAgora()){ milton.g.visible = false; voo.estado = 'decolando'; voo.t = 0; motor(true); return; }
   const [px, pz] = PERNOITE.porta, z = porta[1] - 0.15, nx = PISTA.para + JATO_VOO.nariz + 0.6;
   voo.estado = 'pernoite'; S.pernoite = true; S.pernoiteDia = diaAtual(); salvar();
@@ -18304,6 +18307,104 @@ function passoRega(v, dt){
     }
   }
 }
+// ================= o passeio de avião (o Lucas pediu): com o Milton na fazenda, o menu dele tem "Dar uma volta de avião".
+// O Ed vai até o avião pelo mesmo caminho do Milton e espera; quando o Milton volta, os dois embarcam, o avião decola, dá
+// uma volta larga por cima da fazenda com a câmera atrás dele (VOO_PASSEIO.vista) e pousa de novo. O Ed desce e volta para a
+// fazenda, e o Milton decola como sempre. Na metade da volta, às vezes o Ed avista lá de cima uma trufa perto de uma
+// árvore (depois da cena do Patrinho). A tarefa do Ed ('passeio') fica em andamento do começo ao fim, então a fila espera e
+// nenhuma cena começa
+const VOO_PASSEIO = { raio: 16, alto: 5, vel: 6, virada: 1.6, vista: 22, trufa: 0.6, falas: 4 };
+const FALAS_ED_PASSEIO = ['Aoooa! Olha a fazenda lá embaixo!', 'Dá pra ver a casinha daqui!', 'Oinc! Tô voando!', 'As vacas parecem formiguinhas!', 'Milton, passa em cima da horta!', 'Que lindo! Olha o lago brilhando!', 'Uau, a mata é enorme vista de cima!', 'Oinc oinc! Meu estômago tá dando cambalhota!', 'Olha o celeiro! Que pequenininho!', 'Acho que vi a Luma acenando!', 'É assim que os passarinhos veem a gente?', 'Milton, você voa todo dia assim?', 'Que vista! Quero voltar sempre!', 'Os canteiros parecem um tabuleiro!', 'Aoooa! A fazenda tá linda!', 'Olha a estrada até o Joli Market!', 'Daqui dá pra ver a cachoeira!', 'Que ventinho bom na janela!', 'Oinc! Segura firme, Milton!', 'Ninguém vai acreditar quando eu contar!', 'Melhor passeio da minha vida!'];
+const FALAS_MILTON_PASSEIO = ['Aperta o cinto, Ed! Vamos dar uma volta!', 'Bem-vindo a bordo do PIG-MTP!', 'Olha pela janela, irmão!', 'Segura que lá vem curva!', 'Essa é a melhor vista da fazenda!', 'Voo panorâmico, cortesia da casa!', 'Torre, PIG-MTP com passageiro especial!', 'Que tal? Sua fazenda vista do céu!', 'Vou passar bem em cima do celeiro!', 'Relaxa, Ed, eu sou piloto profissional!', 'Um dia te ensino a pilotar!', 'Olha o tamanho da sua fazenda!', 'Volta completa na Joli Pig!', 'Tá gostando do passeio?', 'Lá embaixo, ó: as galinhas!', 'Que dia bonito pra voar!', 'Mais uma volta? Tô brincando, já vou pousar.', 'Preparando para o pouso!', 'Passageiro feliz, piloto feliz!', 'Que orgulho dessa fazenda, irmão!', 'Câmbio, Ed! Hehe.'];
+const radioEd = { nome: 'ed', g: { get visible(){ return !!aviao && aviao.visible; } }, topo(){ return aviao.position.clone().add(new THREE.Vector3(0.3, 0.75, 0.2)); } };
+let passeio = null;
+// o caminho do avião até o pé da descida do Milton na fazenda ([sx, 0,5]): o Ed faz ao contrário para ir, e igual para voltar
+function caminhoPasseio(){
+  const { m, ida } = caminhoDoAviao(), i = ida.findIndex(p => p[0] === m.sx && p[1] === 0.5);
+  return i < 0 ? null : ida.slice(0, i + 1);
+}
+const podePasseio = () => voo.estado === 'parado' && milton.g.visible && !voo.cena && !voo.reprise && !voo.passeio && !passeio && !!caminhoPasseio();
+function comecarPasseio(tarefa){
+  const c = caminhoPasseio();
+  if (!c || voo.estado !== 'parado'){ terminarPasseio(tarefa); return; }
+  passeio = { tarefa, fase: 'indo', ida: c };
+  voo.passeio = true;
+  ed.ir(c.slice(0, -1).reverse(), () => { if (!passeio) return; passeio.fase = 'esperando'; ed.olhar(aviao.position.x, aviao.position.z); });
+}
+function terminarPasseio(tarefa){
+  if (fila[0] === tarefa) fila.shift();
+  if (tarefaAtual === tarefa) tarefaAtual = null;
+  liberar(tarefa, false); hud(); salvar();
+}
+// a tarefa foi cancelada antes de embarcar: o Milton segue a visita
+function desistirPasseio(){
+  const P = passeio; if (!P) return;
+  if (P.fase === 'voando' || P.fase === 'descendo') return;
+  passeio = null; voo.passeio = false;
+  if (P.miltonPronto){ voo.estado = 'decolando'; voo.t = 0; motor(true); }
+}
+// a volta: um ponto que corre num círculo em volta do meio da fazenda e o avião indo atrás dele (como na perseguição)
+function iniciarVoltaPasseio(v){
+  const cx = W / 2, cz = H / 2;
+  v.estado = 'passeio'; v.t = 0; v.giro = 0; v.dir = new THREE.Vector3(1, 0, 0); v.cx = cx; v.cz = cz;
+  v.th = Math.atan2(aviao.position.z - cz, aviao.position.x - cx) + 0.6; v.falas = 0; v.prox = 1; v.fala = 'milton';
+}
+function passoVoltaPasseio(v, dt){
+  const A = VOO_PASSEIO, P = passeio;
+  // o alvo anda no círculo; depois de uma volta inteira, vai para o começo da chegada de sempre
+  let alvo;
+  if (v.giro < Math.PI * 2){ v.th += A.vel / A.raio * dt; v.giro += A.vel / A.raio * dt; alvo = new THREE.Vector3(v.cx + Math.cos(v.th) * A.raio, A.alto, v.cz + Math.sin(v.th) * A.raio); }
+  else alvo = new THREE.Vector3(-22, 6, PISTA.y);
+  const para = alvo.clone().sub(aviao.position); para.y = 0; const dist = para.length(); para.normalize();
+  const a0 = Math.atan2(v.dir.z, v.dir.x), a1 = Math.atan2(para.z, para.x);
+  let da = a1 - a0; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+  const giro = clamp(da, -A.virada * dt, A.virada * dt), a = a0 + giro;
+  v.dir.set(Math.cos(a), 0, Math.sin(a));
+  aviao.position.addScaledVector(v.dir, A.vel * dt);
+  aviao.position.y += (alvo.y - aviao.position.y) * Math.min(1, dt * 0.8);
+  aviao.rotation.set(-giro / Math.max(dt, 1e-3) * 0.25, -a, 0);
+  if (v.giro >= Math.PI * 2 && dist < 2.5){ voo = { estado: 'chegando', t: 0, modelo: v.modelo, cena: true, posPasseio: true }; aviao.rotation.set(0, 0, 0); return; }
+  // as falas pelo rádio, revezando o Milton e o Ed
+  if (v.falas < A.falas && (v.prox -= dt) <= 0){
+    v.prox = 3.2;
+    if (v.fala === 'milton'){ falar(radioMilton, variar(FALAS_MILTON_PASSEIO), 2.6); v.fala = 'ed'; }
+    else { falar(radioEd, variar(FALAS_ED_PASSEIO), 2.6); Som.oinc(); v.fala = 'milton'; }
+    v.falas++;
+  }
+  // na metade da volta, às vezes o Ed avista uma trufa lá de cima
+  if (P && !P.olhou && v.giro > Math.PI){
+    P.olhou = true;
+    if (S.viuCinePatrinho && S.trufas.length < TRUFA.max && Math.random() < A.trufa){
+      const l = lugarPertoDeArvore();
+      if (l){ const t = { x: l.x, z: l.z }; S.trufas.push(t); montarTrufa(t); salvar(); aviso('Lá de cima, o Ed avistou uma trufa perto de uma árvore!', '', 3.5); Som.pop(); }
+    }
+  }
+  if (v.modelo === 'jato'){ v.rastro = (v.rastro || 0) + dt; while (v.rastro > 0.06){ v.rastro -= 0.06; soltarRastro(); } }
+}
+// a cada quadro: o embarque, a câmera atrás do avião e o desembarque do Ed
+function atualizarPasseio(dt){
+  const P = passeio; if (!P) return;
+  if (P.fase === 'esperando' && P.miltonPronto){
+    P.fase = 'voando'; P.vista0 = cam.vista;
+    ed.g.visible = false; ed.estado = 'parado'; ed.pontos = [];
+    voo.estado = 'decolando'; voo.t = 0; motor(true); Som.oinc();
+  }
+  if (P.fase === 'voando' || P.fase === 'descendo'){
+    // a câmera segue o avião no ar e volta para o tamanho de antes no pouso
+    if (voo.estado !== 'parado'){
+      const k = Math.min(1, dt * 2.5); cam.alvo.x += (aviao.position.x - cam.alvo.x) * k; cam.alvo.z += (aviao.position.z - cam.alvo.z) * k;
+      cam.vista += ((voo.estado === 'chegando' ? P.vista0 : VOO_PASSEIO.vista) - cam.vista) * Math.min(1, dt * 1.2);
+    }
+    // pousou (e, no jatinho, abriu a escada): o Ed desce e volta para a fazenda; o Milton decola em seguida
+    if (P.fase === 'voando' && voo.estado === 'parado' && voo.posPasseio && (voo.modelo !== 'jato' || voo.porta >= 1)){
+      P.fase = 'descendo'; cam.vista = P.vista0;
+      ed.g.visible = true; ed.colocar(...P.ida[0]); ed.estado = 'parado'; ed.pulo = 0.4;
+      falar(ed, variar(FALAS_ED_PASSEIO), 2.4);
+      ed.ir(P.ida.slice(1), () => { passeio = null; terminarPasseio(P.tarefa); });
+      setTimeout(() => { if (voo.estado === 'parado' && voo.posPasseio){ voo.estado = 'decolando'; voo.t = 0; voo.cena = false; motor(true); } }, 2500);
+    }
+  }
+}
 function chamarMilton(){ if (voo.estado === 'fora'){ voo = { estado: 'chegando', t: 0, modelo: temJato() ? 'jato' : 'teco' }; aviao.visible = true; motor(true); } }
 // a cena do jatinho espera o relógio da visita: enquanto ela não acontece, o Milton não vem de teco-teco
 const jatoPendente = () => !temJato() && nivel() >= JATO_VOO.nivel && !!S.conheceuMilton;
@@ -18367,6 +18468,7 @@ function atualizarPista(dt){
   }
   if (v.estado === 'persegue'){ passoPerseguicao(v, dt); return; }
   if (v.estado === 'rega'){ passoRega(v, dt); return; }
+  if (v.estado === 'passeio'){ passoVoltaPasseio(v, dt); return; }
   if (v.estado === 'faixa'){
     // atravessa a tela devagar, balançando de leve, com a faixa ondulando atrás
     const k = Math.min(1, v.t / FAIXA.dur);
@@ -18414,6 +18516,7 @@ function atualizarPista(dt){
       if (v.porta > 0){ v.t = 0; return; }
       const T1 = 2.6, T2 = 4, X = JATO_VOO.sobe, vf = 2 * (X - PISTA.para) / T1;
       if (v.t < T1){ const k = v.t / T1; aviao.position.set(lerp(PISTA.para, X, k * k), 0, y); aviao.rotation.z = 0.03 * k; }
+      else if (v.passeio && v.t > T1 + 1){ iniciarVoltaPasseio(v); }
       else if (v.t < T1 + T2){
         const t = v.t - T1, s = Math.min(1, t / 0.7);
         aviao.position.set(X + vf * t + 1.5 * t * t, 0.6 * t + 0.9 * t * t, y); aviao.rotation.z = 0.03 + 0.22 * s * s * (3 - 2 * s);
@@ -18423,6 +18526,7 @@ function atualizarPista(dt){
     } else {
       const T1 = 3, T2 = 4, X = 38, vf = 2 * (X - PISTA.para) / T1;
       if (v.t < T1){ const k = v.t / T1; aviao.position.set(lerp(PISTA.para, X, k * k), 0, y); aviao.rotation.z = 0.04 * k; }
+      else if (v.passeio && v.t > T1 + 1){ iniciarVoltaPasseio(v); }
       else if (v.t < T1 + T2){ const t = v.t - T1; aviao.position.set(X + vf * t + t * t, 1.2 * t + 0.9 * t * t, y); aviao.rotation.z = 0.04 + 0.11 * Math.min(1, t / 0.5); }
       else { v.estado = 'fora'; aviao.visible = false; motor(false); if (!v.reprise) S.proxMilton = Date.now() + intervaloMilton(); salvar(); }
     }
@@ -18640,6 +18744,8 @@ function itensMilton(){
   const r = { titulo: 'Milton', icone: 'milton', itens: [], classe: 'bom' };
   r.estado = `Irmão do Ed, pilota o ${temJato() ? 'jatinho' : 'teco-teco'} PIG-MTP. Sempre que pousa, traz suprimentos e paga ${reais(taxaPista())} de manutenção da pista.`;
   if (voo.estado === 'pernoite') r.estado = 'O jatinho do Milton pernoita na pista e ele dorme no hangar novo. De manhã ele toma café com o Ed e decola.';
+  if (passeio || fila.some(t => t.tipo === 'passeio')) r.estado += ' O Ed vai dar uma volta de avião com ele.';
+  else if (podePasseio()) r.itens.push({ rotulo: 'Dar uma volta de avião', sub: 'o Ed embarca quando o Milton voltar para o avião', icone: temJato() ? 'jato' : 'aviao', fn: () => enfileirar('passeio', { k: 'passeio' }) });
   itensFrete(r);
   itensEncomenda(r);
   return r;
@@ -18854,13 +18960,13 @@ function itensHud(){
 
 // ================= tarefas do Ed
 const fila = [];
-const NOMES_ACAO = { spa:'Banho de lama', desejo:'Fazer um pedido', museu:'Visitar o museu', subirMirante:'Subir no mirante', estrelas:'Olhar as estrelas', trator:'Sair com o trator', carinhoGalo:'Carinho no galo', pegarGalo:'Pegar o galo', soltarGalo:'Devolver o galo', apagarFogo:'Apagar o fogo', recolherLixo:'Recolher o lixo', tirarGalho:'Tirar o galho', pegarAluguel:'Pegar o aluguel', lerCartao:'Ler o cartão-postal', tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa', nadar:'Nadar na cachoeira', balancar:'Brincar no balanço' };
-const DUR = { spa: 0.3, desejo: 1.4, museu: 0.5, subirMirante: 0.2, estrelas: 4.5, carinhoGalo: 2.4, pegarGalo: 0.5, soltarGalo: 0.7, apagarFogo: 2.2, recolherLixo: 0.8, tirarGalho: 2.4, pegarAluguel: 0.6, lerCartao: 0.6, tirarCerca: 2.4, colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, coletarMata: 1.0, cavarTrufa: 1.6, nadar: 0.2, balancar: 0.2 };
-const FERR = { spa: null, desejo: null, museu: null, subirMirante: null, estrelas: null, carinhoGalo: 'carinho', pegarGalo: null, soltarGalo: 'soltar', apagarFogo: 'regador', recolherLixo: 'cesta', tirarGalho: null, pegarAluguel: null, lerCartao: null, tirarCerca: 'enxada', colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', coletarMata: 'cesta', cavarTrufa: 'enxada', nadar: null, balancar: null };
+const NOMES_ACAO = { spa:'Banho de lama', desejo:'Fazer um pedido', museu:'Visitar o museu', subirMirante:'Subir no mirante', estrelas:'Olhar as estrelas', trator:'Sair com o trator', carinhoGalo:'Carinho no galo', pegarGalo:'Pegar o galo', soltarGalo:'Devolver o galo', apagarFogo:'Apagar o fogo', recolherLixo:'Recolher o lixo', tirarGalho:'Tirar o galho', pegarAluguel:'Pegar o aluguel', lerCartao:'Ler o cartão-postal', tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa', nadar:'Nadar na cachoeira', balancar:'Brincar no balanço', passeio:'Passeio de avião' };
+const DUR = { spa: 0.3, desejo: 1.4, museu: 0.5, subirMirante: 0.2, estrelas: 4.5, carinhoGalo: 2.4, pegarGalo: 0.5, soltarGalo: 0.7, apagarFogo: 2.2, recolherLixo: 0.8, tirarGalho: 2.4, pegarAluguel: 0.6, lerCartao: 0.6, tirarCerca: 2.4, colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, coletarMata: 1.0, cavarTrufa: 1.6, nadar: 0.2, balancar: 0.2, passeio: 0.2 };
+const FERR = { spa: null, desejo: null, museu: null, subirMirante: null, estrelas: null, carinhoGalo: 'carinho', pegarGalo: null, soltarGalo: 'soltar', apagarFogo: 'regador', recolherLixo: 'cesta', tirarGalho: null, pegarAluguel: null, lerCartao: null, tirarCerca: 'enxada', colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', coletarMata: 'cesta', cavarTrufa: 'enxada', nadar: null, balancar: null, passeio: null };
 const mesmoAlvo = (a, b) => a.k === b.k && (a.k === 'animal' ? a.a === b.a : a.x === b.x && a.z === b.z);
-function reservado(alvo){ if (alvo.k === 'balanco') return fila.some(t => t.tipo === 'balancar'); if (alvo.k === 'cachoeira') return fila.some(t => t.tipo === 'nadar'); if (alvo.k === 'spa') return fila.some(t => t.tipo === 'spa'); if (alvo.k === 'poco') return fila.some(t => t.tipo === 'desejo'); if (alvo.k === 'museu') return fila.some(t => t.tipo === 'museu'); if (alvo.k === 'luneta') return fila.some(t => t.tipo === 'estrelas'); if (alvo.k === 'mirante') return fila.some(t => t.tipo === 'subirMirante'); if (alvo.k === 'trator') return fila.some(t => t.tipo === 'trator' && t.alvo.lote === alvo.lote); if (alvo.k === 'galo') return fila.some(t => t.alvo.k === 'galo' && t.alvo.id === alvo.id); if (alvo.k === 'ocorrencia') return fila.some(t => t.alvo.k === 'ocorrencia' && t.alvo.id === alvo.id && t.alvo.j === alvo.j); if (alvo.k === 'aluguel') return fila.some(t => t.tipo === 'pegarAluguel'); if (alvo.k === 'cartao') return fila.some(t => t.tipo === 'lerCartao'); if (alvo.k === 'cercaCanto') return fila.some(t => t.tipo === 'tirarCerca'); if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
+function reservado(alvo){ if (alvo.k === 'passeio') return fila.some(t => t.tipo === 'passeio'); if (alvo.k === 'balanco') return fila.some(t => t.tipo === 'balancar'); if (alvo.k === 'cachoeira') return fila.some(t => t.tipo === 'nadar'); if (alvo.k === 'spa') return fila.some(t => t.tipo === 'spa'); if (alvo.k === 'poco') return fila.some(t => t.tipo === 'desejo'); if (alvo.k === 'museu') return fila.some(t => t.tipo === 'museu'); if (alvo.k === 'luneta') return fila.some(t => t.tipo === 'estrelas'); if (alvo.k === 'mirante') return fila.some(t => t.tipo === 'subirMirante'); if (alvo.k === 'trator') return fila.some(t => t.tipo === 'trator' && t.alvo.lote === alvo.lote); if (alvo.k === 'galo') return fila.some(t => t.alvo.k === 'galo' && t.alvo.id === alvo.id); if (alvo.k === 'ocorrencia') return fila.some(t => t.alvo.k === 'ocorrencia' && t.alvo.id === alvo.id && t.alvo.j === alvo.j); if (alvo.k === 'aluguel') return fila.some(t => t.tipo === 'pegarAluguel'); if (alvo.k === 'cartao') return fila.some(t => t.tipo === 'lerCartao'); if (alvo.k === 'cercaCanto') return fila.some(t => t.tipo === 'tirarCerca'); if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
 const visSlot = alvo => { const L = alvo.k === 'pomar' ? POMAR_VIS : alvo.k === 'mata' ? MATA_VIS : COLMEIA_VIS; return L[alvo.i] || (L[alvo.i] = {}); };
-function setReserva(alvo, v){ if (alvo.k === 'balanco' || alvo.k === 'cachoeira' || alvo.k === 'trator' || alvo.k === 'luneta' || alvo.k === 'mirante' || alvo.k === 'museu' || alvo.k === 'poco' || alvo.k === 'spa') return; if (alvo.k === 'galo'){ if (GALOS[alvo.id]) GALOS[alvo.id].res = v; return; } if (alvo.k === 'ocorrencia' || alvo.k === 'aluguel' || alvo.k === 'cartao' || alvo.k === 'cercaCanto' || alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
+function setReserva(alvo, v){ if (alvo.k === 'passeio' || alvo.k === 'balanco' || alvo.k === 'cachoeira' || alvo.k === 'trator' || alvo.k === 'luneta' || alvo.k === 'mirante' || alvo.k === 'museu' || alvo.k === 'poco' || alvo.k === 'spa') return; if (alvo.k === 'galo'){ if (GALOS[alvo.id]) GALOS[alvo.id].res = v; return; } if (alvo.k === 'ocorrencia' || alvo.k === 'aluguel' || alvo.k === 'cartao' || alvo.k === 'cercaCanto' || alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
 // diz se a ação vale para o alvo; devolve o custo ou um motivo
 function checar(tipoA, alvo, param){
   if (alvo.k === 'galo'){
@@ -18880,6 +18986,7 @@ function checar(tipoA, alvo, param){
   if (alvo.k === 'luneta') return { ok: tipoA === 'estrelas' && obraConcluida('observatorio') && periodo().id === 'noite', motivo: 'Só dá para olhar as estrelas de noite', custo: {} };
   if (alvo.k === 'museu') return { ok: tipoA === 'museu' && obraConcluida('museu'), custo: {} };
   if (alvo.k === 'spa') return { ok: tipoA === 'spa' && spaAberto() && !banhoEd, custo: {} };
+  if (alvo.k === 'passeio') return { ok: tipoA === 'passeio' && voo.estado === 'parado' && !voo.cena && !!caminhoPasseio(), motivo: 'O Milton já foi embora', custo: {} };
   if (alvo.k === 'balanco'){ const e = balancoEm(alvo.x, alvo.z); return { ok: tipoA === 'balancar' && !!e && !!ladoDoBalanco(e) && !irmaoNoBalanco(e) && !balancoEd, motivo: e && irmaoNoBalanco(e) ? 'Tem alguém no balanço' : 'Não dá para chegar no balanço', custo: {} }; }
   if (alvo.k === 'cachoeira') return { ok: tipoA === 'nadar' && cachoeiraAberta() && !nadoDe(ed), motivo: galhoFecha(3) ? 'Um galho caído fecha a trilha. Tire ele primeiro.' : 'A trilha oeste ainda não chega lá', custo: {} };
   if (alvo.k === 'poco'){ const e = pocoEm(alvo.x, alvo.z); return { ok: tipoA === 'desejo' && !!e && !!frentePoco(e) && S.dinheiro >= DESEJO.preco, motivo: 'Falta uma moedinha', custo: {} }; }
@@ -18976,7 +19083,7 @@ function liberar(tarefa, devolver){
 function cancelar(tarefa){
   const i = fila.indexOf(tarefa);
   if (i < 0) return;
-  if (i === 0 && tarefaAtual === tarefa){ if (trator && trator.tarefa === tarefa) guardarTrator(true); if (banhoEd && banhoEd.tarefa === tarefa) terminarBanhoEd(true); if (nadoDe(ed) && nadoDe(ed).tarefa === tarefa) pararNado(ed); if (balancoEd && balancoEd.tarefa === tarefa) pararBalancoEd(); ed.estado = 'parado'; ed.pontos = []; ed.aoChegar = null; ed.trab = null; ed.ferramenta(null); tarefaAtual = null; }
+  if (i === 0 && tarefaAtual === tarefa){ if (trator && trator.tarefa === tarefa) guardarTrator(true); if (banhoEd && banhoEd.tarefa === tarefa) terminarBanhoEd(true); if (nadoDe(ed) && nadoDe(ed).tarefa === tarefa) pararNado(ed); if (balancoEd && balancoEd.tarefa === tarefa) pararBalancoEd(); if (passeio && passeio.tarefa === tarefa) desistirPasseio(); ed.estado = 'parado'; ed.pontos = []; ed.aoChegar = null; ed.trab = null; ed.ferramenta(null); tarefaAtual = null; }
   fila.splice(i, 1); liberar(tarefa, true); hud();
 }
 function limparFila(){ for (const t of fila.slice()) cancelar(t); }
@@ -19004,6 +19111,7 @@ function alvoMundo(alvo){
   if (alvo.k === 'museu') return portaMuseu();
   if (alvo.k === 'spa') return portaSpaMundo();
   if (alvo.k === 'cachoeira') return NADO.entrada;
+  if (alvo.k === 'passeio'){ const c = caminhoPasseio(); return c ? c[c.length - 1] : [12.5, 0.5]; }
   if (alvo.k === 'balanco'){ const e = balancoEm(alvo.x, alvo.z); return (e && ladoDoBalanco(e)) || [alvo.x + 0.5, alvo.z + 0.5]; }
   if (alvo.k === 'poco'){ const e = pocoEm(alvo.x, alvo.z); return (e && frentePoco(e)) || [alvo.x + 0.5, alvo.z + 0.5]; }
   if (alvo.k === 'mirante') return peMirante();
@@ -19190,7 +19298,7 @@ function proximaTarefa(){
     let dx = ultimo[0] - ant[0], dz = ultimo[1] - ant[1], d = Math.hypot(dx, dz);
     if (tarefa.alvo.k === 'animal' || tarefa.alvo.k === 'galo'){ dx = tx - ant[0]; dz = tz - ant[1]; d = Math.hypot(dx, dz); }
     // no galo do mourão o Ed para encostado na cerca, de frente para ele
-    if ((tarefa.alvo.k === 'galo' && tarefa.alvo.onde === 'mourao') || tarefa.alvo.k === 'luneta' || tarefa.alvo.k === 'mirante' || tarefa.alvo.k === 'museu' || tarefa.alvo.k === 'poco' || tarefa.alvo.k === 'spa' || tarefa.alvo.k === 'cachoeira' || tarefa.alvo.k === 'balanco'){ if (pts.length) pts[pts.length - 1] = [tx, tz]; else pts = [[tx, tz]]; }
+    if ((tarefa.alvo.k === 'galo' && tarefa.alvo.onde === 'mourao') || tarefa.alvo.k === 'luneta' || tarefa.alvo.k === 'mirante' || tarefa.alvo.k === 'museu' || tarefa.alvo.k === 'poco' || tarefa.alvo.k === 'spa' || tarefa.alvo.k === 'cachoeira' || tarefa.alvo.k === 'balanco' || tarefa.alvo.k === 'passeio'){ if (pts.length) pts[pts.length - 1] = [tx, tz]; else pts = [[tx, tz]]; }
     else if (encostar){
       const cx = gx + 0.5, cz = gz + 0.5, ex = tx - cx, ez = tz - cz, de = Math.hypot(ex, ez) || 1, k = Math.min(0.4, Math.max(0, de - 0.42));
       const fim = [cx + ex / de * k, cz + ez / de * k];
@@ -19205,6 +19313,7 @@ function proximaTarefa(){
     if (tarefa.tipo === 'andar'){ fila.shift(); tarefaAtual = null; hud(); return; }
     if (tarefa.tipo === 'trator'){ if (checar('trator', tarefa.alvo, tarefa.param).ok) sairComTrator(tarefa); else { fila.shift(); liberar(tarefa, true); tarefaAtual = null; hud(); } return; }
     if (tarefa.tipo === 'spa'){ if (checar('spa', tarefa.alvo).ok) comecarBanhoEd(tarefa); else { fila.shift(); liberar(tarefa, true); tarefaAtual = null; hud(); } return; }
+    if (tarefa.tipo === 'passeio'){ if (checar('passeio', tarefa.alvo).ok) comecarPasseio(tarefa); else { fila.shift(); liberar(tarefa, true); tarefaAtual = null; hud(); } return; }
     if (tarefa.tipo === 'balancar'){ if (checar('balancar', tarefa.alvo).ok) comecarBalancoEd(tarefa); else { fila.shift(); liberar(tarefa, true); tarefaAtual = null; hud(); } return; }
     if (tarefa.tipo === 'nadar'){ if (checar('nadar', tarefa.alvo).ok) comecarNado(ed, [], () => terminarNadoEd(tarefa), tarefa); else { fila.shift(); liberar(tarefa, true); tarefaAtual = null; hud(); } return; }
     // o galo solto correu enquanto o Ed vinha: a tarefa fica na frente da fila e o Ed vai de novo (no máximo 4 vezes)
@@ -21697,7 +21806,7 @@ function quadro(agoraP){
   atualizarDani(dt, t);
   if (irmaoDani.g.visible || daniAtivo()){ porOculto($('daniPill'), !daniAtivo()); if (daniAtivo()){ porTexto($('daniTexto'), 'Dani ajudando'); porTexto($('daniTempo'), tempo((S.daniAte - Date.now()) / 1000)); } }
   else if (!$('daniPill').hidden) $('daniPill').hidden = true;
-  atualizarNados(dt, t); atualizarBalancoEd(dt);
+  atualizarNados(dt, t); atualizarBalancoEd(dt); atualizarPasseio(dt);
   arrumarAndamento();
   if (beto.g.visible) beto.update(dt, t);
   if (jaca.g.visible) jaca.update(dt, t);
@@ -21924,7 +22033,7 @@ async function iniciar(){
       noLugar: (v, tipo, i = 0, t = 999) => { if (!gradeSpa) montarGradeSpa(); const q = lugaresSpa.filter(l => l.tipo === tipo)[i], [x, z] = mundoSpa(q.x, q.z); Object.assign(v, { x, z, y: q.y, lugar: q, vai: 'lugar', estado: 'atividade', t, ang: q.ang, pagou: true, pts: [] }); v.g.visible = true; if (tipo === 'cadeira' && v.pep) v.pep.visible = true; } },
     observatorio: { OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
-    luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, foguete: { FOGUETE, prox: () => proxFoguete, zerar: () => { proxFoguete = 0; }, obj: () => foguete, falas: falasFoguete }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { frete: { opcoes: opcoesFrete, mandar: mandarFrete, pagar: pagarFrete, itens: () => { const r = { estado: '', itens: [] }; itensFrete(r); return r; } }, rega: comecarRegaAerea, faixa: passarFaixa, FAIXA, voo: () => voo, JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, encomenda: { ENCOMENDAS, encomendar, cancelar: cancelarEncomenda, itens: () => { const r = { estado: '', itens: [] }; itensEncomenda(r); return r; } }, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, dormir: pedirDormir, item: itemDormir, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
+    luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, foguete: { FOGUETE, prox: () => proxFoguete, zerar: () => { proxFoguete = 0; }, obj: () => foguete, falas: falasFoguete }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { passeio: { obj: () => passeio, pode: podePasseio, caminho: caminhoPasseio, VOO_PASSEIO }, frete: { opcoes: opcoesFrete, mandar: mandarFrete, pagar: pagarFrete, itens: () => { const r = { estado: '', itens: [] }; itensFrete(r); return r; } }, rega: comecarRegaAerea, faixa: passarFaixa, FAIXA, voo: () => voo, JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, encomenda: { ENCOMENDAS, encomendar, cancelar: cancelarEncomenda, itens: () => { const r = { estado: '', itens: [] }; itensEncomenda(r); return r; } }, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, dormir: pedirDormir, item: itemDormir, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
     // auditoria de colisões: o que o desenho de uma construção (n = nível da reforma, ou 'andaime') põe fora do terreno dela
     fora(id, n){
       const p = PREDIO[id], fab = !!FABRICAS[id], v = n === 'andaime' ? vAndaime(id) : vReforma(id, n), s = 1 / 8, h = s / 2;
