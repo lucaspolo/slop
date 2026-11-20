@@ -12522,6 +12522,20 @@ function executarGalo(tarefa){
 const PREDIO_VIS = {}, ORIGEM_PREDIO = { casa: [16, 0, 16], celeiro: [20, 0, 20], poco: [4, 0, 4], galinheiro: [8, 0, 8], curral: [8, 0, 4], galinheiro2: [8, 0, 8], curral2: [8, 0, 4], patos: [8, 0, 8] };
 // as obras novas desenham do canto do lote, com a origem no meio dele
 for (const p of PREDIOS) if (p.obra) ORIGEM_PREDIO[p.id] = [(p.x1 - p.x0 + 1) * 4, 0, (p.z1 - p.z0 + 1) * 4];
+// a fumaça sai da boca da chaminé: a coluna dela no desenho (x0, x1, z0, z1, em cubinhos) e o cubinho mais alto da coluna
+// no desenho de agora (a reforma que estica a chaminé, o andar a mais), levado para o mapa pelo próprio grupo da construção
+// (que já tem o giro). Antes a fumaça tinha um lugar fixo e ficava fora da chaminé nas construções giradas e ampliadas
+const CHAMINE = { padaria: [11, 12, 4, 5], torrador: [3, 4, 4, 5] }, CHAMINE_LOCAL = {}, CHAMINE_MUNDO = {};
+function topoDaChamine(v, [x0, x1, z0, z1], origem){
+  let topo = -1, mnx = Infinity, mny = Infinity, mnz = Infinity, mxx = -Infinity, mxz = -Infinity;
+  for (const e of v.m.values()){
+    if (e.x < mnx) mnx = e.x; if (e.y < mny) mny = e.y; if (e.z < mnz) mnz = e.z; if (e.x > mxx) mxx = e.x; if (e.z > mxz) mxz = e.z;
+    if (e.x >= x0 && e.x <= x1 && e.z >= z0 && e.z <= z1 && e.y > topo) topo = e.y;
+  }
+  if (topo < 0) return null;
+  const o = origem || [(mnx + mxx + 1) / 2, mny, (mnz + mxz + 1) / 2];
+  return new THREE.Vector3(((x0 + x1 + 1) / 2 - o[0]) / 8, (topo + 1 - o[1]) / 8, ((z0 + z1 + 1) / 2 - o[2]) / 8);
+}
 function montarPredio(p){
   const velho = PREDIO_VIS[p.id];
   if (velho){ scene.remove(velho); const i = pickaveis.indexOf(velho); if (i >= 0) pickaveis.splice(i, 1); velho.geometry.dispose(); }
@@ -12996,7 +13010,11 @@ function montarFabrica(id){
     pl.traverse(o => { o.userData.alvo = { k: 'predio', p }; }); pickaveis.push(pl);
   } else {
     const larg = (p.x1 - p.x0 + 1) * 8, prof = (p.z1 - p.z0 + 1) * 8, n = nivelReforma(id), chave = AMPLIACAO[id] ? (ampliada(id) ? 'A' : emAmpliacao(id) ? 'O' : '') : '';
-    V.mesh = colocar(malha(geo('fab' + id + n + chave, () => vPredio(id).build(1 / 8, { origin: [larg / 2, 0, prof / 2] }))), cx, 0, cz, p.ry || 0);
+    const ch = 'fab' + id + n + chave, origem = [larg / 2, 0, prof / 2];
+    V.mesh = colocar(malha(geo(ch, () => { const v = vPredio(id); if (CHAMINE[id]) CHAMINE_LOCAL[ch] = topoDaChamine(v, CHAMINE[id], origem); return v.build(1 / 8, { origin: origem }); })), cx, 0, cz, p.ry || 0);
+    // a boca da chaminé no mapa, para a fumaça (atualizarFabricas)
+    delete CHAMINE_MUNDO[id];
+    if (CHAMINE_LOCAL[ch]){ V.mesh.updateMatrixWorld(true); const w = V.mesh.localToWorld(CHAMINE_LOCAL[ch].clone()); CHAMINE_MUNDO[id] = [w.x, w.y, w.z]; }
     if (id === 'moinho'){ V.pas = malha(geo('pas' + n, () => vPas(n).build(1 / 8, { origin: [0, 0, 0] }))); V.pas.position.set(0, 19.5 / 8 + subidaAndar(id), 0.62); V.mesh.add(V.pas); }
     if (st.esteira){
       // esteira curta saindo da frente, do lado oposto à porta
@@ -13197,10 +13215,7 @@ function atualizarFabricas(dt){
     const V = FAB_VIS[id], st = estFab(id), ativo = st.feita && st.fila.length > 0;
     if (V.pas) V.pas.rotation.z += dt * (ativo ? 2.2 : 0.25);
     if (V.luz) V.luz.material.color.setHex(st.repetir ? (Math.floor(fumacaT * 6) % 2 && ativo ? 0x8af09a : 0x5ad16a) : 0x8a8a8a);
-    if (ativo && (id === 'padaria' || id === 'torrador') && fumacaT > 0.35){
-      const [cx, cz] = centroPredio(PREDIO[id]), ox = id === 'padaria' ? 0.5 : -0.4;
-      fumaca(cx + ox * (PREDIO[id].ry ? -1 : 1), id === 'padaria' ? 2.5 : 2.6, cz - 0.4 * (PREDIO[id].ry ? -1 : 1));
-    }
+    if (ativo && CHAMINE_MUNDO[id] && fumacaT > 0.35){ const [x, y, z] = CHAMINE_MUNDO[id]; fumaca(x, y, z); }
   }
   if (fumacaT > 0.35) fumacaT = 0;
 }
@@ -21437,6 +21452,19 @@ function alvoMundo(alvo){
   if (alvo.k === 'pomar' || alvo.k === 'colmeia'){ const [x, z] = (alvo.k === 'pomar' ? POMAR_SLOTS : COLMEIA_SLOTS)[alvo.i]; return [x + 0.5, z + 1.5]; }
   return alvo.k === 'animal' ? [alvo.a.pos.x, alvo.a.pos.y] : [alvo.x + 0.5, alvo.z + 0.5];
 }
+// onde fica a setinha rosa de uma tarefa na fila: em cima da coisa (a colmeia, a árvore, o coletor, o brinquedo), não no
+// lugar onde o Ed para (alvoMundo, que é na frente dela); com um balão ali, a setinha fica em cima do balão
+function marcaMundo(alvo){
+  let x, z, y = 1.15;
+  const G = alvo.k === 'galo' && GALOS[alvo.id];
+  if (G){ [x, z] = alvo.onde === 'mourao' ? centroMourao(G) : [G.pos.x, G.pos.y]; y = alvo.onde === 'mourao' ? ALTURA_MOURAO + 1.4 : 1.25; }
+  else if (alvo.k === 'pomar' || alvo.k === 'colmeia'){ const [sx, sz] = (alvo.k === 'pomar' ? POMAR_SLOTS : COLMEIA_SLOTS)[alvo.i]; x = sx + 0.5; z = sz + 0.5; if (alvo.k === 'pomar') y = 2.2; }
+  else if (alvo.k === 'coletor'){ const C = COLETOR[alvo.tp]; x = C.x + 0.5; z = C.z + 0.5; }
+  else if (alvo.k === 'balanco' || alvo.k === 'brinquedo' || alvo.k === 'poco'){ x = alvo.x + 0.5; z = alvo.z + 0.5; }
+  else [x, z] = alvoMundo(alvo);
+  for (const b of BOLHAS) if (b.visible !== false && Math.abs(b.position.x - x) < 0.35 && Math.abs(b.position.z - z) < 0.35){ x = b.position.x; z = b.position.z; y = Math.max(y, b.userData.base + b.scale.y / 2 + 0.3); break; }
+  return [x, y, z];
+}
 let tarefaAtual = null;
 // ================= o trator do galpão (obra nova do nível 42): o Ed sobe no trator e passa num terreno de canteiros inteiro
 // de uma vez, arando, plantando ou colhendo os canteiros que precisam. É a tarefa 'trator', com alvo { k: 'trator', lote } e
@@ -24181,7 +24209,7 @@ function quadro(agoraP){
   atualizarOndas(dt);
   atualizarGalos(dt, t);
   for (const b of BOLHAS){ b.position.y = b.userData.base + Math.sin(t * 3 + (b.userData.fase || 0)) * 0.04; }
-  marcadores.forEach((m, i) => { const tf = fila.find(f => f.marca === m); if (!tf) return; const G = tf.alvo.k === 'galo' && GALOS[tf.alvo.id]; const [x, z] = G ? (tf.alvo.onde === 'mourao' ? centroMourao(G) : [G.pos.x, G.pos.y]) : alvoMundo(tf.alvo); m.position.set(x, (G ? (tf.alvo.onde === 'mourao' ? ALTURA_MOURAO + 1.4 : 1.25) : 1.15) + Math.sin(t * 5 + i) * 0.05, z); m.rotation.y = t * 2; });
+  marcadores.forEach((m, i) => { const tf = fila.find(f => f.marca === m); if (!tf) return; const [x, y, z] = marcaMundo(tf.alvo); m.position.set(x, y + Math.sin(t * 5 + i) * 0.05, z); m.rotation.y = t * 2; });
   for (const k in VIS){ const p = VIS[k].planta; if (p && p.scale.x < 1){ p.scale.setScalar(Math.min(1, p.scale.x + dt * 2.5)); if (p.userData.des) gravarCanteiro(p); } }
   atualizarIrrigadores(dt);
   atualizarFabricas(dt);
@@ -24410,6 +24438,7 @@ async function iniciar(){
     enfeitesNovos: { aves, ave: () => { aves.prox = 0; }, AJUDA, vis: () => ENF_VIS, casinha: () => casinhaParaLuma(), piquenique: () => lugarPiquenique(), montar: e => montarEnfeite(e), FOGUEIRA, LAGUINHO, DESEJO, aquecer, inverno: invernoAgora, assento: assentoFogueira, frentePoco, fazerDesejo, itens: e => itensEnfeite(e), formas: formasLiberadas, grupoComForma },
     cartaoEspaco: { chegar: chegarCartaoEspaco, nomes: nomesNoEspaco, CARTAO_ESPACO },
     museu: { MUSEU, abrir: abrirMuseu, visitar: visitarMuseu, porta: portaMuseu, alvo: alvoMuseu, guardarCartao: guardarCartaoLido },
+    chamine: () => CHAMINE_MUNDO, fumaca: (x, y, z) => fumaca(x, y, z), marcas: () => fila.filter(f => f.marca).map(f => ({ k: f.alvo.k, tipo: f.tipo, pos: f.marca.position.toArray().map(n => +n.toFixed(2)), ed: alvoMundo(f.alvo) })),
     spa: { SPA, PORCO_SPA, GUERRA_LAMA, familiaCena: () => spaFamilia, EXCURSAO, excursao: () => chegarExcursao(), excursaoObj: () => excursao, LIVRO_SPA, abrirLivro: abrirLivroSpa, fatorLivro: fatorLivroSpa, guerra: () => { proxGuerraLama = 0; }, guerraObj: () => guerraLama, ala: { pronta: alaSpaPronta, abrir: abrirAlaSpa, fruta: frutaDoBar, max: maxSpa, entrada: entradaSpa, proxima: v => proximaNoSpa(v), montar: montarGradeSpa }, visitantes: () => visitantesSpa, chegar: chegarAoSpa, familia: chegarFamiliaSpa, livres: familiaLivreSpa, lugares: () => (lugaresSpa || montarGradeSpa(), lugaresSpa), grade: () => gradeSpa, caminho: caminhoSpa, livresGrade: livresGradeSpa, banho: () => banhoEd, mundo: mundoSpa, esvaziar: esvaziarSpa, tracos: tracosPorcoSpa, descricao: descricaoPorcoSpa, itens: v => itensVisitanteSpa(v), menu: r => menuSpa(r), aberto: spaAberto, relogio: () => ({ proxSpa, proxFamiliaSpa }), zerar: () => { proxSpa = 0.1; proxFamiliaSpa = 0.1; }, sujar: sujarSpa, abrirCenas, pedirCena,
       noLugar: (v, tipo, i = 0, t = 999) => { if (!gradeSpa) montarGradeSpa(); const q = lugaresSpa.filter(l => l.tipo === tipo)[i], [x, z] = mundoSpa(q.x, q.z); Object.assign(v, { x, z, y: q.y, lugar: q, vai: 'lugar', estado: 'atividade', t, ang: q.ang, pagou: true, pts: [] }); v.g.visible = true; if (tipo === 'cadeira' && v.pep) v.pep.visible = true; } },
     observatorio: { OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
