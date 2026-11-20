@@ -14629,7 +14629,7 @@ function tirarDoSpa(v){
   tirarCopoBar(v);
   if (v.tipo === 'porco'){ const k = pickaveis.indexOf(v.g); if (k >= 0) pickaveis.splice(k, 1); }
 }
-function esvaziarSpa(){ for (const v of visitantesSpa.slice()) tirarDoSpa(v); }
+function esvaziarSpa(){ for (const v of visitantesSpa.slice()) tirarDoSpa(v); limparGuerraLama(); }
 // ----- o que cada um faz: um lugar livre de uma atividade sorteada pelo peso; saindo da lama, a ducha
 const ocupadosSpa = () => new Set([...visitantesSpa.map(o => o.lugar), banhoEd && banhoEd.lugar].filter(Boolean));
 function proximaNoSpa(v){
@@ -14734,6 +14734,73 @@ function recepcaoPicocaSpa(v){
   if (v.tipo === 'familia') setTimeout(() => { if (P.on) falar(P.v, variar(FALAS_PICOCA_SPA_FAMILIA).replace(/\{nome\}/g, v.apelido), 3); }, 1300);
   else if (Math.random() < 0.4){ const f = variar(FALAS_PICOCA_SPA); falar(P.v, f, tempoDeLeitura(f)); }
 }
+// ----- a guerra de lama (o Lucas pediu): de tempos em tempos (GUERRA_LAMA.intervalo), com dois na lama, eles começam a
+// jogar bolotas de lama um no outro, uma de cada vez, em arco, com respingo e pulinho de quem leva. Em chanceCadeira das
+// guerras uma bolota erra e acerta quem está na espreguiçadeira: ele levanta sujo (o pepino cai) e vai para a ducha
+const GUERRA_LAMA = { intervalo: [25, 55], primeira: [10, 20], jogadas: [5, 8], cada: 0.95, voo: 0.6, chanceCadeira: 0.5 };
+const FALAS_SPA_GUERRA = ['Oinc! (prepara uma bolota de lama)', 'Oinc oinc! (mira bem no focinho)', 'Óinc! (toma essa!)', 'Oinc! (ri e joga de volta)', 'Oinc-oinc! (guerra de lama!)', 'Oinc! (joga com as duas patas)', 'Óóinc! (acertou em cheio!)',
+  'Oinc! (se esconde atrás do montinho)', 'Oinc oinc! (revanche!)', 'Oinc! (faz uma bolota gigante)', 'Óinc! (errou feio)', 'Oinc-oinc! (dá risada com lama na orelha)', 'Oinc! (joga de costas)', 'Oinc oinc! (ninguém me pega!)',
+  'Óinc! (pede trégua... e joga mais uma)', 'Oinc! (lama na bochecha, que delícia)', 'Oinc-oinc! (chama mais gente pra guerra)', 'Oinc! (mira na orelha)', 'Óóóinc! (bolota com efeito!)', 'Oinc! (pula pra desviar)'];
+const FALAS_SPA_GUERRA_FAMILIA = ['Toma essa, lama na cara!', 'Ninguém me vence na guerra de lama!', 'Ei! Bem no focinho!', 'Revanche! Revanche!', 'Hahaha, errou!', 'Essa foi de efeito!', 'Pega essa, maninho!', 'Lama nos olhos não vale!',
+  'Trégua! Brincadeira, toma mais uma!', 'Olha a bolota gigante!', 'Hihihi, você tá todo marrom!', 'Guerra de lama é tradição de família!', 'Mira, mira... fogo!', 'Isso que é spa!', 'Não foge, não!', 'Ai! Lama na orelha!',
+  'Eu sou o campeão da lama!', 'Lá vai uma de presente!', 'Quem sujar mais ganha!', 'Ops, acertei sem querer!'];
+const FALAS_SPA_ATINGIDO = ['Oinc!! (leva lama bem na cara)', 'Óinc?! (o pepino voou longe)', 'Oinc oinc! (que falta de respeito!)', 'Oinc! (levanta todo sujo, bravo)', 'Óóinc... (lá se foi o descanso)', 'Oinc! (sacode a lama da orelha)',
+  'Oinc-oinc! (vai direto pra ducha)', 'Oinc! (olha feio pra lama)', 'Óinc! (eu tava relaxando!)', 'Oinc oinc! (agora é guerra!)', 'Oinc! (resmunga e levanta)', 'Óinc?! (de onde veio isso?)',
+  'Oinc! (cospe um pouco de lama)', 'Oinc-oinc! (minha toalha limpinha!)', 'Oinc! (pisca com lama nos olhos)', 'Óóóinc! (quem foi?!)', 'Oinc! (dá uma risadinha, sem graça)', 'Oinc oinc! (vou contar pra recepção!)',
+  'Oinc! (pula da espreguiçadeira)', 'Óinc! (perdeu o pepino e a paciência)'];
+let guerraLama = null, proxGuerraLama = null;
+const BOLAS_LAMA = [];
+function limparGuerraLama(){ for (const b of BOLAS_LAMA) scene.remove(b.m); BOLAS_LAMA.length = 0; guerraLama = null; }
+function falarSpa(v, lista){ const f = variar(lista); falar(v, f, Math.min(3, tempoDeLeitura(f))); }
+function atualizarGuerraLama(dt){
+  if (cine || !spaAberto()){ if (guerraLama || BOLAS_LAMA.length) limparGuerraLama(); return; }
+  const naLama = v => visitantesSpa.includes(v) && v.estado === 'atividade' && v.lugar && v.lugar.tipo === 'lama';
+  // as bolotas voando: arco até o alvo (que pode ter se mexido), e o respingo na chegada
+  for (let i = BOLAS_LAMA.length - 1; i >= 0; i--){
+    const b = BOLAS_LAMA[i]; b.t = Math.min(1, b.t + dt / GUERRA_LAMA.voo);
+    const alvo = b.alvo, tx = alvo.x, ty = alvo.y + 0.28, tz = alvo.z;
+    b.m.position.set(lerp(b.x0, tx, b.t), lerp(b.y0, ty, b.t) + Math.sin(b.t * Math.PI) * 0.45, lerp(b.z0, tz, b.t)); b.m.rotation.x += dt * 9;
+    if (b.t >= 1){
+      scene.remove(b.m); BOLAS_LAMA.splice(i, 1);
+      respingoSpa(tx, tz, 'lama', 10); alvo.pulo = 0.3;
+      if (naTelaSpa(tx, tz)){ Som.tom(120, 0.15, 'sine', 0.06, 60); Som.ruido(0.12, 0.04, 600); }
+      // errou e acertou quem estava na espreguiçadeira: levanta sujo e vai para a ducha
+      if (b.cadeira && visitantesSpa.includes(alvo) && alvo.estado === 'atividade' && alvo.lugar && alvo.lugar.tipo === 'cadeira'){
+        if (alvo.tipo === 'porco'){ alvo.pep.visible = false; for (let k = 0; k < 2; k++) particula(tx + rnd(-0.1, 0.1), ty + 0.1, tz + rnd(-0.1, 0.1), 0x7cc35a, 1); }
+        sujarSpa(alvo, true); alvo.t = 0;
+        falarSpa(alvo, alvo.tipo === 'familia' ? FALAS_SPA_GUERRA_FAMILIA : FALAS_SPA_ATINGIDO);
+      }
+    }
+  }
+  const G = guerraLama;
+  if (!G){
+    if (proxGuerraLama == null) proxGuerraLama = rnd(...GUERRA_LAMA.primeira);
+    if ((proxGuerraLama -= dt) > 0) return;
+    proxGuerraLama = rnd(...GUERRA_LAMA.intervalo);
+    const L = visitantesSpa.filter(v => naLama(v) && v.t > 3);
+    if (L.length < 2) return;
+    const [a, b] = L.sort(() => Math.random() - 0.5);
+    const cad = Math.random() < GUERRA_LAMA.chanceCadeira ? sorteia(visitantesSpa.filter(v => v.estado === 'atividade' && v.lugar && v.lugar.tipo === 'cadeira')) : null;
+    const n = Math.floor(rnd(...GUERRA_LAMA.jogadas));
+    guerraLama = { a, b, n, feitas: 0, prox: 0.3, cad, erro: cad ? Math.floor(rnd(2, n)) : -1 };
+    // ficam na lama até a guerra acabar
+    a.t = Math.max(a.t, n * GUERRA_LAMA.cada + 2); b.t = Math.max(b.t, n * GUERRA_LAMA.cada + 2);
+    return;
+  }
+  if (!naLama(G.a) || !naLama(G.b) || G.feitas >= G.n){ guerraLama = null; return; }
+  if ((G.prox -= dt) > 0) return;
+  G.prox = GUERRA_LAMA.cada * rnd(0.8, 1.2);
+  const de = G.feitas % 2 ? G.b : G.a, outro = de === G.a ? G.b : G.a;
+  const cadeira = G.feitas === G.erro && G.cad && visitantesSpa.includes(G.cad) && G.cad.estado === 'atividade';
+  const alvo = cadeira ? G.cad : outro;
+  const m = malha(geo('bolaLama', () => { const v = new Vox(); v.ell(0, 0, 0, 1.6, 1.6, 1.6, (x, y, z) => hash(x, y, z) < 0.4 ? 0x5e3a20 : 0x7a4c2c); return v.build(1 / 24, { origin: [0, 0, 0] }); }));
+  m.position.set(de.x, de.y + 0.3, de.z); scene.add(m);
+  BOLAS_LAMA.push({ m, x0: de.x, y0: de.y + 0.3, z0: de.z, alvo, t: 0, cadeira });
+  de.pulo = 0.25; de.ang = Math.atan2(alvo.x - de.x, alvo.z - de.z);
+  if (naTelaSpa(de.x, de.z)) Som.tom(420, 0.1, 'triangle', 0.02, 240);
+  if (G.feitas === 0 || Math.random() < 0.3) falarSpa(de, de.tipo === 'familia' ? FALAS_SPA_GUERRA_FAMILIA : FALAS_SPA_GUERRA);
+  G.feitas++;
+}
 // ----- o relógio do spa e de cada um
 function atualizarSpa(dt, t){
   atualizarPicocaSpa(dt, t);
@@ -14753,6 +14820,7 @@ function atualizarSpa(dt, t){
     if (!visitantesSpa.includes(v)) continue;
     animarSpa(v, dt, t);
   }
+  atualizarGuerraLama(dt);
   efeitosSpa(dt, t);
 }
 
@@ -23903,7 +23971,7 @@ async function iniciar(){
     enfeitesNovos: { aves, ave: () => { aves.prox = 0; }, AJUDA, vis: () => ENF_VIS, casinha: () => casinhaParaLuma(), piquenique: () => lugarPiquenique(), montar: e => montarEnfeite(e), FOGUEIRA, LAGUINHO, DESEJO, aquecer, inverno: invernoAgora, assento: assentoFogueira, frentePoco, fazerDesejo, itens: e => itensEnfeite(e), formas: formasLiberadas, grupoComForma },
     cartaoEspaco: { chegar: chegarCartaoEspaco, nomes: nomesNoEspaco, CARTAO_ESPACO },
     museu: { MUSEU, abrir: abrirMuseu, visitar: visitarMuseu, porta: portaMuseu, alvo: alvoMuseu, guardarCartao: guardarCartaoLido },
-    spa: { SPA, PORCO_SPA, ala: { pronta: alaSpaPronta, abrir: abrirAlaSpa, fruta: frutaDoBar, max: maxSpa, entrada: entradaSpa, proxima: v => proximaNoSpa(v), montar: montarGradeSpa }, visitantes: () => visitantesSpa, chegar: chegarAoSpa, familia: chegarFamiliaSpa, livres: familiaLivreSpa, lugares: () => (lugaresSpa || montarGradeSpa(), lugaresSpa), grade: () => gradeSpa, caminho: caminhoSpa, livresGrade: livresGradeSpa, banho: () => banhoEd, mundo: mundoSpa, esvaziar: esvaziarSpa, tracos: tracosPorcoSpa, descricao: descricaoPorcoSpa, itens: v => itensVisitanteSpa(v), menu: r => menuSpa(r), aberto: spaAberto, relogio: () => ({ proxSpa, proxFamiliaSpa }), zerar: () => { proxSpa = 0.1; proxFamiliaSpa = 0.1; }, sujar: sujarSpa, abrirCenas, pedirCena,
+    spa: { SPA, PORCO_SPA, GUERRA_LAMA, guerra: () => { proxGuerraLama = 0; }, guerraObj: () => guerraLama, picoca: () => picocaSpa, ala: { pronta: alaSpaPronta, abrir: abrirAlaSpa, fruta: frutaDoBar, max: maxSpa, entrada: entradaSpa, proxima: v => proximaNoSpa(v), montar: montarGradeSpa }, visitantes: () => visitantesSpa, chegar: chegarAoSpa, familia: chegarFamiliaSpa, livres: familiaLivreSpa, lugares: () => (lugaresSpa || montarGradeSpa(), lugaresSpa), grade: () => gradeSpa, caminho: caminhoSpa, livresGrade: livresGradeSpa, banho: () => banhoEd, mundo: mundoSpa, esvaziar: esvaziarSpa, tracos: tracosPorcoSpa, descricao: descricaoPorcoSpa, itens: v => itensVisitanteSpa(v), menu: r => menuSpa(r), aberto: spaAberto, relogio: () => ({ proxSpa, proxFamiliaSpa }), zerar: () => { proxSpa = 0.1; proxFamiliaSpa = 0.1; }, sujar: sujarSpa, abrirCenas, pedirCena,
       noLugar: (v, tipo, i = 0, t = 999) => { if (!gradeSpa) montarGradeSpa(); const q = lugaresSpa.filter(l => l.tipo === tipo)[i], [x, z] = mundoSpa(q.x, q.z); Object.assign(v, { x, z, y: q.y, lugar: q, vai: 'lugar', estado: 'atividade', t, ang: q.ang, pagou: true, pts: [] }); v.g.visible = true; if (tipo === 'cadeira' && v.pep) v.pep.visible = true; } },
     observatorio: { OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
