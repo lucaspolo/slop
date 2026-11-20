@@ -321,6 +321,8 @@ button{font:inherit;color:inherit}
 /* o pular fica fora da caixa de diálogo, visível a cena toda (também nos trechos sem fala) */
 .cine .pular{position:absolute;top:calc(10vh + 12px);right:calc(16px + env(safe-area-inset-right,0px));pointer-events:auto}
 #jogo.cinema .hud-topo,#jogo.cinema .hud-base,#jogo.cinema .camera-ctl,#jogo.cinema .menu{display:none !important}
+/* cena de câmera livre (cameraLivre): os botões de girar e zoom aparecem por cima das faixas */
+#jogo.cinema.cine-livre .camera-ctl{display:grid !important;z-index:26}
 body.primeira-pessoa .hud-topo,body.primeira-pessoa .hud-base,body.primeira-pessoa .camera-ctl,body.primeira-pessoa:not(.com-controle) .menu,body.primeira-pessoa .fala,body.primeira-pessoa .flutua{display:none !important}
 .mirante-1p{position:absolute;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;gap:14px;padding:8px 8px 8px 16px;font-weight:700;white-space:nowrap;z-index:6}
 .mirante-1p[hidden]{display:none}
@@ -466,6 +468,7 @@ a{color:var(--rosa)}
   .acao img,.acao svg{width:30px;height:30px}
   .acao .bolinha{margin-left:22px}
   .camera-ctl{top:calc(env(safe-area-inset-top,0px) + 62px);transform:none}
+  #jogo.cinema.cine-livre .camera-ctl{top:calc(10vh + 56px)}
   .camera-ctl .cam{width:34px;height:34px}
   .camera-ctl .cam svg{width:17px;height:17px}
   .xp-texto{display:none}
@@ -17495,10 +17498,10 @@ const CENAS = {
     titulo: 'Dia de spa da família', desc: 'A família inteira fecha o spa só para ela e termina espremida no ofurô.', trancada: 'acontece quando a ala nova do spa fica pronta',
     pronta: () => alaSpaPronta() && !!S.viuCineMaurinho && !!S.viuCinePatrinho && !!S.viuCineDani && !!S.viuCineHud && periodo().id !== 'noite' && !spaFamilia,
     get falas(){ return spaFamilia ? spaFamilia.falas : []; },
-    // a câmera mostra o spa inteiro, com a ala nova, a cena toda (o Lucas pediu). O ponto fica perto da cerca de cima do
-    // desenho do spa para o spa subir na tela e a caixa de fala não cobrir a lama nova. Na tela estreita, afasta até caber na largura
-    foco(){ const [x, z] = mundoSpa(12, 0); return new THREE.Vector3(x, 0.4, z); },
-    vista: () => Math.max(15, 21 * innerHeight / innerWidth),
+    // a cena põe a câmera no spa e depois deixa o jogador girar, aproximar e arrastar como no jogo (o Lucas pediu)
+    cameraLivre: true,
+    foco(){ const [x, z] = mundoSpa(14, 14); return new THREE.Vector3(x, 0.4, z); },
+    vista: () => (telaEstreita() ? 1.6 : 1) * 10,
     iniciar(c){
       if (!gradeSpa) montarGradeSpa();
       esvaziarSpa(); limparExcursao();
@@ -18373,7 +18376,7 @@ function iniciarCine(id, reprise){
   const cena = CENAS[id];
   cine = { cena, passo: '', t: 0, cam0: { alvo: cam.alvo.clone(), vista: cam.vista, az: cam.azAlvo }, linha: -1, letras: 0, presente: false, ini: false, reprise: !!reprise, tfala: 0 };
   cam.azAlvo = Math.round((cam.azAlvo - Math.PI / 4) / (Math.PI / 2)) * (Math.PI / 2) + Math.PI / 4;
-  $('jogo').classList.add('cinema');
+  $('jogo').classList.add('cinema'); $('jogo').classList.toggle('cine-livre', !!cena.cameraLivre);
   $('cine').hidden = false; requestAnimationFrame(() => $('cine').classList.add('on'));
   pararNadosNaHora(); tirarTrajesNaHora();
   cine.passo = cena.iniciar(cine);
@@ -18388,7 +18391,11 @@ function atualizarCine(dt){
   const fim = c.passo === 'voltando-camera';
   const alvo = fim ? c.cam0.alvo : cena.foco(c);
   const k = Math.min(1, dt * (fim ? 3 : cena.cameraRapida && cena.cameraRapida(c) ? 2.8 : 1.6));
-  cam.alvo.lerp(alvo, k); cam.vista = lerp(cam.vista, fim ? c.cam0.vista : cena.vista(c), k);
+  // câmera livre: a cena só leva a câmera até o lugar; depois (ou quando o jogador mexe) é como no jogo
+  if (fim || !c.camLivre){
+    cam.alvo.lerp(alvo, k); cam.vista = lerp(cam.vista, fim ? c.cam0.vista : cena.vista(c), k);
+    if (!fim && cena.cameraLivre && cam.alvo.distanceTo(alvo) < 0.03 && Math.abs(cam.vista - cena.vista(c)) < 0.03) c.camLivre = true;
+  }
   switch (c.passo){
     case 'chegando': {
       const e = 1 - Math.pow(1 - Math.min(1, c.t / 4.2), 3);
@@ -18580,7 +18587,7 @@ function encerrarCine(){
   cam.alvo.copy(cine.cam0.alvo); cam.vista = cine.cam0.vista; cam.azAlvo = cine.cam0.az;
   $('cine').classList.remove('on'); $('cine').hidden = true; $('cineDialogo').hidden = true;
   $('cineCartela').hidden = true; $('cineCartela').classList.remove('on');
-  $('jogo').classList.remove('cinema');
+  $('jogo').classList.remove('cinema', 'cine-livre');
   caminhao = caminhaoMarket; caminhaoE.estado = 'longe';
   cine = null;
   Musica.parar();
@@ -23948,13 +23955,13 @@ function eventos(){
         // com uma ação repetida ligada (plantar, regar...), arrastar aplica a ação em vez de mover a câmera
         if (modo && modo.tipo !== 'enfeite' && !cine && !menuAberto){ pintura = { ult: [inicio.x, inicio.y], feitos: new Set(), n: 0 }; pintarAte(inicio.x + 0.01, inicio.y); }
       }
-      if (arrastou && !cine){
+      if (arrastou && (!cine || camLivreNaCena())){
         if (pintura){ if (modo) pintarAte(e.clientX, e.clientY); }
         else { arrastar(dx, dy); marcaHover.visible = false; }
       }
     } else if (ponteiros.size === 2){
       // dois dedos: a pinça dá zoom e o meio deles move a câmera
-      if (!cine) arrastar((e.clientX - p.x) / 2, (e.clientY - p.y) / 2);
+      if (!cine || camLivreNaCena()) arrastar((e.clientX - p.x) / 2, (e.clientY - p.y) / 2);
       p.x = e.clientX; p.y = e.clientY;
       const [a, b] = [...ponteiros.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
@@ -23973,7 +23980,7 @@ function eventos(){
   canvas.addEventListener('pointerup', solta);
   canvas.addEventListener('pointercancel', solta);
   canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') marcaHover.visible = false; });
-  canvas.addEventListener('wheel', e => { e.preventDefault(); if (cine || vistaEd) return; if (miranteFP){ zoomMirante(Math.exp(e.deltaY * 0.001)); return; } zoom(Math.exp(e.deltaY * 0.0012)); fecharMenu(); }, { passive: false });
+  canvas.addEventListener('wheel', e => { e.preventDefault(); if ((cine && !camLivreNaCena()) || vistaEd) return; if (miranteFP){ zoomMirante(Math.exp(e.deltaY * 0.001)); return; } zoom(Math.exp(e.deltaY * 0.0012)); fecharMenu(); }, { passive: false });
   $('cineDialogo').addEventListener('click', avancarCine);
   $('cineCartela').addEventListener('click', e => { e.stopPropagation(); avancarCine(); });
   $('cinePular').addEventListener('click', e => { e.stopPropagation(); pularCine(); });
@@ -24010,7 +24017,11 @@ function eventos(){
   $('modal').addEventListener('pointerdown', e => { if (e.target === $('modal')) fecharJanela(); });
   document.addEventListener('pointerdown', e => { if (menuAberto && !$('menu').contains(e.target) && e.target !== canvas) fecharMenu(); });
   addEventListener('keydown', e => {
-    if (cine){ if (e.key === 'Escape') pularCine(); else if (e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); avancarCine(); } return; }
+    if (cine){
+      if (e.key === 'Escape') pularCine(); else if (e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); avancarCine(); }
+      else if (cine.cena.cameraLivre){ const k = e.key.toLowerCase(); if (k === 'q') girar(-1); else if (k === 'e') girar(1); else if (k === '+' || k === '=') zoom(0.85); else if (k === '-') zoom(1.18); }
+      return;
+    }
     if (e.key === 'Escape'){ if (algumaJanela()) fecharJanela(); else if (menuAberto) fecharMenu(); else if (modo) desligarModo(); else if (miranteFP) descerMirante(); else if (vistaEd) sairVistaEd(); return; }
     if (algumaJanela() || e.target.tagName === 'INPUT') return;
     const k = e.key.toLowerCase(), passo = 30;
@@ -24053,8 +24064,10 @@ function arrastar(dx, dy){
   cam.alvo.x = clamp(cam.alvo.x, 0, W); cam.alvo.z = clamp(cam.alvo.z, Z_PISTA, H);
   if (menuAberto) fecharMenu();
 }
-function zoom(f){ cam.vista = clamp(cam.vista * f, 5, 40); }
-function girar(s){ cam.azAlvo += s * Math.PI / 2; fecharMenu(); Som.clique(); }
+// numa cena de câmera livre (cameraLivre), o jogador mexe na câmera como no jogo; mexer solta a câmera da cena na hora
+function camLivreNaCena(){ if (!cine || !cine.cena.cameraLivre || cine.passo === 'voltando-camera') return false; cine.camLivre = true; return true; }
+function zoom(f){ if (cine && !camLivreNaCena()) return; cam.vista = clamp(cam.vista * f, 5, 40); }
+function girar(s){ if (cine && !camLivreNaCena()) return; cam.azAlvo += s * Math.PI / 2; fecharMenu(); Som.clique(); }
 
 // ================= laço principal
 let ultimoReal = Date.now(), ultimoQuadro = performance.now(), tSalvo = 0;
