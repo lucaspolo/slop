@@ -14636,7 +14636,7 @@ function tirarDoSpa(v){
   tirarCopoBar(v);
   if (v.tipo === 'porco'){ const k = pickaveis.indexOf(v.g); if (k >= 0) pickaveis.splice(k, 1); }
 }
-function esvaziarSpa(){ for (const v of visitantesSpa.slice()) tirarDoSpa(v); limparGuerraLama(); }
+function esvaziarSpa(){ for (const v of visitantesSpa.slice()) tirarDoSpa(v); limparGuerraLama(); if (excursao){ excursao.bus.visible = false; excursao = null; } }
 // ----- o que cada um faz: um lugar livre de uma atividade sorteada pelo peso; saindo da lama, a ducha
 const ocupadosSpa = () => new Set([...visitantesSpa.map(o => o.lugar), banhoEd && banhoEd.lugar].filter(Boolean));
 function proximaNoSpa(v){
@@ -14677,6 +14677,8 @@ function sairDoSpa(v){
   }
   v.vai = 'sair'; v.lugar = null;
   const dentro = caminhoSpa(celulaDe(v), SPA.porta) || [];
+  // da excursão: volta para a porta do ônibus e embarca
+  if (v.excursao && excursao){ const [vx, vz] = SPA.vao, [ax] = mundoSpa(SPA.porta[0] + 0.5, 0); v.pts = [...dentro, mundoSpa(SPA.porta[0] + 0.5, SPA.fundo - 0.4), [ax, vz + 0.5], [vx + 0.5, vz + 0.5], portaOnibus()]; v.estado = 'saindo'; return; }
   v.pts = [...dentro, ...estradaDoSpa().reverse(), [X_CURVA, H + 1]]; v.estado = 'saindo';
   if (v.tipo === 'familia' && v.p.deToalha){ trocaDeRoupaSpa(v.p, null, v.x, v.z); v.esperaGiro = GIRO.dur; }
 }
@@ -14869,16 +14871,134 @@ function abrirLivroSpa(){
     ${L.length ? `<p class="livro-nota">${m >= 4.5 ? 'Com recados tão bons, mais porquinhos vêm ao spa.' : m < 3.8 ? 'Com notas mais baixas, chega um pouco menos gente.' : 'A nota média muda quantos porquinhos vêm ao spa.'}</p>` : ''}</div>`);
   Som.tom(660, 0.08, 'sine', 0.03, 880);
 }
+// ----- a excursão (o Lucas pediu): de vez em quando (EXCURSAO.intervalo) um ônibus sobe a estrada e para no vão do spa.
+// Desce um grupo de porquinhos de chapéu de sol (EXCURSAO.n), um de cada vez; eles se juntam na frente do arco, o guia
+// (o primeiro) vira para o grupo e tira uma foto (flash), e entram um atrás do outro, em fila até o balcão, pagando a
+// entrada de cada um. Fazem as atividades como os outros e, ao sair, voltam para o ônibus; quando o último embarca, o
+// ônibus vai embora. Enquanto isso não chegam outros visitantes nem passa trânsito na estrada. Não mexe no save
+const EXCURSAO = { primeira: [180, 360], intervalo: [700, 1400], n: [6, 8], vel: 2.4, foto: 2.4, fila: 0.9, quer: [2, 3],
+  chapeus: [0xe2403a, 0x4fb4e8, 0xf28fac, 0x7cc35a, 0xa77be0, 0xf29a2e] };
+const FALAS_EXCURSAO_DESCE = ['Oinc! (desce do ônibus animado)', 'Oinc oinc! (chegamos!)', 'Óinc! (ajeita o chapéu de sol)', 'Oinc! (estica as patinhas da viagem)', 'Oinc-oinc! (que lugar lindo!)', 'Oinc! (aponta pro arco do spa)',
+  'Óóinc! (já sente o cheiro da lama)', 'Oinc! (procura o guia)', 'Oinc oinc! (não esquece a toalha!)', 'Oinc! (pula do degrau)', 'Óinc! (acena pra fazenda)', 'Oinc-oinc! (excursão boa é assim!)', 'Oinc! (confere o chapéu)',
+  'Oinc! (quem sentou na janela fui eu!)', 'Óinc! (a viagem foi longa)', 'Oinc oinc! (cadê o banheiro?)', 'Oinc! (tira o protetor solar da bolsa)', 'Óóinc! (que sol bonito)', 'Oinc! (anda em fila, comportado)', 'Oinc-oinc! (primeira vez no spa!)'];
+const FALAS_EXCURSAO_FOTO = ['Oinc! (xiiis!)', 'Oinc oinc! (todo mundo junto!)', 'Óinc! (sorri de focinho aberto)', 'Oinc! (faz chifrinho no vizinho)', 'Oinc-oinc! (mais uma, mais uma!)', 'Oinc! (fecha o olho no flash)',
+  'Óóinc! (pose de estrela)', 'Oinc! (levanta o chapéu)', 'Oinc oinc! (sai bonito, sai!)', 'Oinc! (fica na ponta dos cascos)', 'Óinc! (dá uma piscadinha)', 'Oinc-oinc! (foto pro álbum!)', 'Oinc! (bate o rabinho)',
+  'Oinc! (empurra pra aparecer)', 'Óinc! (essa vai pro porta-retrato)', 'Oinc oinc! (agora uma careta!)', 'Oinc! (abraça o colega)', 'Óóinc! (diz lama!)', 'Oinc! (posa com o arco atrás)', 'Oinc-oinc! (vai pra parede de casa!)'];
+let excursao = null, proxExcursao = null;
+// o ônibus de excursão, de frente para -z (sobe a estrada), com a porta do lado +x, perto da frente
+function vOnibus(){
+  const v = new Vox(), azul = 0x4fb4e8, azulE = 0x3a8fd0, branco = 0xfdf8ef, vidro = 0x2e5a88;
+  v.box(-7, 2, -18, 7, 15, 18, (x, y, z) => y >= 14 ? branco : y <= 4 ? azulE : (y >= 9 && y <= 12 && Math.abs(x) === 7 && (z + 18) % 6 !== 0 && z > -16) ? vidro : y === 6 ? branco : azul);
+  v.box(-6, 9, -18, 6, 13, -18, vidro); v.box(-6, 16, -16, 6, 16, 14, branco);
+  // a porta, os faróis e as rodas
+  v.box(7, 3, -15, 7, 12, -12, (x, y, z) => z === -12 || z === -15 ? azulE : 0x9fc8e0);
+  for (const x of [-5, 5]) v.box(x - 1, 5, -18, x + 1, 6, -18, 0xfff1a8);
+  for (const z of [-12, 12]) for (const x of [-7, 7]) for (let dy = -2; dy <= 2; dy++) for (let dz = -2; dz <= 2; dz++) if (dy * dy + dz * dz <= 5) v.set(x + Math.sign(x) * 0.5, 2 + dy, z + dz, dy * dy + dz * dz <= 1 ? 0xcfd2d6 : 0x2a2a2e);
+  return v;
+}
+// o chapéu de sol de palha com a fita, no alto da cabeça do porco visitante (na escala dele)
+function vChapeuSol(cor){
+  const v = new Vox(), palha = (x, y, z) => hash(x, y, z) < 0.3 ? 0xd8bb72 : 0xe8cf8a;
+  for (let x = -7; x <= 7; x++) for (let z = -7; z <= 7; z++){ const d = Math.hypot(x, z); if (d <= 7.2) v.set(x, 26, 15 + z, palha(x, 26, z)); if (d <= 4.2) for (let y = 27; y <= 30; y++) v.set(x, y, 15 + z, y === 27 ? cor : palha(x, y, z)); }
+  return v;
+}
+function criarOnibus(){
+  const g = new THREE.Group(), m = malha(geo('onibus', () => vOnibus().build(1 / 16, { origin: [0.5, 0, 0.5] })));
+  g.add(m);
+  const tex = texturaTexto([['EXCURSÃO', 1, '#e0408a']], 512, 110, '#fdf8ef');
+  for (const lado of [1, -1]){ const pl = placaDeTexto(tex, 20 / 16, 4 / 16); pl.position.set(lado * 7.56 / 16, 8 / 16, 2 / 16); pl.rotation.y = lado * Math.PI / 2; g.add(pl); }
+  g.visible = false; scene.add(g);
+  return g;
+}
+const porcosNoSpa = () => visitantesSpa.filter(v => v.tipo === 'porco').length;
+function chegarExcursao(){
+  if (!spaAberto() || cine || excursao || periodo().id === 'noite') return false;
+  if (!gradeSpa) montarGradeSpa();
+  const n = Math.min(Math.floor(rnd(EXCURSAO.n[0], EXCURSAO.n[1] + 0.99)), maxSpa() - porcosNoSpa());
+  if (n < 4) return false;
+  if (!chegarExcursao.bus) chegarExcursao.bus = criarOnibus();
+  const bus = chegarExcursao.bus; bus.visible = true; bus.position.set(X_CURVA, 0, H + 3); bus.rotation.y = 0;
+  excursao = { fase: 'chega', t: 0, bus, n, membros: [], para: SPA.vao[1] + 1.55, saiu: 0 };
+  return true;
+}
+function limparExcursao(){
+  if (!excursao) return;
+  excursao.bus.visible = false;
+  for (const v of excursao.membros) if (visitantesSpa.includes(v)) tirarDoSpa(v);
+  excursao = null;
+}
+// a porta do ônibus parado e o lugar de cada um na frente do arco, para a foto (duas fileiras, o guia na frente)
+const portaOnibus = () => [X_CURVA + 0.62, excursao.para - 0.8];
+function lugarFotoExcursao(i){
+  const [ax] = mundoSpa(SPA.porta[0] + 0.5, 0), zf = SPA.vao[1] + 0.5;
+  if (i === 0) return [ax + 0.2, zf + 0.15];
+  const k = i - 1, fila = k % 2, col = Math.floor(k / 2);
+  return [ax - 0.9 - col * 0.42, zf - 0.2 + fila * 0.4];
+}
+function atualizarExcursao(dt, t){
+  const E = excursao; if (!E) return;
+  E.t += dt;
+  const bus = E.bus;
+  if (E.fase === 'chega'){
+    bus.position.z = Math.max(E.para, bus.position.z - EXCURSAO.vel * dt);
+    if (bus.position.z <= E.para){ E.fase = 'desce'; E.t = 0; E.i = 0; if (naTelaSpa(bus.position.x, bus.position.z)) Som.tom(330, 0.25, 'square', 0.02, 220); }
+    return;
+  }
+  if (E.fase === 'desce'){
+    if (E.i < E.n && E.t >= E.i * 0.75 + 0.6){
+      const v = criarPorcoSpa(Math.floor(Math.random() * PORCO_SPA.sementes)), cor = EXCURSAO.chapeus[E.i % EXCURSAO.chapeus.length];
+      const ch = malha(geo('chapeuSol' + cor, () => vChapeuSol(cor).build(PORCO_SPA.escala, { origin: [0.5, 0, 0.5] }))); v.corpo.add(ch);
+      const [px, pz] = portaOnibus(), [vx] = SPA.vao, zf = SPA.vao[1] + 0.5;
+      Object.assign(v, { excursao: true, guia: E.i === 0, x: px, z: pz, y: 0, ang: Math.PI / 2, fase: rnd(0, 6), estado: 'andando', vai: 'fotoArco', t: 0, lugar: null, sujo: false, pulo: 0.3, feitas: 0,
+        quer: Math.floor(rnd(EXCURSAO.quer[0], EXCURSAO.quer[1] + 0.99)), pts: [[vx + 0.5, zf], lugarFotoExcursao(E.i)] });
+      v.g.visible = true; visitantesSpa.push(v); E.membros.push(v); E.i++;
+      if (Math.random() < 0.4) falarSpa(v, FALAS_EXCURSAO_DESCE);
+    }
+    if (E.i >= E.n && E.membros.every(v => v.estado === 'posando')){ E.fase = 'foto'; E.t = 0; }
+    return;
+  }
+  if (E.fase === 'foto'){
+    const guia = E.membros[0], resto = E.membros.slice(1), mx = resto.reduce((a, v) => a + v.x, 0) / resto.length, mz = resto.reduce((a, v) => a + v.z, 0) / resto.length;
+    guia.ang = Math.atan2(mx - guia.x, mz - guia.z); for (const v of resto) v.ang = Math.atan2(guia.x - v.x, guia.z - v.z);
+    if (E.t > 0.9 && !E.flash){
+      E.flash = true;
+      for (let i = 0; i < 14; i++) faisca(guia.x + rnd(-0.08, 0.08), 0.55, guia.z + rnd(-0.08, 0.08), 0xffffff).vida = 0.25;
+      if (naTelaSpa(guia.x, guia.z)) Som.tom(2200, 0.06, 'square', 0.02, 1800);
+      falarSpa(sorteia(resto), FALAS_EXCURSAO_FOTO);
+      for (const v of resto) v.pulo = 0.3;
+    }
+    if (E.t >= EXCURSAO.foto){
+      // entram em fila: o guia primeiro, um atrás do outro
+      E.membros.forEach((v, i) => {
+        const [px, pz] = mundoSpa(...SPA.paga), dentro = caminhoSpa(SPA.porta, [Math.floor(SPA.paga[0]), Math.floor(SPA.paga[1])]) || [];
+        v.pts = [mundoSpa(SPA.porta[0] + 0.5, SPA.fundo - 0.4), ...dentro, [px, pz]]; v.vai = null; v.estado = 'chegando'; v.esperaGiro = i * EXCURSAO.fila;
+      });
+      E.fase = 'spa'; E.t = 0;
+    }
+    return;
+  }
+  if (E.fase === 'spa'){
+    // o último embarcou: o ônibus vira e vai embora, descendo a estrada
+    if (E.membros.every(v => !visitantesSpa.includes(v))){ E.fase = 'parte'; E.t = 0; bus.rotation.y = Math.PI; if (naTelaSpa(bus.position.x, bus.position.z)) Som.tom(220, 0.4, 'square', 0.02, 330); }
+    return;
+  }
+  if (E.fase === 'parte'){
+    bus.position.z += EXCURSAO.vel * dt * Math.min(1, E.t);
+    if (bus.position.z > H + 4){ bus.visible = false; excursao = null; proxExcursao = rnd(...EXCURSAO.intervalo); }
+  }
+}
 // ----- o relógio do spa e de cada um
 function atualizarSpa(dt, t){
   atualizarPicocaSpa(dt, t);
   if (!spaAberto()){ if (visitantesSpa.length) esvaziarSpa(); return; }
-  if (cine){ if (visitantesSpa.length) esvaziarSpa(); return; }
+  if (cine){ if (visitantesSpa.length) esvaziarSpa(); limparExcursao(); return; }
   const noite = periodo().id === 'noite';
+  if (proxExcursao == null) proxExcursao = rnd(...EXCURSAO.primeira);
+  if (!noite && !excursao && (proxExcursao -= dt) <= 0){ proxExcursao = rnd(...EXCURSAO.intervalo); chegarExcursao(); }
   if (proxSpa == null) proxSpa = rnd(...SPA.primeira);
   if (proxFamiliaSpa == null) proxFamiliaSpa = rnd(...SPA.familia) * 0.5;
   if (!noite){
-    if ((proxSpa -= dt) <= 0){ proxSpa = rnd(...SPA.chegada) * fatorLivroSpa(); chegarAoSpa(Math.random() < 0.2 ? 3 : Math.random() < 0.5 ? 2 : 1); }
+    if (!excursao && (proxSpa -= dt) <= 0){ proxSpa = rnd(...SPA.chegada) * fatorLivroSpa(); chegarAoSpa(Math.random() < 0.2 ? 3 : Math.random() < 0.5 ? 2 : 1); }
     if ((proxFamiliaSpa -= dt) <= 0){ proxFamiliaSpa = rnd(...SPA.familia); if (!visitantesSpa.some(v => v.tipo === 'familia')) chegarFamiliaSpa(); }
   }
   for (const v of visitantesSpa.slice()){
@@ -14889,6 +15009,7 @@ function atualizarSpa(dt, t){
     animarSpa(v, dt, t);
   }
   atualizarGuerraLama(dt);
+  atualizarExcursao(dt, t);
   efeitosSpa(dt, t);
 }
 
@@ -14925,6 +15046,7 @@ function passoSpa(v, dt, t, noite){
     case 'chegou':
       if (v.vai === 'toboga' && v.lugar){ subirTobogaSpa(v); break; }
       if (v.vai === 'assinar'){ v.estado = 'assinando'; v.t = 1.6; v.ang = Math.PI / 2 + SPA.giro; break; }
+      if (v.vai === 'fotoArco'){ v.estado = 'posando'; break; }
       if (v.vai === 'sauna'){
         // entra pela porta e some lá dentro
         const [x, z] = mundoSpa(SPA.portaSauna[0] + 2, SPA.sauna[3] + 1.3);
@@ -21765,7 +21887,7 @@ function tirarVeiculo(){
 }
 function atualizarTransito(dt, t){
   if (!carroRua){
-    if (!cine && !cenaPedida && caminhaoE.estado === 'longe' && (transitoEspera -= dt) <= 0) soltarVeiculo(Math.floor(Math.random() * TRAFEGO.length));
+    if (!cine && !cenaPedida && !excursao && caminhaoE.estado === 'longe' && (transitoEspera -= dt) <= 0) soltarVeiculo(Math.floor(Math.random() * TRAFEGO.length));
     return;
   }
   // visita e cena usam a mesma pista, e os veículos se atravessariam
@@ -24148,7 +24270,7 @@ async function iniciar(){
     enfeitesNovos: { aves, ave: () => { aves.prox = 0; }, AJUDA, vis: () => ENF_VIS, casinha: () => casinhaParaLuma(), piquenique: () => lugarPiquenique(), montar: e => montarEnfeite(e), FOGUEIRA, LAGUINHO, DESEJO, aquecer, inverno: invernoAgora, assento: assentoFogueira, frentePoco, fazerDesejo, itens: e => itensEnfeite(e), formas: formasLiberadas, grupoComForma },
     cartaoEspaco: { chegar: chegarCartaoEspaco, nomes: nomesNoEspaco, CARTAO_ESPACO },
     museu: { MUSEU, abrir: abrirMuseu, visitar: visitarMuseu, porta: portaMuseu, alvo: alvoMuseu, guardarCartao: guardarCartaoLido },
-    spa: { SPA, PORCO_SPA, GUERRA_LAMA, LIVRO_SPA, abrirLivro: abrirLivroSpa, fatorLivro: fatorLivroSpa, guerra: () => { proxGuerraLama = 0; }, guerraObj: () => guerraLama, picoca: () => picocaSpa, ala: { pronta: alaSpaPronta, abrir: abrirAlaSpa, fruta: frutaDoBar, max: maxSpa, entrada: entradaSpa, proxima: v => proximaNoSpa(v), montar: montarGradeSpa }, visitantes: () => visitantesSpa, chegar: chegarAoSpa, familia: chegarFamiliaSpa, livres: familiaLivreSpa, lugares: () => (lugaresSpa || montarGradeSpa(), lugaresSpa), grade: () => gradeSpa, caminho: caminhoSpa, livresGrade: livresGradeSpa, banho: () => banhoEd, mundo: mundoSpa, esvaziar: esvaziarSpa, tracos: tracosPorcoSpa, descricao: descricaoPorcoSpa, itens: v => itensVisitanteSpa(v), menu: r => menuSpa(r), aberto: spaAberto, relogio: () => ({ proxSpa, proxFamiliaSpa }), zerar: () => { proxSpa = 0.1; proxFamiliaSpa = 0.1; }, sujar: sujarSpa, abrirCenas, pedirCena,
+    spa: { SPA, PORCO_SPA, GUERRA_LAMA, EXCURSAO, excursao: () => chegarExcursao(), excursaoObj: () => excursao, LIVRO_SPA, abrirLivro: abrirLivroSpa, fatorLivro: fatorLivroSpa, guerra: () => { proxGuerraLama = 0; }, guerraObj: () => guerraLama, picoca: () => picocaSpa, ala: { pronta: alaSpaPronta, abrir: abrirAlaSpa, fruta: frutaDoBar, max: maxSpa, entrada: entradaSpa, proxima: v => proximaNoSpa(v), montar: montarGradeSpa }, visitantes: () => visitantesSpa, chegar: chegarAoSpa, familia: chegarFamiliaSpa, livres: familiaLivreSpa, lugares: () => (lugaresSpa || montarGradeSpa(), lugaresSpa), grade: () => gradeSpa, caminho: caminhoSpa, livresGrade: livresGradeSpa, banho: () => banhoEd, mundo: mundoSpa, esvaziar: esvaziarSpa, tracos: tracosPorcoSpa, descricao: descricaoPorcoSpa, itens: v => itensVisitanteSpa(v), menu: r => menuSpa(r), aberto: spaAberto, relogio: () => ({ proxSpa, proxFamiliaSpa }), zerar: () => { proxSpa = 0.1; proxFamiliaSpa = 0.1; }, sujar: sujarSpa, abrirCenas, pedirCena,
       noLugar: (v, tipo, i = 0, t = 999) => { if (!gradeSpa) montarGradeSpa(); const q = lugaresSpa.filter(l => l.tipo === tipo)[i], [x, z] = mundoSpa(q.x, q.z); Object.assign(v, { x, z, y: q.y, lugar: q, vai: 'lugar', estado: 'atividade', t, ang: q.ang, pagou: true, pts: [] }); v.g.visible = true; if (tipo === 'cadeira' && v.pep) v.pep.visible = true; } },
     observatorio: { OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
