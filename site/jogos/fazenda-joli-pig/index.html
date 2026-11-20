@@ -10805,6 +10805,11 @@ const TEMAS = {
     { tipo: 'sine', vol: 0.015, notas: 'C4+E4+G4:4 F3+A3+C4:4 C4+E4+G4:4 G3+B3+D4:4' },
     { tipo: 'triangle', vol: 0.05, leg: 0.6, notas: 'C3:1 G2:1 C3:1 G2:1 F2:1 C3:1 G2:1 D3:1 C3:1 G2:1 E3:1 C3:1 G2:1 D3:1 C3:2' },
     { tipo: 'x', vol: 0.025, notas: 'x:.5 r:.5 x:.5 x:.5 x:.5 r:.5 x:.5 x:.5 x:.5 r:.5 x:.5 x:.5 x:.5 r:.5 x:.5 x:.5 x:.5 r:.5 x:.5 x:.5 x:.5 r:.5 x:.5 x:.5 x:.5 r:.5 x:.5 x:.5 x:.5 r:.5 x:.5 x:.5' } ] },
+  // Dia de spa da família: bossinha preguiçosa em fá maior, com sininho de vez em quando
+  spaFamilia: { bpm: 88, ganho: 1.4, loop: true, faixas: [
+    { tipo: 'sine', vol: 0.03, leg: 0.8, notas: 'A5:1 C6:.5 A5:.5 G5:1 F5:1 E5:1 G5:.5 E5:.5 D5:2 F5:1 A5:.5 F5:.5 E5:1 D5:1 C5:1 E5:.5 G5:.5 F5:2' },
+    { tipo: 'triangle', vol: 0.045, leg: 0.7, notas: 'F3:1 C3:1 F3:1 C3:1 G2:1 D3:1 G2:1 D3:1 C3:1 G2:1 C3:1 G2:1 F2:1 C3:1 F3:2' },
+    { tipo: 'sine', vol: 0.012, notas: 'F4+A4+C5:4 G4+Bb4+D5:4 C4+E4+G4:4 F4+A4+C5:4' } ] },
   // Sócias da terra: notinhas curtas que pulam, em dó maior
   minhocas: { bpm: 126, ganho: 1.7, loop: true, faixas: [
     { tipo: 'square', vol: 0.022, leg: 0.4, notas: 'C5:.5 r:.5 E5:.5 r:.5 G5:.5 E5:.5 C5:1 D5:.5 r:.5 F5:.5 r:.5 A5:.5 F5:.5 D5:1 E5:.5 G5:.5 C6:.5 G5:.5 F5:.5 D5:.5 B4:.5 G4:.5 C5:1 G4:1 C5:2' },
@@ -13884,13 +13889,13 @@ class Porco {
     return true;
   }
   // no spa, de toalha: o corpo de toalha na cor de cada um e os braços sem manga; toalha() sem cor volta para a roupa
-  toalha(quem){
+  toalha(quem, oculos){
     const mc = this.corpo.children[0], mb = [this.bE.children[0], this.bD.children[0]], s = this.escala, op = OP_PORCO;
     if (!this.roupa) this.roupa = { c: mc.geometry, b: mb[0].geometry };
     const T = quem && TOALHA_SPA[quem];
     this.deToalha = !!T;
     if (!T){ mc.geometry = this.roupa.c; for (const m of mb) m.geometry = this.roupa.b; return; }
-    mc.geometry = geo('corpoToalha' + quem, () => vPorco(T[0], T[1], false, 'toalha').build(s, op));
+    mc.geometry = geo('corpoToalha' + quem + (oculos ? 'Oc' : ''), () => vPorco(T[0], T[1], false, 'toalha', oculos).build(s, op));
     for (const m of mb) m.geometry = geo('braco', () => vBraco().build(s, op));
   }
   ir(pontos, aoChegar){ this.pontos = pontos.slice(); this.aoChegar = aoChegar; this.estado = this.pontos.length ? 'andando' : 'parado'; if (!this.pontos.length && aoChegar) aoChegar(); }
@@ -14532,6 +14537,8 @@ const FAMILIA_SPA = {
   milton: { nome: 'Milton', pode: () => !!S.conheceuMilton && voo.estado === 'fora', orig: () => milton, escala: 0.5, cria: () => new Porco(0, 0, 'milton', modeloMoletom(0.7)) },
   hud: { nome: 'Hud', pode: () => !!S.viuCineHud && !hudAtivo(), orig: () => irmaoHud, escala: 0.5, cria: () => new Porco(COR.ed, COR.edBolso, 'hud', MODELO_HUD) },
   dani: { nome: 'Dani', pode: () => !!S.viuCineDani && !daniAtivo(), orig: () => irmaoDani, escala: ESCALA_DANI, cria: () => new Porco(COR.dani, COR.daniBolso, 'dani', MODELO_DANI) },
+  // o Ed só entra na cena do dia de spa da família (nunca vem como visitante)
+  ed: { nome: 'Ed', pode: () => false, orig: () => ed, cria: () => new Porco(COR.ed, COR.edBolso, 'ed') },
 };
 const COPIA_SPA = {};
 // a toalha de cada um: [cor, listra], nas cores de cada personagem (o Milton na laranja do PIG-MTP)
@@ -14702,7 +14709,15 @@ const FALAS_SPA_ATINGIDO = ['Oinc!! (leva lama bem na cara)', 'Óinc?! (o pepino
   'Oinc-oinc! (vai direto pra ducha)', 'Oinc! (olha feio pra lama)', 'Óinc! (eu tava relaxando!)', 'Oinc oinc! (agora é guerra!)', 'Oinc! (resmunga e levanta)', 'Óinc?! (de onde veio isso?)',
   'Oinc! (cospe um pouco de lama)', 'Oinc-oinc! (minha toalha limpinha!)', 'Oinc! (pisca com lama nos olhos)', 'Óóóinc! (quem foi?!)', 'Oinc! (dá uma risadinha, sem graça)', 'Oinc oinc! (vou contar pra recepção!)',
   'Oinc! (pula da espreguiçadeira)', 'Óinc! (perdeu o pepino e a paciência)'];
-let guerraLama = null, proxGuerraLama = null;
+let guerraLama = null, proxGuerraLama = null, spaFamilia = null;
+function limparSpaFamilia(){
+  const F = spaFamilia; if (!F) return;
+  for (const v of F.membros){ tirarCopoBar(v); v.g.visible = false; scene.remove(v.g); v.p.toalha(null); v.p.sentado = 0; const k = pickaveis.indexOf(v.g); if (k >= 0) pickaveis.splice(k, 1); }
+  if (F.livro && F.livro.parent) F.livro.parent.remove(F.livro);
+  spaFamilia = null;
+  // o Ed de verdade aparece na porta do spa
+  ed.g.visible = true; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; ed.colocar(...portaSpaMundo());
+}
 const BOLAS_LAMA = [];
 function limparGuerraLama(){ for (const b of BOLAS_LAMA) scene.remove(b.m); BOLAS_LAMA.length = 0; guerraLama = null; }
 function falarSpa(v, lista){ const f = variar(lista); falar(v, f, Math.min(3, tempoDeLeitura(f))); }
@@ -17407,6 +17422,118 @@ const CENAS = {
     fim(){ limparPuxao(); discoJogo.prox = rnd(...DISCO_JOGO.intervalo); S.viuPuxao = true; },
     restaurar(){ limparPuxao(); },
   },
+  // Dia de spa da família (o Lucas pediu): com a ala nova pronta, a família inteira fecha o spa só para ela. Todos chegam de
+  // toalha, cada um vai para uma coisa (o Dani no tobogã, o Patrinho na pedicure, o Maurinho de óculos lendo na
+  // espreguiçadeira, o Ed e o Hud na lama, o Beto no ofurô, o Pelúcio no bar e o Milton na outra espreguiçadeira) e no fim
+  // todo mundo se espreme no ofurô. Usa cópias de cada um (FAMILIA_SPA, com o Ed também) andando pela grade do spa, como
+  // os visitantes (passoSpa, animarSpa), numa lista só da cena (spaFamilia.membros). O Ed de verdade some durante a cena e
+  // aparece na porta do spa no fim. Não mexe no save (só S.viuCineSpaFamilia)
+  spaFamilia: {
+    flag: 'viuCineSpaFamilia', nivel: () => OBRAS.spa.etapas ? (OBRAS.spa.etapas[1] && OBRAS.spa.etapas[1].nivel) || 47 : 47, musica: 'spaFamilia', icone: 'spa',
+    titulo: 'Dia de spa da família', desc: 'A família inteira fecha o spa só para ela e termina espremida no ofurô.', trancada: 'acontece quando a ala nova do spa fica pronta',
+    pronta: () => alaSpaPronta() && !!S.viuCineMaurinho && !!S.viuCinePatrinho && !!S.viuCineDani && !!S.viuCineHud && periodo().id !== 'noite' && !spaFamilia,
+    get falas(){ return spaFamilia ? spaFamilia.falas : []; },
+    foco(c){
+      if (c.passo === 'sf-ofuro' || (spaFamilia && spaFamilia.noOfuro)){ const [x, z] = mundoSpa(SPA.ofuro[0], SPA.ofuro[1] + 2); return new THREE.Vector3(x, 0.5, z); }
+      const [x, z] = mundoSpa(c.passo === 'sf-entra' ? 30 : 14, 24); return new THREE.Vector3(x, 0.4, z);
+    },
+    vista: c => (telaEstreita() ? 1.6 : 1) * (c.passo === 'sf-ofuro' || (spaFamilia && spaFamilia.noOfuro) ? 3.8 : 6.6),
+    iniciar(c){
+      if (!gradeSpa) montarGradeSpa();
+      esvaziarSpa(); limparExcursao();
+      const quem = ['ed', 'hud', 'dani', 'beto', 'patrinho', 'maurinho'].concat(S.viuCinePelucio ? ['pelucio'] : [], S.conheceuMilton ? ['milton'] : []);
+      const membros = quem.map((q, i) => {
+        const v = criarFamiliaSpa(q), [x, z] = lugarFotoExcursao(i);
+        Object.assign(v, { x, z, y: 0, ang: SPA.giro + Math.PI, estado: 'parado', t: 999, pts: [], fase: rnd(0, 6), pulo: 0, cena: true, feitas: 0, quer: 9 });
+        v.p.toalha(q, q === 'maurinho'); v.g.visible = true;
+        return v;
+      });
+      ed.g.visible = false;
+      const tem = q => quem.includes(q), M = q => membros.find(v => v.quem === q);
+      const falas = [
+        ['ed', 'Ed', 'Hoje o spa fechou mais cedo: é só da família!'],
+        ['beto', 'Beto', 'Toalha azul, chinelo e nenhum caminhão pra dirigir. Que maravilha.'],
+        ['dani', 'Dani', 'Eu vou primeiro no tobogã!', 'sf-brinca'],
+        ['dani', 'Dani', 'Iiiihá! Ninguém me segura nesse tobogã!'],
+        ['patrinho', 'Patrinho', 'Esmalte cor de trufa, irmãozinho. Chique e combina com tudo.'],
+        ['maurinho', 'Maurinho', 'Pelos meus cálculos, essa lama está a 37 graus. Perfeita.'],
+        ...(tem('pelucio') ? [['pelucio', 'Pelúcio', 'Suco de laranja com um pinguinho de café. Receita nova da Joli Coffee!']] : []),
+        ...(tem('milton') ? [['milton', 'Milton', 'Daqui da espreguiçadeira dá pra ver o céu todinho. Quase como voar.']] : []),
+        ['hud', 'Hud', 'Ed, olha! Fiz uma bolinha de lama com orelhinha!'],
+        ['ed', 'Ed', 'Agora todo mundo pro ofurô!', 'sf-ofuro'],
+        ...(tem('milton') ? [['milton', 'Milton', 'Cabe mais um? Eu sou pequenininho!']] : [['hud', 'Hud', 'Cabe mais um? Eu sou pequenininho!']]),
+        ['dani', 'Dani', 'Opa, acho que a água tá saindo pelos lados...'],
+        ['ed', 'Ed', 'Apertadinho, mas quentinho. Spa de família é outra coisa.'],
+      ];
+      spaFamilia = { membros, falas, M, noOfuro: false };
+      return 'sf-entra';
+    },
+    trecho(c, dt){
+      const F = spaFamilia, t = performance.now() / 1000; if (!F) return;
+      const lugarL = tipo => lugaresSpa.filter(l => l.tipo === tipo);
+      if (c.passo === 'sf-entra'){
+        if (!c.ini){
+          c.ini = true;
+          F.membros.forEach((v, i) => {
+            const alvo = celulaSpa(26 + (i % 4) * 5, 22 + Math.floor(i / 4) * 6);
+            v.pts = [mundoSpa(SPA.porta[0] + 0.5, SPA.fundo - 0.4), ...(caminhoSpa(SPA.porta, alvo) || [])]; v.estado = 'andando'; v.vai = null; v.esperaGiro = i * 0.45;
+          });
+        }
+        if (F.membros.every(v => v.estado === 'parado') && c.t > 2){ for (const v of F.membros) v.ang = SPA.giro; c.passo = 'dialogo'; mostrarFalaCine(0); }
+      }
+      if (c.passo === 'sf-brinca'){
+        if (!c.ini){
+          c.ini = true;
+          const usa = new Set(), lugar = tipo => { const q = lugarL(tipo).find(l => !usa.has(l)); if (q) usa.add(q); return q; };
+          const vaiPara = (q, tipo) => { const v = F.M(q); if (!v) return; const l = lugar(tipo); if (l) irAoLugarSpa(v, l); };
+          // o Dani no tobogã: fica com o pé da rampa e vai até a escada
+          const d = F.M('dani'), fim = lugarL('tobogaFim')[0]; usa.add(fim); d.lugar = fim; d.vai = 'toboga'; andarNoSpa(d, celulaSpa(...SPA.ala.baseEscada));
+          vaiPara('patrinho', 'pedicure'); vaiPara('maurinho', 'cadeira'); vaiPara('ed', 'lama'); vaiPara('hud', 'lama'); vaiPara('beto', 'ofuro'); vaiPara('pelucio', 'bar'); vaiPara('milton', 'cadeira');
+          // o livro do Maurinho, no colo
+          const mau = F.M('maurinho'); if (mau){ F.livro = malha(geo('livroMaurinho', () => { const v = new Vox(); v.box(-3, 0, 0, 3, 4, 0, 0x2e5a88); v.box(-2, 0, 1, 2, 4, 1, 0xfdf8ef); return v.build(1 / 40, { origin: [0.5, 0, 0.5] }); })); F.livro.position.set(0, 0.62, 0.3); F.livro.rotation.x = -0.6; F.livro.visible = false; mau.p.g.add(F.livro); }
+        }
+        const pronto = F.membros.every(v => v.estado === 'atividade' || v.estado === 'parado');
+        if (F.livro) F.livro.visible = F.M('maurinho').estado === 'atividade';
+        if ((pronto && c.t > 4) || c.t > 18){ c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
+      }
+      if (c.passo === 'sf-ofuro'){
+        // todo mundo sai do que fazia e vai para o ofurô, e se espreme lá dentro (em roda, virados para o meio)
+        if (!c.ini){
+          c.ini = true; F.noOfuro = true; if (F.livro) F.livro.visible = false;
+          const [ox, oz] = SPA.ofuro, n = F.membros.length;
+          F.membros.forEach((v, i) => {
+            tirarCopoBar(v);
+            const a = i / n * Math.PI * 2, r = 3.4, lx = ox + Math.cos(a) * r, lz = oz + Math.sin(a) * r * 0.85;
+            const q = { tipo: 'ofuro', x: lx, z: lz, y: SPA.altura.ofuro, ang: Math.atan2(-(ox - lx), -(oz - lz)) + SPA.giro, perto: celulaSpa(ox + Math.cos(a) * 9, oz + 2 + Math.max(0, Math.sin(a)) * 6) };
+            const vai = () => setTimeout(() => { if (spaFamilia === F) irAoLugarSpa(v, q); }, i * 450);
+            if (v.estado === 'atividade' && v.lugar){ const [cx, cz] = v.lugar.perto, [x, z] = mundoSpa(cx + 0.5, cz + 0.5); v.p.sentado = 0; pularNoSpa(v, x, 1 / 8, z, v.lugar.tipo === 'ofuro' ? 0.62 : 0.22, () => { v.lugar = null; v.estado = 'parado'; v.t = 999; vai(); }); }
+            else { v.lugar = null; v.estado = 'parado'; v.t = 999; vai(); }
+          });
+        }
+        if (F.membros.every(v => v.estado === 'atividade' && v.lugar && v.lugar.tipo === 'ofuro') && c.t > 2){
+          const [x, z] = mundoSpa(...SPA.ofuro);
+          for (let i = 0; i < 26; i++){ const a = rnd(0, 6.28); particula(x + Math.cos(a) * 0.9, 0.35, z + Math.sin(a) * 0.9, 0xa8e4f0, 1.1); }
+          Som.tom(300, 0.3, 'sine', 0.06, 160);
+          c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1);
+        }
+        if (c.t > 25){ c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
+      }
+      // todos se mexem pela grade do spa, como os visitantes; parados, ninguém procura atividade sozinho
+      for (const v of F.membros){
+        if (v.estado === 'parado') v.t = 999;
+        if (v.estado === 'atividade') v.t = 999;
+        passoSpa(v, dt, t, false); animarSpa(v, dt, t);
+      }
+      if (F.noOfuro && Math.random() < dt * 4){ const [ox, oz, or] = SPA.ofuro, a = rnd(0, 6.28), [vx, vz] = mundoSpa(ox + Math.cos(a) * rnd(0, or - 2), oz + Math.sin(a) * rnd(0, or - 2)); vaporSpa(vx, 0.42, vz); }
+    },
+    // nos diálogos, eles continuam onde estão (e quem fala dá um pulinho)
+    ambiente(dt){ const F = spaFamilia; if (!F || !cine || cine.passo !== 'dialogo') return; const t = performance.now() / 1000; for (const v of F.membros){ if (v.estado === 'parado' || v.estado === 'atividade') v.t = 999; passoSpa(v, dt, t, false); animarSpa(v, dt, t); } },
+    aoFalar(fl){ const F = spaFamilia; if (!F) return; const v = F.M(fl[0]); if (v){ v.pulo = 0.3; v.p.aceno = 1.2; } },
+    fimDasFalas(c){ $('cineDialogo').hidden = true; c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; },
+    pular(){ limparSpaFamilia(); },
+    fim(){ limparSpaFamilia(); },
+    restaurar(){ limparSpaFamilia(); },
+  },
   arraied: {
     flag: 'viuCineArraied', nivel: () => ARRAIA.nivel, musica: 'arraied', icone: 'festa', abducao: true,
     titulo: 'ArraiEd', desc: 'O Arraiá do Ed: a maior festa de todas, com a família, a mata, o espaço e o resort em volta da fogueira.',
@@ -18146,7 +18273,7 @@ const CENAS = {
   },
 };
 // a ordem da história; uma cena que ainda não existe em CENAS fica de fora
-const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'patrinho', 'lucia', 'pelucio', 'minhocas', 'picoca', 'mata', 'festa', 'curupira', 'jato', 'dani', 'maurinho', 'abducao', 'puxao', 'aposentadoria', 'nanar', 'cafezinho', 'foguete', 'resort', 'arraied', 'volta'];
+const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'patrinho', 'lucia', 'pelucio', 'minhocas', 'picoca', 'mata', 'festa', 'curupira', 'jato', 'dani', 'maurinho', 'abducao', 'puxao', 'aposentadoria', 'nanar', 'cafezinho', 'foguete', 'resort', 'spaFamilia', 'arraied', 'volta'];
 const ordemCenas = () => ORDEM_CENAS.filter(id => CENAS[id]);
 // uma cena começa sozinha quando ainda não foi vista e está pronta (pelo nível, ou pela regra própria dela)
 const cenaPronta = id => { const C = CENAS[id]; return (!S[C.flag] || C.repete) && (C.pronta ? C.pronta() : nivel() >= C.nivel()); };
@@ -18263,6 +18390,8 @@ function atualizarCine(dt){
     case 'ab-vem': case 'ab-raio': case 'ab-vai': cena.trecho(c, dt); break;
     // cena do quase abduzido
     case 'pu-vem': case 'pu-raio': case 'pu-segura': case 'pu-solta': case 'pu-vai': cena.trecho(c, dt); break;
+    // cena do dia de spa da família
+    case 'sf-entra': case 'sf-brinca': case 'sf-ofuro': cena.trecho(c, dt); break;
     // cena da aposentadoria
     case 'ap-indo': case 'ap-paga': case 'ap-galo': case 'ap-vai': cena.trecho(c, dt); break;
     // ArraiEd
