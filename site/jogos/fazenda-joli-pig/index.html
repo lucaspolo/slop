@@ -14508,14 +14508,40 @@ function estradaDoSpa(){
   return [[X_CURVA, zf], [vx + 0.5, zf], [ax, zf], mundoSpa(SPA.porta[0] + 0.5, SPA.fundo - 0.4)];
 }
 // o vão na cerca da estrada e o caminho de terra até o arco, quando o spa fica pronto
+// o estacionamento do ônibus de excursão (o Lucas pediu, no gramado entre a estrada e a cerca de cima do spa): x0 a x1,
+// z0 a z1, com um vão na cerca da estrada (entrada) e o asfalto com a vaga pintada e a placa por cima (montarEstacionamento).
+// O ônibus para em vaga (o meio dele), de frente para +x, com a porta virada para o spa
+const ESTACIONAMENTO = { x0: 23, x1: 27, z0: 41, z1: 42, entrada: 22, vaga: [25.2, 42] };
 function abrirPassagemSpa(refazer = true){
-  const [vx, vz] = SPA.vao, [ax] = mundoSpa(SPA.porta[0] + 0.5, 0), x1 = Math.floor(ax);
-  // o enfeite que estava no caminho volta para a loja (o caminho mudou de lugar quando o spa girou)
-  if (Array.isArray(S.enfeites)){ if (!S.guardados) S.guardados = {}; devolverEnfeites((x, z) => z === vz && x >= vx && x <= x1, 'do caminho do spa'); }
+  const [vx, vz] = SPA.vao, [ax] = mundoSpa(SPA.porta[0] + 0.5, 0), x1 = Math.floor(ax), E = ESTACIONAMENTO;
+  const noEstac = (x, z) => x >= E.entrada && x <= E.x1 && z >= E.z0 && z <= E.z1;
+  // o enfeite que estava no caminho ou no estacionamento volta para a loja (o caminho mudou de lugar quando o spa girou)
+  if (Array.isArray(S.enfeites)){ if (!S.guardados) S.guardados = {}; devolverEnfeites((x, z) => (z === vz && x >= vx && x <= x1) || noEstac(x, z), 'do caminho do spa'); }
   for (let x = vx; x <= x1; x++) setT(x, vz, 'caminho');
+  for (let x = E.entrada; x <= E.x1; x++) for (let z = E.z0; z <= E.z1; z++) setT(x, z, 'caminho');
+  montarEstacionamento();
   if (!refazer) return;
-  atualizarCercas(vx - 1, vz - 1, vx + 1, vz + 1);
+  atualizarCercas(vx - 1, Math.min(vz, E.z0) - 1, vx + 1, vz + 1);
   refazerChao();
+}
+let estacionamento = null;
+function montarEstacionamento(){
+  if (estacionamento) return;
+  const E = ESTACIONAMENTO, g = new THREE.Group(), w = E.x1 + 1 - E.entrada, d = E.z1 + 1 - E.z0;
+  const asf = new THREE.Mesh(new THREE.BoxGeometry(w, 0.02, d), new THREE.MeshLambertMaterial({ color: 0x6d7076 }));
+  asf.position.set(E.entrada + w / 2, 0.012, E.z0 + d / 2); asf.receiveShadow = true; g.add(asf);
+  // a vaga pintada: o contorno branco e a faixa amarela da entrada
+  const tinta = new THREE.MeshLambertMaterial({ color: 0xfdf8ef }), amarela = new THREE.MeshLambertMaterial({ color: 0xffd23f });
+  const [cx, cz] = E.vaga, L = 2.6, A = 1.15;
+  for (const [x, z, sx, sz, m] of [[cx, cz - A / 2, L, 0.05, tinta], [cx, cz + A / 2, L, 0.05, tinta], [cx + L / 2, cz, 0.05, A, tinta], [E.entrada + 0.05, E.z0 + d / 2, 0.06, d - 0.1, amarela]]){
+    const q = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.022, sz), m); q.position.set(x, 0.016, z); g.add(q);
+  }
+  // a placa: um poste com o P azul e o nome
+  const poste = malha(geo('postePlaca', () => { const v = new Vox(); v.box(0, 0, 0, 0, 12, 0, 0x8a8e94); return v.build(1 / 16, { origin: [0.5, 0, 0.5] }); }));
+  poste.position.set(E.x1 + 0.75, 0, E.z0 + 0.25); g.add(poste);
+  const tex = texturaTexto([['P', 1.2, '#2f6fd6'], ['ÔNIBUS', 0.55, '#3b2a20']], 160, 200, '#fdf8ef');
+  for (const lado of [1, -1]){ const pl = placaDeTexto(tex, 0.36, 0.45); pl.position.set(E.x1 + 0.75, 1.0, E.z0 + 0.25 + lado * 0.02); if (lado < 0) pl.rotation.y = Math.PI; g.add(pl); }
+  scene.add(g); estacionamento = g;
 }
 // ----- os porcos visitantes
 function criarPorcoSpa(seed){
@@ -14694,7 +14720,7 @@ function sairDoSpa(v){
   v.vai = 'sair'; v.lugar = null;
   const dentro = caminhoSpa(celulaDe(v), SPA.porta) || [];
   // da excursão: volta para a porta do ônibus e embarca
-  if (v.excursao && excursao){ const [vx, vz] = SPA.vao, [ax] = mundoSpa(SPA.porta[0] + 0.5, 0); v.pts = [...dentro, mundoSpa(SPA.porta[0] + 0.5, SPA.fundo - 0.4), [ax, vz + 0.5], [vx + 0.5, vz + 0.5], portaOnibus()]; v.estado = 'saindo'; return; }
+  if (v.excursao && excursao){ const vz = SPA.vao[1], [ax] = mundoSpa(SPA.porta[0] + 0.5, 0), [px] = portaOnibus(); v.pts = [...dentro, mundoSpa(SPA.porta[0] + 0.5, SPA.fundo - 0.4), [ax, vz + 0.5], [px, vz + 0.5], portaOnibus()]; v.estado = 'saindo'; return; }
   v.pts = [...dentro, ...estradaDoSpa().reverse(), [X_CURVA, H + 1]]; v.estado = 'saindo';
   if (v.tipo === 'familia' && v.p.deToalha){ trocaDeRoupaSpa(v.p, null, v.x, v.z); v.esperaGiro = GIRO.dur; }
 }
@@ -14881,7 +14907,7 @@ function chegarExcursao(){
   if (n < 4) return false;
   if (!chegarExcursao.bus) chegarExcursao.bus = criarOnibus();
   const bus = chegarExcursao.bus; bus.visible = true; bus.position.set(X_CURVA, 0, H + 3); bus.rotation.y = 0;
-  excursao = { fase: 'chega', t: 0, bus, n, membros: [], para: SPA.vao[1] + 1.55, saiu: 0 };
+  excursao = { fase: 'chega', t: 0, bus, n, membros: [], saiu: 0 };
   return true;
 }
 function limparExcursao(){
@@ -14891,7 +14917,8 @@ function limparExcursao(){
   excursao = null;
 }
 // a porta do ônibus parado e o lugar de cada um na frente do arco, para a foto (duas fileiras, o guia na frente)
-const portaOnibus = () => [X_CURVA + 0.62, excursao.para - 0.8];
+// parado na vaga, de frente para +x: a porta fica do lado do spa (+z), perto da frente
+const portaOnibus = () => [ESTACIONAMENTO.vaga[0] + 0.82, ESTACIONAMENTO.vaga[1] + 0.62];
 function lugarFotoExcursao(i){
   const [ax] = mundoSpa(SPA.porta[0] + 0.5, 0), zf = SPA.vao[1] + 0.5;
   if (i === 0) return [ax + 0.2, zf + 0.15];
@@ -14902,18 +14929,31 @@ function atualizarExcursao(dt, t){
   const E = excursao; if (!E) return;
   E.t += dt;
   const bus = E.bus;
+  // sobe a estrada, vira à direita no vão da cerca, entra no estacionamento e para na vaga
+  const [vgx, vgz] = ESTACIONAMENTO.vaga, R = 1;
   if (E.fase === 'chega'){
-    bus.position.z = Math.max(E.para, bus.position.z - EXCURSAO.vel * dt);
-    if (bus.position.z <= E.para){ E.fase = 'desce'; E.t = 0; E.i = 0; if (naTelaSpa(bus.position.x, bus.position.z)) Som.tom(330, 0.25, 'square', 0.02, 220); }
+    bus.position.z = Math.max(vgz + R, bus.position.z - EXCURSAO.vel * dt);
+    if (bus.position.z <= vgz + R){ E.fase = 'vira'; E.t = 0; }
+    return;
+  }
+  if (E.fase === 'vira'){
+    const k = Math.min(1, E.t / 1.3), a = k * Math.PI / 2;
+    bus.position.set(X_CURVA + R - R * Math.cos(a), 0, vgz + R - R * Math.sin(a)); bus.rotation.y = -a;
+    if (k >= 1){ E.fase = 'entra'; E.t = 0; }
+    return;
+  }
+  if (E.fase === 'entra'){
+    bus.position.x = Math.min(vgx, bus.position.x + EXCURSAO.vel * 0.6 * dt);
+    if (bus.position.x >= vgx){ E.fase = 'desce'; E.t = 0; E.i = 0; if (naTelaSpa(bus.position.x, bus.position.z)) Som.tom(330, 0.25, 'square', 0.02, 220); }
     return;
   }
   if (E.fase === 'desce'){
     if (E.i < E.n && E.t >= E.i * 0.75 + 0.6){
       const v = criarPorcoSpa(Math.floor(Math.random() * PORCO_SPA.sementes)), cor = EXCURSAO.chapeus[E.i % EXCURSAO.chapeus.length];
       const ch = malha(geo('chapeuSol' + cor, () => vChapeuSol(cor).build(PORCO_SPA.escala, { origin: [0.5, 0, 0.5] }))); v.corpo.add(ch);
-      const [px, pz] = portaOnibus(), [vx] = SPA.vao, zf = SPA.vao[1] + 0.5;
+      const [px, pz] = portaOnibus(), zf = SPA.vao[1] + 0.5;
       Object.assign(v, { excursao: true, guia: E.i === 0, x: px, z: pz, y: 0, ang: Math.PI / 2, fase: rnd(0, 6), estado: 'andando', vai: 'fotoArco', t: 0, lugar: null, sujo: false, pulo: 0.3, feitas: 0,
-        quer: Math.floor(rnd(EXCURSAO.quer[0], EXCURSAO.quer[1] + 0.99)), pts: [[vx + 0.5, zf], lugarFotoExcursao(E.i)] });
+        quer: Math.floor(rnd(EXCURSAO.quer[0], EXCURSAO.quer[1] + 0.99)), pts: [[px, zf], lugarFotoExcursao(E.i)] });
       v.g.visible = true; visitantesSpa.push(v); E.membros.push(v); E.i++;
       if (Math.random() < 0.4) falarSpa(v, FALAS_EXCURSAO_DESCE);
     }
@@ -14941,8 +14981,21 @@ function atualizarExcursao(dt, t){
     return;
   }
   if (E.fase === 'spa'){
-    // o último embarcou: o ônibus vira e vai embora, descendo a estrada
-    if (E.membros.every(v => !visitantesSpa.includes(v))){ E.fase = 'parte'; E.t = 0; bus.rotation.y = Math.PI; if (naTelaSpa(bus.position.x, bus.position.z)) Som.tom(220, 0.4, 'square', 0.02, 330); }
+    // o último embarcou: o ônibus sai de ré da vaga, manobra para a estrada e desce
+    if (E.membros.every(v => !visitantesSpa.includes(v))){ E.fase = 're'; E.t = 0; if (naTelaSpa(bus.position.x, bus.position.z)) Som.tom(220, 0.4, 'square', 0.02, 330); }
+    return;
+  }
+  if (E.fase === 're'){
+    bus.position.x = Math.max(X_CURVA + R, bus.position.x - EXCURSAO.vel * 0.5 * dt);
+    if (Math.floor(E.t * 2) % 2 === 0 && naTelaSpa(bus.position.x, bus.position.z) && Math.random() < dt * 3) Som.tom(1100, 0.08, 'square', 0.012);
+    if (bus.position.x <= X_CURVA + R){ E.fase = 'manobra'; E.t = 0; }
+    return;
+  }
+  if (E.fase === 'manobra'){
+    // de ré, a traseira vai para a estrada e a frente termina virada para baixo (+z)
+    const k = Math.min(1, E.t / 1.5), a = k * Math.PI / 2;
+    bus.position.set(X_CURVA + R - R * Math.sin(a), 0, vgz - R + R * Math.cos(a)); bus.rotation.y = -Math.PI / 2 - a;
+    if (k >= 1){ E.fase = 'parte'; E.t = 0; }
     return;
   }
   if (E.fase === 'parte'){
