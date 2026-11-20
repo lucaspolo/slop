@@ -193,6 +193,11 @@ button{font:inherit;color:inherit}
 .ficha-bicho .ficha-retrato{display:grid;place-items:center;margin:0 0 6px;background:#eef6e2;border:2px solid var(--borda);border-radius:14px;padding:6px}
 .ficha-bicho .ficha-retrato img{width:min(200px,55vw);height:auto;aspect-ratio:1}
 .ficha-bicho h3{margin:12px 0 4px;font-family:var(--f-titulo);font-weight:400;font-size:18px}
+.livro-spa .livro-recado{background:#fffaf0;border:2px solid var(--borda);border-radius:12px;padding:8px 10px;margin:0 0 8px}
+.livro-spa .livro-cab{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.livro-spa .livro-estrelas{color:#e8a817;letter-spacing:1px;white-space:nowrap}
+.livro-spa .livro-recado p{margin:4px 0 0;font-style:italic}
+.livro-spa .livro-nota{font-size:13px;opacity:.8}
 .ficha-bicho .ficha-curio{margin-top:12px;padding:10px 12px;border:2px solid var(--borda);border-radius:12px;background:var(--amarelo);line-height:1.45;font-weight:500}
 .ficha-bicho .ficha-curio b{display:block;font-family:var(--f-titulo);font-weight:400;font-size:16px;margin-bottom:2px}
 .menu .estado{font-size:13px;font-weight:700;color:var(--tinta-suave);margin:2px 0 6px;line-height:1.3}
@@ -9349,6 +9354,8 @@ function vSpa(ala = false){
   v.box(b0 - 1, 5, c0 - 1, b1, 5, c1 + 1, madeira);
   const zs = Math.round((c0 + c1) / 2);
   v.set(b0, 6, zs, amarelo); v.set(b0, 7, zs, 0x9a7a2a);
+  // o livro de visitas aberto, na outra ponta do balcão
+  v.set(b0, 6, zs + 2, 0xfdf8ef); v.set(b0, 6, zs + 3, 0xf3ead6); v.set(b0 + 1, 6, zs + 2, 0xc8433a); v.set(b0 + 1, 6, zs + 3, 0xc8433a);
   // a prateleira é vazada, com as toalhas enroladas à vista dos dois lados
   const [q0, q1, r0, r1] = R.prateleira;
   for (const z of [r0, r1]) v.box(q0, 1, z, q1, 9, z, madeira);
@@ -14662,6 +14669,12 @@ function andarNoSpa(v, cel){
   v.pts = pts || []; v.estado = v.pts.length ? 'andando' : 'chegou';
 }
 function sairDoSpa(v){
+  // passa no balcão para assinar o livro de visitas
+  if (v.tipo === 'porco' && !v.assinou && periodo().id !== 'noite' && Math.random() < LIVRO_SPA.chance){
+    v.assinou = true; v.vai = 'assinar'; v.lugar = null;
+    const [px, pz] = mundoSpa(...SPA.paga), dentro = caminhoSpa(celulaSpa(...localSpa(v.x, v.z)), [Math.floor(SPA.paga[0]), Math.floor(SPA.paga[1])]);
+    if (dentro){ v.pts = [...dentro, [px, pz]]; v.estado = 'andando'; return; }
+  }
   v.vai = 'sair'; v.lugar = null;
   const dentro = caminhoSpa(celulaDe(v), SPA.porta) || [];
   v.pts = [...dentro, ...estradaDoSpa().reverse(), [X_CURVA, H + 1]]; v.estado = 'saindo';
@@ -14767,7 +14780,7 @@ function atualizarGuerraLama(dt){
       // errou e acertou quem estava na espreguiçadeira: levanta sujo e vai para a ducha
       if (b.cadeira && visitantesSpa.includes(alvo) && alvo.estado === 'atividade' && alvo.lugar && alvo.lugar.tipo === 'cadeira'){
         if (alvo.tipo === 'porco'){ alvo.pep.visible = false; for (let k = 0; k < 2; k++) particula(tx + rnd(-0.1, 0.1), ty + 0.1, tz + rnd(-0.1, 0.1), 0x7cc35a, 1); }
-        sujarSpa(alvo, true); alvo.t = 0;
+        sujarSpa(alvo, true); alvo.t = 0; alvo.atingido = true;
         falarSpa(alvo, alvo.tipo === 'familia' ? FALAS_SPA_GUERRA_FAMILIA : FALAS_SPA_ATINGIDO);
       }
     }
@@ -14801,6 +14814,61 @@ function atualizarGuerraLama(dt){
   if (G.feitas === 0 || Math.random() < 0.3) falarSpa(de, de.tipo === 'familia' ? FALAS_SPA_GUERRA_FAMILIA : FALAS_SPA_GUERRA);
   G.feitas++;
 }
+// ----- o livro de visitas (o Lucas pediu): na saída, LIVRO_SPA.chance dos porcos visitantes passam no balcão e assinam,
+// deixando estrelinhas e um recado (S.spaLivro, os LIVRO_SPA.guarda mais novos, no save). A nota sai do que fizeram: quem
+// fez muita coisa, pintou os cascos ou tomou suco gosta mais; quem levou lama na espreguiçadeira gosta menos. A média dos
+// últimos LIVRO_SPA.media recados muda o tempo entre as chegadas (fatorLivroSpa: 5 estrelas, mais gente). O livro abre no menu
+const LIVRO_SPA = { chance: 0.65, guarda: 40, media: 20, mostra: 12, efeito: 0.15 };
+const RECADOS_SPA = {
+  5: ['Melhor spa da região! Volto semana que vem.', 'Saí novinho em folha. Cinco estrelas!', 'Lama perfeita, ofurô quentinho, atendimento nota dez.', 'Trouxe minha avó da próxima vez, ela vai amar.', 'Nunca relaxei tanto na vida!',
+    'Que lugar lindo! Até o bambu é cheiroso.', 'Recomendo pra todos os porquinhos da cidade.', 'A toalha macia me ganhou.', 'Saí rindo à toa. Obrigado, Spa dos Pigs!', 'Já quero voltar amanhã.',
+    'Lama de primeira qualidade, digna de campeão.', 'O sininho do balcão é a coisa mais fofa.', 'Meu focinho nunca esteve tão macio.', 'Paz, lama e alegria. Perfeito!', 'Cinco estrelas e um rabicó enrolado de felicidade.',
+    'Fui de tudo um pouco e amei cada cantinho.', 'O Ed está de parabéns!', 'Vim estressado, saí flutuando.', 'Atendimento caprichado, lugar limpinho.', 'Se pudesse eu morava aqui!'],
+  4: ['Muito bom! Só faltou mais lama no meu lado.', 'Gostei bastante, volto com certeza.', 'A ducha podia ser mais quentinha, mas amei.', 'Ótimo lugar pra descansar.', 'Lama gostosa, fila pequena no ofurô.',
+    'Bom demais, só queria uma espreguiçadeira a mais.', 'Relaxei bastante. Recomendo!', 'Lugar bonito e tranquilo.', 'Saí cheiroso e feliz.', 'Quase perfeito! Faltou um travesseiro de pepino.',
+    'A sauna é ótima, mas me deu soninho.', 'Voltarei com meus primos.', 'Tudo muito bom, preço justo.', 'Gostei da música dos bambus no vento.', 'Bom pra recarregar as energias.',
+    'O ofurô estava uma delícia.', 'Lama na medida certa.', 'Atendimento simpático!', 'Um bom dia de spa, obrigado!', 'Quatro estrelas, e a quinta fica pra próxima.'],
+  3: [
+    'Lugar legal, mas estava cheio demais hoje.', 'Gostei, mas queria mais tempo no ofurô.', 'Razoável. A ducha demorou pra vagar.', 'Spa bonito, só um pouco barulhento.',
+    'Ok. Esperava mais bolhinhas na lama.', 'Relaxei um pouco, mas tinha fila.', 'Preferia a lama mais quentinha.', 'Mais ou menos. Vou dar outra chance.', 'Legal, mas a sauna estava lotada.',
+    'Faltou espreguiçadeira pra mim.', 'Normal. A toalha era bonita.', 'Podia ter mais silêncio.', 'Três estrelas e um suspiro.', 'Bom, mas o caminho até aqui é longo.',
+    'Gostei do bambu, achei a lama meio fria.', 'Faltou pepino fresquinho.', 'Bonito, mas a ducha é geladinha demais.', 'Vou voltar num dia mais vazio.', 'Esperava um ofurô maior.',
+    'O sininho é fofo, o resto é normal.', 'Bom pra uma tarde, nada demais.'],
+  // só para quem levou lama na espreguiçadeira
+  atingido: [
+    'Foi bom, mas levei uma bolota de lama na cara.', 'Alguém jogou lama em mim na espreguiçadeira!', 'Bom, mas meu pepino caiu.', 'Teve guerra de lama e eu não fui convidado.',
+    'Bom, só não gostei de levar respingo.', 'Cheguei relaxado e saí sujo de novo.', 'Bom, mas vou trazer guarda-chuva contra lama.', 'Levei uma bolota de lama bem no focinho!',
+    'Tava relaxando e virou guerra de lama.', 'Minha toalha limpinha virou marrom.', 'Pepino no olho e lama na orelha, que dia.', 'Quem jogou aquela bolota, apareça!',
+    'Respingo de lama até na sobrancelha.', 'Saí sujo da espreguiçadeira direto pra ducha.', 'A guerra de lama acabou com meu cochilo.', 'Fui atingido sem nem estar na lama!',
+    'Bom spa, péssima pontaria dos vizinhos.', 'Uma bolota voadora me acordou.', 'Peço uma área livre de guerra de lama.', 'Levei lama, mas confesso que dei risada.'],
+};
+function notaVisitaSpa(v){
+  let n = 4;
+  if (v.feitas >= 3) n++;
+  if (v.esmalteNome || v.tomouSuco) n++;
+  if (v.atingido) n -= 2;
+  if (Math.random() < 0.25) n--;
+  return clamp(n, 3, 5);
+}
+function assinarLivroSpa(v){
+  const n = notaVisitaSpa(v), txt = variar(v.atingido ? RECADOS_SPA.atingido : RECADOS_SPA[n]);
+  if (!Array.isArray(S.spaLivro)) S.spaLivro = [];
+  S.spaLivro.unshift({ nome: v.apelido, n, txt, dia: diaAtual() });
+  S.spaLivro.length = Math.min(S.spaLivro.length, LIVRO_SPA.guarda);
+  if (naTelaSpa(v.x, v.z)){ Som.tom(1500, 0.08, 'sine', 0.02, 1700); for (let i = 0; i < n; i++) particula(v.x + rnd(-0.15, 0.15), 0.8, v.z + rnd(-0.15, 0.15), 0xffd23f, 0.6); }
+  salvar();
+}
+const mediaLivroSpa = () => { const L = (S.spaLivro || []).slice(0, LIVRO_SPA.media); return L.length ? L.reduce((a, e) => a + e.n, 0) / L.length : 0; };
+const fatorLivroSpa = () => { const m = mediaLivroSpa(); return m ? clamp(1 - (m - 4) * LIVRO_SPA.efeito, 0.8, 1.2) : 1; };
+const estrelasSpa = n => '★'.repeat(n) + '☆'.repeat(5 - n);
+function abrirLivroSpa(){
+  const L = (S.spaLivro || []).slice(0, LIVRO_SPA.mostra), m = mediaLivroSpa();
+  const linhas = L.map(e => `<div class="livro-recado"><div class="livro-cab"><b>${esc(e.nome)}</b><span class="livro-estrelas">${estrelasSpa(e.n)}</span></div><p>${esc(e.txt)}</p></div>`).join('');
+  abrirJanela(`<div class="janela-topo"><img src="${icone('spa')}" alt=""><div><h2>Livro de visitas</h2><div class="sub">${L.length ? `nota média ${m.toFixed(1).replace('.', ',')} de 5` : 'ainda sem recados'}</div></div><button class="fechar" type="button" data-fechar aria-label="Fechar">×</button></div>
+    <div class="janela-corpo livro-spa">${linhas || '<p>Os porquinhos visitantes assinam o livro na saída. Volte depois de alguns banhos de lama.</p>'}
+    ${L.length ? `<p class="livro-nota">${m >= 4.5 ? 'Com recados tão bons, mais porquinhos vêm ao spa.' : m < 3.8 ? 'Com notas mais baixas, chega um pouco menos gente.' : 'A nota média muda quantos porquinhos vêm ao spa.'}</p>` : ''}</div>`);
+  Som.tom(660, 0.08, 'sine', 0.03, 880);
+}
 // ----- o relógio do spa e de cada um
 function atualizarSpa(dt, t){
   atualizarPicocaSpa(dt, t);
@@ -14810,7 +14878,7 @@ function atualizarSpa(dt, t){
   if (proxSpa == null) proxSpa = rnd(...SPA.primeira);
   if (proxFamiliaSpa == null) proxFamiliaSpa = rnd(...SPA.familia) * 0.5;
   if (!noite){
-    if ((proxSpa -= dt) <= 0){ proxSpa = rnd(...SPA.chegada); chegarAoSpa(Math.random() < 0.2 ? 3 : Math.random() < 0.5 ? 2 : 1); }
+    if ((proxSpa -= dt) <= 0){ proxSpa = rnd(...SPA.chegada) * fatorLivroSpa(); chegarAoSpa(Math.random() < 0.2 ? 3 : Math.random() < 0.5 ? 2 : 1); }
     if ((proxFamiliaSpa -= dt) <= 0){ proxFamiliaSpa = rnd(...SPA.familia); if (!visitantesSpa.some(v => v.tipo === 'familia')) chegarFamiliaSpa(); }
   }
   for (const v of visitantesSpa.slice()){
@@ -14853,8 +14921,10 @@ function passoSpa(v, dt, t, noite){
       if (v.t <= 0){ v.estado = 'parado'; v.t = rnd(0.3, 0.8); if (v.tipo === 'familia'){ trocaDeRoupaSpa(v.p, v.quem, v.x, v.z); v.t = GIRO.dur + 0.15; } }
       break;
     case 'parado': v.t -= dt; if (v.t <= 0) proximaNoSpa(v); break;
+    case 'assinando': v.t -= dt; v.corpo.rotation.x = Math.sin(v.t * 14) * 0.06; if (v.t <= 0){ v.corpo.rotation.x = 0; assinarLivroSpa(v); sairDoSpa(v); } break;
     case 'chegou':
       if (v.vai === 'toboga' && v.lugar){ subirTobogaSpa(v); break; }
+      if (v.vai === 'assinar'){ v.estado = 'assinando'; v.t = 1.6; v.ang = Math.PI / 2 + SPA.giro; break; }
       if (v.vai === 'sauna'){
         // entra pela porta e some lá dentro
         const [x, z] = mundoSpa(SPA.portaSauna[0] + 2, SPA.sauna[3] + 1.3);
@@ -14970,6 +15040,7 @@ function pedirSucoSpa(v, q){
   if (v.tipo !== 'porco') return;
   if (!F){ falar(v, 'Oinc? (o bar está sem fruta)', 2.4); return; }
   S.celeiro[F[0]]--; if (!S.celeiro[F[0]]) delete S.celeiro[F[0]];
+  v.tomouSuco = true;
   const val = A.sucoValor;
   S.dinheiro += val; S.spaReais = (S.spaReais || 0) + val; S.spaSucos = (S.spaSucos || 0) + 1;
   if (!S.spaHoje || S.spaHoje.dia !== diaAtual()) S.spaHoje = { dia: diaAtual(), n: 0, reais: 0 };
@@ -15096,6 +15167,8 @@ function menuSpa(r){
   const H2 = S.spaHoje && S.spaHoje.dia === diaAtual() ? S.spaHoje : { n: 0, reais: 0 }, aqui = visitantesSpa.filter(v => v.estado !== 'chegando' && v.estado !== 'saindo').length;
   const ala = alaSpaPronta(), fruta = ala && frutaDoBar();
   r.estado = `Entrada de ${reais(entradaSpa())} por porquinho visitante; a família não paga.${ala ? ` Na ala nova tem tobogã, pedicure dos cascos e o bar de sucos, a ${reais(SPA.ala.sucoValor)} o copo, com laranja ou coco do celeiro${fruta ? '' : ' (agora o celeiro está sem nenhuma das duas)'}.` : ''} Hoje: ${contagem(H2.n, 'visitante', 'visitantes')} e ${reais(H2.reais)}.${aqui ? ` Agora ${aqui > 1 ? aqui + ' porquinhos estão' : 'um porquinho está'} relaxando.` : ''}${periodo().id === 'noite' ? ' De noite o spa fecha.' : ''}`;
+  const nL = (S.spaLivro || []).length;
+  r.itens.push({ rotulo: 'Livro de visitas', sub: nL ? `nota média ${mediaLivroSpa().toFixed(1).replace('.', ',')} de 5, ${contagem(nL, 'recado', 'recados')}` : 'os visitantes assinam na saída', icone: 'spa', fn: abrirLivroSpa });
   const ja = S.spaDia === diaAtual(), naFila = fila.find(t => t.tipo === 'spa');
   if (naFila){ r.itens.push({ rotulo: 'Cancelar o banho de lama', icone: 'ed', fn: () => cancelar(naFila) }); return; }
   r.itens.push({ rotulo: 'Banho de lama', sub: `o Ed rola na lama e passa na ducha; ${ja ? 'o XP de hoje já veio' : SPA.xp + ' XP, uma vez por dia'}`, icone: 'spa', fn: () => enfileirar('spa', { k: 'spa' }) });
@@ -23971,7 +24044,7 @@ async function iniciar(){
     enfeitesNovos: { aves, ave: () => { aves.prox = 0; }, AJUDA, vis: () => ENF_VIS, casinha: () => casinhaParaLuma(), piquenique: () => lugarPiquenique(), montar: e => montarEnfeite(e), FOGUEIRA, LAGUINHO, DESEJO, aquecer, inverno: invernoAgora, assento: assentoFogueira, frentePoco, fazerDesejo, itens: e => itensEnfeite(e), formas: formasLiberadas, grupoComForma },
     cartaoEspaco: { chegar: chegarCartaoEspaco, nomes: nomesNoEspaco, CARTAO_ESPACO },
     museu: { MUSEU, abrir: abrirMuseu, visitar: visitarMuseu, porta: portaMuseu, alvo: alvoMuseu, guardarCartao: guardarCartaoLido },
-    spa: { SPA, PORCO_SPA, GUERRA_LAMA, guerra: () => { proxGuerraLama = 0; }, guerraObj: () => guerraLama, picoca: () => picocaSpa, ala: { pronta: alaSpaPronta, abrir: abrirAlaSpa, fruta: frutaDoBar, max: maxSpa, entrada: entradaSpa, proxima: v => proximaNoSpa(v), montar: montarGradeSpa }, visitantes: () => visitantesSpa, chegar: chegarAoSpa, familia: chegarFamiliaSpa, livres: familiaLivreSpa, lugares: () => (lugaresSpa || montarGradeSpa(), lugaresSpa), grade: () => gradeSpa, caminho: caminhoSpa, livresGrade: livresGradeSpa, banho: () => banhoEd, mundo: mundoSpa, esvaziar: esvaziarSpa, tracos: tracosPorcoSpa, descricao: descricaoPorcoSpa, itens: v => itensVisitanteSpa(v), menu: r => menuSpa(r), aberto: spaAberto, relogio: () => ({ proxSpa, proxFamiliaSpa }), zerar: () => { proxSpa = 0.1; proxFamiliaSpa = 0.1; }, sujar: sujarSpa, abrirCenas, pedirCena,
+    spa: { SPA, PORCO_SPA, GUERRA_LAMA, LIVRO_SPA, abrirLivro: abrirLivroSpa, fatorLivro: fatorLivroSpa, guerra: () => { proxGuerraLama = 0; }, guerraObj: () => guerraLama, picoca: () => picocaSpa, ala: { pronta: alaSpaPronta, abrir: abrirAlaSpa, fruta: frutaDoBar, max: maxSpa, entrada: entradaSpa, proxima: v => proximaNoSpa(v), montar: montarGradeSpa }, visitantes: () => visitantesSpa, chegar: chegarAoSpa, familia: chegarFamiliaSpa, livres: familiaLivreSpa, lugares: () => (lugaresSpa || montarGradeSpa(), lugaresSpa), grade: () => gradeSpa, caminho: caminhoSpa, livresGrade: livresGradeSpa, banho: () => banhoEd, mundo: mundoSpa, esvaziar: esvaziarSpa, tracos: tracosPorcoSpa, descricao: descricaoPorcoSpa, itens: v => itensVisitanteSpa(v), menu: r => menuSpa(r), aberto: spaAberto, relogio: () => ({ proxSpa, proxFamiliaSpa }), zerar: () => { proxSpa = 0.1; proxFamiliaSpa = 0.1; }, sujar: sujarSpa, abrirCenas, pedirCena,
       noLugar: (v, tipo, i = 0, t = 999) => { if (!gradeSpa) montarGradeSpa(); const q = lugaresSpa.filter(l => l.tipo === tipo)[i], [x, z] = mundoSpa(q.x, q.z); Object.assign(v, { x, z, y: q.y, lugar: q, vai: 'lugar', estado: 'atividade', t, ang: q.ang, pagou: true, pts: [] }); v.g.visible = true; if (tipo === 'cadeira' && v.pep) v.pep.visible = true; } },
     observatorio: { OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
