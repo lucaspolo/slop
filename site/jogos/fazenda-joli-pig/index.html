@@ -8573,7 +8573,7 @@ function vRampaEscorregador(){
 const BALANCO_PARQUE = { corrente: 18 }, GIRA = { barras: [0, Math.PI * 2 / 3, Math.PI * 4 / 3] };
 // tempo: quanto o Hud e o Dani brincam num brinquedo antes de trocar; ed: quanto o Ed brinca; pneu: a chance de o irmão
 // sem tarefa preferir o balanço de pneu (quando tem um)
-const PARQUINHO = { tempo: [22, 40], ed: [14, 20], pneu: 0.3, falaIrmao: 0.35 };
+const PARQUINHO = { tempo: [22, 40], ed: [14, 20], pneu: 0.3, falaIrmao: 0.35, espera: 30 };
 const BRINQ = {
   cavalinho: { nome: 'cavalinho', no: 'no cavalinho', escala: 1.25, base: vCavalinhoBase, partes: [{ pivo: [8, 7, 8], vox: vCavalinho }], assentos: [{ parte: 0, p: [0, 6, -3.6], ang: 0, montado: true }],
     anima(m, U, dt, t, o){ const P = U.partes[0], a = o[0] ? 1 : 0.12; P.rotation.x = Math.sin(t * 4.2 + U.fase) * 0.24 * a; P.position.y = (7 + Math.abs(Math.sin(t * 4.2 + U.fase)) * 0.6 * a) / 16; } },
@@ -8591,7 +8591,7 @@ const BRINQ = {
   giraGira: { nome: 'gira-gira', no: 'no gira-gira', escala: 1.15, base: vGiraBase, partes: [{ pivo: [8, 3, 8], vox: vGiraDisco }],
     assentos: [1, 3, 5].map(k => { const a = k * Math.PI / 3, x = Math.cos(a) * 4.4, z = Math.sin(a) * 4.4; return { parte: 0, p: [x, 1, z], ang: Math.atan2(x, z) }; }),
     anima(m, U, dt, t, o){ U.vel = lerp(U.vel || 0, o.some(Boolean) ? 1.6 : 0.1, Math.min(1, dt * 0.7)); U.partes[0].rotation.y += U.vel * dt; } },
-  escorregador: { nome: 'escorregador', no: 'no escorregador', escala: 1.35, base: vEscorregador, partes: [{ pivo: [8.5, 13, 6], vox: vRampaEscorregador, rx: ESCORREGA.inclina }], assentos: [{}], trajeto: true },
+  escorregador: { nome: 'escorregador', no: 'no escorregador', escala: 1.35, base: vEscorregador, partes: [{ pivo: [8.5, 13, 6], vox: vRampaEscorregador, rx: ESCORREGA.inclina }], assentos: [{}, {}], trajeto: true },
 };
 // o brinquedo inteiro, parado, para o ícone e o visualizador
 function vParqueCompleto(tipo){
@@ -18479,7 +18479,7 @@ function itensEnfeite(e){
     const quem = [AJUDA.hud, AJUDA.dani].filter(A => A.brinq && A.brinq.e === e).map(A => A === AJUDA.dani ? 'o Dani' : 'o Hud');
     if (quem.length) r.estado += ` Agora ${quem.join(' e ')} ${quem.length > 1 ? 'estão' : 'está'} brincando ${T.no}.`;
     if (naFila) r.itens.push({ rotulo: 'Parar de brincar', icone: 'ed', fn: () => cancelar(naFila) });
-    else if (assentoLivre(e, true) >= 0 && ladoBrinquedo(e)) r.itens.push({ rotulo: `Brincar ${T.no}`, sub: quem.length ? `o Ed brinca junto com ${quem.join(' e ')}` : 'o Ed brinca um pouquinho', icone: 'ed', fn: () => enfileirar('parquinho', { k: 'brinquedo', x: e.x, z: e.z }) });
+    else if (edCabe(e) && ladoBrinquedo(e)) r.itens.push({ rotulo: `Brincar ${T.no}`, sub: quem.length ? `o Ed brinca junto com ${quem.join(' e ')}` : 'o Ed brinca um pouquinho', icone: 'ed', fn: () => enfileirar('parquinho', { k: 'brinquedo', x: e.x, z: e.z }) });
   }
   if (e.tipo === 'balanco'){
     const naFila = fila.find(t => t.tipo === 'balancar' && t.alvo.x === e.x && t.alvo.z === e.z), A = irmaoNoBalanco(e);
@@ -18693,7 +18693,7 @@ const _vBrinq = new THREE.Vector3();
 function ocupantesBrinq(e){
   const o = [];
   for (const A of [AJUDA.hud, AJUDA.dani]){ if (A.brinq && A.brinq.e === e) o[A.brinq.i] = 'sentado'; else if (A.indoBrinq && A.indoBrinq.e === e) o[A.indoBrinq.i] = 'indo'; }
-  if (brinqEd && brinqEd.e === e) o[brinqEd.i] = 'sentado';
+  if (brinqEd && brinqEd.e === e) o[brinqEd.i] = brinqEd.espera ? 'espera' : 'sentado';
   return o;
 }
 const edVaiBrincar = e => fila.some(t => t.tipo === 'parquinho' && t.alvo.x === e.x && t.alvo.z === e.z) && !(brinqEd && brinqEd.e === e);
@@ -18702,6 +18702,9 @@ function assentoLivre(e, paraEd){
   const o = ocupantesBrinq(e), livres = BRINQ[e.tipo].assentos.map((s, i) => i).filter(i => !o[i]);
   return paraEd ? (livres.length ? livres[0] : -1) : (livres.length > (edVaiBrincar(e) ? 1 : 0) ? livres[livres.length - 1] : -1);
 }
+// o Ed pode brincar: tem assento livre ou um irmão sentado (que dá o lugar para ele, em comecarBrinqEd)
+const irmaoNoBrinq = e => [AJUDA.hud, AJUDA.dani].find(A => (A.brinq && A.brinq.e === e) || (A.indoBrinq && A.indoBrinq.e === e)) || null;
+const edCabe = e => assentoLivre(e, true) >= 0 || !!irmaoNoBrinq(e);
 // o ladrilho por onde se chega ao brinquedo: a frente (de onde sai o escorregador), depois os lados e o fundo
 function ladoBrinquedo(e){
   const ry = (e.rot || 0) * Math.PI / 2;
@@ -18725,8 +18728,11 @@ function trajetoEscorregador(P, B, m, dt){
   // x, y, z em cubinhos da base (a escala do brinquedo entra pelo localToWorld)
   const W3 = (x, y, z) => { m.updateMatrixWorld(true); return m.localToWorld(_vBrinq.set((x - 8) / 16, y / 16, (z - 8) / 16)); };
   const L = (x, z) => { const w = W3(x, 0, z); return [w.x, w.z]; };
-  B.t = (B.t || 0) + dt; B.fase = B.fase || 'sobe';
+  B.fase = B.fase || 'sobe';
   const de = (x, y, z, sent) => { const w = W3(x, y, z), wx = w.x, wz = w.z; P.alt = sent ? 0 : w.y; P.sentado = sent ? w.y + 0.01 - P.baseSentado : 0; P.colocar(wx, wz); P.ang = P.angAlvo = m.rotation.y; };
+  // com dois brincando, um sobe de cada vez: quem chegou depois espera do lado da escada
+  if (B.fase === 'sobe' && !(B.t > 0) && escadaOcupada(B)){ B.t = 0; de(-3, 0, -4, false); return; }
+  B.t = (B.t || 0) + dt;
   if (B.fase === 'sobe'){ const k = Math.min(1, B.t / 2); de(8, k * 14, -1.5, false); if (k >= 1){ B.fase = 'topo'; B.t = 0; } }
   else if (B.fase === 'topo'){ const k = Math.min(1, B.t / 0.7); de(8, 14, lerp(-1.5, 4, k), false); if (k >= 1){ B.fase = 'desce'; B.t = 0; P.pulo = 0.2; } }
   else if (B.fase === 'desce'){ const k = Math.min(1, B.t / 1.1), z = lerp(5.5, 15.5, k * k); de(8, Math.max(3, 14 - (z - 6) * 11 / 9), z, true); if (k >= 1){ B.fase = 'fim'; B.t = 0; P.pulo = 0.35; } }
@@ -18734,6 +18740,9 @@ function trajetoEscorregador(P, B, m, dt){
     de(8, 0, 19, false);
     if (B.t > 0.7){ B.fase = 'volta'; B.t = 0; P.ir([L(-2, 19), L(-2, -2), L(8, -1.5)], () => { if (B.fase === 'volta'){ B.fase = 'sobe'; B.t = 0; } }); }
   }
+}
+function escadaOcupada(B){
+  return [AJUDA.hud.brinq, AJUDA.dani.brinq, brinqEd].some(q => q && q !== B && q.e === B.e && !q.espera && (q.fase === 'topo' || (q.fase === 'sobe' && (q.t > 0 || (q.chegou || 0) < (B.chegou || 0)))));
 }
 // pode largar o brinquedo agora (no escorregador, só depois de escorregar)
 const podeLargar = B => !BRINQ[B.e.tipo].trajeto || B.fase === 'fim';
@@ -18745,8 +18754,8 @@ function brincarAjudante(A, Hd, dt){
     andarNoBrinquedo(Hd, B, dt);
     B.tempo += dt;
     if ((B.falaT -= dt) <= 0){ B.falaT = rnd(10, 18); if (Math.random() < PARQUINHO.falaIrmao) falar(Hd, variar(FALAS_BRINQ[B.e.tipo]), 3); }
-    // cansou deste: desce e vai para outro (ou volta para este, se não tiver outro)
-    if (B.tempo >= B.fim && podeLargar(B)){ A.ultimoBrinq = B.e; sairDoBrinquedo(A, Hd); }
+    // cansou deste: desce e vai para outro (ou volta para este, se não tiver outro); brincando com o Ed, fica até ele descer
+    if (B.tempo >= B.fim && podeLargar(B) && !(A.comEd && brinqEd)){ A.ultimoBrinq = B.e; sairDoBrinquedo(A, Hd); }
     return true;
   }
   if (A.indoBrinq) return true;
@@ -18765,16 +18774,51 @@ function brincarAjudante(A, Hd, dt){
     const pts = rota(clamp(Math.floor(Hd.pos.x), 0, W - 1), clamp(Math.floor(Hd.pos.y), 0, H - 1), Math.floor(l[0]), Math.floor(l[1]));
     if (!pts) continue;
     const ida = { e, i }; A.indoBrinq = ida;
-    Hd.ir([...pts, l], () => {
-      if (A.indoBrinq !== ida) return;
-      A.indoBrinq = null;
-      if (!S.enfeites.includes(e) || A.tarefa || ocupantesBrinq(e)[i]) return;
-      baseSentadoDe(Hd); Hd.ferramenta(null); Hd.pulo = 0.35;
-      A.brinq = { e, i, tempo: 0, fim: rnd(...PARQUINHO.tempo), falaT: rnd(3, 8) };
-    });
+    Hd.ir([...pts, l], () => sentarNoBrinquedo(A, Hd, ida));
     return true;
   }
   return false;
+}
+function sentarNoBrinquedo(A, Hd, ida){
+  if (A.indoBrinq !== ida) return;
+  A.indoBrinq = null;
+  const { e, i } = ida;
+  if (!S.enfeites.includes(e) || A.tarefa || ocupantesBrinq(e)[i]){ A.comEd = false; return; }
+  baseSentadoDe(Hd); Hd.ferramenta(null); Hd.pulo = 0.35;
+  A.brinq = { e, i, tempo: 0, fim: rnd(...PARQUINHO.tempo), falaT: rnd(3, 8), chegou: performance.now() };
+  if (A.comEd) falar(Hd, variar(FALAS_IRMAO_CHEGA), 3);
+}
+// o Ed começou a brincar (o Lucas pediu): o irmão mais perto (o Hud ou o Dani, ajudando e na fazenda) larga o que estava
+// fazendo e vem na hora brincar com ele, no mesmo brinquedo; se não tiver lugar (o cavalinho), no brinquedo com lugar mais
+// perto. A.comEd: ele fica brincando até o Ed descer, mesmo com trabalho. O Ed espera ele chegar (brinqEd.espera)
+const FALAS_ED_CHAMA = ['Vem brincar comigo, {nome}!', 'Ô {nome}! Larga isso e vem brincar!', '{nome}! Corre aqui, vamos brincar!', 'Vem, {nome}! Sozinho não tem graça!', 'Ei, {nome}! Hora do recreio!',
+  '{nome}, vem! O parquinho tá esperando!', 'Psiu, {nome}! Vem brincar um pouquinho!', 'Bora, {nome}! Depois a gente volta pro trabalho!', '{nome}! Vem logo, que eu tô te esperando!', 'Ô, {nome}! Um intervalinho, vai!',
+  'Vem cá, {nome}! Brincar junto é mais legal!', '{nome}, deixa a enxada aí e vem!', 'Recreio, {nome}! Vem correndo!', 'Tô te esperando, {nome}!', 'Vamos brincar, {nome}? Vem!',
+  '{nome}! Guarda o regador e vem brincar!', 'Ei, maninho {nome}! Vem pro parquinho!', 'Vem, {nome}! Só um pouquinho!', '{nome}, tem lugar pra você aqui!', 'Ô {nome}! Brinca comigo?'];
+const FALAS_IRMAO_CHEGA = ['Cheguei, Ed! Bora brincar!', 'Oba! Recreio!', 'Tô aqui! Vamos!', 'Eba! Já larguei tudo!', 'Brincar com o Ed é o melhor!', 'Esperou? Cheguei!', 'Uhuu! Parquinho!', 'Vamos, Ed! Valendo!',
+  'Corri o mais rápido que deu!', 'Oba, oba! Brincadeira!', 'Pronto, Ed! Pode começar!', 'Ninguém segura a gente!', 'Hihihi, vamos!', 'O trabalho pode esperar um pouquinho!', 'Cheguei! Quem brinca mais?',
+  'Iupiii! Hora de brincar!', 'Valeu por chamar, Ed!', 'Eu adoro esse brinquedo!', 'Tô pronto, Ed!', 'Agora sim! Vamos!'];
+function chamarIrmaoParaBrincar(e){
+  const cands = [[AJUDA.hud, irmaoHud], [AJUDA.dani, irmaoDani]].filter(([A, P]) => A.ativo() && P.g.visible && !P.saindo && !P.giro && !nadoDe(P) && !(A.tarefa && A.tarefa.tipo === 'nadar'));
+  const d = (P, q) => Math.hypot(P.pos.x - q.x - 0.5, P.pos.y - q.z - 0.5);
+  cands.sort((a, b) => d(a[1], e) - d(b[1], e));
+  for (const [A, P] of cands){
+    if ((A.brinq && A.brinq.e === e) || (A.indoBrinq && A.indoBrinq.e === e)){ A.comEd = true; return A; }
+    let alvo = e, i = assentoLivre(e, false);
+    if (i < 0){
+      const outros = S.enfeites.filter(q => BRINQ[q.tipo] && q !== e && ENF_VIS[q.x + ',' + q.z] && assentoLivre(q, false) >= 0 && ladoBrinquedo(q)).sort((a, b) => Math.hypot(a.x - e.x, a.z - e.z) - Math.hypot(b.x - e.x, b.z - e.z));
+      if (!outros.length) continue;
+      alvo = outros[0]; i = assentoLivre(alvo, false);
+    }
+    const l = ladoBrinquedo(alvo), pts = l && rota(clamp(Math.floor(P.pos.x), 0, W - 1), clamp(Math.floor(P.pos.y), 0, H - 1), Math.floor(l[0]), Math.floor(l[1]));
+    if (!pts) continue;
+    soltarAjudante(P);
+    A.comEd = true; A.prefPneu = null;
+    const ida = { e: alvo, i }; A.indoBrinq = ida;
+    P.ir([...pts, l], () => sentarNoBrinquedo(A, P, ida));
+    return A;
+  }
+  return null;
 }
 function sairDoBrinquedo(A, Hd){
   const B = A.brinq; A.brinq = null; A.indoBrinq = null; A.prefPneu = null;
@@ -18797,14 +18841,27 @@ function brincarOuBalancar(A, Hd, dt){
 // livre, brinca PARQUINHO.ed segundos com duas falas e desce. A tarefa fica em andamento até ele descer
 let brinqEd = null;
 function comecarBrinqEd(tarefa){
-  const e = brinquedoEm(tarefa.alvo.x, tarefa.alvo.z), i = e ? assentoLivre(e, true) : -1;
+  const e = brinquedoEm(tarefa.alvo.x, tarefa.alvo.z);
+  let i = e ? assentoLivre(e, true) : -1;
+  // cheio de irmãos: um deles dá o lugar (desce e vai para outro brinquedo) e o outro fica brincando com o Ed
+  if (e && i < 0){ const A = irmaoNoBrinq(e); if (A){ i = (A.brinq || A.indoBrinq).i; A.ultimoBrinq = e; sairDoBrinquedo(A, A.p()); } }
   if (!e || i < 0 || !ENF_VIS[e.x + ',' + e.z]){ terminarBalancoEd(tarefa); return; }
   baseSentadoDe(ed); ed.ferramenta(null); ed.pulo = 0.35;
-  brinqEd = { e, i, tarefa, tempo: 0, fim: rnd(...PARQUINHO.ed), falas: 0, prox: 1.2 };
+  brinqEd = { e, i, tarefa, tempo: 0, fim: rnd(...PARQUINHO.ed), falas: 0, prox: 4, chegou: performance.now() };
+  const A = chamarIrmaoParaBrincar(e);
+  if (A && !A.brinq){ brinqEd.espera = true; brinqEd.irmao = A; brinqEd.esperaT = 0; const nome = A === AJUDA.dani ? 'Dani' : 'Hud'; edFala(FALAS_ED_CHAMA, f => f.replace('{nome}', nome)); }
 }
 function atualizarBrinqEd(dt){
   const B = brinqEd; if (!B) return;
   if (!S.enfeites.includes(B.e) || !ENF_VIS[B.e.x + ',' + B.e.z]){ pararBrinqEd(); terminarBalancoEd(B.tarefa); return; }
+  // esperando o irmão: o Ed fica no lugar (no pé da escada, no escorregador) e só começa quando ele senta
+  if (B.espera){
+    B.esperaT += dt;
+    if (ed.estado === 'parado') andarNoBrinquedo(ed, B, 0);
+    const I = B.irmao;
+    if (I.brinq || (!I.indoBrinq && !I.brinq) || B.esperaT > PARQUINHO.espera) B.espera = false;
+    return;
+  }
   B.tempo += dt;
   if (ed.estado === 'parado') andarNoBrinquedo(ed, B, dt);
   if (B.falas < 2 && (B.prox -= dt) <= 0){ B.falas++; B.prox = rnd(4, 6); edFala(FALAS_BRINQ[B.e.tipo]); }
@@ -18813,6 +18870,8 @@ function atualizarBrinqEd(dt){
 function pararBrinqEd(){
   const B = brinqEd; if (!B) return;
   brinqEd = null;
+  // o irmão que veio brincar com ele brinca mais um pouquinho e volta ao normal
+  for (const A of [AJUDA.hud, AJUDA.dani]) if (A.comEd){ A.comEd = false; if (A.brinq) A.brinq.fim = A.brinq.tempo + rnd(3, 8); }
   ed.sentado = 0; ed.alt = 0; ed.montado = false; ed.pulo = 0.3;
   if (ed.estado === 'andando'){ ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; }
   const l = S.enfeites.includes(B.e) && ladoBrinquedo(B.e);
@@ -20465,6 +20524,8 @@ function atualizarAjudante(A, dt, t){
     }
     return;
   }
+  // brincando com o Ed (ou indo), fica até ele descer, mesmo com trabalho
+  if (A.comEd){ if (brinqEd && A.brinq){ brincarAjudante(A, Hd, dt); return; } if (!A.indoBrinq) A.comEd = false; }
   const alvos = alvosHud();
   // sem nada para fazer, vai para o balanço de pneu, se tiver um livre; com trabalho, desce dele
   // nas noites de inverno, a fogueira vem antes do balanço
@@ -20607,7 +20668,7 @@ function checar(tipoA, alvo, param){
   if (alvo.k === 'museu') return { ok: tipoA === 'museu' && obraConcluida('museu'), custo: {} };
   if (alvo.k === 'spa') return { ok: tipoA === 'spa' && spaAberto() && !banhoEd, custo: {} };
   if (alvo.k === 'passeio') return { ok: tipoA === 'passeio' && voo.estado === 'parado' && !voo.cena && !!caminhoPasseio(), motivo: 'O Milton já foi embora', custo: {} };
-  if (alvo.k === 'brinquedo'){ const e = brinquedoEm(alvo.x, alvo.z); return { ok: tipoA === 'parquinho' && !!e && !!ladoBrinquedo(e) && assentoLivre(e, true) >= 0 && !brinqEd && !balancoEd, motivo: e && assentoLivre(e, true) < 0 ? 'Os irmãos estão brincando nele' : 'Não dá para chegar no brinquedo', custo: {} }; }
+  if (alvo.k === 'brinquedo'){ const e = brinquedoEm(alvo.x, alvo.z); return { ok: tipoA === 'parquinho' && !!e && !!ladoBrinquedo(e) && edCabe(e) && !brinqEd && !balancoEd, motivo: e && !edCabe(e) ? 'Não tem lugar nele' : 'Não dá para chegar no brinquedo', custo: {} }; }
   if (alvo.k === 'balanco'){ const e = balancoEm(alvo.x, alvo.z); return { ok: tipoA === 'balancar' && !!e && !!ladoDoBalanco(e) && !irmaoNoBalanco(e) && !balancoEd, motivo: e && irmaoNoBalanco(e) ? 'Tem alguém no balanço' : 'Não dá para chegar no balanço', custo: {} }; }
   if (alvo.k === 'cachoeira') return { ok: tipoA === 'nadar' && cachoeiraAberta() && !nadoDe(ed), motivo: galhoFecha(3) ? 'Um galho caído fecha a trilha. Tire ele primeiro.' : 'A trilha oeste ainda não chega lá', custo: {} };
   if (alvo.k === 'poco'){ const e = pocoEm(alvo.x, alvo.z); return { ok: tipoA === 'desejo' && !!e && !!frentePoco(e) && S.dinheiro >= DESEJO.preco, motivo: 'Falta uma moedinha', custo: {} }; }
