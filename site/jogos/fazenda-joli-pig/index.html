@@ -7695,7 +7695,7 @@ function girarVistaEd(dx, dy){
 // o que o Ed está fazendo, em poucas palavras (embaixo da vista dele e no menu dele)
 function oQueOEdFaz(){
   if (trator) return 'Trabalhando com o trator';
-  if (banhoEd) return 'No banho de lama';
+  if (banhoEd) return { lama: 'No banho de lama', cadeira: 'Relaxando na espreguiçadeira', ofuro: 'No ofurô', sauna: 'Na sauna' }[banhoEd.modo] || 'No spa';
   if (nadoDe(ed)) return 'Nadando na cachoeira';
   if (balancoEd) return 'No balanço';
   if (brinqEd) return 'Brincando ' + BRINQ[brinqEd.e.tipo].no;
@@ -7703,7 +7703,7 @@ function oQueOEdFaz(){
   if (miranteFP) return 'No mirante';
   if (controleManual()){ const nf = fila.filter(f => f.tipo !== 'andar').length; return 'Andando com o controle' + (nf ? ` · ${nf} na fila esperando` : ''); }
   const t = tarefaAtual, nf = fila.filter(f => f.tipo !== 'andar' && f !== t).length;
-  let txt = t && t.tipo !== 'andar' && NOMES_ACAO[t.tipo] ? NOMES_ACAO[t.tipo] + (typeof t.param === 'string' && CULTURAS[t.param] ? ' ' + CULTURAS[t.param].nome.toLowerCase() : '')
+  let txt = t && t.tipo !== 'andar' && NOMES_ACAO[t.tipo] ? nomeAcao(t) + (typeof t.param === 'string' && CULTURAS[t.param] ? ' ' + CULTURAS[t.param].nome.toLowerCase() : '')
     : ed.estado === 'andando' ? 'Andando pela fazenda' : 'Esperando uma tarefa';
   if (nf) txt += ` · mais ${nf} na fila`;
   return txt;
@@ -15170,21 +15170,60 @@ function menuSpa(r){
   const nL = (S.spaLivro || []).length;
   r.itens.push({ rotulo: 'Livro de visitas', sub: nL ? `nota média ${mediaLivroSpa().toFixed(1).replace('.', ',')} de 5, ${contagem(nL, 'recado', 'recados')}` : 'os visitantes assinam na saída', icone: 'spa', fn: abrirLivroSpa });
   const ja = S.spaDia === diaAtual(), naFila = fila.find(t => t.tipo === 'spa');
-  if (naFila){ r.itens.push({ rotulo: 'Cancelar o banho de lama', icone: 'ed', fn: () => cancelar(naFila) }); return; }
+  if (naFila){ r.itens.push({ rotulo: naFila.alvo.modo ? `Cancelar: ${naFila.alvo.rotulo.toLowerCase()}` : 'Cancelar o banho de lama', icone: 'ed', fn: () => cancelar(naFila) }); return; }
   r.itens.push({ rotulo: 'Banho de lama', sub: `o Ed rola na lama e passa na ducha; ${ja ? 'o XP de hoje já veio' : SPA.xp + ' XP, uma vez por dia'}`, icone: 'spa', fn: () => enfileirar('spa', { k: 'spa' }) });
+  for (const [modo, [rotulo, sub]] of Object.entries(RELAXA_ED.modos)){
+    const feito = S.spaDias && S.spaDias[modo] === diaAtual();
+    r.itens.push({ rotulo, sub: `${sub}; ${feito ? 'o XP de hoje já veio' : RELAXA_ED.xp + ' XP, uma vez por dia'}`, icone: 'ed', fn: () => enfileirar('spa', { k: 'spa', modo, rotulo }) });
+  }
 }
 // ----- o banho de lama do Ed (tarefa 'spa'): ele chega no arco, entra, pula num lugar livre da lama, fica sentado
 // rolando um tempo, passa na ducha e sai pelo arco. A tarefa fica em andamento até ele sair (como o trator), então a fila
 // espera e nenhuma cena começa. Cancelar no meio põe o Ed na frente do arco na hora
 const BANHO_ED = { lama: 9, ducha: 3.2, sentado: 0.02 };
+// o dia de relaxar do Ed (o Lucas pediu): além do banho de lama, no menu do spa ele pode deitar na espreguiçadeira com
+// rodelas de pepino nos olhos, entrar no ofurô com um patinho de borracha boiando do lado ou ficar um tempo na sauna, de
+// onde sai vermelhinho, soltando vapor. A mesma tarefa 'spa', com alvo.modo; cada uma dá RELAXA_ED.xp uma vez por dia
+// (S.spaDias[modo]). relaxa: segundos na espreguiçadeira e no ofurô; sauna: segundos lá dentro; corado: segundos com as
+// bochechas vermelhas depois da sauna
+const RELAXA_ED = { relaxa: 11, sauna: 8, corado: 14, xp: 150,
+  modos: { cadeira: ['Relaxar na espreguiçadeira', 'com rodelas de pepino nos olhos'], ofuro: ['Ofurô com patinho', 'água quentinha e um patinho de borracha boiando'], sauna: ['Sauna', 'sai vermelhinho, soltando vapor'] } };
+const FALAS_ED_CADEIRA = ['Pepino nos olhos e nada na cabeça. Perfeito.', 'Ahhh... ninguém me chama, tá?', 'Isso que é vida de fazendeiro!', 'Shhh... o Ed está relaxando.', 'Que fresquinho esse pepino!', 'Vou tirar só um cochilinho.', 'Daqui eu escuto até os bambus.',
+  'Hmm, o pepino tá melhor que salada.', 'Um minutinho de paz, por favor.', 'Nem lembro mais o que é enxada.', 'Ai, que solzinho bom.', 'Spa da fazenda, cinco estrelas!', 'Ninguém conta pro Beto que eu tô de folga.', 'Acho que vou ficar aqui pra sempre.',
+  'Pepino no olho, rabicó relaxado.', 'Que silêncio gostoso...', 'Ooooinc... (suspira)', 'Respira fundo, Ed. Respira.', 'Até o mato da horta pode esperar.', 'Tô vendo tudo verdinho, hihihi.'];
+const FALAS_ED_OFURO = ['Água quentinha! Oinc!', 'Oi, patinho! Vamos relaxar juntos?', 'Quac quac! Ops, eu sou porquinho.', 'Ahhh, que delícia de ofurô.', 'O patinho tá mais relaxado que eu.', 'Bolhinhas! Hihihi!', 'Água até o queixo, que maravilha.',
+  'Vou virar uma ameixa de tanto ficar aqui.', 'Patinho, você também trabalha muito?', 'Nada como um ofurô depois da colheita.', 'Oinc... nem quero sair mais.', 'Quentinho, quentinho!', 'O vapor tá limpando até as ideias.', 'Esse patinho é meu novo melhor amigo.',
+  'Ploft! O patinho mergulhou.', 'Daqui dá pra ver o vapor subindo.', 'Hmm, cheirinho de madeira molhada.', 'Relaxa, Ed... relaxa...', 'Se o Hud visse, ia querer entrar também.', 'Melhor banho da semana!'];
+const FALAS_ED_SAUNA = ['Ufa! Que calor! Oinc!', 'Saí vermelhinho que nem um tomate!', 'Tô soltando fumacinha, olha!', 'Aoooa, que quentura gostosa!', 'Meu focinho virou morango!', 'Quinze minutos e virei pimentão.', 'Uau, que sauna potente!',
+  'Agora sim, poros abertos!', 'Preciso de um suco geladinho.', 'Saí da sauna mais leve que uma pena.', 'Tô cozido, mas feliz!', 'Vapor saindo até das orelhas!', 'Que bom, mas que calor!', 'Ufa! Cadê a ducha?',
+  'Fiquei corado de tanto relaxar.', 'Deu até moleza... que gostoso.', 'Sauna é coisa séria, viu?', 'Oinc! Pareço um porquinho assado!', 'Que vapor! Não enxergava nem o rabicó.', 'Agora só uma soneca pra fechar.'];
+// o pepino nos olhos, as bochechas coradas (no corpo do Ed, na escala dele) e o patinho de borracha do ofurô
+function vPepinosEd(){ const v = new Vox(); for (const lx of [-8, 8]) for (let dx = -4; dx <= 4; dx++) for (let dy = -4; dy <= 4; dy++){ const d = Math.hypot(dx, dy); if (d > 3.7) continue; v.set(lx + dx, 48 + dy, 19, d > 2.9 ? 0x3f8a33 : (dx + dy) % 3 === 0 && d < 1.6 ? 0xa8c878 : 0xd8efb0); } return v; }
+function vBochechasEd(){ const v = new Vox(); for (const lx of [-12, 12]) for (let dx = -2; dx <= 2; dx++) for (let dy = -1; dy <= 1; dy++) v.set(lx + dx, 41 + dy, 16 - Math.abs(dx), 0xf06a6a); return v; }
+function vPatinhoBorracha(){ const v = new Vox(); v.ell(0, 2, 0, 3, 2.2, 3.6, 0xffd23f); v.ell(0, 5, 2, 2, 2, 2, 0xffd23f); v.box(-1, 5, 4, 1, 5, 5, 0xf28a24); v.set(-1, 6, 3, 0x222222); v.set(1, 6, 3, 0x222222); v.box(0, 3, -4, 0, 4, -4, 0xffd23f); return v; }
+function enfeiteEd(nome, fn){
+  if (!ed[nome]){ ed[nome] = malha(geo(nome, () => fn().build(ed.escala || 1 / 57, OP_PORCO))); ed[nome].visible = false; ed.corpo.add(ed[nome]); }
+  return ed[nome];
+}
 let banhoEd = null;
 const FALAS_ED_LAMA = ['Aoooa! Que lama gostosa!', 'Oinc! Lama quentinha é tudo de bom.', 'Ahhh... agora sim, um porquinho feliz.', 'Nada como um banho de lama depois do trabalho!', 'Oinc oinc! Tô rolando na lama!', 'Essa lama vale cada moedinha.', 'Ai, que relaxante... nem lembro da enxada.', 'Lama na orelha, lama no focinho. Perfeito!', 'Os visitantes têm razão: que spa bom!', 'Aoooa! Vou sair daqui novinho!', 'Só mais um minutinho de lama...', 'Aoooa! Lama até o rabicó!', 'Que delícia de lama morninha!', 'Oinc! Quem disse que fazendeiro não descansa?', 'Rolei pra um lado, rolei pro outro. Perfeito!', 'Ahhh... tô virando um pudim de lama.', 'Essa lama é melhor que travesseiro!', 'Oinc oinc! A Luma ia odiar isso aqui.', 'Lama boa, Ed feliz!', 'Ai, que gostoso... nem quero sair.', 'Aoooa! Até as orelhas relaxaram!'];
 const FALAS_ED_DUCHA = ['Pronto, limpinho de novo!', 'Uma ducha geladinha pra fechar!', 'Agora sim, cheiroso e descansado.', 'Volto pro trabalho novinho em folha!', 'Oinc! Que spa bom esse da fazenda.', 'Tchau, lama! Até amanhã.', 'Saí da lama direto pra ducha. Ufa!', 'Aoooa! Pronto pra mais um dia de fazenda.', 'Pele de pelúcia nova!', 'Que banho! Vou recomendar pro Beto.', 'Nada como cuidar de quem cuida da fazenda.', 'Ducha fresquinha! Que maravilha!', 'Saí da lama brilhando!', 'Pronto! Cheiroso que nem flor.', 'Agora sim, pronto pra horta!', 'Aoooa! Que banho gostoso!', 'Limpinho e descansado. Valeu, spa!', 'Tirei a lama até da orelha!', 'Ducha tomada! Bora trabalhar.', 'Que refrescância!', 'Pronto! Até o macacão ficou contente.'];
 const portaSpaMundo = () => mundoSpa(SPA.porta[0] + 0.5, SPA.fundo + 3.6);
 function comecarBanhoEd(tarefa){
   if (!gradeSpa) montarGradeSpa();
-  const ocupados = ocupadosSpa(), q = sorteia(lugaresSpa.filter(l => l.tipo === 'lama' && !ocupados.has(l))) || lugaresSpa.find(l => l.tipo === 'lama');
-  banhoEd = { tarefa, lugar: q, fase: 'entra', t: 0 };
+  const modo = tarefa.alvo.modo || 'lama';
+  // a sauna: vai até a porta, troca pela toalha e entra
+  if (modo === 'sauna'){
+    banhoEd = { tarefa, modo, lugar: null, fase: 'entra', t: 0 };
+    const cel = celulaSpa(SPA.portaSauna[0] + 2, SPA.sauna[3] + 2.5);
+    ed.ir([mundoSpa(SPA.porta[0] + 0.5, SPA.fundo - 0.4), ...(caminhoSpa(SPA.porta, cel) || [])], () => {
+      if (!banhoEd) return;
+      banhoEd.fase = 'saunaEntra'; banhoEd.t = 0; trocaDeRoupaSpa(ed, 'ed', ed.pos.x, ed.pos.y);
+    });
+    return;
+  }
+  const ocupados = ocupadosSpa(), q = sorteia(lugaresSpa.filter(l => l.tipo === modo && !ocupados.has(l))) || lugaresSpa.find(l => l.tipo === modo);
+  banhoEd = { tarefa, modo, lugar: q, fase: 'entra', t: 0 };
   const dentro = caminhoSpa(SPA.porta, q.perto) || [];
   ed.ir([mundoSpa(SPA.porta[0] + 0.5, SPA.fundo - 0.4), ...dentro], () => {
     if (!banhoEd) return;
@@ -15197,15 +15236,26 @@ function atualizarBanhoEd(dt, t){
   const B = banhoEd; if (!B) return;
   B.t += dt;
   if (B.fase === 'pula' || B.fase === 'sai'){
-    const k = Math.min(1, B.t / 0.5), [x0, z0] = B.de, [x1, z1] = B.ate;
-    ed.pos.set(lerp(x0, x1, k), lerp(z0, z1, k)); ed.alt = Math.sin(k * Math.PI) * 0.25 + (B.fase === 'pula' ? k * 0.1 : (1 - k) * 0.1);
+    const k = Math.min(1, B.t / 0.5), [x0, z0] = B.de, [x1, z1] = B.ate, h = B.modo === 'lama' ? 0.1 : SPA.sentado[B.modo], arco = B.modo === 'ofuro' ? 0.62 : 0.25;
+    ed.pos.set(lerp(x0, x1, k), lerp(z0, z1, k)); ed.alt = Math.sin(k * Math.PI) * arco + (B.fase === 'pula' ? k * h : (1 - k) * h);
     ed.angAlvo = Math.atan2(x1 - x0, z1 - z0);
     if (k >= 1){
       ed.alt = 0;
-      if (B.fase === 'pula'){
+      if (B.fase === 'pula' && B.modo !== 'lama'){
+        // na espreguiçadeira (com pepino nos olhos) ou no ofurô (com o patinho boiando)
+        B.fase = 'relaxa'; B.t = 0; B.falou = 0; ed.sentado = SPA.sentado[B.modo]; ed.angAlvo = ed.ang = B.lugar.ang;
+        if (B.modo === 'cadeira') enfeiteEd('pepinosEd', vPepinosEd).visible = true;
+        else {
+          respingoSpa(ed.pos.x, ed.pos.y, 'agua', 10); Som.tom(300, 0.18, 'sine', 0.05, 180);
+          B.pato = malha(geo('patinhoBorracha', () => vPatinhoBorracha().build(1 / 40, { origin: [0.5, 0, 0.5] }))); scene.add(B.pato);
+        }
+        const f = variar(B.modo === 'cadeira' ? FALAS_ED_CADEIRA : FALAS_ED_OFURO); falar(ed, f, tempoDeLeitura(f));
+      } else if (B.fase === 'pula'){
         B.fase = 'lama'; B.t = 0; ed.sentado = BANHO_ED.sentado; ed.angAlvo = B.lugar.ang;
         respingoSpa(ed.pos.x, ed.pos.y, 'lama', 12); Som.tom(140, 0.2, 'sine', 0.06, 70);
         const f = variar(FALAS_ED_LAMA); falar(ed, f, tempoDeLeitura(f));
+      } else if (B.modo !== 'lama'){
+        sairDoSpaEd(B);
       } else {
         // da beira da lama até a ducha livre
         const ocupados = ocupadosSpa(), d = sorteia(lugaresSpa.filter(l => l.tipo === 'ducha' && !ocupados.has(l))) || lugaresSpa.find(l => l.tipo === 'ducha');
@@ -15215,6 +15265,42 @@ function atualizarBanhoEd(dt, t){
     }
     return;
   }
+  if (B.fase === 'relaxa'){
+    // o patinho boia na frente dele, girando devagar; no meio, mais uma fala
+    if (B.pato){ const a = B.lugar.ang, d = 0.24 + Math.sin(B.t * 0.7) * 0.04, s2 = Math.sin(B.t * 0.5) * 0.12; B.pato.position.set(ed.pos.x + Math.sin(a) * d + Math.cos(a) * s2, 0.33 + Math.sin(B.t * 2.4) * 0.012, ed.pos.y + Math.cos(a) * d - Math.sin(a) * s2); B.pato.rotation.y = a + Math.PI + Math.sin(B.t * 0.8) * 0.6; if (Math.random() < dt * 2) vaporSpa(ed.pos.x + rnd(-0.2, 0.2), 0.45, ed.pos.y + rnd(-0.2, 0.2)); }
+    else ed.corpo.rotation.x = -0.25;
+    if (!B.falou && B.t > RELAXA_ED.relaxa / 2){ B.falou = 1; const f = variar(B.modo === 'cadeira' ? FALAS_ED_CADEIRA : FALAS_ED_OFURO); falar(ed, f, tempoDeLeitura(f)); }
+    if (B.t >= RELAXA_ED.relaxa){
+      if (ed.pepinosEd) ed.pepinosEd.visible = false;
+      if (B.pato){ scene.remove(B.pato); B.pato = null; respingoSpa(ed.pos.x, ed.pos.y, 'agua', 8); }
+      ed.sentado = 0; ed.corpo.rotation.x = 0;
+      const [cx, cz] = B.lugar.perto;
+      B.fase = 'sai'; B.t = 0; B.de = [ed.pos.x, ed.pos.y]; B.ate = mundoSpa(cx + 0.5, cz + 0.5);
+    }
+    return;
+  }
+  if (B.fase === 'saunaEntra'){
+    // depois do giro da toalha, entra pela porta e some lá dentro
+    if (B.t < GIRO.dur + 0.1) return;
+    const [x, z] = mundoSpa(SPA.portaSauna[0] + 2, SPA.sauna[3] + 1.3);
+    ed.pos.x += (x - ed.pos.x) * Math.min(1, dt * 3); ed.pos.y += (z - ed.pos.y) * Math.min(1, dt * 3); ed.angAlvo = Math.PI + SPA.giro;
+    if (Math.hypot(x - ed.pos.x, z - ed.pos.y) < 0.05){ B.fase = 'sauna'; B.t = 0; ed.g.visible = false; }
+    return;
+  }
+  if (B.fase === 'sauna'){
+    if (Math.random() < dt * 3){ const [sx, sz] = mundoSpa(5, 5); vaporSpa(sx, 2.35, sz); }
+    if (B.t >= RELAXA_ED.sauna){
+      // sai vermelhinho, soltando vapor
+      const [x, z] = mundoSpa(SPA.portaSauna[0] + 2, SPA.sauna[3] + 2.4);
+      ed.colocar(x, z); ed.ang = ed.angAlvo = SPA.giro; ed.g.visible = true; ed.pulo = 0.35;
+      for (let i = 0; i < 10; i++) vaporSpa(x + rnd(-0.25, 0.25), rnd(0.3, 1.2), z + rnd(-0.25, 0.25));
+      corarEd();
+      const f = variar(FALAS_ED_SAUNA); falar(ed, f, tempoDeLeitura(f)); Som.tom(500, 0.3, 'sine', 0.03, 300);
+      B.fase = 'pausa'; B.t = 0;
+    }
+    return;
+  }
+  if (B.fase === 'pausa'){ if (Math.random() < dt * 4) vaporSpa(ed.pos.x + rnd(-0.15, 0.15), 1.25, ed.pos.y + rnd(-0.15, 0.15)); if (B.t > 1.4) sairDoSpaEd(B); return; }
   if (B.fase === 'lama'){
     ed.corpo.rotation.z = Math.sin(B.t * 1.6) * 0.18;
     if (Math.random() < dt * 1.2) respingoSpa(ed.pos.x, ed.pos.y, 'lama', 3);
@@ -15237,9 +15323,25 @@ function atualizarBanhoEd(dt, t){
     }
   }
 }
+// a saída sem ducha (espreguiçadeira, ofurô e sauna): volta para o macacão, ganha o XP do dia e sai pelo arco
+function sairDoSpaEd(B){
+  B.fase = 'saindo';
+  trocaDeRoupaSpa(ed, null, ed.pos.x, ed.pos.y);
+  if (!S.spaDias) S.spaDias = {};
+  if (S.spaDias[B.modo] !== diaAtual()){ S.spaDias[B.modo] = diaAtual(); ganharXP(RELAXA_ED.xp, new THREE.Vector3(ed.pos.x, 1.3, ed.pos.y)); }
+  ed.ir([...(caminhoSpa(celulaSpa(...localSpa(ed.pos.x, ed.pos.y)), SPA.porta) || []), mundoSpa(SPA.porta[0] + 0.5, SPA.fundo - 0.4), portaSpaMundo()], () => terminarBanhoEd(false));
+}
+// as bochechas coradas da sauna, por um tempinho, com vapor saindo dele
+function corarEd(){
+  const b = enfeiteEd('bochechasEd', vBochechasEd); b.visible = true;
+  clearTimeout(corarEd.timer); corarEd.timer = setTimeout(() => { b.visible = false; }, RELAXA_ED.corado * 1000);
+}
 function terminarBanhoEd(cancelado){
   const B = banhoEd; if (!B) return;
   banhoEd = null;
+  ed.g.visible = true; ed.corpo.rotation.x = 0;
+  if (ed.pepinosEd) ed.pepinosEd.visible = false;
+  if (B.pato){ scene.remove(B.pato); B.pato = null; }
   ed.sentado = 0; ed.alt = 0; ed.corpo.rotation.z = 0;
   if (ed.deToalha) ed.toalha(null);
   if (cancelado){ ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; ed.colocar(...portaSpaMundo()); return; }
@@ -20903,6 +21005,8 @@ function itensHud(){
 
 // ================= tarefas do Ed
 const fila = [];
+// o nome de uma tarefa: o da ação, ou um próprio dela (as atividades do spa: alvo.rotulo)
+const nomeAcao = t => (t.alvo && t.alvo.rotulo) || NOMES_ACAO[t.tipo];
 const NOMES_ACAO = { spa:'Banho de lama', desejo:'Fazer um pedido', museu:'Visitar o museu', subirMirante:'Subir no mirante', estrelas:'Olhar as estrelas', trator:'Sair com o trator', carinhoGalo:'Carinho no galo', pegarGalo:'Pegar o galo', soltarGalo:'Devolver o galo', apagarFogo:'Apagar o fogo', recolherLixo:'Recolher o lixo', tirarGalho:'Tirar o galho', pegarAluguel:'Pegar o aluguel', lerCartao:'Ler o cartão-postal', tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', abrirPresente:'Abrir o presente', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa', nadar:'Nadar na cachoeira', balancar:'Brincar no balanço', parquinho:'Brincar no parquinho', passeio:'Passeio de avião' };
 const DUR = { spa: 0.3, desejo: 1.4, museu: 0.5, subirMirante: 0.2, estrelas: 4.5, carinhoGalo: 2.4, pegarGalo: 0.5, soltarGalo: 0.7, apagarFogo: 2.2, recolherLixo: 0.8, tirarGalho: 2.4, pegarAluguel: 0.6, lerCartao: 0.6, tirarCerca: 2.4, colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, abrirPresente: 0.2, coletarMata: 1.0, cavarTrufa: 1.6, nadar: 0.2, balancar: 0.2, parquinho: 0.2, passeio: 0.2 };
 const FERR = { spa: null, desejo: null, museu: null, subirMirante: null, estrelas: null, carinhoGalo: 'carinho', pegarGalo: null, soltarGalo: 'soltar', apagarFogo: 'regador', recolherLixo: 'cesta', tirarGalho: null, pegarAluguel: null, lerCartao: null, tirarCerca: 'enxada', colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', abrirPresente: null, coletarMata: 'cesta', cavarTrufa: 'enxada', nadar: null, balancar: null, parquinho: null, passeio: null };
@@ -22207,7 +22311,7 @@ function itensDoAlvoBase(alvo){
     if (t){
       const res = VIS[chave(x, z)] && VIS[chave(x, z)].res;
       if (res){
-        r.titulo = 'Na fila do Ed'; r.icone = 'ed'; r.estado = NOMES_ACAO[res.tipo] + (res.param ? ' ' + CULTURAS[res.param].nome.toLowerCase() : '');
+        r.titulo = 'Na fila do Ed'; r.icone = 'ed'; r.estado = nomeAcao(res) + (res.param ? ' ' + CULTURAS[res.param].nome.toLowerCase() : '');
         r.itens.push({ rotulo: 'Cancelar', icone: 'ed', fn: () => cancelar(res) });
         return r;
       }
@@ -22293,7 +22397,7 @@ function itensDoAlvoBase(alvo){
     }
     r.titulo = A.nome; r.icone = a.d.tipo; r.ficha = a.d.tipo;
     if (a.nado && a.d.e !== 'produzindo'){ r.estado = a.d.e === 'pronto' ? 'Já botou e está voltando do lago para o pasto.' : 'Com fome, voltando do lago para o pasto.'; return r; }
-    if (a.res){ r.estado = 'Na fila do Ed: ' + NOMES_ACAO[a.res.tipo].toLowerCase(); r.itens.push({ rotulo: 'Cancelar', icone: 'ed', fn: () => cancelar(a.res) }); return r; }
+    if (a.res){ r.estado = 'Na fila do Ed: ' + nomeAcao(a.res).toLowerCase(); r.itens.push({ rotulo: 'Cancelar', icone: 'ed', fn: () => cancelar(a.res) }); return r; }
     if (a.d.e === 'fome'){
       r.estado = S.alimentador[a.d.tipo] ? 'Com fome, e o alimentador está sem ração.' : `Com fome. Come ${A.racao} ração e depois dá ${A.produto === 'ovo' ? 'um ovo' : A.produto === 'ovopata' ? 'um ovo de pata' : 'leite'}.`; r.classe = 'alerta';
       r.itens.push({ rotulo: 'Alimentar', sub: `${A.racao} ração · tem ${S.racao}`, icone: 'racao', off: S.racao < A.racao, fn: () => enfileirar('alimentar', alvo), modo: { tipo: 'alimentar' } });
