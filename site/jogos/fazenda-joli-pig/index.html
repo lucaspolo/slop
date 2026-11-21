@@ -94,6 +94,23 @@ button{font:inherit;color:inherit}
 .hud-topo.aperto2 #horaFalta{min-width:2.5em}
 /* estrelas atrás do mapa, que aparecem à noite */
 #estrelas{position:fixed;inset:0;pointer-events:none;opacity:0}
+/* a ocular do observatório: o céu pela luneta grande, por cima de tudo */
+.ocular{position:absolute;inset:0;z-index:45;background:#03040a;opacity:0;transition:opacity .5s;touch-action:none;pointer-events:auto}
+.ocular.on{opacity:1}
+.ocular canvas{position:absolute;inset:0;width:100%;height:100%;cursor:grab}
+.oc-topo{position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);left:16px;color:#f3d27a;font-weight:800;text-shadow:0 1px 0 #000}
+.oc-titulo{font-size:17px}.oc-conta{font-size:13px;color:#d8c9a0;font-weight:600}
+.ocular .oc-sair{position:absolute;z-index:2;top:calc(env(safe-area-inset-top,0px) + 10px);right:16px}
+.oc-info{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);transform:translateX(-50%);width:min(440px,calc(100% - 32px));background:rgba(18,22,44,.88);border:2px solid #a8772c;border-radius:14px;padding:10px 14px;color:#f4efe2;display:grid;gap:3px;font-size:14px;line-height:1.35;pointer-events:none}
+.oc-info small{color:#9fb4e8;font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:11px}
+.oc-info b{color:#f3d27a;font-size:16px}.oc-info em{color:#ffd84d;font-style:normal;font-weight:800}
+.oc-rumo{position:absolute;left:50%;top:calc(env(safe-area-inset-top,0px) + 58px);transform:translateX(-50%);color:#c9b98e;font-size:12px;font-weight:700;white-space:nowrap;pointer-events:none}
+.astro-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:8px}
+.astro-cartao{display:grid;gap:3px;align-content:start;background:#fffdf6;border:2px solid #e8dcc0;border-radius:12px;padding:8px;font-size:13px;line-height:1.3}
+.astro-cartao img{width:100%;aspect-ratio:1;border-radius:8px;display:block}
+.astro-cartao small{color:#8a7a5a}
+.astro-cartao.falta{opacity:.75}
+.astro-q{aspect-ratio:1;border-radius:8px;background:#1a2148;color:#5f6fa8;display:grid;place-items:center;font-size:44px;font-weight:900}
 /* ração acabando: amarelo quando dá para menos de 10 minutos, vermelho quando não dá para alimentar ninguém */
 #chipRacao.pouca{background:var(--amarelo)}
 #chipRacao.acabou{background:#f6b3a8;animation:alertaRacao 1.2s ease-in-out infinite}
@@ -7698,6 +7715,7 @@ function girarVistaEd(dx, dy){
 // o que o Ed está fazendo, em poucas palavras (embaixo da vista dele e no menu dele)
 function oQueOEdFaz(){
   if (trator) return 'Trabalhando com o trator';
+  if (obsEd) return 'Olhando pela luneta do observatório';
   if (banhoEd) return { lama: 'No banho de lama', cadeira: 'Relaxando na espreguiçadeira', ofuro: 'No ofurô', sauna: 'Na sauna' }[banhoEd.modo] || 'No spa';
   if (nadoDe(ed)) return 'Nadando na cachoeira';
   if (balancoEd) return 'No balanço';
@@ -7723,7 +7741,7 @@ const controleEd = { x: 0, y: 0, id: null, ultimo: -1e9, andando: false, teclas:
 const CONTROLE_CAM = { vel: 520, morto: 0.12 };
 const controleCam = { x: 0, y: 0, id: null };
 const controleManual = () => !!vistaEd && performance.now() - controleEd.ultimo < CONTROLE_ED.espera * 1000;
-const podeControlarEd = () => !cine && !trator && !banhoEd && !nadoDe(ed) && !balancoEd && !brinqEd && !passeio && !miranteFP && ed.g.visible && (ed.estado === 'parado' || ed.estado === 'andando');
+const podeControlarEd = () => !cine && !trator && !banhoEd && !obsEd && !nadoDe(ed) && !balancoEd && !brinqEd && !passeio && !miranteFP && ed.g.visible && (ed.estado === 'parado' || ed.estado === 'andando');
 function montarControleEd(){ montarManche($('controleEd'), controleEd); montarManche($('controleCam'), controleCam); }
 function montarManche(base, est){
   const manche = base.querySelector('.manche'), controleEd = est;
@@ -9850,12 +9868,27 @@ function vObservatorio(){
 }
 // a cúpula: prateada, em gomos, com a fenda escura virada para a frente (+z) e a luneta grande saindo por ela, inclinada
 // para o céu. A origem é o meio da base, em cima da torre; ela gira em volta do eixo y
-function vCupula(){
+function vCupula(semLuneta){
   const v = new Vox(), R = OBSERV.cupula, C = COR_OBS;
   v.ell(0, 0, 0, R + 0.4, R + 0.4, R + 0.4, (x, y, z) => Math.abs(x) <= 1 && z > 0 && y >= 2 ? C.fenda : (Math.floor(Math.atan2(x, z) / (Math.PI / 6)) & 1) ? C.prata : C.prata2, (x, y) => y >= 0);
   for (let x = -R - 1; x <= R + 1; x++) for (let z = -R - 1; z <= R + 1; z++){ const d = Math.hypot(x, z); if (d >= R - 0.5 && d <= R + 1.2) v.set(x, 0, z, C.aro); }
-  for (let t = 6; t <= R + 4; t += 0.5){ const y = Math.round(3 + Math.sin(0.9) * t), z = Math.round(Math.cos(0.9) * t); v.box(-1, y - 1, z, 1, y + 1, z, t > R + 3 ? 0x6fc3f5 : Math.abs(t - R - 1) < 0.6 ? 0xd9a441 : 0xfdf8ef); }
+  if (!semLuneta) for (let t = 6; t <= R + 4; t += 0.5){ const y = Math.round(3 + Math.sin(0.9) * t), z = Math.round(Math.cos(0.9) * t); v.box(-1, y - 1, z, 1, y + 1, z, t > R + 3 ? 0x6fc3f5 : Math.abs(t - R - 1) < 0.6 ? 0xd9a441 : 0xfdf8ef); }
   v.box(0, R + 1, 0, 0, R + 2, 0, C.aro); v.set(0, R + 3, 0, 0xff3b30);
+  return v;
+}
+// a luneta grande, deitada ao longo de +z a partir do eixo (vestirObservatorio inclina e empurra para fora da fenda)
+function vLunetaGrande(){
+  const v = new Vox(), R = OBSERV.cupula;
+  for (let z = 2; z <= R + 8; z++) v.box(-1, -1, z, 1, 1, z, z > R + 7 ? 0x6fc3f5 : z === R + 2 || z === R + 5 ? 0xd9a441 : 0xfdf8ef);
+  v.box(-2, -2, R + 6, 2, 2, R + 7, 0xfdf8ef); v.box(-2, -2, 2, 2, 2, 3, 0x6a6e74);
+  return v;
+}
+// a portinhola da fenda: um gomo prateado por fora da cúpula, que desliza por cima dela para abrir (gira no eixo x)
+function vPortinhola(){
+  const v = new Vox(), R = OBSERV.cupula + 0.4, C = COR_OBS;
+  for (let x = -2; x <= 2; x++) for (let y = 1; y <= R + 2; y++) for (let z = 0; z <= R + 2; z++){
+    const d = Math.hypot(x, y, z); if (d > R && d <= R + 1.1) v.set(x, y, z, Math.abs(x) === 2 ? C.aro : (y & 2) ? C.prata : C.prata2);
+  }
   return v;
 }
 // o observatório inteiro, com a cúpula em cima (o visualizador e o ícone)
@@ -9868,22 +9901,39 @@ function vObservatorioCompleto(){
 let observVis = null;
 function vestirObservatorio(m){
   const [ox, , oz] = ORIGEM_PREDIO.observatorio, [cx, cz] = OBSERV.torre, s = 1 / 8;
-  const v = vCupula(), cup = malha(geo('cupula', () => v.build(s, { origin: [0, 0, 0], jitter: 0.02 })));
+  const v = vCupula(true), cup = malha(geo('cupulaSemLuneta', () => v.build(s, { origin: [0, 0, 0], jitter: 0.02 })));
   cup.add(brilhoDe(v, s, { origin: [0, 0, 0] }, [COR_OBS.fenda]));
+  // a luneta grande (num pivô, para inclinar) e a portinhola da fenda: abertas de noite e com o Ed lá dentro
+  const piv = new THREE.Group(), lun = malha(geo('lunetaGrande', () => vLunetaGrande().build(s, { origin: [0.5, 0.5, 0] })));
+  piv.position.set(0, 3 * s, 0); piv.add(lun); cup.add(piv);
+  const port = malha(geo('portinhola', () => vPortinhola().build(s, { origin: [0.5, 0, 0] }))); cup.add(port);
   cup.position.set((cx - ox) * s, (OBSERV.alto + 1) * s, (cz - oz) * s); m.add(cup);
   m.add(brilhoDe(modeloObra('observatorio', 1), s, { origin: ORIGEM_PREDIO.observatorio }, [COR_OBS.vidro, COR_OBS.lampada]));
   const tx = placaDeTexto(texturaTexto([['OBSERVATÓRIO', 1, '#fdf8ef']], 320, 72, '#34508f'), 6.6 / 8, 2.6 / 8);
   tx.position.set((20.5 - ox) * s, 7 * s, (32 - oz) * s + 0.012); m.add(tx);
-  observVis = { m, cup, ang: observVis ? observVis.ang : 0 };
+  const aberto = periodo().id === 'noite' || !!obsEd ? 1 : 0;
+  observVis = { m, cup, piv, lun, port, ang: observVis ? observVis.ang : 0, abre: aberto, estende: aberto, elev: 0.9 };
+  aplicarCupula(observVis);
 }
 // de noite a cúpula gira devagar, procurando estrelas; de dia volta com a fenda para a frente. E as estrelas cadentes
 const CADENTES = [];
+// a portinhola gira por cima da cúpula até 1,35 rad; a luneta recolhida fica 11 cubinhos para dentro
+function aplicarCupula(V){
+  V.cup.rotation.y = V.ang; V.port.rotation.x = -V.abre * 1.35; V.piv.rotation.x = -V.elev; V.lun.position.z = -(1 - V.estende) * 11 / 8;
+}
 function atualizarObservatorio(dt){
-  const V = observVis;
+  const V = observVis, O = obsEd;
   if (V){
-    if (periodo().id === 'noite') V.ang += dt * OBSERV.giro; else V.ang = anguloPerto(V.ang, 0, Math.min(1, dt * 0.4));
-    V.cup.rotation.y = V.ang;
+    const noite = periodo().id === 'noite', dentro = O && (O.fase === 'gira' || O.fase === 'olha');
+    if (dentro) V.ang = anguloPerto(V.ang, O.az, Math.min(1, dt * OCULAR.gira));
+    else if (noite) V.ang += dt * OBSERV.giro; else V.ang = anguloPerto(V.ang, 0, Math.min(1, dt * 0.4));
+    // abre primeiro a portinhola e depois empurra a luneta; para fechar, o contrário
+    if (noite || O){ V.abre = Math.min(1, V.abre + dt * 0.6); if (V.abre > 0.95) V.estende = Math.min(1, V.estende + dt * 0.5); }
+    else { V.estende = Math.max(0, V.estende - dt * 0.5); if (V.estende < 0.05) V.abre = Math.max(0, V.abre - dt * 0.6); }
+    V.elev = lerp(V.elev, dentro ? O.elev : 0.9, Math.min(1, dt * 0.8));
+    aplicarCupula(V);
   }
+  passoObservacao(dt); desenharOcular(dt);
   for (let i = CADENTES.length - 1; i >= 0; i--){
     const E = CADENTES[i]; E.t += dt;
     const k = Math.min(1, E.t / E.dur);
@@ -9924,6 +9974,362 @@ function menuObservatorio(r){
   r.estado = noite ? 'A cúpula está aberta e girando. Boa noite para olhar as estrelas!' : 'De dia a cúpula fica fechada. De noite o Ed olha as estrelas pela luneta, e o pouso do disco fica aceso.';
   if (n) r.estado += ` ${n > 1 ? n + ' vacas estão' : 'Uma vaca está'} de férias no espaço. ${cabeVacaDeVolta() ? 'De noite o disco pode vir devolver, no pouso.' : 'Para o disco devolver, precisa de lugar no curral.'}`;
   r.itens.push({ rotulo: 'Olhar as estrelas', sub: !noite ? 'só de noite' : ja ? 'o XP desta noite já veio' : `${OBSERV.xp} XP, uma vez por noite`, icone: 'lua', off: !noite, fn: () => enfileirar('estrelas', { k: 'luneta' }) });
+  menuTorre(r);
+}
+// ================= o observatório por dentro (o Lucas pediu): de noite o Ed entra na torre (tarefa 'observar', alvo
+// { k: 'torre' }); a portinhola da fenda abre, a cúpula vira para um ponto do céu, a luneta grande sobe e abre a ocular
+// (abrirOcular): o céu pela luneta, que dá para arrastar e tocar. O que o Ed acha vai para o caderno de astronomia
+// (S.astro, com o dia da descoberta) e dá XP na primeira vez. Fechando a ocular, a luneta desce e o Ed sai comentando
+const OCULAR = { campo: 46, altMin: 14, altMax: 80, gira: 0.7, desce: 1.8, xpVia: 200 };
+let obsEd = null;
+const portaTorre = () => { const P = PREDIO.observatorio, [cx] = OBSERV.torre; return [P.x0 + (cx + 0.5) / 8, P.z0 + (OBSERV.torre[1] + OBSERV.raio + 1.4) / 8]; };
+const frenteTorre = () => { const [x, z] = portaTorre(); return [x, z + 1.45]; };
+// as constelações da fazenda: estrelas em graus em volta do meio (x para o leste, y para cima) e os riscos entre elas
+const CONSTELACOES = {
+  cVaca: { e: [[-6, 2], [2, 2], [3, -2], [-5, -2], [-5, -6], [2, -6], [-8, 4], [-10, 2], [-8, 7], [5, 3]], l: [[0, 1], [1, 2], [2, 3], [3, 0], [3, 4], [2, 5], [0, 6], [6, 7], [6, 8], [1, 9]] },
+  cPorquinho: { e: [[-5, 0], [-3, 4], [2, 5], [6, 2], [5, -3], [0, -4], [-4, -3], [-8, 1], [-8, -1], [8, 4], [10, 2], [9, 0]], l: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 0], [0, 7], [7, 8], [8, 0], [3, 9], [9, 10], [10, 11]] },
+  cGalinha: { e: [[-4, -3], [4, -3], [6, 2], [0, 3], [-2, 7], [-4, 9], [-1, 10], [-5, 6], [7, 6], [0, -7], [3, -7]], l: [[0, 1], [1, 2], [2, 3], [3, 0], [3, 4], [4, 5], [4, 6], [4, 7], [2, 8], [0, 9], [1, 10]] },
+  cTrator: { e: [[-6, -4], [-2, -4], [-2, 0], [-6, 0], [5, -5], [7, -5], [-5, 6], [0, 6], [0, 1], [8, 1], [8, -3]], l: [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [3, 6], [6, 7], [7, 8], [8, 9], [9, 10], [10, 5]] },
+  cPa: { e: [[-9, -7], [-5, -3], [-1, 1], [2, 4], [1, 8], [6, 9], [7, 3]], l: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 3]] },
+  cPato: { e: [[-6, 0], [-2, -3], [5, -3], [7, 1], [3, 1], [3, 5], [6, 7], [9, 6], [-8, 3]], l: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 0], [4, 5], [5, 6], [6, 7], [0, 8]] },
+  cAbelha: { e: [[-5, 0], [0, 3], [5, 0], [0, -3], [-1, 7], [-5, 6], [3, 7], [6, 5], [8, -1], [-7, 3], [-8, 5]], l: [[0, 1], [1, 2], [2, 3], [3, 0], [1, 4], [4, 5], [1, 6], [6, 7], [2, 8], [0, 9], [9, 10]] },
+  cRegador: { e: [[-5, -4], [2, -4], [2, 3], [-5, 3], [-3, 6], [1, 6], [6, 0], [10, 5], [11, 3]], l: [[0, 1], [1, 2], [2, 3], [3, 0], [3, 4], [4, 5], [5, 2], [1, 6], [6, 7], [7, 8]] }
+};
+// o catálogo do caderno: posição no céu (az em graus, 0 é o norte e 90 o leste; alt acima do horizonte), raio de toque,
+// XP da primeira vez, o texto do caderno (desc), o que o Ed comenta (fala) e a dica de quando aparece (só os de evento)
+const ASTRO = [
+  { id: 'lua', nome: 'A Lua', tipo: 'Lua', raio: 5, xp: 200, desc: 'Cheia de crateras. Muda de fase a cada noite e aparece num lugar diferente do céu.', fala: 'A Lua de pertinho parece um queijo cheio de buraco!' },
+  { id: 'vacaLua', nome: 'Vaca de férias na Lua', tipo: 'Visita', raio: 1.6, xp: 600, desc: 'Uma das vacas que o disco levou, de óculos escuros e anteninha, acenando lá de cima.', fala: 'Eu vi a vaquinha acenando da Lua! Tá bronzeada de luar!', dica: 'só com vaca de férias no espaço' },
+  { id: 'saturno', nome: 'Saturno', tipo: 'Planeta', az: 104, alt: 30, raio: 3, xp: 400, desc: 'O planeta dos anéis. Os anéis são de gelo e poeira, e dariam uma bela pista de patinação.', fala: 'Saturno tem anel igual ao bolo de fubá da vó!' },
+  { id: 'jupiter', nome: 'Júpiter', tipo: 'Planeta', az: 212, alt: 52, raio: 3.5, xp: 400, desc: 'O maior planeta, de faixas coloridas, com quatro luas em fila do lado.', fala: 'Júpiter tem quatro luas! E eu aqui com uma só.' },
+  { id: 'marte', nome: 'Marte', tipo: 'Planeta', az: 266, alt: 28, raio: 2.5, xp: 400, desc: 'O planeta vermelho, de terra cor de tijolo e um chapeuzinho de gelo no polo.', fala: 'Marte tem a cor da terra do Hud depois da chuva.' },
+  { id: 'venus', nome: 'Vênus', tipo: 'Planeta', az: 346, alt: 20, raio: 2.5, xp: 400, desc: 'O mais brilhante depois da Lua, baixinho no horizonte. Tem gente que chama de estrela-d\'alva.', fala: 'Vênus brilha mais que lanterna de vaga-lume.' },
+  { id: 'leitoezinhos', nome: 'Os Sete Leitõezinhos', tipo: 'Aglomerado', az: 56, alt: 66, raio: 3.5, xp: 500, desc: 'Um montinho de estrelas azuladas bem juntinhas, como leitõezinhos dormindo.', fala: 'Sete estrelinhas juntinhas, igual leitão na hora de nanar.' },
+  { id: 'nebulosa', nome: 'Nebulosa do Algodão-Doce', tipo: 'Nebulosa', az: 162, alt: 70, raio: 4, xp: 500, desc: 'Uma nuvem rosa e azul de gás, onde nascem estrelas novas.', fala: 'Uma nuvem de algodão-doce no céu! Dá vontade de morder.' },
+  { id: 'galaxia', nome: 'Galáxia do Redemoinho', tipo: 'Galáxia', az: 302, alt: 70, raio: 4, xp: 500, desc: 'Bilhões de estrelas girando num redemoinho, muito, muito longe daqui.', fala: 'Um redemoinho de estrelas! Parece o leite quando o Pelúcio mexe o café.' },
+  { id: 'via', nome: 'Via Láctea', tipo: 'Galáxia', raio: 0, xp: 200, desc: 'A faixa clarinha que atravessa o céu: é a nossa galáxia vista de dentro. Leite derramado no céu.', fala: 'A Via Láctea! O leite derramado mais bonito do mundo.' },
+  { id: 'cVaca', nome: 'Constelação da Vaca', tipo: 'Constelação', az: 20, alt: 48, raio: 8, xp: 300, desc: 'O corpo quadradinho, as quatro pernas, os chifrinhos e o rabo.', fala: 'Achei a constelação da Vaca! Tem até chifrinho.' },
+  { id: 'cPorquinho', nome: 'Constelação do Porquinho', tipo: 'Constelação', az: 74, alt: 38, raio: 8, xp: 300, desc: 'Barriguinha redonda, focinho e o rabinho enrolado. A preferida do Ed.', fala: 'A constelação do Porquinho! Com o rabicó e tudo!' },
+  { id: 'cGalinha', nome: 'Constelação da Galinha', tipo: 'Constelação', az: 134, alt: 50, raio: 8, xp: 300, desc: 'A crista em cima, o bico para a frente e os dois pezinhos.', fala: 'A Galinha do céu! Será que bota ovo de estrela?' },
+  { id: 'cTrator', nome: 'Constelação do Trator', tipo: 'Constelação', az: 182, alt: 32, raio: 8, xp: 300, desc: 'A roda grande atrás, a pequena na frente e a cabine.', fala: 'Um trator no céu! Quem será que ara as estrelas?' },
+  { id: 'cPa', nome: 'Constelação da Pá de Pão', tipo: 'Constelação', az: 240, alt: 58, raio: 8, xp: 300, desc: 'O cabo comprido e a pá larga do forno da padaria.', fala: 'A Pá de Pão! Agora deu fome.' },
+  { id: 'cPato', nome: 'Constelação do Pato', tipo: 'Constelação', az: 292, alt: 40, raio: 8, xp: 300, desc: 'Corpo de barquinho, pescoço comprido, bico e o rabinho arrebitado.', fala: 'O Pato do céu nada na Via Láctea.' },
+  { id: 'cAbelha', nome: 'Constelação da Abelha', tipo: 'Constelação', az: 332, alt: 60, raio: 8, xp: 300, desc: 'O corpinho, as duas asas e o ferrão. Dizem que ela guarda o mel das estrelas.', fala: 'Uma abelha de estrelas! Cadê a colmeia dela?' },
+  { id: 'cRegador', nome: 'Constelação do Regador', tipo: 'Constelação', az: 152, alt: 24, raio: 8, xp: 300, desc: 'A lata, a alça e o bico comprido. Quando chove, foi ela.', fala: 'O Regador do céu! Então é ele que manda a chuva.' },
+  { id: 'cometa', nome: 'Cometa', tipo: 'Cometa', az: 122, alt: 42, raio: 4, xp: 1000, desc: 'Uma bola de gelo e poeira com a cauda comprida, de passagem por algumas noites.', fala: 'Um cometa! Com a cauda e tudo! Isso é raro!', dica: 'só nas noites de cometa' },
+  { id: 'eclipse', nome: 'Eclipse da Lua', tipo: 'Eclipse', raio: 5, xp: 1000, desc: 'A sombra da Terra cobre a Lua, que fica vermelha cor de goiabada.', fala: 'A Lua ficou cor de goiabada! É o eclipse!', dica: 'só na noite de eclipse' },
+  { id: 'meteoros', nome: 'Chuva de meteoros', tipo: 'Meteoros', raio: 0, xp: 800, desc: 'Dezenas de estrelas cadentes na mesma noite: pedrinhas do espaço queimando no céu.', fala: 'Peguei uma estrela cadente na luneta! Foi muito rápida!', dica: 'só na noite de chuva de meteoros' }
+];
+const ASTRO_ID = Object.fromEntries(ASTRO.map(a => [a.id, a]));
+const FALAS_TORRE = ['Que céu! Dava pra ficar a noite inteira aqui.', 'A luneta grande é outra coisa, hein!', 'Olhei, olhei e nada de novo. Mas que é bonito, é.', 'O céu tá cheio hoje.', 'Acho que vi o ETzinho acenando. Ou era um vaga-lume.', 'As estrelas piscam igual a Luma quando tá com sono.', 'Amanhã eu volto pra procurar mais.', 'Olhar o céu acalma até porquinho agitado.', 'Lá de cima a fazenda deve ser um pontinho.', 'Tem mais estrela no céu que grão no terreiro.', 'A luneta é tão grande que dá pra ver o pensamento das estrelas.', 'Que silêncio bom lá dentro da torre.', 'Contei até mil estrelas e desisti.', 'Se a Via Láctea é leite, quem será a vaca?', 'Preciso anotar tudo no caderno.', 'Meu focinho ficou gelado de encostar na ocular.', 'Será que alguém lá longe tá olhando pra cá?', 'A cúpula girando faz um barulhinho gostoso.', 'Hoje o céu tava de gala.', 'Boa noite, estrelas! Até amanhã.', 'Fiquei tanto tempo olhando que deu torcicolo.', 'Céu limpinho, sem uma nuvem.'];
+// a Lua muda de lugar e de fase a cada noite (8 fases); a vaca de férias aparece em cima dela
+const luaDoDia = () => { const d = diaAtual(); return { az: (d * 53 + 40) % 360, alt: 34 + 14 * Math.sin(d * 1.7), fase: ((d % 8) + 0.5) / 8 }; };
+// o que tem de especial no céu desta noite (ceuDaNoite cuida do sorteio): chuva de meteoros, cometa ou eclipse
+const ceuHoje = () => { const c = S.ceuNoite; return c && c.dia === diaAtual() ? c : {}; };
+const posAstro = a => a.id === 'lua' || a.id === 'eclipse' ? luaDoDia() : a;
+const descobriu = id => !!(S.astro && S.astro[id] != null);
+function descobrirAstro(id){
+  if (!S.astro) S.astro = {};
+  if (S.astro[id] != null) return false;
+  S.astro[id] = diaAtual();
+  const [x, z] = frenteTorre(); ganharXP(ASTRO_ID[id].xp, new THREE.Vector3(x, 2.5, z));
+  if (obsEd) obsEd.novos.push(id);
+  hud(); salvar(); return true;
+}
+function menuTorre(r){
+  const noite = periodo().id === 'noite', n = ASTRO.filter(a => descobriu(a.id)).length;
+  r.itens.push({ rotulo: 'Olhar pela luneta grande', sub: !noite ? 'só de noite' : obsEd ? 'o Ed já está lá dentro' : `${n} de ${ASTRO.length} descobertas no caderno`, icone: 'lua', off: !noite || !!obsEd, fn: () => enfileirar('observar', { k: 'torre' }) });
+}
+function comecarObservacao(tarefa){
+  obsEd = { tarefa, fase: 'entra', t: 0, az: rnd(0, Math.PI * 2), elev: rnd(1.05, 1.3), novos: [] };
+  const [x, z] = portaTorre();
+  ed.ir([[x, z + 0.15]], () => { if (!obsEd || obsEd.fase !== 'entra') return; ed.g.visible = false; obsEd.fase = 'gira'; obsEd.t = 0; Som.tom(320, 0.6, 'triangle', 0.02, 260); });
+}
+function passoObservacao(dt){
+  const O = obsEd; if (!O) return;
+  O.t += dt;
+  if (O.fase === 'gira' && O.t > OCULAR.gira + 2.2){ O.fase = 'olha'; O.t = 0; abrirOcular(); }
+  else if (O.fase === 'desce' && O.t > OCULAR.desce) terminarObservacao(false);
+}
+function terminarObservacao(cancelado){
+  const O = obsEd; if (!O) return;
+  obsEd = null; fecharOcular(true);
+  const [x, z] = portaTorre(), [fx, fz] = frenteTorre();
+  ed.g.visible = true;
+  if (cancelado){ ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; ed.colocar(fx, fz); return; }
+  ed.colocar(x, z + 0.15);
+  ed.ir([[fx, fz]], () => {
+    const novo = O.novos.length ? ASTRO_ID[O.novos[O.novos.length - 1]] : null, txt = novo ? novo.fala : variar(FALAS_TORRE);
+    falar(ed, txt, tempoDeLeitura(txt)); if (novo) ed.pulo = 0.3;
+    if (fila[0] === O.tarefa) fila.shift();
+    if (tarefaAtual === O.tarefa) tarefaAtual = null;
+    liberar(O.tarefa, false); hud(); salvar();
+  });
+}
+// ---- a ocular: o céu numa tela redonda. Coordenadas em graus: az (0 a 360) e alt; vista guarda para onde a luneta aponta
+let ocular = null;
+const ESTRELAS_FUNDO = Array.from({ length: 1700 }, (_, i) => ({ az: hash(i, 1, 3) * 360, alt: Math.asin(hash(i, 2, 5)) * 180 / Math.PI, m: Math.pow(hash(i, 7, 9), 3), tw: hash(i, 4, 8) * 6.28, c: hash(i, 6, 2) }));
+const altVia = az => 46 + 26 * Math.sin((az + 30) * Math.PI / 180);
+const NUVEM_VIA = Array.from({ length: 420 }, (_, i) => { const az = hash(i, 11, 3) * 360; return { az, alt: altVia(az) + (hash(i, 12, 5) - 0.5) * 16 * (0.4 + hash(i, 13, 1)), r: 2 + hash(i, 14, 7) * 5, a: 0.03 + hash(i, 15, 2) * 0.05 }; });
+function abrirOcular(){
+  fecharMenu(); desligarModo();
+  const L = luaDoDia(), el = document.createElement('div');
+  el.id = 'ocular'; el.className = 'ocular';
+  el.innerHTML = '<canvas></canvas><div class="oc-topo"><div class="oc-titulo">Luneta do observatório</div><div class="oc-conta"></div></div><button class="botao oc-sair" type="button">Sair da luneta</button><div class="oc-info"><b>Arraste para mover a luneta.</b><span>Toque no que achar no céu para anotar no caderno.</span></div><div class="oc-rumo"></div>';
+  $('jogo').appendChild(el);
+  // começa olhando para a Lua, um pouco de lado, para ela aparecer e convidar a procurar o resto
+  ocular = { el, c: el.querySelector('canvas'), vaz: (L.az + 14) % 360, valt: clamp(L.alt + 6, OCULAR.altMin, OCULAR.altMax), t: 0, sel: null, novo: false, risco: [], proxRisco: 1, toque: null };
+  el.querySelector('.oc-sair').addEventListener('click', () => { Som.clique(); fecharOcular(); });
+  const C = ocular.c;
+  C.addEventListener('pointerdown', e => { C.setPointerCapture(e.pointerId); ocular.toque = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, mexeu: false }; });
+  C.addEventListener('pointermove', e => {
+    const T = ocular && ocular.toque; if (!T) return;
+    const k = escalaOcular(), dx = e.clientX - T.x, dy = e.clientY - T.y; T.x = e.clientX; T.y = e.clientY;
+    if (Math.hypot(e.clientX - T.x0, e.clientY - T.y0) > 7) T.mexeu = true;
+    if (!T.mexeu) return;
+    ocular.vaz = ((ocular.vaz - dx / k) % 360 + 360) % 360; ocular.valt = clamp(ocular.valt + dy / k, OCULAR.altMin, OCULAR.altMax);
+  });
+  C.addEventListener('pointerup', e => { const T = ocular && ocular.toque; if (!T) return; ocular.toque = null; if (!T.mexeu) tocarOcular(e.clientX, e.clientY); });
+  contarOcular();
+  requestAnimationFrame(() => el.classList.add('on'));
+}
+function fecharOcular(silencioso){
+  if (!ocular) return;
+  ocular.el.remove(); ocular = null;
+  if (!silencioso && obsEd && obsEd.fase === 'olha'){ obsEd.fase = 'desce'; obsEd.t = 0; }
+}
+function contarOcular(){ if (ocular) ocular.el.querySelector('.oc-conta').textContent = `${ASTRO.filter(a => descobriu(a.id)).length} de ${ASTRO.length} no caderno`; }
+const raioOcular = () => Math.min(innerWidth, innerHeight) * 0.46;
+const escalaOcular = () => raioOcular() / (OCULAR.campo / 2);
+const difAz = a => ((a % 360) + 540) % 360 - 180;
+// de graus no céu para a tela
+function naOcular(az, alt){ const k = escalaOcular(); return [innerWidth / 2 + difAz(az - ocular.vaz) * k, innerHeight / 2 - (alt - ocular.valt) * k]; }
+// o que tem no céu agora, na ordem do toque (o de cima primeiro)
+function astrosVisiveis(){
+  const c = ceuHoje(), l = [];
+  if (vacasNoEspaco() > 0) l.push('vacaLua');
+  l.push(c.evento === 'eclipse' ? 'eclipse' : 'lua');
+  if (c.evento === 'cometa') l.push('cometa');
+  for (const a of ASTRO) if (a.az != null && a.id !== 'cometa') l.push(a.id);
+  return l;
+}
+function tocarOcular(x, y){
+  const O = ocular, k = escalaOcular(), L = luaDoDia();
+  if (Math.hypot(x - innerWidth / 2, y - innerHeight / 2) > raioOcular()) return;
+  let achou = null;
+  // as estrelas cadentes da chuva de meteoros, enquanto riscam
+  for (const R of O.risco){ const [rx, ry] = naOcular(R.az + R.daz * R.k, R.alt + R.dalt * R.k); if (Math.hypot(rx - x, ry - y) < 30) achou = 'meteoros'; }
+  if (!achou) for (const id of astrosVisiveis()){
+    const a = ASTRO_ID[id];
+    let [px, py] = id === 'vacaLua' ? naOcular(L.az + 1.2, L.alt + 4.6) : naOcular(posAstro(a).az, posAstro(a).alt);
+    if (Math.hypot(px - x, py - y) <= a.raio * k){ achou = id; break; }
+    if (CONSTELACOES[id] && CONSTELACOES[id].e.some(([ex, ey]) => { const [sx, sy] = naOcular(a.az + ex, a.alt + ey); return Math.hypot(sx - x, sy - y) < Math.max(14, 1.6 * k); })){ achou = id; break; }
+  }
+  if (!achou){ const az = O.vaz + (x - innerWidth / 2) / k, alt = O.valt - (y - innerHeight / 2) / k; if (Math.abs(alt - altVia(az)) < 7) achou = 'via'; }
+  if (!achou){ O.sel = null; mostrarInfoOcular(null); return; }
+  const novo = descobrirAstro(achou);
+  O.sel = achou; O.selT = 0;
+  if (novo){ Som.nivel(); contarOcular(); } else Som.clique();
+  mostrarInfoOcular(achou, novo);
+}
+function mostrarInfoOcular(id, novo){
+  const I = ocular && ocular.el.querySelector('.oc-info'); if (!I) return;
+  if (!id){ I.innerHTML = '<b>Nada por aqui.</b><span>Arraste para procurar. Toque na Lua, nos planetas, nas manchinhas e nos desenhos das estrelas.</span>'; return; }
+  const a = ASTRO_ID[id];
+  I.innerHTML = `<small>${esc(a.tipo)}</small><b>${esc(a.nome)}</b><span>${esc(a.desc)}</span>${novo ? `<em>Anotado no caderno! +${a.xp} XP</em>` : ''}`;
+}
+// desenhos do céu: cada um recebe o contexto, o ponto e k (pixels por grau)
+function desenharLua(g, x, y, k, fase, vermelha, vaca){
+  const r = 4.2 * k;
+  const gr = g.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
+  gr.addColorStop(0, vermelha ? '#e0705a' : '#f6f2e4'); gr.addColorStop(1, vermelha ? '#8a2e22' : '#c9c3b0');
+  g.save(); g.shadowColor = vermelha ? 'rgba(220,80,60,.5)' : 'rgba(255,250,220,.55)'; g.shadowBlur = r * 0.6;
+  g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); g.restore();
+  g.save(); g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.clip();
+  for (let i = 0; i < 14; i++){
+    const a = hash(i, 3, 9) * 6.28, d = Math.sqrt(hash(i, 5, 1)) * r * 0.85, cr = r * (0.06 + hash(i, 8, 4) * 0.13);
+    g.fillStyle = vermelha ? 'rgba(90,20,14,.35)' : 'rgba(140,132,112,.45)'; g.beginPath(); g.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, cr, 0, Math.PI * 2); g.fill();
+    g.fillStyle = vermelha ? 'rgba(255,170,150,.18)' : 'rgba(255,255,245,.35)'; g.beginPath(); g.arc(x + Math.cos(a) * d - cr * 0.25, y + Math.sin(a) * d - cr * 0.25, cr * 0.55, 0, Math.PI * 2); g.fill();
+  }
+  // a sombra da fase (fase 0 e 1: nova; 0,5: cheia); no eclipse a Lua está sempre cheia
+  if (!vermelha){
+    const c = Math.cos(fase * Math.PI * 2);
+    g.translate(x, y); if (fase > 0.5) g.scale(-1, 1);
+    g.fillStyle = 'rgba(6,8,20,.86)'; g.beginPath(); g.arc(0, 0, r + 1, -Math.PI / 2, Math.PI / 2, true); g.ellipse(0, 0, (r + 1) * Math.abs(c), r + 1, 0, Math.PI / 2, -Math.PI / 2, c > 0); g.fill();
+  }
+  g.restore();
+  if (vaca) desenharVacaLua(g, x + 1.2 * k, y - 4.6 * k, k);
+}
+// a vaca de férias, de pé em cima da Lua, de óculos escuros e anteninha, acenando
+function desenharVacaLua(g, x, y, k){
+  const s = k * 0.5, t = performance.now() / 1000, ac = Math.sin(t * 6) * 0.5;
+  g.save(); g.translate(x, y); g.lineJoin = 'round'; g.lineCap = 'round'; g.lineWidth = Math.max(1, s * 0.25); g.strokeStyle = '#222';
+  const ret = (a, b, w, h, cor) => { g.fillStyle = cor; g.fillRect(a * s, b * s, w * s, h * s); g.strokeRect(a * s, b * s, w * s, h * s); };
+  ret(-1.6, 1.2, 0.6, 1.4, '#fff'); ret(0.9, 1.2, 0.6, 1.4, '#fff');
+  ret(-2, -0.6, 4, 2, '#fff'); g.fillStyle = '#222'; g.fillRect(-1.3 * s, -0.4 * s, 1.1 * s, 0.8 * s); g.fillRect(0.6 * s, 0.2 * s, 0.9 * s, 0.7 * s);
+  ret(1.6, -2.2, 1.8, 1.9, '#fff'); ret(2.4, -1.1, 1.2, 0.9, '#f4a3b8');
+  g.fillStyle = '#111'; g.fillRect(1.7 * s, -1.9 * s, 1.6 * s, 0.5 * s);
+  g.beginPath(); g.moveTo(2.2 * s, -2.2 * s); g.lineTo(1.9 * s, -3.4 * s); g.stroke(); g.fillStyle = '#ffd84d'; g.beginPath(); g.arc(1.9 * s, -3.5 * s, 0.35 * s, 0, 6.28); g.fill();
+  g.beginPath(); g.moveTo(-1.8 * s, -0.4 * s); g.lineTo(-3 * s, (-1.8 + ac) * s); g.stroke();
+  g.restore();
+}
+function desenharPlaneta(g, id, x, y, k){
+  g.save();
+  if (id === 'saturno'){
+    const r = 1.3 * k;
+    g.strokeStyle = 'rgba(230,210,160,.85)'; g.lineWidth = Math.max(1.5, k * 0.35);
+    g.beginPath(); g.ellipse(x, y, r * 2.3, r * 0.7, -0.35, Math.PI, Math.PI * 2); g.stroke();
+    const gr = g.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r); gr.addColorStop(0, '#f4dfa6'); gr.addColorStop(1, '#b58f4e');
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.ellipse(x, y, r * 2.3, r * 0.7, -0.35, 0, Math.PI); g.stroke();
+  } else if (id === 'jupiter'){
+    const r = 1.6 * k;
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.clip();
+    const cores = ['#e8d3b0', '#c48a5a', '#efe0c4', '#b0704a', '#e6cfa8', '#c9946a', '#efe2c8'];
+    cores.forEach((c, i) => { g.fillStyle = c; g.fillRect(x - r, y - r + i * 2 * r / cores.length, 2 * r, 2 * r / cores.length + 1); });
+    g.fillStyle = '#b5482f'; g.beginPath(); g.ellipse(x + r * 0.35, y + r * 0.3, r * 0.22, r * 0.13, 0, 0, Math.PI * 2); g.fill();
+    g.restore(); g.save();
+    g.fillStyle = '#fff8e0';
+    for (const [d, rr] of [[-3.2, 0.22], [-2.3, 0.18], [2.6, 0.2], [3.8, 0.17]]){ g.beginPath(); g.arc(x + d * k, y + d * k * 0.08, Math.max(1.2, rr * k), 0, Math.PI * 2); g.fill(); }
+  } else if (id === 'marte'){
+    const r = 0.95 * k, gr = g.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r); gr.addColorStop(0, '#f0855a'); gr.addColorStop(1, '#9a3a22');
+    g.shadowColor = 'rgba(240,120,80,.6)'; g.shadowBlur = r; g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    g.shadowBlur = 0; g.fillStyle = '#fdf8ef'; g.beginPath(); g.ellipse(x, y - r * 0.78, r * 0.45, r * 0.2, 0, 0, Math.PI * 2); g.fill();
+  } else if (id === 'venus'){
+    const r = 1.05 * k;
+    g.shadowColor = 'rgba(255,250,210,.9)'; g.shadowBlur = r * 2.2; g.fillStyle = '#fffbe6'; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    g.shadowBlur = 0; g.fillStyle = 'rgba(8,10,24,.75)'; g.beginPath(); g.arc(x - r * 0.45, y, r * 0.9, 0, Math.PI * 2); g.fill();
+  }
+  g.restore();
+}
+function desenharObjetoFundo(g, id, x, y, k, t){
+  g.save();
+  if (id === 'leitoezinhos'){
+    for (const [dx, dy, m] of [[0, 0, 1], [1.4, 0.6, 0.8], [-1.2, 0.9, 0.9], [0.6, -1.3, 0.85], [-0.7, -1.6, 0.7], [2.2, -0.8, 0.7], [-2, -0.4, 0.75]]){
+      const r = Math.max(1.6, k * 0.22 * m);
+      g.shadowColor = 'rgba(150,190,255,.95)'; g.shadowBlur = r * 4; g.fillStyle = '#dfeaff'; g.beginPath(); g.arc(x + dx * k, y + dy * k, r, 0, Math.PI * 2); g.fill();
+    }
+  } else if (id === 'nebulosa'){
+    for (let i = 0; i < 26; i++){
+      const a = hash(i, 2, 7) * 6.28, d = hash(i, 4, 3) * 3.2 * k, rr = (1 + hash(i, 6, 5) * 2.2) * k, cor = i % 3 ? 'rgba(255,120,190,' : 'rgba(110,170,255,';
+      const gr = g.createRadialGradient(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7, 0, x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7, rr);
+      gr.addColorStop(0, cor + '.22)'); gr.addColorStop(1, cor + '0)'); g.fillStyle = gr; g.fillRect(x - 7 * k, y - 7 * k, 14 * k, 14 * k);
+    }
+    g.fillStyle = '#fff'; for (let i = 0; i < 6; i++){ g.beginPath(); g.arc(x + (hash(i, 9, 1) - 0.5) * 5 * k, y + (hash(i, 9, 2) - 0.5) * 4 * k, Math.max(1, k * 0.12), 0, 6.28); g.fill(); }
+  } else if (id === 'galaxia'){
+    g.translate(x, y); g.rotate(t * 0.03); g.scale(1, 0.55);
+    const gr = g.createRadialGradient(0, 0, 0, 0, 0, 1.2 * k); gr.addColorStop(0, 'rgba(255,240,200,.9)'); gr.addColorStop(1, 'rgba(255,240,200,0)');
+    g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 1.2 * k, 0, 6.28); g.fill();
+    for (let b = 0; b < 2; b++) for (let i = 0; i < 90; i++){
+      const u = i / 90, a = b * Math.PI + u * 3.6, d = (0.4 + u * 3.6) * k;
+      g.fillStyle = `rgba(${200 + 55 * u | 0},${210},255,${0.55 * (1 - u) + 0.08})`;
+      g.beginPath(); g.arc(Math.cos(a) * d + (hash(i, b, 3) - 0.5) * k * 0.5, Math.sin(a) * d + (hash(i, b, 4) - 0.5) * k * 0.5, Math.max(0.8, k * 0.11), 0, 6.28); g.fill();
+    }
+  } else if (id === 'cometa'){
+    const ang = -2.4, gr = g.createLinearGradient(x, y, x + Math.cos(ang) * 14 * k, y + Math.sin(ang) * 14 * k);
+    gr.addColorStop(0, 'rgba(200,240,255,.75)'); gr.addColorStop(1, 'rgba(200,240,255,0)');
+    g.fillStyle = gr; g.beginPath(); g.moveTo(x, y - 0.6 * k); g.lineTo(x + Math.cos(ang) * 14 * k - 2.5 * k, y + Math.sin(ang) * 14 * k + 1.5 * k); g.lineTo(x + Math.cos(ang) * 14 * k + 2 * k, y + Math.sin(ang) * 14 * k - 2 * k); g.lineTo(x + 0.6 * k, y); g.fill();
+    g.shadowColor = 'rgba(190,240,255,1)'; g.shadowBlur = k * 2; g.fillStyle = '#f4fdff'; g.beginPath(); g.arc(x, y, Math.max(2, 0.7 * k), 0, 6.28); g.fill();
+  }
+  g.restore();
+}
+function desenharConstelacao(g, id, x, y, k, ligada, brilho){
+  const C = CONSTELACOES[id], pts = C.e.map(([ex, ey]) => [x + ex * k, y - ey * k]);
+  if (ligada){
+    g.save(); g.strokeStyle = `rgba(140,190,255,${0.55 * brilho})`; g.lineWidth = Math.max(1, k * 0.12); g.setLineDash([k * 0.5, k * 0.35]);
+    g.beginPath(); for (const [a, b] of C.l){ g.moveTo(...pts[a]); g.lineTo(...pts[b]); } g.stroke(); g.restore();
+  }
+  g.save(); g.fillStyle = '#fff6dc'; g.shadowColor = 'rgba(255,240,190,.9)'; g.shadowBlur = k * 0.6;
+  pts.forEach(([px, py], i) => { g.beginPath(); g.arc(px, py, Math.max(1.4, k * (0.16 + 0.06 * (i % 3))), 0, 6.28); g.fill(); });
+  g.restore();
+}
+// um quadro da ocular: o céu, a Via Láctea, os astros, as cadentes da chuva e o aro de latão
+function desenharOcular(dt){
+  const O = ocular; if (!O) return;
+  O.t += dt;
+  const C = O.c, w = innerWidth, h = innerHeight;
+  if (C.width !== w || C.height !== h){ C.width = w; C.height = h; }
+  const g = C.getContext('2d'), k = escalaOcular(), R = raioOcular(), cx = w / 2, cy = h / 2, c = ceuHoje(), L = luaDoDia();
+  g.clearRect(0, 0, w, h);
+  g.save(); g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.clip();
+  const fundo = g.createRadialGradient(cx, cy, R * 0.1, cx, cy, R); fundo.addColorStop(0, '#141a3a'); fundo.addColorStop(1, '#070914');
+  g.fillStyle = fundo; g.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+  const ve = (az, alt, m) => Math.abs(difAz(az - O.vaz)) * k < R + m && Math.abs(alt - O.valt) * k < R + m;
+  for (const N of NUVEM_VIA) if (ve(N.az, N.alt, N.r * k)){ const [x, y] = naOcular(N.az, N.alt), gr = g.createRadialGradient(x, y, 0, x, y, N.r * k); gr.addColorStop(0, `rgba(190,180,255,${N.a})`); gr.addColorStop(1, 'rgba(190,180,255,0)'); g.fillStyle = gr; g.fillRect(x - N.r * k, y - N.r * k, 2 * N.r * k, 2 * N.r * k); }
+  for (const E of ESTRELAS_FUNDO) if (ve(E.az, E.alt, 4)){
+    const [x, y] = naOcular(E.az, E.alt), a = 0.35 + 0.65 * E.m * (0.75 + 0.25 * Math.sin(O.t * 3 + E.tw));
+    g.fillStyle = E.c < 0.15 ? `rgba(255,200,170,${a})` : E.c > 0.85 ? `rgba(180,210,255,${a})` : `rgba(255,252,240,${a})`;
+    g.beginPath(); g.arc(x, y, 0.5 + E.m * Math.max(1.2, k * 0.14), 0, 6.28); g.fill();
+  }
+  for (const a of ASTRO){
+    if (a.az == null) continue;
+    if (a.id === 'cometa' && c.evento !== 'cometa') continue;
+    if (!ve(a.az, a.alt, 16 * k)) continue;
+    const [x, y] = naOcular(a.az, a.alt), brilho = O.sel === a.id ? 0.6 + 0.4 * Math.sin(O.t * 5) : 1;
+    if (CONSTELACOES[a.id]) desenharConstelacao(g, a.id, x, y, k, descobriu(a.id) || O.sel === a.id, brilho);
+    else if (a.tipo === 'Planeta') desenharPlaneta(g, a.id, x, y, k);
+    else desenharObjetoFundo(g, a.id, x, y, k, O.t);
+  }
+  if (ve(L.az, L.alt, 6 * k)){ const [x, y] = naOcular(L.az, L.alt); desenharLua(g, x, y, k, L.fase, c.evento === 'eclipse', vacasNoEspaco() > 0); }
+  // a chuva de meteoros: riscos que cruzam a ocular de vez em quando (e um pouco mais quando é a noite dela)
+  O.proxRisco -= dt;
+  if (O.proxRisco <= 0){
+    O.proxRisco = c.evento === 'chuva' ? rnd(0.5, 1.4) : rnd(7, 16);
+    O.risco.push({ az: O.vaz + rnd(-18, 18), alt: O.valt + rnd(4, 18), daz: rnd(-14, 14), dalt: rnd(-12, -6), k: 0, dur: rnd(0.5, 0.9) });
+  }
+  for (let i = O.risco.length - 1; i >= 0; i--){
+    const M = O.risco[i]; M.k += dt / M.dur;
+    if (M.k >= 1){ O.risco.splice(i, 1); continue; }
+    const [x1, y1] = naOcular(M.az + M.daz * M.k, M.alt + M.dalt * M.k), [x0, y0] = naOcular(M.az + M.daz * Math.max(0, M.k - 0.25), M.alt + M.dalt * Math.max(0, M.k - 0.25));
+    const gr = g.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, 'rgba(255,250,220,0)'); gr.addColorStop(1, `rgba(255,250,220,${Math.sin(M.k * Math.PI)})`);
+    g.strokeStyle = gr; g.lineWidth = Math.max(1.5, k * 0.18); g.lineCap = 'round'; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+  }
+  // o nome do que está selecionado, perto dele
+  if (O.sel){
+    const a = ASTRO_ID[O.sel], p = O.sel === 'vacaLua' ? [L.az + 1.2, L.alt + 7] : O.sel === 'via' || O.sel === 'meteoros' ? null : [posAstro(a).az, posAstro(a).alt + (a.raio || 3) + 1.5];
+    if (p && ve(p[0], p[1], 0)){ const [x, y] = naOcular(...p); g.font = `700 ${Math.max(13, Math.min(18, k * 0.9))}px system-ui, sans-serif`; g.textAlign = 'center'; g.fillStyle = 'rgba(255,240,200,.95)'; g.fillText(a.nome, x, y); }
+  }
+  // a vinheta da lente
+  const vin = g.createRadialGradient(cx, cy, R * 0.75, cx, cy, R); vin.addColorStop(0, 'rgba(0,0,0,0)'); vin.addColorStop(1, 'rgba(0,0,0,.55)');
+  g.fillStyle = vin; g.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+  g.restore();
+  // o aro de latão com os riscos de grau
+  g.save(); g.lineWidth = Math.max(10, R * 0.07);
+  const aro = g.createLinearGradient(cx - R, cy - R, cx + R, cy + R); aro.addColorStop(0, '#f3d27a'); aro.addColorStop(0.5, '#a8772c'); aro.addColorStop(1, '#e7c066');
+  g.strokeStyle = aro; g.beginPath(); g.arc(cx, cy, R + g.lineWidth / 2, 0, Math.PI * 2); g.stroke();
+  g.strokeStyle = 'rgba(60,40,10,.6)'; g.lineWidth = 2;
+  for (let i = 0; i < 72; i++){ const a = i / 72 * Math.PI * 2, r1 = R + 3, r2 = R + (i % 6 ? 9 : 15); g.beginPath(); g.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); g.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2); g.stroke(); }
+  g.restore();
+  const rumo = ['norte', 'nordeste', 'leste', 'sudeste', 'sul', 'sudoeste', 'oeste', 'noroeste'][Math.round(O.vaz / 45) % 8];
+  const el = O.el.querySelector('.oc-rumo'), txt = `Olhando para o ${rumo}, ${Math.round(O.valt)}° de altura`;
+  if (el.textContent !== txt) el.textContent = txt;
+}
+// a miniatura de um astro para o caderno (fica guardada)
+const MINI_ASTRO = {};
+function miniAstro(id){
+  if (MINI_ASTRO[id]) return MINI_ASTRO[id];
+  const c = document.createElement('canvas'); c.width = c.height = 160;
+  const g = c.getContext('2d'), fundo = g.createRadialGradient(80, 80, 10, 80, 80, 90); fundo.addColorStop(0, '#1a2148'); fundo.addColorStop(1, '#080a18');
+  g.fillStyle = fundo; g.fillRect(0, 0, 160, 160);
+  for (let i = 0; i < 40; i++){ g.fillStyle = `rgba(255,250,235,${0.3 + hash(i, 3, 1) * 0.6})`; g.beginPath(); g.arc(hash(i, 1, 9) * 160, hash(i, 2, 9) * 160, 0.6 + hash(i, 5, 9), 0, 6.28); g.fill(); }
+  const a = ASTRO_ID[id];
+  if (CONSTELACOES[id]) desenharConstelacao(g, id, 80, 80, 6.2, true, 1.4);
+  else if (a.tipo === 'Planeta') desenharPlaneta(g, id, 80, 80, id === 'saturno' ? 22 : id === 'jupiter' ? 15 : 30);
+  else if (id === 'lua' || id === 'eclipse') desenharLua(g, 80, 80, 14, 0.38, id === 'eclipse', false);
+  else if (id === 'vacaLua'){ desenharLua(g, 80, 120, 12, 0.5, false, false); desenharVacaLua(g, 80, 64, 14); }
+  else if (id === 'via'){ for (let i = 0; i < 70; i++){ const x = i / 70 * 160, y = 80 + Math.sin(i / 11) * 18 + (hash(i, 4, 4) - 0.5) * 30, gr = g.createRadialGradient(x, y, 0, x, y, 22); gr.addColorStop(0, 'rgba(200,190,255,.14)'); gr.addColorStop(1, 'rgba(200,190,255,0)'); g.fillStyle = gr; g.fillRect(x - 22, y - 22, 44, 44); } }
+  else if (id === 'meteoros'){ for (let i = 0; i < 6; i++){ const x = 30 + i * 22, y = 20 + hash(i, 1, 1) * 40; const gr = g.createLinearGradient(x, y, x + 34, y + 44); gr.addColorStop(0, 'rgba(255,250,220,0)'); gr.addColorStop(1, 'rgba(255,250,220,.95)'); g.strokeStyle = gr; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x, y); g.lineTo(x + 34, y + 44); g.stroke(); } }
+  else desenharObjetoFundo(g, id, id === 'cometa' ? 110 : 80, id === 'cometa' ? 110 : 80, id === 'cometa' ? 6 : 13, 0);
+  return (MINI_ASTRO[id] = c.toDataURL());
+}
+function astronomiaHTML(){
+  const n = ASTRO.filter(a => descobriu(a.id)).length;
+  let h = `<div class="caderno"><h2>Astronomia</h2><p>Já anotei <span class="grifo">${n} de ${ASTRO.length}</span> coisas do céu. De noite eu olho pela luneta grande do observatório: é só tocar na torre.</p><div class="astro-grade">`;
+  for (const a of ASTRO){
+    if (descobriu(a.id)) h += `<div class="astro-cartao"><img src="${miniAstro(a.id)}" alt="${esc(a.nome)}"><b>${esc(a.nome)}</b><small>${esc(a.tipo)} · noite ${S.astro[a.id] + 1}</small><span>${esc(a.desc)}</span></div>`;
+    else h += `<div class="astro-cartao falta"><div class="astro-q">?</div><b>${CONSTELACOES[a.id] ? 'Uma constelação' : esc(a.tipo)}</b><small>${esc(a.dica || 'ainda não achei')}</small></div>`;
+  }
+  return h + '</div></div>';
 }
 // ================= Museu da fazenda (nível 56): o acervo da história da fazenda num prédio de colunas no canto Sul, ao lado
 // do observatório e de frente para a câmera. Visitar (tarefa 'museu', alvo { k: 'museu' }) leva o Ed até a escada e abre as
@@ -14624,7 +15030,7 @@ function passoGiro(p, dt, x, z){
   return a;
 }
 // a roupa de cada tarefa (undefined: a tarefa não muda nada, como andar); com chuva, a capa nas tarefas ao ar livre
-const TRAJE_ACAO = { coletarMel: 'apicultor', apagarFogo: 'bombeiro', coletarMata: 'guarda', tirarGalho: 'guarda', recolherLixo: 'guarda', cavarTrufa: 'detetive', trator: 'piloto', estrelas: 'astronauta', museu: 'chique' };
+const TRAJE_ACAO = { observar: 'astronauta', coletarMel: 'apicultor', apagarFogo: 'bombeiro', coletarMata: 'guarda', tirarGalho: 'guarda', recolherLixo: 'guarda', cavarTrufa: 'detetive', trator: 'piloto', estrelas: 'astronauta', museu: 'chique' };
 const SEM_CAPA = new Set(['spa', 'museu']);
 function trajeDaTarefa(t){
   if (!t || t.tipo === 'andar') return undefined;
@@ -18394,6 +18800,7 @@ function iniciarCine(id, reprise){
   $('jogo').classList.add('cinema'); $('jogo').classList.toggle('cine-livre', !!cena.cameraLivre);
   $('cine').hidden = false; requestAnimationFrame(() => $('cine').classList.add('on'));
   pararNadosNaHora(); tirarTrajesNaHora();
+  if (obsEd) cancelar(obsEd.tarefa);
   cine.passo = cena.iniciar(cine);
   if (cena.musica) Musica.tocar(cena.musica);
 }
@@ -21278,13 +21685,13 @@ function itensHud(){
 const fila = [];
 // o nome de uma tarefa: o da ação, ou um próprio dela (as atividades do spa: alvo.rotulo)
 const nomeAcao = t => (t.alvo && t.alvo.rotulo) || NOMES_ACAO[t.tipo];
-const NOMES_ACAO = { spa:'Banho de lama', desejo:'Fazer um pedido', museu:'Visitar o museu', subirMirante:'Subir no mirante', estrelas:'Olhar as estrelas', trator:'Sair com o trator', carinhoGalo:'Carinho no galo', pegarGalo:'Pegar o galo', soltarGalo:'Devolver o galo', apagarFogo:'Apagar o fogo', recolherLixo:'Recolher o lixo', tirarGalho:'Tirar o galho', pegarAluguel:'Pegar o aluguel', lerCartao:'Ler o cartão-postal', tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', abrirPresente:'Abrir o presente', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa', nadar:'Nadar na cachoeira', balancar:'Brincar no balanço', parquinho:'Brincar no parquinho', passeio:'Passeio de avião' };
+const NOMES_ACAO = { observar:'Olhar pela luneta grande', spa:'Banho de lama', desejo:'Fazer um pedido', museu:'Visitar o museu', subirMirante:'Subir no mirante', estrelas:'Olhar as estrelas', trator:'Sair com o trator', carinhoGalo:'Carinho no galo', pegarGalo:'Pegar o galo', soltarGalo:'Devolver o galo', apagarFogo:'Apagar o fogo', recolherLixo:'Recolher o lixo', tirarGalho:'Tirar o galho', pegarAluguel:'Pegar o aluguel', lerCartao:'Ler o cartão-postal', tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', abrirPresente:'Abrir o presente', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa', nadar:'Nadar na cachoeira', balancar:'Brincar no balanço', parquinho:'Brincar no parquinho', passeio:'Passeio de avião' };
 const DUR = { spa: 0.3, desejo: 1.4, museu: 0.5, subirMirante: 0.2, estrelas: 4.5, carinhoGalo: 2.4, pegarGalo: 0.5, soltarGalo: 0.7, apagarFogo: 2.2, recolherLixo: 0.8, tirarGalho: 2.4, pegarAluguel: 0.6, lerCartao: 0.6, tirarCerca: 2.4, colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, abrirPresente: 0.2, coletarMata: 1.0, cavarTrufa: 1.6, nadar: 0.2, balancar: 0.2, parquinho: 0.2, passeio: 0.2 };
 const FERR = { spa: null, desejo: null, museu: null, subirMirante: null, estrelas: null, carinhoGalo: 'carinho', pegarGalo: null, soltarGalo: 'soltar', apagarFogo: 'regador', recolherLixo: 'cesta', tirarGalho: null, pegarAluguel: null, lerCartao: null, tirarCerca: 'enxada', colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', abrirPresente: null, coletarMata: 'cesta', cavarTrufa: 'enxada', nadar: null, balancar: null, parquinho: null, passeio: null };
 const mesmoAlvo = (a, b) => a.k === b.k && (a.k === 'animal' ? a.a === b.a : a.x === b.x && a.z === b.z);
-function reservado(alvo){ if (alvo.k === 'passeio') return fila.some(t => t.tipo === 'passeio'); if (alvo.k === 'brinquedo') return fila.some(t => t.tipo === 'parquinho'); if (alvo.k === 'balanco') return fila.some(t => t.tipo === 'balancar'); if (alvo.k === 'cachoeira') return fila.some(t => t.tipo === 'nadar'); if (alvo.k === 'spa') return fila.some(t => t.tipo === 'spa'); if (alvo.k === 'poco') return fila.some(t => t.tipo === 'desejo'); if (alvo.k === 'museu') return fila.some(t => t.tipo === 'museu'); if (alvo.k === 'luneta') return fila.some(t => t.tipo === 'estrelas'); if (alvo.k === 'mirante') return fila.some(t => t.tipo === 'subirMirante'); if (alvo.k === 'trator') return fila.some(t => t.tipo === 'trator' && t.alvo.lote === alvo.lote); if (alvo.k === 'galo') return fila.some(t => t.alvo.k === 'galo' && t.alvo.id === alvo.id); if (alvo.k === 'ocorrencia') return fila.some(t => t.alvo.k === 'ocorrencia' && t.alvo.id === alvo.id && t.alvo.j === alvo.j); if (alvo.k === 'aluguel') return fila.some(t => t.tipo === 'pegarAluguel'); if (alvo.k === 'cartao') return fila.some(t => t.tipo === 'lerCartao'); if (alvo.k === 'cercaCanto') return fila.some(t => t.tipo === 'tirarCerca'); if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'caixaEt') return fila.some(t => t.tipo === 'abrirPresente'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
+function reservado(alvo){ if (alvo.k === 'torre') return fila.some(t => t.tipo === 'observar'); if (alvo.k === 'passeio') return fila.some(t => t.tipo === 'passeio'); if (alvo.k === 'brinquedo') return fila.some(t => t.tipo === 'parquinho'); if (alvo.k === 'balanco') return fila.some(t => t.tipo === 'balancar'); if (alvo.k === 'cachoeira') return fila.some(t => t.tipo === 'nadar'); if (alvo.k === 'spa') return fila.some(t => t.tipo === 'spa'); if (alvo.k === 'poco') return fila.some(t => t.tipo === 'desejo'); if (alvo.k === 'museu') return fila.some(t => t.tipo === 'museu'); if (alvo.k === 'luneta') return fila.some(t => t.tipo === 'estrelas'); if (alvo.k === 'mirante') return fila.some(t => t.tipo === 'subirMirante'); if (alvo.k === 'trator') return fila.some(t => t.tipo === 'trator' && t.alvo.lote === alvo.lote); if (alvo.k === 'galo') return fila.some(t => t.alvo.k === 'galo' && t.alvo.id === alvo.id); if (alvo.k === 'ocorrencia') return fila.some(t => t.alvo.k === 'ocorrencia' && t.alvo.id === alvo.id && t.alvo.j === alvo.j); if (alvo.k === 'aluguel') return fila.some(t => t.tipo === 'pegarAluguel'); if (alvo.k === 'cartao') return fila.some(t => t.tipo === 'lerCartao'); if (alvo.k === 'cercaCanto') return fila.some(t => t.tipo === 'tirarCerca'); if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'caixaEt') return fila.some(t => t.tipo === 'abrirPresente'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
 const visSlot = alvo => { const L = alvo.k === 'pomar' ? POMAR_VIS : alvo.k === 'mata' ? MATA_VIS : COLMEIA_VIS; return L[alvo.i] || (L[alvo.i] = {}); };
-function setReserva(alvo, v){ if (alvo.k === 'passeio' || alvo.k === 'balanco' || alvo.k === 'brinquedo' || alvo.k === 'cachoeira' || alvo.k === 'trator' || alvo.k === 'luneta' || alvo.k === 'mirante' || alvo.k === 'museu' || alvo.k === 'poco' || alvo.k === 'spa') return; if (alvo.k === 'galo'){ if (GALOS[alvo.id]) GALOS[alvo.id].res = v; return; } if (alvo.k === 'ocorrencia' || alvo.k === 'aluguel' || alvo.k === 'cartao' || alvo.k === 'cercaCanto' || alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'caixaEt' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
+function setReserva(alvo, v){ if (alvo.k === 'torre' || alvo.k === 'passeio' || alvo.k === 'balanco' || alvo.k === 'brinquedo' || alvo.k === 'cachoeira' || alvo.k === 'trator' || alvo.k === 'luneta' || alvo.k === 'mirante' || alvo.k === 'museu' || alvo.k === 'poco' || alvo.k === 'spa') return; if (alvo.k === 'galo'){ if (GALOS[alvo.id]) GALOS[alvo.id].res = v; return; } if (alvo.k === 'ocorrencia' || alvo.k === 'aluguel' || alvo.k === 'cartao' || alvo.k === 'cercaCanto' || alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'caixaEt' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
 // diz se a ação vale para o alvo; devolve o custo ou um motivo
 function checar(tipoA, alvo, param){
   if (alvo.k === 'galo'){
@@ -21301,6 +21708,7 @@ function checar(tipoA, alvo, param){
   if (alvo.k === 'aluguel') return { ok: tipoA === 'pegarAluguel' && !!S.aluguel, custo: {} };
   if (alvo.k === 'cartao') return { ok: tipoA === 'lerCartao' && !!S.cartao, custo: {} };
   if (alvo.k === 'mirante') return { ok: tipoA === 'subirMirante' && !!S.mirante && !miranteFP, custo: {} };
+  if (alvo.k === 'torre') return { ok: tipoA === 'observar' && obraConcluida('observatorio') && periodo().id === 'noite' && !obsEd, motivo: 'Só dá para olhar pela luneta grande de noite', custo: {} };
   if (alvo.k === 'luneta') return { ok: tipoA === 'estrelas' && obraConcluida('observatorio') && periodo().id === 'noite', motivo: 'Só dá para olhar as estrelas de noite', custo: {} };
   if (alvo.k === 'museu') return { ok: tipoA === 'museu' && obraConcluida('museu'), custo: {} };
   if (alvo.k === 'spa') return { ok: tipoA === 'spa' && spaAberto() && !banhoEd, custo: {} };
@@ -21415,7 +21823,7 @@ function liberar(tarefa, devolver){
 function cancelar(tarefa){
   const i = fila.indexOf(tarefa);
   if (i < 0) return;
-  if (i === 0 && tarefaAtual === tarefa){ if (trator && trator.tarefa === tarefa) guardarTrator(true); if (banhoEd && banhoEd.tarefa === tarefa) terminarBanhoEd(true); if (nadoDe(ed) && nadoDe(ed).tarefa === tarefa) pararNado(ed); if (balancoEd && balancoEd.tarefa === tarefa) pararBalancoEd(); if (brinqEd && brinqEd.tarefa === tarefa) pararBrinqEd(); if (passeio && passeio.tarefa === tarefa) desistirPasseio(); ed.estado = 'parado'; ed.pontos = []; ed.aoChegar = null; ed.trab = null; ed.ferramenta(null); tarefaAtual = null; }
+  if (i === 0 && tarefaAtual === tarefa){ if (trator && trator.tarefa === tarefa) guardarTrator(true); if (banhoEd && banhoEd.tarefa === tarefa) terminarBanhoEd(true); if (obsEd && obsEd.tarefa === tarefa) terminarObservacao(true); if (nadoDe(ed) && nadoDe(ed).tarefa === tarefa) pararNado(ed); if (balancoEd && balancoEd.tarefa === tarefa) pararBalancoEd(); if (brinqEd && brinqEd.tarefa === tarefa) pararBrinqEd(); if (passeio && passeio.tarefa === tarefa) desistirPasseio(); ed.estado = 'parado'; ed.pontos = []; ed.aoChegar = null; ed.trab = null; ed.ferramenta(null); tarefaAtual = null; }
   fila.splice(i, 1); liberar(tarefa, true); hud();
 }
 function limparFila(){ for (const t of fila.slice()) cancelar(t); }
@@ -21440,6 +21848,7 @@ function alvoMundo(alvo){
   if (alvo.k === 'composteira') return [COMPOSTEIRA.porta[0] + 0.5, COMPOSTEIRA.porta[1] + 0.5];
   if (alvo.k === 'trator') return [PREDIO.galpao.porta[0] + 0.5, PREDIO.galpao.porta[1] + 0.5];
   if (alvo.k === 'luneta') return lugarDaLuneta();
+  if (alvo.k === 'torre') return frenteTorre();
   if (alvo.k === 'museu') return portaMuseu();
   if (alvo.k === 'spa') return portaSpaMundo();
   if (alvo.k === 'cachoeira') return NADO.entrada;
@@ -21644,7 +22053,7 @@ function proximaTarefa(){
     let dx = ultimo[0] - ant[0], dz = ultimo[1] - ant[1], d = Math.hypot(dx, dz);
     if (tarefa.alvo.k === 'animal' || tarefa.alvo.k === 'galo'){ dx = tx - ant[0]; dz = tz - ant[1]; d = Math.hypot(dx, dz); }
     // no galo do mourão o Ed para encostado na cerca, de frente para ele
-    if ((tarefa.alvo.k === 'galo' && tarefa.alvo.onde === 'mourao') || tarefa.alvo.k === 'luneta' || tarefa.alvo.k === 'mirante' || tarefa.alvo.k === 'museu' || tarefa.alvo.k === 'poco' || tarefa.alvo.k === 'spa' || tarefa.alvo.k === 'cachoeira' || tarefa.alvo.k === 'balanco' || tarefa.alvo.k === 'brinquedo' || tarefa.alvo.k === 'passeio'){ if (pts.length) pts[pts.length - 1] = [tx, tz]; else pts = [[tx, tz]]; }
+    if ((tarefa.alvo.k === 'galo' && tarefa.alvo.onde === 'mourao') || tarefa.alvo.k === 'torre' || tarefa.alvo.k === 'luneta' || tarefa.alvo.k === 'mirante' || tarefa.alvo.k === 'museu' || tarefa.alvo.k === 'poco' || tarefa.alvo.k === 'spa' || tarefa.alvo.k === 'cachoeira' || tarefa.alvo.k === 'balanco' || tarefa.alvo.k === 'brinquedo' || tarefa.alvo.k === 'passeio'){ if (pts.length) pts[pts.length - 1] = [tx, tz]; else pts = [[tx, tz]]; }
     else if (encostar){
       const cx = gx + 0.5, cz = gz + 0.5, ex = tx - cx, ez = tz - cz, de = Math.hypot(ex, ez) || 1, k = Math.min(0.4, Math.max(0, de - 0.42));
       const fim = [cx + ex / de * k, cz + ez / de * k];
@@ -21658,6 +22067,7 @@ function proximaTarefa(){
   ed.ir(pts, () => {
     if (tarefa.tipo === 'andar'){ fila.shift(); tarefaAtual = null; hud(); return; }
     if (tarefa.tipo === 'trator'){ if (checar('trator', tarefa.alvo, tarefa.param).ok) sairComTrator(tarefa); else { fila.shift(); liberar(tarefa, true); tarefaAtual = null; hud(); } return; }
+    if (tarefa.tipo === 'observar'){ if (checar('observar', tarefa.alvo).ok) comecarObservacao(tarefa); else { fila.shift(); liberar(tarefa, true); tarefaAtual = null; hud(); } return; }
     if (tarefa.tipo === 'spa'){ if (checar('spa', tarefa.alvo).ok) comecarBanhoEd(tarefa); else { fila.shift(); liberar(tarefa, true); tarefaAtual = null; hud(); } return; }
     if (tarefa.tipo === 'passeio'){ if (checar('passeio', tarefa.alvo).ok) comecarPasseio(tarefa); else { fila.shift(); liberar(tarefa, true); tarefaAtual = null; hud(); } return; }
     if (tarefa.tipo === 'parquinho'){ if (checar('parquinho', tarefa.alvo).ok) comecarBrinqEd(tarefa); else { fila.shift(); liberar(tarefa, true); tarefaAtual = null; hud(); } return; }
@@ -23327,7 +23737,7 @@ function objetivosPorNivel(){
 }
 function abasDoCaderno(atual){
   const aba = (id, nome) => `<button class="aba" role="tab" type="button" data-pagina="${id}" aria-selected="${id === atual}">${nome}</button>`;
-  return `<div class="abas do-caderno" role="tablist">${aba('pedidos', 'Pedidos')}${aba('objetivos', 'Objetivos')}</div>`;
+  return `<div class="abas do-caderno" role="tablist">${aba('pedidos', 'Pedidos')}${aba('objetivos', 'Objetivos')}${obraConcluida('observatorio') ? aba('astronomia', 'Astronomia') : ''}</div>`;
 }
 function ligarAbasDoCaderno(){
   document.querySelectorAll('.do-caderno .aba').forEach(b => b.addEventListener('click', () => { Som.clique(); abrirCaderno(b.dataset.pagina); }));
@@ -23352,6 +23762,7 @@ function abrirObjetivos(){
 }
 function abrirCaderno(pagina){
   if (pagina === 'objetivos'){ abrirObjetivos(); return; }
+  if (pagina === 'astronomia'){ abrirJanela(topo('caderno', 'Caderno do Ed', 'Pedidos, desenhos e objetivos', 'rosa') + abasDoCaderno('astronomia') + `<div class="janela-corpo">${astronomiaHTML()}</div>`); ligarAbasDoCaderno(); return; }
   const of = ofertaDoDia();
   let h = `<div class="caderno">`;
   h += `<div class="rabisco-canto" style="right:10px;top:4px">${rabisco(RABISCO.sol(), '0 0 80 80', 64, 8)}</div>`;
@@ -24045,6 +24456,13 @@ function eventos(){
   $('modal').addEventListener('pointerdown', e => { if (e.target === $('modal')) fecharJanela(); });
   document.addEventListener('pointerdown', e => { if (menuAberto && !$('menu').contains(e.target) && e.target !== canvas) fecharMenu(); });
   addEventListener('keydown', e => {
+    // a ocular do observatório: Esc sai, as setas movem a luneta
+    if (ocular){
+      if (e.key === 'Escape') fecharOcular();
+      const d = { ArrowLeft: [-4, 0], ArrowRight: [4, 0], ArrowUp: [0, 4], ArrowDown: [0, -4] }[e.key];
+      if (d){ e.preventDefault(); ocular.vaz = (ocular.vaz + d[0] + 360) % 360; ocular.valt = clamp(ocular.valt + d[1], OCULAR.altMin, OCULAR.altMax); }
+      return;
+    }
     if (cine){
       if (e.key === 'Escape') pularCine(); else if (e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); avancarCine(); }
       else if (cine.cena.cameraLivre){ const k = e.key.toLowerCase(); if (k === 'q') girar(-1); else if (k === 'e') girar(1); else if (k === '+' || k === '=') zoom(0.85); else if (k === '-') zoom(1.18); }
@@ -24441,7 +24859,7 @@ async function iniciar(){
     chamine: () => CHAMINE_MUNDO, fumaca: (x, y, z) => fumaca(x, y, z), marcas: () => fila.filter(f => f.marca).map(f => ({ k: f.alvo.k, tipo: f.tipo, pos: f.marca.position.toArray().map(n => +n.toFixed(2)), ed: alvoMundo(f.alvo) })),
     spa: { SPA, PORCO_SPA, GUERRA_LAMA, familiaCena: () => spaFamilia, EXCURSAO, excursao: () => chegarExcursao(), excursaoObj: () => excursao, LIVRO_SPA, abrirLivro: abrirLivroSpa, fatorLivro: fatorLivroSpa, guerra: () => { proxGuerraLama = 0; }, guerraObj: () => guerraLama, ala: { pronta: alaSpaPronta, abrir: abrirAlaSpa, fruta: frutaDoBar, max: maxSpa, entrada: entradaSpa, proxima: v => proximaNoSpa(v), montar: montarGradeSpa }, visitantes: () => visitantesSpa, chegar: chegarAoSpa, familia: chegarFamiliaSpa, livres: familiaLivreSpa, lugares: () => (lugaresSpa || montarGradeSpa(), lugaresSpa), grade: () => gradeSpa, caminho: caminhoSpa, livresGrade: livresGradeSpa, banho: () => banhoEd, mundo: mundoSpa, esvaziar: esvaziarSpa, tracos: tracosPorcoSpa, descricao: descricaoPorcoSpa, itens: v => itensVisitanteSpa(v), menu: r => menuSpa(r), aberto: spaAberto, relogio: () => ({ proxSpa, proxFamiliaSpa }), zerar: () => { proxSpa = 0.1; proxFamiliaSpa = 0.1; }, sujar: sujarSpa, abrirCenas, pedirCena,
       noLugar: (v, tipo, i = 0, t = 999) => { if (!gradeSpa) montarGradeSpa(); const q = lugaresSpa.filter(l => l.tipo === tipo)[i], [x, z] = mundoSpa(q.x, q.z); Object.assign(v, { x, z, y: q.y, lugar: q, vai: 'lugar', estado: 'atividade', t, ang: q.ang, pagou: true, pts: [] }); v.g.visible = true; if (tipo === 'cadeira' && v.pep) v.pep.visible = true; } },
-    observatorio: { OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
+    observatorio: { caderno: abrirCaderno, obsEd: () => obsEd, ocular: () => ocular, abrirOcular, fecharOcular, tocar: tocarOcular, naOcular, ASTRO, luaDoDia, ceuHoje, descobrir: descobrirAstro, vis: () => observVis, OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
     luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, foguete: { FOGUETE, prox: () => S.fogueteEspera, zerar: () => { S.fogueteEspera = 0; }, obj: () => foguete, falas: falasFoguete }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { passeio: { obj: () => passeio, pode: podePasseio, caminho: caminhoPasseio, VOO_PASSEIO }, frete: { opcoes: opcoesFrete, mandar: mandarFrete, pagar: pagarFrete, itens: () => { const r = { estado: '', itens: [] }; itensFrete(r); return r; } }, rega: comecarRegaAerea, faixa: passarFaixa, FAIXA, voo: () => voo, JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, encomenda: { ENCOMENDAS, encomendar, cancelar: cancelarEncomenda, itens: () => { const r = { estado: '', itens: [] }; itensEncomenda(r); return r; } }, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, dormir: pedirDormir, item: itemDormir, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
     // auditoria de colisões: o que o desenho de uma construção (n = nível da reforma, ou 'andaime') põe fora do terreno dela
