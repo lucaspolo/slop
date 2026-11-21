@@ -4872,6 +4872,7 @@ function trocarEt(tipo){
   const p = V.quer, n = tipo === 'disco' ? V.q * VISITA_ET.discoX : V.q;
   if (tipo === 'sementes' ? V.sementes : temDiscoJardim()) return false;
   if ((S.celeiro[p] || 0) < n){ aviso(`Faltam ${PRODUTOS[p].plural} para a troca`, 'ruim'); Som.erro(); return false; }
+  if (sobraDe(p, separadoPedidos()) < n){ aviso(`Os ${PRODUTOS[p].plural} estão separados para os pedidos`, 'ruim'); Som.erro(); return false; }
   S.celeiro[p] -= n; if (!S.celeiro[p]) delete S.celeiro[p];
   const E = V.et, alvo = E.topo();
   if (tipo === 'sementes'){
@@ -6528,7 +6529,8 @@ function visitaDaLucia(){
     S.aluguel = ALUGUEL.valor; S.aluguelEspera = rnd(...ALUGUEL.minutos) * 60;
     // leva até 2 de cada doce da mata para o café da manhã dos nanos, pagando 25% a mais, no mesmo envelope
     let compra = 0;
-    for (const p of COMPRA_DA_MATA.lucia){ const q = Math.min(2, S.celeiro[p] || 0); if (!q) continue; S.celeiro[p] -= q; if (!S.celeiro[p]) delete S.celeiro[p]; compra += Math.round(PRODUTOS[p].venda * BONUS_COMPRADOR) * q; }
+    const sep = separadoPedidos();
+    for (const p of COMPRA_DA_MATA.lucia){ const q = Math.min(2, sobraDe(p, sep)); if (!q) continue; S.celeiro[p] -= q; if (!S.celeiro[p]) delete S.celeiro[p]; compra += Math.round(PRODUTOS[p].venda * BONUS_COMPRADOR) * q; }
     S.aluguel += compra;
     montarEnvelope(); Som.moeda();
     olharLucia(ed.pos.x, ed.pos.y);
@@ -13828,12 +13830,18 @@ function simularFabricas(){
   if (entregou) hud();
 }
 const ordenarFilaFab = st => st.fila.sort((a, b) => a.fim - b.fim);
+// a esteira só repete a receita com o que não está separado para os pedidos e a encomenda dos ETs (itensPrometidos). Se
+// o que ela faz é o que está faltando num deles, pode usar o que ficou separado como ingrediente, mas nunca o que vai direto
+function cabeNaSobra(R){
+  const { direto, ingr } = reservaPedidos(), fazFalta = Object.keys(R.sai).some(k => faltaNoPedido(k) > 0);
+  return Object.entries(R.entra).every(([k, q]) => (S.celeiro[k] || 0) - (direto[k] || 0) - (fazFalta ? 0 : ingr[k] || 0) >= q);
+}
 function repor(id, quando){
   const st = estFab(id);
   if (!st.repetir || !st.esteira) return false;
   const R = RECEITAS[st.repetir], naFila = fila.filter(t => t.tipo === 'produzir' && t.alvo.id === id).length;
   let pos = false;
-  while (st.fila.length + naFila < vagasFab(id) && temItens(R.entra)){
+  while (st.fila.length + naFila < vagasFab(id) && temItens(R.entra) && cabeNaSobra(R)){
     for (const [k, q] of Object.entries(R.entra)){ S.celeiro[k] -= q; if (!S.celeiro[k]) delete S.celeiro[k]; }
     st.fila.push({ r: st.repetir, fim: quando + R.tempo * 1000 });
     pos = true;
@@ -21658,7 +21666,7 @@ function desembarcar(){
 function presenteMilton(){
   const n = nivel(), culturas = ORDEM_CULTURAS.filter(c => CULTURAS[c].nivel <= n), r = Math.random();
   // se tiver guaraná em pó no celeiro, ele leva até 2 pacotes para as viagens, paga 25% a mais e traz o dobro do presente
-  const gq = Math.min(2, S.celeiro.guaranapo || 0), dobro = gq ? 2 : 1;
+  const gq = Math.min(2, sobraDe('guaranapo', separadoPedidos())), dobro = gq ? 2 : 1;
   if (gq){
     S.celeiro.guaranapo -= gq; if (!S.celeiro.guaranapo) delete S.celeiro.guaranapo;
     const v = Math.round(PRODUTOS.guaranapo.venda * BONUS_COMPRADOR) * gq; S.dinheiro += v;
@@ -21804,8 +21812,9 @@ const FALAS_MILTON_FRETE_PAGA = ['Vendi tudo! Aqui está: {v}.', 'A carga voou! 
 const miltonNaFazenda = () => voo.estado === 'parado' || voo.estado === 'pernoite';
 // os produtos que mais valem no celeiro (só os que o Milton pode vender), com a quantidade que cabe e o que rende
 function opcoesFrete(){
-  return Object.keys(S.celeiro).filter(p => PRODUTOS[p] && PRODUTOS[p].venda > 0 && S.celeiro[p] > 0)
-    .map(p => { const q = Math.min(FRETE.max, S.celeiro[p]); return { p, q, v: Math.round(PRODUTOS[p].venda * q * FRETE.bonus) }; })
+  const sep = separadoPedidos();
+  return Object.keys(S.celeiro).filter(p => PRODUTOS[p] && PRODUTOS[p].venda > 0 && sobraDe(p, sep) > 0)
+    .map(p => { const q = Math.min(FRETE.max, sobraDe(p, sep)); return { p, q, v: Math.round(PRODUTOS[p].venda * q * FRETE.bonus) }; })
     .sort((a, b) => b.v - a.v).slice(0, FRETE.opcoes);
 }
 function mandarFrete(o){
@@ -23152,17 +23161,26 @@ function canteirosPorCultura(){
   for (const tf of tarefas) if (tf.tipo === 'plantar' && CULTURAS[tf.param]){ const t = campo(tf.alvo.x, tf.alvo.z); if (t && t.e !== 'plantado') n[tf.param] = (n[tf.param] || 0) + 1; }
   return n;
 }
+// tudo o que está prometido e ainda não foi entregue: os pedidos do caderno (S.pedidos) e a encomenda dos ETs que chegou
+// pela antena e ainda não foi levada ao pouso (S.encomendaEt 'nova'). Vender, as fábricas, os canteiros e quem leva coisa
+// do celeiro sozinho (a Lúcia, o Milton, o frete, a troca com o ETzinho) contam por aqui, para não gastar o que está separado
+function itensPrometidos(){
+  const l = [];
+  for (const p of S.pedidos || []) if (p && p.itens) l.push(...p.itens);
+  const E = S.encomendaEt; if (E && E.estado === 'nova' && E.itens) l.push(...E.itens);
+  return l;
+}
 // o que os pedidos em aberto ainda pedem de cada cultura, descontando o celeiro e o que vai sair dos canteiros
 function faltaPedidos(cont){
   const pede = {}, falta = {};
-  for (const p of S.pedidos || []) if (p && p.itens) for (const [k, q] of p.itens) if (CULTURAS[k]) pede[k] = (pede[k] || 0) + q;
+  for (const [k, q] of itensPrometidos()) if (CULTURAS[k]) pede[k] = (pede[k] || 0) + q;
   for (const k in pede){ const f = pede[k] - (S.celeiro[k] || 0) - (cont[k] || 0) * rendCultura(k); if (f > 0) falta[k] = f; }
   return falta;
 }
 // o mesmo para qualquer produto, descontando o que já está a caminho (fila de construção, árvores plantadas)
 function faltaNoPedido(k, aCaminho = 0){
   let pede = 0;
-  for (const p of S.pedidos || []) if (p && p.itens) for (const [k2, q] of p.itens) if (k2 === k) pede += q;
+  for (const [k2, q] of itensPrometidos()) if (k2 === k) pede += q;
   return Math.max(0, pede - (S.celeiro[k] || 0) - aCaminho);
 }
 const textoFalta = f => f ? ` · ${f > 1 ? 'faltam' : 'falta'} ${f} pro pedido` : '';
@@ -23950,7 +23968,7 @@ function receitaQueFaz(p){
 // nas fábricas; o resto vira receitas, e os ingredientes delas são guardados, descendo de nível quando falta um ingrediente
 function reservaPedidos(){
   const pede = {}, livre = {}, vem = aCaminhoDasFabricas(), direto = {}, ingr = {}, falta = {};
-  for (const p of S.pedidos || []) if (p && p.itens) for (const [k, q] of p.itens) pede[k] = (pede[k] || 0) + q;
+  for (const [k, q] of itensPrometidos()) pede[k] = (pede[k] || 0) + q;
   const tirar = (p, q, onde) => { const t = Math.min(q, livre[p] != null ? livre[p] : (livre[p] = S.celeiro[p] || 0)); if (t){ livre[p] -= t; onde[p] = (onde[p] || 0) + t; } return q - t; };
   const fazer = (p, q, prof) => {
     const v = Math.min(q, vem[p] || 0); if (v){ vem[p] -= v; q -= v; }
@@ -24164,6 +24182,13 @@ function abrirCaderno(pagina){
       h += `<ul>${p.itens.map(([k, q]) => { const tem = S.celeiro[k] || 0, ok = tem >= q; return `<li class="${ok ? 'feito' : ''}"><span class="caixa">${ok ? '✓' : ''}</span><img src="${icone(k)}" alt=""><span class="texto">${q} ${q > 1 ? PRODUTOS[k].plural : PRODUTOS[k].nome.toLowerCase()}</span><small>(tenho ${tem})</small></li>`; }).join('')}</ul>`;
       h += `<p>Paga <span class="grifo">${reais(p.dinheiro)}</span> e ${p.xp} xp${p.premio ? `, e ainda ${esc(textoPremio(p.premio))}` : ''}!${completo ? ' Já tenho tudo!!' : ''}</p>`;
     });
+    // a encomenda dos ETs, enquanto não vai para o pouso: entra na conta do que fica separado no celeiro
+    const E = S.encomendaEt;
+    if (E && E.estado === 'nova' && E.itens){
+      h += `<p><b style="color:#5a8f2c">Encomenda dos ETs</b> <small>(sem prazo; o Ed leva ao pouso)</small></p>`;
+      h += `<ul>${E.itens.map(([k, q]) => { const ok = (S.celeiro[k] || 0) >= q; return `<li class="${ok ? 'feito' : ''}"><span class="caixa">${ok ? '✓' : ''}</span><img src="${icone(k)}" alt=""><span class="texto">${esc(nomeProdutoQ(k, q))}</span></li>`; }).join('')}</ul>`;
+      h += `<p>Paga <span class="grifo">${reais(E.paga)}</span> e ${E.xp} xp!${E.itens.every(([k, q]) => (S.celeiro[k] || 0) >= q) ? ' Já tenho tudo!!' : ''}</p>`;
+    }
     h += `<h3>Oferta de hoje</h3><p>O Joli Market tá pagando mais por <span class="grifo">${PRODUTOS[of].plural}</span>.</p>`;
   }
   if (S.viuCinePelucio){
@@ -24287,7 +24312,8 @@ function abrirBeto(){
   if (guardados.length){
     const { direto, ingr } = reservaPedidos(), lista = o => ORDEM_PRODUTOS.filter(p => o[p] > 0 && aceita(p)).map(p => nomeQtd(p, o[p])).join(', ');
     const a = lista(direto), b = lista(ingr);
-    corpo += `<p style="margin:10px 0 0;font-weight:700;font-size:13px;color:var(--tinta-suave)">${a ? `Separado para os pedidos: ${a}.` : ''}${a && b ? ' ' : ''}${b ? `${a ? 'E para' : 'Separado para'} fazer o que falta: ${b}.` : ''}</p>`;
+    const praQuem = S.encomendaEt && S.encomendaEt.estado === 'nova' ? 'os pedidos e a encomenda dos ETs' : 'os pedidos';
+    corpo += `<p style="margin:10px 0 0;font-weight:700;font-size:13px;color:var(--tinta-suave)">${a ? `Separado para ${praQuem}: ${a}.` : ''}${a && b ? ' ' : ''}${b ? `${a ? 'E para' : 'Separado para'} fazer o que falta: ${b}.` : ''}</p>`;
   }
   if (freguesiaAtiva()) corpo += `<p style="margin:10px 0 0;font-weight:700;font-size:13px;color:var(--tinta-suave)">Freguesia: em cada visita, o ${visita === jaca ? 'Jaca' : 'Beto'} leva até ${reais(demandaVisita())} de cada produto pelo preço cheio. O que passar disso ele paga ${Math.round(FREGUESIA.resto * 100)}%.</p>`;
   const total = ORDEM_PRODUTOS.reduce((t, p) => t + (aceita(p) ? valorVenda(p, sobraDe(p, sep)) : 0), 0);
@@ -25243,7 +25269,7 @@ async function iniciar(){
     chamine: () => CHAMINE_MUNDO, fumaca: (x, y, z) => fumaca(x, y, z), marcas: () => fila.filter(f => f.marca).map(f => ({ k: f.alvo.k, tipo: f.tipo, pos: f.marca.position.toArray().map(n => +n.toFixed(2)), ed: alvoMundo(f.alvo) })),
     spa: { SPA, PORCO_SPA, GUERRA_LAMA, familiaCena: () => spaFamilia, EXCURSAO, excursao: () => chegarExcursao(), excursaoObj: () => excursao, LIVRO_SPA, abrirLivro: abrirLivroSpa, fatorLivro: fatorLivroSpa, guerra: () => { proxGuerraLama = 0; }, guerraObj: () => guerraLama, ala: { pronta: alaSpaPronta, abrir: abrirAlaSpa, fruta: frutaDoBar, max: maxSpa, entrada: entradaSpa, proxima: v => proximaNoSpa(v), montar: montarGradeSpa }, visitantes: () => visitantesSpa, chegar: chegarAoSpa, familia: chegarFamiliaSpa, livres: familiaLivreSpa, lugares: () => (lugaresSpa || montarGradeSpa(), lugaresSpa), grade: () => gradeSpa, caminho: caminhoSpa, livresGrade: livresGradeSpa, banho: () => banhoEd, mundo: mundoSpa, esvaziar: esvaziarSpa, tracos: tracosPorcoSpa, descricao: descricaoPorcoSpa, itens: v => itensVisitanteSpa(v), menu: r => menuSpa(r), aberto: spaAberto, relogio: () => ({ proxSpa, proxFamiliaSpa }), zerar: () => { proxSpa = 0.1; proxFamiliaSpa = 0.1; }, sujar: sujarSpa, abrirCenas, pedirCena,
       noLugar: (v, tipo, i = 0, t = 999) => { if (!gradeSpa) montarGradeSpa(); const q = lugaresSpa.filter(l => l.tipo === tipo)[i], [x, z] = mundoSpa(q.x, q.z); Object.assign(v, { x, z, y: q.y, lugar: q, vai: 'lugar', estado: 'atividade', t, ang: q.ang, pagou: true, pts: [] }); v.g.visible = true; if (tipo === 'cadeira' && v.pep) v.pep.visible = true; } },
-    vagalumes: () => vagalumes, VAGALUMES,
+    vagalumes: () => vagalumes, VAGALUMES, prometidos: { itensPrometidos, separadoPedidos, opcoesFrete, faltaNoPedido, caderno: abrirCaderno },
     observatorio: { PLANETARIO, desvio: desvioPlanetario, ANTENA, novaEncomenda: novaEncomendaEt, antena: () => antenaVis, caixa: () => caixaEtVis, mensagem: abrirMensagemEt, tocarUltimaCadente: () => { const E = CADENTES[CADENTES.length - 1]; if (!E) return 'sem'; const s = tela(E.m.position); return tocarCadente(s.x, s.y); }, ceu: CEU, ceuDaNoite, pedir: pedirAEstrela, realizar: realizarPedido, tocarCadente, cadentes: () => CADENTES, chuvaCena: () => chuvaCena, cometa: () => cometaVis, caderno: abrirCaderno, obsEd: () => obsEd, ocular: () => ocular, abrirOcular, fecharOcular, tocar: tocarOcular, naOcular, ASTRO, luaDoDia, ceuHoje, descobrir: descobrirAstro, vis: () => observVis, OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
     luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, foguete: { FOGUETE, prox: () => S.fogueteEspera, zerar: () => { S.fogueteEspera = 0; }, obj: () => foguete, falas: falasFoguete }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { passeio: { obj: () => passeio, pode: podePasseio, caminho: caminhoPasseio, VOO_PASSEIO }, frete: { opcoes: opcoesFrete, mandar: mandarFrete, pagar: pagarFrete, itens: () => { const r = { estado: '', itens: [] }; itensFrete(r); return r; } }, rega: comecarRegaAerea, faixa: passarFaixa, FAIXA, voo: () => voo, JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, encomenda: { ENCOMENDAS, encomendar, cancelar: cancelarEncomenda, itens: () => { const r = { estado: '', itens: [] }; itensEncomenda(r); return r; } }, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, dormir: pedirDormir, item: itemDormir, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
