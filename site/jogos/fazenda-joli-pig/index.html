@@ -1027,10 +1027,10 @@ const VAGAS_FAB = 3;
 // ({ id, n, fim }), que continua correndo com o jogo fechado
 const REFORMA = { nivel: [31, 35, 43], minutos: [3, 6, 9], xp: [40, 80, 120], max: 3 };
 // a casa tem só a 1ª: a 2ª dela é o casarão (OBRAS.casarao); a 3ª é só das fábricas e do terreiro (o Lucas pediu: 6 vagas)
-const maxReforma = id => id === 'casa' ? 1 : FABRICAS[id] ? REFORMA.max : 2;
+const maxReforma = id => id === 'casa' || id === 'observatorio' ? 1 : FABRICAS[id] ? REFORMA.max : 2;
 // a 1ª reforma custa 1,5 vez o preço original (rebalanceamento do nível 43): do 30 em diante a fazenda rende muito mais que a loja oferecia
 // (a 3ª custa 1,5 vez a 2ª)
-const PRECO_REFORMA = { moinho: [13500, 24000, 36000], queijaria: [22500, 30000, 45000], padaria: [36000, 48000, 72000], cozinha: [54000, 72000, 108000], terreiro: [22500, 36000, 54000], torrador: [81000, 108000, 162000], chocobarra: [81000, 108000, 162000], chocolateria: [126000, 168000, 252000], oficina: [144000, 192000, 288000], galinheiro: [27000, 45000], curral: [36000, 60000], patos: [36000, 60000], casa: [45000, 90000], celeiro: [45000, 90000], poco: [13500, 24000] };
+const PRECO_REFORMA = { observatorio: [450000], moinho: [13500, 24000, 36000], queijaria: [22500, 30000, 45000], padaria: [36000, 48000, 72000], cozinha: [54000, 72000, 108000], terreiro: [22500, 36000, 54000], torrador: [81000, 108000, 162000], chocobarra: [81000, 108000, 162000], chocolateria: [126000, 168000, 252000], oficina: [144000, 192000, 288000], galinheiro: [27000, 45000], curral: [36000, 60000], patos: [36000, 60000], casa: [45000, 90000], celeiro: [45000, 90000], poco: [13500, 24000] };
 const nivelReforma = id => (S && S.reformas && S.reformas[id]) || 0;
 // as construções novas reformam pelo mesmo preço das originais
 Object.assign(PRECO_REFORMA, { galinheiro2: PRECO_REFORMA.galinheiro, curral2: PRECO_REFORMA.curral });
@@ -1038,7 +1038,7 @@ Object.assign(PRECO_REFORMA, { galinheiro2: PRECO_REFORMA.galinheiro, curral2: P
 const precoReforma = (id, n) => PRECO_REFORMA[id][n] * (ampliada(id) ? 2 : 1);
 const precoAmpliacao = id => AMPLIACAO[id].preco;
 // o galinheiro dos patos chega depois (nível 32), então a reforma dele libera no 36, o primeiro nível livre depois da 2ª reforma
-const NIVEL_REFORMA = { patos: [36, 40] };
+const NIVEL_REFORMA = { patos: [36, 40], observatorio: [55] };
 const nivelDaReforma = (id, n) => (NIVEL_REFORMA[id] || REFORMA.nivel)[n];
 const vagasFab = id => (VAGAS_FAB + nivelReforma(id)) * (ampliada(id) ? 2 : 1);
 // ================= obras novas do Maurinho (nível 39 em diante): construções grandes, feitas do zero num lote demarcado
@@ -9140,7 +9140,7 @@ function vMoinhoCompleto(n = 0){
   return v;
 }
 // andaime da obra: tubos cinza em volta da construção, tábuas a cada andar, travas em X e uma tela laranja embaixo
-const ANDAIME = { casa: [2, 29, 4, 29, 26], celeiro: [4, 35, 5, 34, 30], poco: [0, 7, 0, 7, 13], galinheiro: [0, 15, 0, 15, 18], curral: [0, 15, 0, 7, 12], patos: [0, 15, 0, 15, 18],
+const ANDAIME = { observatorio: [2, 22, 2, 22, 22], casa: [2, 29, 4, 29, 26], celeiro: [4, 35, 5, 34, 30], poco: [0, 7, 0, 7, 13], galinheiro: [0, 15, 0, 15, 18], curral: [0, 15, 0, 7, 12], patos: [0, 15, 0, 15, 18],
   moinho: [1, 14, 1, 14, 28], terreiro: [0, 23, 0, 15, 6] };
 const ANDAIME_FAB = [1, 14, 2, 13, 15];
 function vAndaime(id){
@@ -9914,6 +9914,7 @@ function vestirObservatorio(m){
   const aberto = periodo().id === 'noite' || !!obsEd ? 1 : 0;
   observVis = { m, cup, piv, lun, port, ang: observVis ? observVis.ang : 0, abre: aberto, estende: aberto, elev: 0.9 };
   aplicarCupula(observVis);
+  montarAntena(m);
 }
 // de noite a cúpula gira devagar, procurando estrelas; de dia volta com a fenda para a frente. E as estrelas cadentes
 const CADENTES = [];
@@ -9933,7 +9934,7 @@ function atualizarObservatorio(dt){
     V.elev = lerp(V.elev, dentro ? O.elev : 0.9, Math.min(1, dt * 0.8));
     aplicarCupula(V);
   }
-  passoObservacao(dt); desenharOcular(dt); atualizarCeu(dt);
+  passoObservacao(dt); desenharOcular(dt); atualizarCeu(dt); atualizarAntena(dt);
   for (let i = CADENTES.length - 1; i >= 0; i--){
     const E = CADENTES[i]; E.t += dt;
     const k = Math.min(1, E.t / E.dur);
@@ -9974,7 +9975,7 @@ function menuObservatorio(r){
   r.estado = noite ? 'A cúpula está aberta e girando. Boa noite para olhar as estrelas!' : 'De dia a cúpula fica fechada. De noite o Ed olha as estrelas pela luneta, e o pouso do disco fica aceso.';
   if (n) r.estado += ` ${n > 1 ? n + ' vacas estão' : 'Uma vaca está'} de férias no espaço. ${cabeVacaDeVolta() ? 'De noite o disco pode vir devolver, no pouso.' : 'Para o disco devolver, precisa de lugar no curral.'}`;
   r.itens.push({ rotulo: 'Olhar as estrelas', sub: !noite ? 'só de noite' : ja ? 'o XP desta noite já veio' : `${OBSERV.xp} XP, uma vez por noite`, icone: 'lua', off: !noite, fn: () => enfileirar('estrelas', { k: 'luneta' }) });
-  menuTorre(r);
+  menuTorre(r); menuAntena(r);
 }
 // ================= o observatório por dentro (o Lucas pediu): de noite o Ed entra na torre (tarefa 'observar', alvo
 // { k: 'torre' }); a portinhola da fenda abre, a cúpula vira para um ponto do céu, a luneta grande sobe e abre a ocular
@@ -10470,6 +10471,120 @@ function montarChuvaCena(){
   ed.g.visible = false;
   chuvaCena = { membros, cangas, falas, prox: 0.5 };
 }
+// ================= a antena dos ETs (o Lucas pediu): a reforma do observatório com o Maurinho (nível 55) põe uma antena
+// parabólica do lado da torre. Ela capta mensagens do espaço que viram encomendas (S.encomendaEt): uns produtos da fazenda
+// por um bom dinheiro. O Ed leva a caixa até o pouso (tarefa 'entregarEt', alvo { k: 'pouso' }) e, de noite, o disco vem
+// buscar (força a visita do ETzinho ao pouso); o raio sobe a caixa e o pagamento cai na hora
+const ANTENA = { pos: [36, 28], espera: [6, 12], itens: [2, 3], fator: 2, xp: 600, valor: 3000, tentativas: 3 };
+const ASSINA_ET = ['os ETzinhos do planeta Bolinha', 'a família Bip-Bop, da terceira lua à esquerda', 'o ETzinho que visita o pouso', 'a cozinha da nave-mãe', 'os primos do ETzinho, de Marte', 'a escolinha espacial do anel de Saturno', 'o vovô ET, que adora doce', 'a confeitaria intergaláctica', 'o time de futebol de Júpiter', 'a vizinha da Lua, que conheceu a vaca de férias', 'o clube do queijo cósmico', 'a padaria do cinturão de asteroides', 'os astronautas do cometa', 'a turma do disco voador', 'o restaurante da estação espacial', 'a festa de aniversário do ETzinho', 'o hotel das vacas de férias', 'a feira livre de Plutão', 'o piquenique na nebulosa', 'a biblioteca da galáxia do Redemoinho', 'o chef de cozinha de Vênus', 'a mamãe do ETzinho'];
+const ABRE_ET = ['Bip bop! Bip-bip bop!', 'Bop bop bip! Bip!', 'Bi-bip bop bop!', 'Bip! Bip! Bop-bip!', 'Bop bip bip bop!'];
+const FALAS_ENTREGA_ET = ['Encomenda espacial no pouso! Agora é esperar a noite.', 'Caixa no pouso! Tomara que não amasse na viagem.', 'Prontinho, ETzinho! Pode vir buscar.', 'Exportação pro espaço, primeira classe!', 'Deixei a caixa no meio do círculo, bem caprichada.'];
+const FALAS_BUSCA_ET = ['Lá vai a encomenda pro espaço!', 'O raio levou a caixa! Pagamento em dia, que ETzinho honesto.', 'Bom negócio com o espaço!', 'Tchau, caixinha! Boa viagem!', 'Aoooa! Entrega intergaláctica concluída!'];
+const temAntena = () => obraConcluida('observatorio') && nivelReforma('observatorio') >= 1;
+// a antena: o mastro, a parabólica num suporte que gira e a luzinha vermelha da mensagem
+function vAntenaMastro(){ const v = new Vox(); v.box(-2, 0, -2, 2, 1, 2, 0x8a96a3); v.box(-1, 2, -1, 1, 2, 1, 0x6a6e74); v.box(0, 3, 0, 0, 11, 0, 0x6a6e74); v.box(-1, 11, -1, 1, 12, 1, 0x8a96a3); return v; }
+function vAntenaPrato(){
+  const v = new Vox();
+  for (let x = -4; x <= 4; x++) for (let y = -4; y <= 4; y++){ const d = Math.hypot(x, y); if (d <= 4.4) v.set(x, y, Math.round(d * d / 8), d > 3.6 ? 0xc2cbd4 : 0xf3efe6); }
+  v.box(0, 0, 1, 0, 0, 5, 0x6a6e74); v.set(0, 0, 6, 0x34508f);
+  return v;
+}
+let antenaVis = null;
+function montarAntena(m){
+  if (antenaVis){ antenaVis.g.parent && antenaVis.g.parent.remove(antenaVis.g); antenaVis = null; }
+  if (!temAntena()) return;
+  const [ox, , oz] = ORIGEM_PREDIO.observatorio, s = 1 / 8, g = new THREE.Group();
+  g.add(malha(geo('antenaMastro', () => vAntenaMastro().build(s, { origin: [0.5, 0, 0.5] }))));
+  const giro = new THREE.Group(); giro.position.y = 12.5 * s; g.add(giro);
+  const prato = malha(geo('antenaPrato', () => vAntenaPrato().build(s, { origin: [0.5, 0.5, 0] }))); prato.rotation.x = -0.75; giro.add(prato);
+  const luz = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff3b30 })); luz.position.set(0, 13.4 * s, 0); g.add(luz);
+  g.position.set((ANTENA.pos[0] - ox) * s, 0, (ANTENA.pos[1] - oz) * s); m.add(g);
+  g.traverse(o => { o.userData.alvo = { k: 'predio', p: PREDIO.observatorio }; });
+  antenaVis = { g, giro, luz, ang: 0 };
+}
+// a caixa da encomenda no pouso: madeira com a carinha verde do ETzinho
+function vCaixaEncomenda(){ const v = new Vox(); v.box(0, 0, 0, 5, 4, 5, (x, y, z) => (x + y + z) % 3 ? 0xc99a66 : 0xb5854f); v.box(1, 1, 6, 4, 3, 6, CDV.et); v.set(2, 2, 6, CDV.olho); v.set(3, 2, 6, CDV.olho); v.box(0, 5, 2, 5, 5, 3, 0xd94a4a); return v; }
+let caixaEtVis = null;
+function mostrarCaixaEt(){
+  if (caixaEtVis){ scene.remove(caixaEtVis); caixaEtVis = null; }
+  const E = S.encomendaEt; if (!E || E.estado !== 'pouso') return;
+  const [x, z] = pousoMundo(); caixaEtVis = malha(geo('caixaEncomendaEt', () => vCaixaEncomenda().build(1 / 16, { origin: [3, 0, 3] })));
+  caixaEtVis.position.set(x, 1 / 8, z); scene.add(caixaEtVis);
+}
+function novaEncomendaEt(){
+  const l = VISITA_ET.quer.filter(k => PRODUTOS[k] && PRODUTOS[k].nivel <= nivel());
+  const n = Math.min(l.length, Math.floor(rnd(ANTENA.itens[0], ANTENA.itens[1] + 0.99))), esc = [];
+  while (esc.length < n){ const k = sorteia(l); if (!esc.includes(k)) esc.push(k); }
+  const itens = esc.map(k => [k, Math.max(3, Math.round(ANTENA.valor / PRODUTOS[k].venda))]);
+  const valor = itens.reduce((a, [k, q]) => a + q * PRODUTOS[k].venda, 0);
+  S.encomendaEt = { itens, paga: Math.round(valor * ANTENA.fator / 50) * 50, xp: ANTENA.xp, estado: 'nova', de: sorteia(ASSINA_ET), abre: sorteia(ABRE_ET) };
+  aviso('A antena do observatório captou uma mensagem dos ETs!', 'grande', 4); Som.tom(1400, 0.3, 'square', 0.02, 900);
+  salvar();
+}
+let bolhaAntena = null;
+function atualizarAntena(dt){
+  if (!temAntena()) return;
+  const E = S.encomendaEt, noite = periodo().id === 'noite', t = performance.now() / 1000;
+  if (!E && (S.antenaProx == null || Date.now() >= S.antenaProx)){
+    if (S.antenaProx == null) S.antenaProx = Date.now() + 60000; else novaEncomendaEt();
+  }
+  if (antenaVis){
+    antenaVis.ang += dt * (E && E.estado === 'nova' ? 1.2 : 0.25); antenaVis.giro.rotation.y = antenaVis.ang;
+    antenaVis.luz.visible = !!(E && E.estado === 'nova') && Math.sin(t * 6) > 0;
+  }
+  // o balão com o envelope, em cima do observatório, enquanto a mensagem não foi atendida
+  const quer = !!(E && E.estado === 'nova');
+  if (quer && !bolhaAntena){ const P = PREDIO.observatorio, [x, z] = centroPredio(P); bolhaAntena = novaBolha('envelope'); bolhaAntena.position.set(x + 1.2, 2.2, z + 0.6); bolhaAntena.userData.base = 2.2; bolhaAntena.userData.fase = 3; scene.add(bolhaAntena); BOLHAS.push(bolhaAntena); }
+  if (!quer && bolhaAntena){ scene.remove(bolhaAntena); BOLHAS.splice(BOLHAS.indexOf(bolhaAntena), 1); bolhaAntena = null; }
+  if (E && E.estado === 'pouso'){
+    if (!caixaEtVis) mostrarCaixaEt();
+    const P = discoJogo, V = etVisita;
+    // de noite o disco vem buscar: força a visita ao pouso na próxima passagem, que vem logo
+    if (noite && P && P.t < 0 && !E.subindo){ P.forcarVisita = true; if (P.prox > 6){ P.prox = 6; E.tentativas = (E.tentativas || 0) + 1; } }
+    if (noite && !E.subindo && ((V && V.fase !== 'desce') || (E.tentativas || 0) > ANTENA.tentativas)){ E.subindo = 0; E.raio = !V; }
+    if (E.subindo != null && caixaEtVis){
+      E.subindo += dt;
+      const k = Math.min(1, E.subindo / 2.2), [x, z] = pousoMundo(), topo = V ? V.baixo.y - 0.3 : 2.4;
+      caixaEtVis.position.set(x, lerp(1 / 8, topo, k * k), z); caixaEtVis.rotation.y += dt * 2; caixaEtVis.scale.setScalar(1 - k * 0.6);
+      if (Math.random() < dt * 30) particula(x + rnd(-0.3, 0.3), rnd(0.2, topo), z + rnd(-0.3, 0.3), 0x9cff8a, 0.6);
+      if (k >= 1) pagarEncomendaEt();
+    }
+  } else if (caixaEtVis) mostrarCaixaEt();
+}
+function pagarEncomendaEt(){
+  const E = S.encomendaEt; if (!E) return;
+  S.dinheiro += E.paga; Som.moeda(); chipPulsa('chipDinheiro');
+  const [x, z] = pousoMundo(); ganharXP(E.xp, new THREE.Vector3(x, 1.5, z));
+  aviso(`Os ETs buscaram a encomenda e pagaram ${reais(E.paga)}! Bip bop!`, 'grande', 4.5);
+  if (ed.g.visible){ const t = variar(FALAS_BUSCA_ET); falar(ed, t, tempoDeLeitura(t)); }
+  S.encomendaEt = null; S.antenaProx = Date.now() + rnd(...ANTENA.espera) * 60000;
+  mostrarCaixaEt(); hud(); salvar();
+}
+function menuAntena(r){
+  if (!temAntena()) return;
+  const E = S.encomendaEt;
+  if (!E) r.estado += ` A antena está escutando o espaço. A próxima mensagem chega em uns ${Math.max(1, Math.ceil(((S.antenaProx || Date.now()) - Date.now()) / 60000))} min.`;
+  else if (E.estado === 'nova'){ r.estado += ' A antena captou uma mensagem dos ETs!'; r.itens.push({ rotulo: 'Ler a mensagem dos ETs', sub: `paga ${reais(E.paga)}`, icone: 'envelope', fn: abrirMensagemEt }); }
+  else r.estado += ' A encomenda dos ETs está no pouso. De noite o disco vem buscar.';
+}
+function abrirMensagemEt(){
+  const E = S.encomendaEt; if (!E) return;
+  const falta = E.itens.filter(([k, q]) => (S.celeiro[k] || 0) < q);
+  let h = `<div class="caderno"><p><b>${esc(E.abre)}</b></p><p><small>Tradução do Maurinho:</small></p><p>Querida fazenda Joli Pig, aqui é ${esc(E.de)}. Por favor, deixem no pouso do disco:</p><ul>`;
+  h += E.itens.map(([k, q]) => { const ok = (S.celeiro[k] || 0) >= q; return `<li class="${ok ? 'feito' : ''}"><span class="caixa">${ok ? '✓' : ''}</span><img src="${icone(k)}" alt=""><span class="texto">${esc(nomeProdutoQ(k, q))} <small>(tenho ${S.celeiro[k] || 0})</small></span></li>`; }).join('');
+  h += `</ul><p>A gente paga <span class="grifo">${reais(E.paga)}</span> e ${E.xp} xp. O disco busca de noite. Bip!</p>`;
+  h += `<p><button class="botao azul" id="jEntregaEt" type="button"${falta.length ? ' disabled' : ''}><img src="${icone('presenteEt')}" alt="">${falta.length ? 'Falta coisa no celeiro' : 'Levar ao pouso'}</button> <button class="botao" id="jRecusaEt" type="button">Agora não dá</button></p></div>`;
+  abrirJanela(topo('disco', 'Mensagem dos ETs', 'captada pela antena do observatório', 'azul') + `<div class="janela-corpo">${h}</div>`);
+  const b = $('jEntregaEt'); if (b && !falta.length) b.addEventListener('click', () => { fecharJanela(); enfileirar('entregarEt', { k: 'pouso' }); });
+  $('jRecusaEt').addEventListener('click', () => { fecharJanela(); S.encomendaEt = null; S.antenaProx = Date.now() + rnd(...ANTENA.espera) * 60000; aviso('Tudo bem. A antena vai escutar outra mensagem.'); salvar(); });
+}
+function deixarEncomendaEt(){
+  const E = S.encomendaEt; if (!E) return;
+  E.estado = 'pouso'; E.tentativas = 0; mostrarCaixaEt();
+  const t = variar(FALAS_ENTREGA_ET); falar(ed, t, tempoDeLeitura(t)); Som.plantar();
+  hud(); salvar();
+}
+const ladoDoPouso = () => chaoPerto(...pousoMundo(), 3) || frenteTorre();
 // ================= Museu da fazenda (nível 56): o acervo da história da fazenda num prédio de colunas no canto Sul, ao lado
 // do observatório e de frente para a câmera. Visitar (tarefa 'museu', alvo { k: 'museu' }) leva o Ed até a escada e abre as
 // salas: figurinhas, cartões-postais (os que o Ed leu, S.cartoesLidos), cenas e recordes. Dá XP uma vez por dia (S.museuDia)
@@ -13171,7 +13286,7 @@ const artigoPredio = id => (id === 'casa' || (FABRICAS[id] && FABRICAS[id].fem))
 const oQueOMaurinhoFaz = () => !S.obra ? '' : S.obra.obra ? `construindo ${textoEtapa(S.obra.obra, S.obra.n)}` : `${S.obra.amplia ? 'ampliando' : 'reformando'} ${artigoPredio(S.obra.id)} ${nomePredio(S.obra.id)}`;
 const textoEtapa = (k, n) => { const O = OBRAS[k], E = O.etapas[n - 1]; return E.nome ? `${E.nome} ${O.de || 'do'} ${O.nome.toLowerCase()}` : `${O.artigo || 'o'} ${O.nome.toLowerCase()}`; };
 const nomePredio = id => id === 'casa' ? 'casa' : (FABRICAS[id] ? FABRICAS[id].nome : PREDIO[id].nome).toLowerCase();
-const efeitoReforma = (id, n) => FABRICAS[id] ? `fica com ${(VAGAS_FAB + n) * (ampliada(id) ? 2 : 1)} vagas de produção e visual novo`
+const efeitoReforma = (id, n) => id === 'observatorio' ? 'ganha a antena parabólica que capta as encomendas dos ETs' : FABRICAS[id] ? `fica com ${(VAGAS_FAB + n) * (ampliada(id) ? 2 : 1)} vagas de produção e visual novo`
   : n >= 2 && (/^galinheiro|^curral/.test(id) || id === 'patos') ? 'visual novo e mais conforto para os bichos'
   : /^galinheiro/.test(id) ? `cabem ${ANIMAIS.galinha.max * ESPACO_REFORMA[n]} galinhas e visual novo` : /^curral/.test(id) ? `cabem ${ANIMAIS.vaca.max * ESPACO_REFORMA[n]} vacas e visual novo`
   : id === 'patos' ? `cabem ${ANIMAIS.pato.max * ESPACO_REFORMA[n]} patos e visual novo` : 'visual novo';
@@ -21851,13 +21966,13 @@ function itensHud(){
 const fila = [];
 // o nome de uma tarefa: o da ação, ou um próprio dela (as atividades do spa: alvo.rotulo)
 const nomeAcao = t => (t.alvo && t.alvo.rotulo) || NOMES_ACAO[t.tipo];
-const NOMES_ACAO = { observar:'Olhar pela luneta grande', spa:'Banho de lama', desejo:'Fazer um pedido', museu:'Visitar o museu', subirMirante:'Subir no mirante', estrelas:'Olhar as estrelas', trator:'Sair com o trator', carinhoGalo:'Carinho no galo', pegarGalo:'Pegar o galo', soltarGalo:'Devolver o galo', apagarFogo:'Apagar o fogo', recolherLixo:'Recolher o lixo', tirarGalho:'Tirar o galho', pegarAluguel:'Pegar o aluguel', lerCartao:'Ler o cartão-postal', tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', abrirPresente:'Abrir o presente', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa', nadar:'Nadar na cachoeira', balancar:'Brincar no balanço', parquinho:'Brincar no parquinho', passeio:'Passeio de avião' };
-const DUR = { spa: 0.3, desejo: 1.4, museu: 0.5, subirMirante: 0.2, estrelas: 4.5, carinhoGalo: 2.4, pegarGalo: 0.5, soltarGalo: 0.7, apagarFogo: 2.2, recolherLixo: 0.8, tirarGalho: 2.4, pegarAluguel: 0.6, lerCartao: 0.6, tirarCerca: 2.4, colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, abrirPresente: 0.2, coletarMata: 1.0, cavarTrufa: 1.6, nadar: 0.2, balancar: 0.2, parquinho: 0.2, passeio: 0.2 };
-const FERR = { spa: null, desejo: null, museu: null, subirMirante: null, estrelas: null, carinhoGalo: 'carinho', pegarGalo: null, soltarGalo: 'soltar', apagarFogo: 'regador', recolherLixo: 'cesta', tirarGalho: null, pegarAluguel: null, lerCartao: null, tirarCerca: 'enxada', colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', abrirPresente: null, coletarMata: 'cesta', cavarTrufa: 'enxada', nadar: null, balancar: null, parquinho: null, passeio: null };
+const NOMES_ACAO = { entregarEt:'Levar a encomenda dos ETs', observar:'Olhar pela luneta grande', spa:'Banho de lama', desejo:'Fazer um pedido', museu:'Visitar o museu', subirMirante:'Subir no mirante', estrelas:'Olhar as estrelas', trator:'Sair com o trator', carinhoGalo:'Carinho no galo', pegarGalo:'Pegar o galo', soltarGalo:'Devolver o galo', apagarFogo:'Apagar o fogo', recolherLixo:'Recolher o lixo', tirarGalho:'Tirar o galho', pegarAluguel:'Pegar o aluguel', lerCartao:'Ler o cartão-postal', tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', abrirPresente:'Abrir o presente', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa', nadar:'Nadar na cachoeira', balancar:'Brincar no balanço', parquinho:'Brincar no parquinho', passeio:'Passeio de avião' };
+const DUR = { entregarEt: 1.2, spa: 0.3, desejo: 1.4, museu: 0.5, subirMirante: 0.2, estrelas: 4.5, carinhoGalo: 2.4, pegarGalo: 0.5, soltarGalo: 0.7, apagarFogo: 2.2, recolherLixo: 0.8, tirarGalho: 2.4, pegarAluguel: 0.6, lerCartao: 0.6, tirarCerca: 2.4, colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, abrirPresente: 0.2, coletarMata: 1.0, cavarTrufa: 1.6, nadar: 0.2, balancar: 0.2, parquinho: 0.2, passeio: 0.2 };
+const FERR = { entregarEt: null, spa: null, desejo: null, museu: null, subirMirante: null, estrelas: null, carinhoGalo: 'carinho', pegarGalo: null, soltarGalo: 'soltar', apagarFogo: 'regador', recolherLixo: 'cesta', tirarGalho: null, pegarAluguel: null, lerCartao: null, tirarCerca: 'enxada', colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', abrirPresente: null, coletarMata: 'cesta', cavarTrufa: 'enxada', nadar: null, balancar: null, parquinho: null, passeio: null };
 const mesmoAlvo = (a, b) => a.k === b.k && (a.k === 'animal' ? a.a === b.a : a.x === b.x && a.z === b.z);
-function reservado(alvo){ if (alvo.k === 'torre') return fila.some(t => t.tipo === 'observar'); if (alvo.k === 'passeio') return fila.some(t => t.tipo === 'passeio'); if (alvo.k === 'brinquedo') return fila.some(t => t.tipo === 'parquinho'); if (alvo.k === 'balanco') return fila.some(t => t.tipo === 'balancar'); if (alvo.k === 'cachoeira') return fila.some(t => t.tipo === 'nadar'); if (alvo.k === 'spa') return fila.some(t => t.tipo === 'spa'); if (alvo.k === 'poco') return fila.some(t => t.tipo === 'desejo'); if (alvo.k === 'museu') return fila.some(t => t.tipo === 'museu'); if (alvo.k === 'luneta') return fila.some(t => t.tipo === 'estrelas'); if (alvo.k === 'mirante') return fila.some(t => t.tipo === 'subirMirante'); if (alvo.k === 'trator') return fila.some(t => t.tipo === 'trator' && t.alvo.lote === alvo.lote); if (alvo.k === 'galo') return fila.some(t => t.alvo.k === 'galo' && t.alvo.id === alvo.id); if (alvo.k === 'ocorrencia') return fila.some(t => t.alvo.k === 'ocorrencia' && t.alvo.id === alvo.id && t.alvo.j === alvo.j); if (alvo.k === 'aluguel') return fila.some(t => t.tipo === 'pegarAluguel'); if (alvo.k === 'cartao') return fila.some(t => t.tipo === 'lerCartao'); if (alvo.k === 'cercaCanto') return fila.some(t => t.tipo === 'tirarCerca'); if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'caixaEt') return fila.some(t => t.tipo === 'abrirPresente'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
+function reservado(alvo){ if (alvo.k === 'pouso') return fila.some(t => t.tipo === 'entregarEt'); if (alvo.k === 'torre') return fila.some(t => t.tipo === 'observar'); if (alvo.k === 'passeio') return fila.some(t => t.tipo === 'passeio'); if (alvo.k === 'brinquedo') return fila.some(t => t.tipo === 'parquinho'); if (alvo.k === 'balanco') return fila.some(t => t.tipo === 'balancar'); if (alvo.k === 'cachoeira') return fila.some(t => t.tipo === 'nadar'); if (alvo.k === 'spa') return fila.some(t => t.tipo === 'spa'); if (alvo.k === 'poco') return fila.some(t => t.tipo === 'desejo'); if (alvo.k === 'museu') return fila.some(t => t.tipo === 'museu'); if (alvo.k === 'luneta') return fila.some(t => t.tipo === 'estrelas'); if (alvo.k === 'mirante') return fila.some(t => t.tipo === 'subirMirante'); if (alvo.k === 'trator') return fila.some(t => t.tipo === 'trator' && t.alvo.lote === alvo.lote); if (alvo.k === 'galo') return fila.some(t => t.alvo.k === 'galo' && t.alvo.id === alvo.id); if (alvo.k === 'ocorrencia') return fila.some(t => t.alvo.k === 'ocorrencia' && t.alvo.id === alvo.id && t.alvo.j === alvo.j); if (alvo.k === 'aluguel') return fila.some(t => t.tipo === 'pegarAluguel'); if (alvo.k === 'cartao') return fila.some(t => t.tipo === 'lerCartao'); if (alvo.k === 'cercaCanto') return fila.some(t => t.tipo === 'tirarCerca'); if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'caixaEt') return fila.some(t => t.tipo === 'abrirPresente'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
 const visSlot = alvo => { const L = alvo.k === 'pomar' ? POMAR_VIS : alvo.k === 'mata' ? MATA_VIS : COLMEIA_VIS; return L[alvo.i] || (L[alvo.i] = {}); };
-function setReserva(alvo, v){ if (alvo.k === 'torre' || alvo.k === 'passeio' || alvo.k === 'balanco' || alvo.k === 'brinquedo' || alvo.k === 'cachoeira' || alvo.k === 'trator' || alvo.k === 'luneta' || alvo.k === 'mirante' || alvo.k === 'museu' || alvo.k === 'poco' || alvo.k === 'spa') return; if (alvo.k === 'galo'){ if (GALOS[alvo.id]) GALOS[alvo.id].res = v; return; } if (alvo.k === 'ocorrencia' || alvo.k === 'aluguel' || alvo.k === 'cartao' || alvo.k === 'cercaCanto' || alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'caixaEt' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
+function setReserva(alvo, v){ if (alvo.k === 'pouso' || alvo.k === 'torre' || alvo.k === 'passeio' || alvo.k === 'balanco' || alvo.k === 'brinquedo' || alvo.k === 'cachoeira' || alvo.k === 'trator' || alvo.k === 'luneta' || alvo.k === 'mirante' || alvo.k === 'museu' || alvo.k === 'poco' || alvo.k === 'spa') return; if (alvo.k === 'galo'){ if (GALOS[alvo.id]) GALOS[alvo.id].res = v; return; } if (alvo.k === 'ocorrencia' || alvo.k === 'aluguel' || alvo.k === 'cartao' || alvo.k === 'cercaCanto' || alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'caixaEt' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
 // diz se a ação vale para o alvo; devolve o custo ou um motivo
 function checar(tipoA, alvo, param){
   if (alvo.k === 'galo'){
@@ -21874,6 +21989,7 @@ function checar(tipoA, alvo, param){
   if (alvo.k === 'aluguel') return { ok: tipoA === 'pegarAluguel' && !!S.aluguel, custo: {} };
   if (alvo.k === 'cartao') return { ok: tipoA === 'lerCartao' && !!S.cartao, custo: {} };
   if (alvo.k === 'mirante') return { ok: tipoA === 'subirMirante' && !!S.mirante && !miranteFP, custo: {} };
+  if (alvo.k === 'pouso'){ const E = S.encomendaEt, falta = E && E.itens.find(([k, q]) => (S.celeiro[k] || 0) < q); return { ok: tipoA === 'entregarEt' && !!E && E.estado === 'nova' && !falta, motivo: falta ? `Falta ${PRODUTOS[falta[0]].plural} no celeiro` : 'Não há encomenda dos ETs', custo: E ? { itens: Object.fromEntries(E.itens) } : {} }; }
   if (alvo.k === 'torre') return { ok: tipoA === 'observar' && obraConcluida('observatorio') && periodo().id === 'noite' && !obsEd, motivo: 'Só dá para olhar pela luneta grande de noite', custo: {} };
   if (alvo.k === 'luneta') return { ok: tipoA === 'estrelas' && obraConcluida('observatorio') && periodo().id === 'noite', motivo: 'Só dá para olhar as estrelas de noite', custo: {} };
   if (alvo.k === 'museu') return { ok: tipoA === 'museu' && obraConcluida('museu'), custo: {} };
@@ -22015,6 +22131,7 @@ function alvoMundo(alvo){
   if (alvo.k === 'trator') return [PREDIO.galpao.porta[0] + 0.5, PREDIO.galpao.porta[1] + 0.5];
   if (alvo.k === 'luneta') return lugarDaLuneta();
   if (alvo.k === 'torre') return frenteTorre();
+  if (alvo.k === 'pouso') return ladoDoPouso();
   if (alvo.k === 'museu') return portaMuseu();
   if (alvo.k === 'spa') return portaSpaMundo();
   if (alvo.k === 'cachoeira') return NADO.entrada;
@@ -22357,6 +22474,7 @@ function executar(tarefa){
   if (alvo.k === 'cartao'){ lerCartao(); return; }
   if (alvo.k === 'luneta'){ olharEstrelas(); return; }
   if (alvo.k === 'museu'){ visitarMuseu(); return; }
+  if (alvo.k === 'pouso'){ deixarEncomendaEt(); return; }
   if (alvo.k === 'poco'){ const e = pocoEm(alvo.x, alvo.z); if (e) fazerDesejo(e); return; }
   if (alvo.k === 'mirante'){ subirMirante(); return; }
   if (alvo.k === 'trufa'){ executarTrufa(tarefa); return; }
@@ -25026,7 +25144,7 @@ async function iniciar(){
     chamine: () => CHAMINE_MUNDO, fumaca: (x, y, z) => fumaca(x, y, z), marcas: () => fila.filter(f => f.marca).map(f => ({ k: f.alvo.k, tipo: f.tipo, pos: f.marca.position.toArray().map(n => +n.toFixed(2)), ed: alvoMundo(f.alvo) })),
     spa: { SPA, PORCO_SPA, GUERRA_LAMA, familiaCena: () => spaFamilia, EXCURSAO, excursao: () => chegarExcursao(), excursaoObj: () => excursao, LIVRO_SPA, abrirLivro: abrirLivroSpa, fatorLivro: fatorLivroSpa, guerra: () => { proxGuerraLama = 0; }, guerraObj: () => guerraLama, ala: { pronta: alaSpaPronta, abrir: abrirAlaSpa, fruta: frutaDoBar, max: maxSpa, entrada: entradaSpa, proxima: v => proximaNoSpa(v), montar: montarGradeSpa }, visitantes: () => visitantesSpa, chegar: chegarAoSpa, familia: chegarFamiliaSpa, livres: familiaLivreSpa, lugares: () => (lugaresSpa || montarGradeSpa(), lugaresSpa), grade: () => gradeSpa, caminho: caminhoSpa, livresGrade: livresGradeSpa, banho: () => banhoEd, mundo: mundoSpa, esvaziar: esvaziarSpa, tracos: tracosPorcoSpa, descricao: descricaoPorcoSpa, itens: v => itensVisitanteSpa(v), menu: r => menuSpa(r), aberto: spaAberto, relogio: () => ({ proxSpa, proxFamiliaSpa }), zerar: () => { proxSpa = 0.1; proxFamiliaSpa = 0.1; }, sujar: sujarSpa, abrirCenas, pedirCena,
       noLugar: (v, tipo, i = 0, t = 999) => { if (!gradeSpa) montarGradeSpa(); const q = lugaresSpa.filter(l => l.tipo === tipo)[i], [x, z] = mundoSpa(q.x, q.z); Object.assign(v, { x, z, y: q.y, lugar: q, vai: 'lugar', estado: 'atividade', t, ang: q.ang, pagou: true, pts: [] }); v.g.visible = true; if (tipo === 'cadeira' && v.pep) v.pep.visible = true; } },
-    observatorio: { tocarUltimaCadente: () => { const E = CADENTES[CADENTES.length - 1]; if (!E) return 'sem'; const s = tela(E.m.position); return tocarCadente(s.x, s.y); }, ceu: CEU, ceuDaNoite, pedir: pedirAEstrela, realizar: realizarPedido, tocarCadente, cadentes: () => CADENTES, chuvaCena: () => chuvaCena, cometa: () => cometaVis, caderno: abrirCaderno, obsEd: () => obsEd, ocular: () => ocular, abrirOcular, fecharOcular, tocar: tocarOcular, naOcular, ASTRO, luaDoDia, ceuHoje, descobrir: descobrirAstro, vis: () => observVis, OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
+    observatorio: { ANTENA, novaEncomenda: novaEncomendaEt, antena: () => antenaVis, caixa: () => caixaEtVis, mensagem: abrirMensagemEt, tocarUltimaCadente: () => { const E = CADENTES[CADENTES.length - 1]; if (!E) return 'sem'; const s = tela(E.m.position); return tocarCadente(s.x, s.y); }, ceu: CEU, ceuDaNoite, pedir: pedirAEstrela, realizar: realizarPedido, tocarCadente, cadentes: () => CADENTES, chuvaCena: () => chuvaCena, cometa: () => cometaVis, caderno: abrirCaderno, obsEd: () => obsEd, ocular: () => ocular, abrirOcular, fecharOcular, tocar: tocarOcular, naOcular, ASTRO, luaDoDia, ceuHoje, descobrir: descobrirAstro, vis: () => observVis, OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
     luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, foguete: { FOGUETE, prox: () => S.fogueteEspera, zerar: () => { S.fogueteEspera = 0; }, obj: () => foguete, falas: falasFoguete }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { passeio: { obj: () => passeio, pode: podePasseio, caminho: caminhoPasseio, VOO_PASSEIO }, frete: { opcoes: opcoesFrete, mandar: mandarFrete, pagar: pagarFrete, itens: () => { const r = { estado: '', itens: [] }; itensFrete(r); return r; } }, rega: comecarRegaAerea, faixa: passarFaixa, FAIXA, voo: () => voo, JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, encomenda: { ENCOMENDAS, encomendar, cancelar: cancelarEncomenda, itens: () => { const r = { estado: '', itens: [] }; itensEncomenda(r); return r; } }, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, dormir: pedirDormir, item: itemDormir, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
     // auditoria de colisões: o que o desenho de uma construção (n = nível da reforma, ou 'andaime') põe fora do terreno dela
