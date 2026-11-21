@@ -10622,6 +10622,60 @@ function recolherIngressos(){
   aviso(`Ingressos do planetário: ${reais(n)}!`); falar(ed, 'O planetário tá fazendo sucesso!', 2.4);
   hud(); salvar();
 }
+// ================= vaga-lumes (o Lucas pediu): de noite e sem chuva. Muitos em volta da água do lago da fazenda (LAGO) e
+// do lago da cachoeira, na mata (CACHOEIRA.mapa), e uns poucos soltos em qualquer lugar perto de onde a câmera olha, que
+// mudam de lugar de tempos em tempos. Cada um é um sprite que voa num oito preguiçoso em volta de um ponto e pisca no
+// seu ritmo; o brilho é o tamanho (o material é um só, para todos), e a opacidade dele acompanha a noite
+const VAGALUMES = { lago: 60, cachoeira: 36, soltos: 18, raioSolto: 6, troca: [18, 40], tam: 0.36, cor: [216, 255, 106] };
+let vagalumes = null;
+function criarVagalumes(){
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'), [r, gg, b] = VAGALUMES.cor, gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,235,1)'); gr.addColorStop(0.12, 'rgba(255,255,200,1)'); gr.addColorStop(0.28, `rgba(${r},${gg},${b},.8)`); gr.addColorStop(0.55, `rgba(${r},${gg},${b},.22)`); gr.addColorStop(1, `rgba(${r},${gg},${b},0)`);
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  const mat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 });
+  const grupo = new THREE.Group(), lista = [];
+  const agua = [], mata = [];
+  for (const z in LAGO){ const [a, b2] = LAGO[z]; for (let x = a; x <= b2; x++) agua.push([x + 0.5, +z + 0.5]); }
+  CACHOEIRA.mapa.forEach((l, k) => [...l].forEach((ch, i) => { if (ch === 'L') mata.push([CACHOEIRA.x0 + i + 0.5, CACHOEIRA.z0 + k + 0.5]); }));
+  const novo = (tipo, ancora) => {
+    const s = new THREE.Sprite(mat); s.renderOrder = 4; grupo.add(s);
+    const v = { s, tipo, ax: 0, az: 0, ay: 0, f: [rnd(0.25, 0.6), rnd(0.3, 0.7), rnd(0.2, 0.5)], fase: [rnd(0, 6.3), rnd(0, 6.3), rnd(0, 6.3)], raio: rnd(0.25, 0.6), pisca: rnd(1.4, 3.8), pfase: rnd(0, 1), troca: rnd(...VAGALUMES.troca) };
+    ancorar(v, ancora); lista.push(v);
+  };
+  // em volta da água: a maioria em cima dela e o resto na margem, a meia altura
+  const perto = l => () => { const [x, z] = sorteia(l); return [x + rnd(-1.1, 1.1), z + rnd(-1.1, 1.1)]; };
+  for (let i = 0; i < VAGALUMES.lago; i++) novo('lago', perto(agua));
+  for (let i = 0; i < VAGALUMES.cachoeira; i++) novo('cachoeira', perto(mata));
+  for (let i = 0; i < VAGALUMES.soltos; i++) novo('solto', pontoSolto);
+  scene.add(grupo); vagalumes = { grupo, mat, lista };
+}
+function ancorar(v, onde){ const [x, z] = onde(); v.ax = x; v.az = z; v.ay = rnd(0.3, 1.3); v.onde = onde; }
+// um ponto qualquer de chão perto do meio da tela (não em cima de construção nem de árvore)
+function pontoSolto(){
+  for (let i = 0; i < 12; i++){
+    const x = cam.alvo.x + rnd(-VAGALUMES.raioSolto, VAGALUMES.raioSolto), z = cam.alvo.z + rnd(-VAGALUMES.raioSolto, VAGALUMES.raioSolto);
+    if (andavel(Math.floor(x), Math.floor(z))) return [x, z];
+  }
+  return [cam.alvo.x + rnd(-3, 3), cam.alvo.z + rnd(-3, 3)];
+}
+function atualizarVagalumes(dt, t){
+  const alvo = periodo().id === 'noite' && !chovendo() ? Math.min(1, LUZ.noite * 1.4) : 0;
+  if (!vagalumes){ if (alvo <= 0) return; criarVagalumes(); }
+  const V = vagalumes;
+  V.mat.opacity = lerp(V.mat.opacity, alvo, Math.min(1, dt * 0.8));
+  V.grupo.visible = V.mat.opacity > 0.02;
+  if (!V.grupo.visible) return;
+  for (const v of V.lista){
+    // os soltos acompanham a câmera: trocam de lugar de tempos em tempos ou quando ficam longe dela
+    if (v.tipo === 'solto'){ v.troca -= dt; if (v.troca <= 0 || Math.hypot(v.ax - cam.alvo.x, v.az - cam.alvo.z) > VAGALUMES.raioSolto * 1.6){ v.troca = rnd(...VAGALUMES.troca); ancorar(v, v.onde); } }
+    const [f1, f2, f3] = v.f, [p1, p2, p3] = v.fase;
+    v.s.position.set(v.ax + Math.sin(t * f1 + p1) * v.raio, v.ay + Math.sin(t * f2 + p2) * 0.18, v.az + Math.sin(t * f3 * 2 + p3) * v.raio * 0.6);
+    // pisca: aceso um pedacinho do ciclo, com subida e descida suaves, e um brilho fraquinho no resto
+    const u = ((t / v.pisca + v.pfase) % 1), k = u < 0.35 ? Math.sin(u / 0.35 * Math.PI) : 0, tam = VAGALUMES.tam * (0.15 + 0.85 * k);
+    v.s.scale.set(tam, tam, 1);
+  }
+}
 // ================= Museu da fazenda (nível 56): o acervo da história da fazenda num prédio de colunas no canto Sul, ao lado
 // do observatório e de frente para a câmera. Visitar (tarefa 'museu', alvo { k: 'museu' }) leva o Ed até a escada e abre as
 // salas: figurinhas, cartões-postais (os que o Ed leu, S.cartoesLidos), cenas e recordes. Dá XP uma vez por dia (S.museuDia)
@@ -24938,6 +24992,7 @@ function quadro(agoraP){
   atualizarPiloto(dt, t);
   atualizarObra(dt, t);
   atualizarObservatorio(dt);
+  atualizarVagalumes(dt, performance.now() / 1000);
   atualizarEnfeites(dt, t);
   if (milton.g.visible) milton.update(dt, t);
   atualizarPista(dt);
@@ -25188,6 +25243,7 @@ async function iniciar(){
     chamine: () => CHAMINE_MUNDO, fumaca: (x, y, z) => fumaca(x, y, z), marcas: () => fila.filter(f => f.marca).map(f => ({ k: f.alvo.k, tipo: f.tipo, pos: f.marca.position.toArray().map(n => +n.toFixed(2)), ed: alvoMundo(f.alvo) })),
     spa: { SPA, PORCO_SPA, GUERRA_LAMA, familiaCena: () => spaFamilia, EXCURSAO, excursao: () => chegarExcursao(), excursaoObj: () => excursao, LIVRO_SPA, abrirLivro: abrirLivroSpa, fatorLivro: fatorLivroSpa, guerra: () => { proxGuerraLama = 0; }, guerraObj: () => guerraLama, ala: { pronta: alaSpaPronta, abrir: abrirAlaSpa, fruta: frutaDoBar, max: maxSpa, entrada: entradaSpa, proxima: v => proximaNoSpa(v), montar: montarGradeSpa }, visitantes: () => visitantesSpa, chegar: chegarAoSpa, familia: chegarFamiliaSpa, livres: familiaLivreSpa, lugares: () => (lugaresSpa || montarGradeSpa(), lugaresSpa), grade: () => gradeSpa, caminho: caminhoSpa, livresGrade: livresGradeSpa, banho: () => banhoEd, mundo: mundoSpa, esvaziar: esvaziarSpa, tracos: tracosPorcoSpa, descricao: descricaoPorcoSpa, itens: v => itensVisitanteSpa(v), menu: r => menuSpa(r), aberto: spaAberto, relogio: () => ({ proxSpa, proxFamiliaSpa }), zerar: () => { proxSpa = 0.1; proxFamiliaSpa = 0.1; }, sujar: sujarSpa, abrirCenas, pedirCena,
       noLugar: (v, tipo, i = 0, t = 999) => { if (!gradeSpa) montarGradeSpa(); const q = lugaresSpa.filter(l => l.tipo === tipo)[i], [x, z] = mundoSpa(q.x, q.z); Object.assign(v, { x, z, y: q.y, lugar: q, vai: 'lugar', estado: 'atividade', t, ang: q.ang, pagou: true, pts: [] }); v.g.visible = true; if (tipo === 'cadeira' && v.pep) v.pep.visible = true; } },
+    vagalumes: () => vagalumes, VAGALUMES,
     observatorio: { PLANETARIO, desvio: desvioPlanetario, ANTENA, novaEncomenda: novaEncomendaEt, antena: () => antenaVis, caixa: () => caixaEtVis, mensagem: abrirMensagemEt, tocarUltimaCadente: () => { const E = CADENTES[CADENTES.length - 1]; if (!E) return 'sem'; const s = tela(E.m.position); return tocarCadente(s.x, s.y); }, ceu: CEU, ceuDaNoite, pedir: pedirAEstrela, realizar: realizarPedido, tocarCadente, cadentes: () => CADENTES, chuvaCena: () => chuvaCena, cometa: () => cometaVis, caderno: abrirCaderno, obsEd: () => obsEd, ocular: () => ocular, abrirOcular, fecharOcular, tocar: tocarOcular, naOcular, ASTRO, luaDoDia, ceuHoje, descobrir: descobrirAstro, vis: () => observVis, OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
     luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, foguete: { FOGUETE, prox: () => S.fogueteEspera, zerar: () => { S.fogueteEspera = 0; }, obj: () => foguete, falas: falasFoguete }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { passeio: { obj: () => passeio, pode: podePasseio, caminho: caminhoPasseio, VOO_PASSEIO }, frete: { opcoes: opcoesFrete, mandar: mandarFrete, pagar: pagarFrete, itens: () => { const r = { estado: '', itens: [] }; itensFrete(r); return r; } }, rega: comecarRegaAerea, faixa: passarFaixa, FAIXA, voo: () => voo, JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, encomenda: { ENCOMENDAS, encomendar, cancelar: cancelarEncomenda, itens: () => { const r = { estado: '', itens: [] }; itensEncomenda(r); return r; } }, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, dormir: pedirDormir, item: itemDormir, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
