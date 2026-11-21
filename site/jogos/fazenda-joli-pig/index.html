@@ -9933,7 +9933,7 @@ function atualizarObservatorio(dt){
     V.elev = lerp(V.elev, dentro ? O.elev : 0.9, Math.min(1, dt * 0.8));
     aplicarCupula(V);
   }
-  passoObservacao(dt); desenharOcular(dt);
+  passoObservacao(dt); desenharOcular(dt); atualizarCeu(dt);
   for (let i = CADENTES.length - 1; i >= 0; i--){
     const E = CADENTES[i]; E.t += dt;
     const k = Math.min(1, E.t / E.dur);
@@ -10330,6 +10330,145 @@ function astronomiaHTML(){
     else h += `<div class="astro-cartao falta"><div class="astro-q">?</div><b>${CONSTELACOES[a.id] ? 'Uma constelação' : esc(a.tipo)}</b><small>${esc(a.dica || 'ainda não achei')}</small></div>`;
   }
   return h + '</div></div>';
+}
+// ================= o céu da fazenda (o Lucas pediu): com o observatório pronto, cada noite pode ter um evento (S.ceuNoite):
+// chuva de meteoros (cadentes o tempo todo e, na primeira, a cena da família), cometa (fica CEU.cometaNoites noites no alto
+// da tela e na ocular) ou eclipse da Lua (a luz da noite fica avermelhada e a Lua da ocular, vermelha). Fora dos eventos,
+// de vez em quando passa uma estrela cadente; tocar nela faz o Ed pedir alguma coisa, uma vez por noite, e o pedido se
+// realiza na manhã seguinte (S.pedidoEstrela)
+const CEU = { chuva: 0.12, cometa: 0.1, eclipse: 0.08, cometaNoites: 3, cadente: [35, 80], cadenteChuva: [0.8, 2.4], primeiraChuva: 2 };
+const FALAS_PEDIDO_ESTRELA = ['Estrelinha, eu queria que a colheita de amanhã viesse dobrada!', 'Peço que o Beto nunca esqueça de buscar os pedidos!', 'Queria um dia inteirinho sem mato na horta!', 'Que a Luma pare de cavar os canteiros. Ou pelo menos cave os vazios.', 'Desejo muito queijo pro Patrinho e muito café pro Pelúcio!', 'Queria que o ETzinho viesse tomar um café com a gente.', 'Peço uma chuvinha na hora certa, nem mais nem menos.', 'Que as galinhas botem ovos de chocolate! Brincadeira. Ou não.', 'Estrela, traz um pouquinho de sorte pro celeiro?', 'Desejo que todos os porquinhos do mundo tenham lama quentinha.', 'Que a vaca de férias mande mais cartão-postal!', 'Queria aprender a assobiar igual o Maurinho.', 'Peço que o trator nunca atole.', 'Que o Hud cresça forte e continue ajudando!', 'Queria que o Dani dormisse antes de mim só uma vez.', 'Que a fazenda fique cada dia mais bonita.', 'Desejo uma pizza de trufa. Do tamanho da Lua.', 'Peço que o Milton sempre volte do voo direitinho.', 'Estrelinha, me dá um pouquinho de sorte amanhã?', 'Que o Jaca dirija sempre com cuidado. Ele já dirige, mas vai que.', 'Queria que todo dia tivesse estrela cadente.', 'Desejo que a mamãe venha visitar a fazenda!'];
+const FALAS_PEDIDO_JA = ['Já fiz o pedido de hoje. Não pode ser guloso com as estrelas.', 'Um pedido por noite, que as estrelas são ocupadas.', 'Essa eu deixo pra outro porquinho pedir.', 'Hoje já pedi! Amanhã tem mais.', 'Pedido de hoje já tá anotado lá em cima.'];
+const FALAS_CEU_EVENTO = {
+  chuva: ['Olha pro céu! Tá chovendo estrela!', 'Noite de chuva de meteoros! Vou fazer um monte de pedido. Quer dizer, um só.', 'Que noite! Uma estrela atrás da outra!'],
+  cometa: ['Um cometa! Com cauda e tudo!', 'Olha lá no alto: um cometa de passagem!', 'O cometa voltou hoje. Lindo de ver.'],
+  eclipse: ['A Lua tá ficando vermelha... é o eclipse!', 'Eclipse! A Lua parece uma goiabada.', 'Que luz diferente essa do eclipse. As galinhas estranharam.']
+};
+let proxCadente = 20, cometaVis = null;
+// sorteia o evento quando a noite começa (uma vez por noite)
+function ceuDaNoite(){
+  if (!obraConcluida('observatorio') || periodo().id !== 'noite') return;
+  const d = diaAtual(); if (S.ceuNoite && S.ceuNoite.dia === d) return;
+  let ev = null;
+  if (S.cometaAte != null && S.cometaAte >= d) ev = 'cometa';
+  else if (!S.viuCineChuva && (S.primeiraChuva == null ? (S.primeiraChuva = d + CEU.primeiraChuva) : S.primeiraChuva) <= d) ev = 'chuva';
+  else { const r = Math.random(); ev = r < CEU.chuva ? 'chuva' : r < CEU.chuva + CEU.cometa ? 'cometa' : r < CEU.chuva + CEU.cometa + CEU.eclipse ? 'eclipse' : null; }
+  if (ev === 'cometa' && !(S.cometaAte >= d)) S.cometaAte = d + CEU.cometaNoites - 1;
+  S.ceuNoite = { dia: d, evento: ev };
+  if (ev){
+    aviso({ chuva: 'Noite de chuva de meteoros! Toque numa estrela cadente para o Ed fazer um pedido.', cometa: 'Um cometa está passando no céu! Dá para ver daqui e pela luneta do observatório.', eclipse: 'Noite de eclipse da Lua! A Lua fica vermelha. Olhe pela luneta do observatório.' }[ev], 'grande', 5);
+    if (ed.g.visible){ const t = variar(FALAS_CEU_EVENTO[ev]); setTimeout(() => falar(ed, t, tempoDeLeitura(t)), 1500); }
+  }
+  salvar();
+}
+function atualizarCeu(dt){
+  if (!obraConcluida('observatorio')) return;
+  ceuDaNoite();
+  const noite = periodo().id === 'noite', ev = ceuHoje().evento;
+  // estrelas cadentes no alto da tela (na ocular elas passam sozinhas)
+  if (noite && !ocular && !miranteFP && !vistaEd){
+    proxCadente -= dt;
+    if (proxCadente <= 0){ proxCadente = rnd(...(ev === 'chuva' ? CEU.cadenteChuva : CEU.cadente)); estrelaCadente(); }
+  }
+  // o cometa: fica parado no alto da tela, à direita, de noite
+  const querCometa = noite && ev === 'cometa' && !miranteFP && !vistaEd;
+  if (querCometa && !cometaVis){
+    const c = document.createElement('canvas'); c.width = 512; c.height = 256;
+    const g = c.getContext('2d'), hx = 440, hy = 62;
+    // a cauda de poeira, curva e amarelada, e a de gás, reta e azulada
+    for (let i = 0; i < 60; i++){
+      const u = i / 60, x = hx - u * 400, y = hy + u * 150 + Math.sin(u * 2.2) * 26, r = 8 + u * 34;
+      const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(255,236,190,${0.16 * (1 - u)})`); gr.addColorStop(1, 'rgba(255,236,190,0)');
+      g.fillStyle = gr; g.fillRect(x - r, y - r, 2 * r, 2 * r);
+    }
+    const ion = g.createLinearGradient(hx, hy, hx - 430, hy + 120); ion.addColorStop(0, 'rgba(150,210,255,.7)'); ion.addColorStop(1, 'rgba(150,210,255,0)');
+    g.strokeStyle = ion; g.lineWidth = 5; g.lineCap = 'round'; g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx - 430, hy + 120); g.stroke();
+    const cab = g.createRadialGradient(hx, hy, 0, hx, hy, 34); cab.addColorStop(0, 'rgba(255,255,255,1)'); cab.addColorStop(0.25, 'rgba(210,245,255,.9)'); cab.addColorStop(1, 'rgba(160,220,255,0)');
+    g.fillStyle = cab; g.fillRect(hx - 34, hy - 34, 68, 68);
+    const tx = new THREE.CanvasTexture(c), m = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending }));
+    m.renderOrder = 5; scene.add(m); cometaVis = m;
+  }
+  if (cometaVis){
+    cometaVis.visible = querCometa;
+    if (querCometa){ cometaVis.position.copy(pontoCeu(0.3, 0.12, 6)); const t = cam.vista * 0.36; cometaVis.scale.set(t * 2, t, 1); cometaVis.material.opacity = Math.min(1, LUZ.noite * 1.2); }
+  }
+  // o pedido se realiza na manhã seguinte
+  const P = S.pedidoEstrela;
+  if (P && !P.feito && diaAtual() > P.dia && periodo().id === 'dia' && !cine) realizarPedido(P);
+}
+// tocar numa estrela cadente que ainda está riscando o céu
+function tocarCadente(x, y){
+  for (const E of CADENTES){
+    const k = E.t / E.dur; if (k < 0.05 || k > 0.97) continue;
+    const s = tela(E.m.position); if (Math.hypot(s.x - x, s.y - y) > 48) continue;
+    pedirAEstrela(E.m.position.clone()); return true;
+  }
+  return false;
+}
+function pedirAEstrela(pos){
+  for (let i = 0; i < 18; i++) particula(pos.x + rnd(-0.3, 0.3), pos.y + rnd(-0.2, 0.2), pos.z + rnd(-0.3, 0.3), [0xfff6d0, 0xffe066, 0xff9ad0][i % 3], 0.6);
+  if (S.pedidoEstrela && S.pedidoEstrela.dia === diaAtual()){ const t = variar(FALAS_PEDIDO_JA); if (ed.g.visible) falar(ed, t, tempoDeLeitura(t)); else aviso(t); return; }
+  const t = variar(FALAS_PEDIDO_ESTRELA);
+  S.pedidoEstrela = { dia: diaAtual(), feito: false, texto: t };
+  Som.tom(1800, 0.6, 'sine', 0.03, 2600);
+  if (ed.g.visible){ falar(ed, t, tempoDeLeitura(t)); ed.pulo = 0.3; } else aviso(`O Ed fez um pedido: "${t}"`, 'grande', 4);
+  salvar();
+}
+// a sorte da manhã: dinheiro, uns itens do celeiro ou ração (o tamanho acompanha o nível)
+function realizarPedido(P){
+  P.feito = true;
+  const r = Math.random(), n = nivel();
+  let txt;
+  if (r < 0.45){ const v = Math.round((800 + n * 120) / 50) * 50; S.dinheiro += v; S.ganhou = (S.ganhou || 0) + v; Som.moeda(); chipPulsa('chipDinheiro'); txt = `apareceram ${reais(v)} no cofrinho`; }
+  else if (r < 0.8){
+    const l = Object.keys(S.celeiro).filter(k => PRODUTOS[k] && S.celeiro[k] > 0), k = l.length ? sorteia(l) : 'ovo', q = 5;
+    S.celeiro[k] = (S.celeiro[k] || 0) + q; txt = `o celeiro amanheceu com mais ${nomeProdutoQ(k, q)}`;
+  } else { S.racao += 40; chipPulsa('chipRacao'); txt = 'chegaram 40 de ração de presente'; }
+  aviso(`O pedido do Ed para a estrela cadente se realizou: ${txt}!`, 'grande', 5);
+  if (ed.g.visible) setTimeout(() => falar(ed, 'Oinc! A estrela ouviu meu pedido!', 2.6), 800);
+  hud(); salvar();
+}
+// ---- a cena da chuva de meteoros: a família deitada em cangas na frente do observatório, olhando o céu
+const CHUVA_CENA = { z: 40.25, x0: 23.2, passo: 1.02, vista: 6.4 };
+let chuvaCena = null;
+function limparChuvaCena(){
+  const C = chuvaCena; if (!C) return;
+  for (const v of C.membros){ v.p.sentado = 0; v.p.corpo.rotation.x = 0; scene.remove(v.p.g); }
+  for (const m of C.cangas) scene.remove(m);
+  chuvaCena = null; ed.g.visible = true;
+}
+const COR_CANGA = { ed: 0xf6c945, beto: 0x4f8fd6, hud: 0x8fd06a, dani: 0xff8a5c, pelucio: 0xd77f75, patrinho: 0xb48be0, maurinho: 0x58b6c8, milton: 0xff5500 };
+function montarChuvaCena(){
+  const quem = ['maurinho', 'beto', 'hud', 'ed', 'dani', 'pelucio', 'patrinho', 'milton'].filter(q => q === 'ed' || q === 'beto' || ({ hud: S.viuCineHud, dani: S.viuCineDani, pelucio: S.viuCinePelucio, patrinho: S.viuCinePatrinho, maurinho: S.viuCineMaurinho, milton: S.conheceuMilton })[q]);
+  const cangas = [], membros = quem.map((q, i) => {
+    const F = FAMILIA_SPA[q], p = F.cria(); if (F.escala) p.g.scale.setScalar(F.escala);
+    pickaveis.pop();
+    const x = CHUVA_CENA.x0 + i * CHUVA_CENA.passo, z = CHUVA_CENA.z;
+    const canga = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.02, 1.05), new THREE.MeshLambertMaterial({ color: COR_CANGA[q] || 0xffffff }));
+    canga.position.set(x, 0.012, z + 0.1); canga.receiveShadow = true; scene.add(canga); cangas.push(canga);
+    const faixa = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.024, 0.12), new THREE.MeshLambertMaterial({ color: 0xfdf8ef })); faixa.position.set(0, 0.002, -0.3); canga.add(faixa);
+    const gc = p.corpo.children[0].geometry; if (!gc.boundingBox) gc.computeBoundingBox();
+    p.sentado = 0.03 - gc.boundingBox.min.y * p.g.scale.y || 0.001; p.colocar(x, z); p.ang = p.angAlvo = cam.azAlvo; p.corpo.rotation.x = -0.32;
+    scene.add(p.g); p.g.visible = true;
+    return { quem, q, p };
+  });
+  const tem = q => quem.includes(q);
+  const falas = [
+    ['ed', 'Ed', 'Pessoal, deita aí! Hoje vai chover estrela.'],
+    ['beto', 'Beto', 'Trouxe as cangas do caminhão. Cada um com a sua cor.'],
+    ...(tem('hud') ? [['hud', 'Hud', 'Ali! Passou uma! Passou uma!']] : []),
+    ...(tem('dani') ? [['dani', 'Dani', 'Eu vi três! Não, quatro! Perdi a conta.']] : []),
+    ...(tem('maurinho') ? [['maurinho', 'Maurinho', 'Pelos meus cálculos, são umas sessenta por hora. Fiquem de olho no nordeste.']] : []),
+    ...(tem('pelucio') ? [['pelucio', 'Pelúcio', 'Trouxe chocolate quente na garrafinha. Estrela cadente combina com chocolate.']] : []),
+    ...(tem('patrinho') ? [['patrinho', 'Patrinho', 'Essa da cauda dourada parece um suflê saindo do forno, irmãozinho.']] : []),
+    ...(tem('milton') ? [['milton', 'Milton', 'Lá de cima, no PIG-MTP, elas passam ainda mais perto.']] : []),
+    ['beto', 'Beto', 'Maninho, pode fazer um pedido por estrela ou é um só?'],
+    ['ed', 'Ed', 'Um por noite. Mas hoje eu vou pedir pra todo mundo junto.'],
+    ['ed', 'Ed', 'Que a gente sempre tenha noites assim, todo mundo junto, olhando pro céu.'],
+    ...(tem('dani') ? [['dani', 'Dani', 'Zzzz... (dormiu na canga)']] : [['beto', 'Beto', '(bocejo) Mais cinco minutinhos de estrela e eu vou dormir.']])
+  ];
+  ed.g.visible = false;
+  chuvaCena = { membros, cangas, falas, prox: 0.5 };
 }
 // ================= Museu da fazenda (nível 56): o acervo da história da fazenda num prédio de colunas no canto Sul, ao lado
 // do observatório e de frente para a câmera. Visitar (tarefa 'museu', alvo { k: 'museu' }) leva o Ed até a escada e abre as
@@ -18134,6 +18273,29 @@ const CENAS = {
     fim(){ limparArraia(); S.viuCineArraied = true; aviso('Que festa! O ArraiEd entrou para a história da fazenda.', 'grande', 5); salvar(); },
     restaurar(){ fimDaNoiteDaReprise(); limparArraia(); },
   },
+  chuva: {
+    flag: 'viuCineChuva', nivel: () => OBRAS.observatorio.nivel, musica: 'volta', icone: 'lua',
+    titulo: 'Chuva de meteoros', desc: 'A família deita nas cangas na frente do observatório para ver a chuva de estrelas cadentes.', trancada: 'acontece numa noite de chuva de meteoros, com o observatório pronto',
+    pronta: () => obraConcluida('observatorio') && periodo().id === 'noite' && ceuHoje().evento === 'chuva' && !chuvaCena && !obsEd && !banhoEd && !trator && !hudAtivo() && !daniAtivo(),
+    get falas(){ return chuvaCena ? chuvaCena.falas : []; },
+    // como no spa da família: a câmera começa no grupo e fica livre (o Lucas pediu assim nas cenas novas)
+    cameraLivre: true,
+    foco(){ const n = chuvaCena ? chuvaCena.membros.length : 6; return new THREE.Vector3(CHUVA_CENA.x0 + (n - 1) / 2 * CHUVA_CENA.passo, 0.5, CHUVA_CENA.z + 0.3); },
+    vista: () => (telaEstreita() ? 1.6 : 1) * CHUVA_CENA.vista,
+    iniciar(){ montarChuvaCena(); return 'ch-espera'; },
+    trecho(c){ if (c.passo === 'ch-espera' && c.t > 1.8){ c.passo = 'dialogo'; mostrarFalaCine(0); } },
+    ambiente(dt){
+      const C = chuvaCena; if (!C) return;
+      const t = performance.now() / 1000;
+      for (const v of C.membros) v.p.update(dt, t);
+      C.prox -= dt; if (C.prox <= 0){ C.prox = rnd(0.5, 1.6); estrelaCadente(); }
+    },
+    aoFalar(fl){ const C = chuvaCena; if (!C) return; const v = C.membros.find(m => m.q === fl[0]); if (v) v.p.aceno = 1.2; estrelaCadente(); setTimeout(estrelaCadente, 500); },
+    fimDasFalas(c){ $('cineDialogo').hidden = true; c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; },
+    pular(){ limparChuvaCena(); },
+    fim(){ limparChuvaCena(); S.viuCineChuva = true; },
+    restaurar(){ limparChuvaCena(); },
+  },
   volta: {
     flag: 'viuVoltaFerias', nivel: () => OBRAS.observatorio.nivel, repete: true, abducao: true, musica: 'volta', icone: 'vacaEspaco',
     titulo: 'De volta das férias', desc: 'O disco voador pousa no observatório e devolve uma vaca que estava de férias no espaço. Vista daqui, nenhuma vaca entra no curral.',
@@ -18758,7 +18920,7 @@ const CENAS = {
   },
 };
 // a ordem da história; uma cena que ainda não existe em CENAS fica de fora
-const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'patrinho', 'lucia', 'pelucio', 'minhocas', 'picoca', 'mata', 'festa', 'curupira', 'jato', 'dani', 'maurinho', 'abducao', 'puxao', 'aposentadoria', 'nanar', 'cafezinho', 'foguete', 'resort', 'spaFamilia', 'arraied', 'volta'];
+const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'patrinho', 'lucia', 'pelucio', 'minhocas', 'picoca', 'mata', 'festa', 'curupira', 'jato', 'dani', 'maurinho', 'abducao', 'puxao', 'aposentadoria', 'nanar', 'cafezinho', 'foguete', 'resort', 'spaFamilia', 'arraied', 'chuva', 'volta'];
 const ordemCenas = () => ORDEM_CENAS.filter(id => CENAS[id]);
 // uma cena começa sozinha quando ainda não foi vista e está pronta (pelo nível, ou pela regra própria dela)
 const cenaPronta = id => { const C = CENAS[id]; return (!S[C.flag] || C.repete) && (C.pronta ? C.pronta() : nivel() >= C.nivel()); };
@@ -18882,6 +19044,7 @@ function atualizarCine(dt){
     case 'pu-vem': case 'pu-raio': case 'pu-segura': case 'pu-solta': case 'pu-vai': cena.trecho(c, dt); break;
     // cena do dia de spa da família
     case 'sf-entra': case 'sf-brinca': case 'sf-ofuro': cena.trecho(c, dt); break;
+    case 'ch-espera': cena.trecho(c, dt); break;
     // cena da aposentadoria
     case 'ap-indo': case 'ap-paga': case 'ap-galo': case 'ap-vai': cena.trecho(c, dt); break;
     // ArraiEd
@@ -20465,6 +20628,7 @@ function comprarVaral(){
   aviso(LUZ.noite > 0.05 ? 'Varal de luzes nos caminhos! Ao amanhecer ele se recolhe e volta quando anoitecer.' : 'Varal de luzes comprado! Ele aparece nos caminhos quando anoitecer e se recolhe ao amanhecer.', 'grande', 3.5);
   hud(); salvar(); return true;
 }
+const COR_ECLIPSE = new THREE.Color(0xd2553a);
 let estrelasFeitas = 0;
 function desenharEstrelas(){
   const c = $('estrelas'), w = innerWidth, h = innerHeight;
@@ -20597,6 +20761,8 @@ function atualizarCiclo(dt){
   const dia = p < 0.72, t = dia ? p / 0.72 : (p - 0.72) / 0.28, ang = lerp(-0.9, 0.9, t), alto = dia ? 16 + 12 * Math.sin(Math.PI * t) : 18 + 6 * Math.sin(Math.PI * t);
   LUZ.dir.set(Math.cos(ang) * 16, alto, Math.sin(ang) * 16 + 4);
   sol.color.copy(LUZ.solCor); ceuLuz.color.copy(LUZ.ceuCor); ceuLuz.groundColor.copy(LUZ.chao);
+  // noite de eclipse: a luz da Lua fica cor de goiabada
+  if (S.ceuNoite && S.ceuNoite.evento === 'eclipse' && S.ceuNoite.dia === diaAtual() && LUZ.noite > 0.05){ sol.color.lerp(COR_ECLIPSE, LUZ.noite * 0.7); ceuLuz.color.lerp(COR_ECLIPSE, LUZ.noite * 0.25); }
   // brilho das janelas, halos dos postes e luzes de verdade
   const n = LUZ.noite;
   MAT_LUZ.opacity = n * 0.85; MAT_LUZ.visible = n > 0.02;
@@ -24331,6 +24497,7 @@ function tocou(cx, cy){
   Som.ligar();
   if (cine){ avancarCine(); return; }
   if (menuAberto){ fecharMenu(); return; }
+  if (!modo && tocarCadente(cx, cy)) return;
   const alvo = alvoNaTela(cx, cy);
   if (!alvo){ return; }
   if (modo && modo.tipo === 'enfeite'){
@@ -24859,7 +25026,7 @@ async function iniciar(){
     chamine: () => CHAMINE_MUNDO, fumaca: (x, y, z) => fumaca(x, y, z), marcas: () => fila.filter(f => f.marca).map(f => ({ k: f.alvo.k, tipo: f.tipo, pos: f.marca.position.toArray().map(n => +n.toFixed(2)), ed: alvoMundo(f.alvo) })),
     spa: { SPA, PORCO_SPA, GUERRA_LAMA, familiaCena: () => spaFamilia, EXCURSAO, excursao: () => chegarExcursao(), excursaoObj: () => excursao, LIVRO_SPA, abrirLivro: abrirLivroSpa, fatorLivro: fatorLivroSpa, guerra: () => { proxGuerraLama = 0; }, guerraObj: () => guerraLama, ala: { pronta: alaSpaPronta, abrir: abrirAlaSpa, fruta: frutaDoBar, max: maxSpa, entrada: entradaSpa, proxima: v => proximaNoSpa(v), montar: montarGradeSpa }, visitantes: () => visitantesSpa, chegar: chegarAoSpa, familia: chegarFamiliaSpa, livres: familiaLivreSpa, lugares: () => (lugaresSpa || montarGradeSpa(), lugaresSpa), grade: () => gradeSpa, caminho: caminhoSpa, livresGrade: livresGradeSpa, banho: () => banhoEd, mundo: mundoSpa, esvaziar: esvaziarSpa, tracos: tracosPorcoSpa, descricao: descricaoPorcoSpa, itens: v => itensVisitanteSpa(v), menu: r => menuSpa(r), aberto: spaAberto, relogio: () => ({ proxSpa, proxFamiliaSpa }), zerar: () => { proxSpa = 0.1; proxFamiliaSpa = 0.1; }, sujar: sujarSpa, abrirCenas, pedirCena,
       noLugar: (v, tipo, i = 0, t = 999) => { if (!gradeSpa) montarGradeSpa(); const q = lugaresSpa.filter(l => l.tipo === tipo)[i], [x, z] = mundoSpa(q.x, q.z); Object.assign(v, { x, z, y: q.y, lugar: q, vai: 'lugar', estado: 'atividade', t, ang: q.ang, pagou: true, pts: [] }); v.g.visible = true; if (tipo === 'cadeira' && v.pep) v.pep.visible = true; } },
-    observatorio: { caderno: abrirCaderno, obsEd: () => obsEd, ocular: () => ocular, abrirOcular, fecharOcular, tocar: tocarOcular, naOcular, ASTRO, luaDoDia, ceuHoje, descobrir: descobrirAstro, vis: () => observVis, OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
+    observatorio: { tocarUltimaCadente: () => { const E = CADENTES[CADENTES.length - 1]; if (!E) return 'sem'; const s = tela(E.m.position); return tocarCadente(s.x, s.y); }, ceu: CEU, ceuDaNoite, pedir: pedirAEstrela, realizar: realizarPedido, tocarCadente, cadentes: () => CADENTES, chuvaCena: () => chuvaCena, cometa: () => cometaVis, caderno: abrirCaderno, obsEd: () => obsEd, ocular: () => ocular, abrirOcular, fecharOcular, tocar: tocarOcular, naOcular, ASTRO, luaDoDia, ceuHoje, descobrir: descobrirAstro, vis: () => observVis, OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
     luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, foguete: { FOGUETE, prox: () => S.fogueteEspera, zerar: () => { S.fogueteEspera = 0; }, obj: () => foguete, falas: falasFoguete }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { passeio: { obj: () => passeio, pode: podePasseio, caminho: caminhoPasseio, VOO_PASSEIO }, frete: { opcoes: opcoesFrete, mandar: mandarFrete, pagar: pagarFrete, itens: () => { const r = { estado: '', itens: [] }; itensFrete(r); return r; } }, rega: comecarRegaAerea, faixa: passarFaixa, FAIXA, voo: () => voo, JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, encomenda: { ENCOMENDAS, encomendar, cancelar: cancelarEncomenda, itens: () => { const r = { estado: '', itens: [] }; itensEncomenda(r); return r; } }, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, dormir: pedirDormir, item: itemDormir, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
     // auditoria de colisões: o que o desenho de uma construção (n = nível da reforma, ou 'andaime') põe fora do terreno dela
