@@ -7451,13 +7451,15 @@ function nanoPula(n, a, b, k, alto = 0.25){
   return k >= 1;
 }
 // o Ed comenta, se está na fazenda e perto; vira para olhar se está parado
-function reageEd(lista, x, z){
+function reageEd(lista, x, z, rep){
   if (!ed.g.visible || cine || Math.hypot(ed.pos.x - x, ed.pos.y - z) > 14) return;
   if (ed.estado === 'parado') ed.olhar(x, z);
-  const f = variar(lista); falar(ed, f, tempoDeLeitura(f));
+  const f = rep ? variarF(lista, rep) : variar(lista); falar(ed, f, tempoDeLeitura(f));
 }
+// um objeto da arte (o morango roubado, o chapéu): some junto quando a arte acaba
+function objetoArte(A, m){ scene.add(m); A.objs.push(m); return m; }
 function iniciarArteNano(id, lugar){
-  const def = ARTES_NANO[id], A = Object.assign({ id, def, t: 0, ft: 0, nanos: [], fase: 'vem' }, lugar);
+  const def = ARTES_NANO[id], A = Object.assign({ id, def, t: 0, ft: 0, nanos: [], objs: [], fase: 'vem' }, lugar);
   arteNano = A; arteNanoUlt = id; def.iniciar(A);
   return A;
 }
@@ -7466,6 +7468,7 @@ function encerrarArteNano(){
   if (!A) return;
   try { if (A.def.limpar) A.def.limpar(A); } catch (e){ console.error(e); }
   for (const n of A.nanos) scene.remove(n.g);
+  for (const m of A.objs) scene.remove(m);
   for (let i = FALAS.length - 1; i >= 0; i--) if (A.nanos.some(n => n.fala === FALAS[i].quem)){ FALAS[i].el.remove(); FALAS.splice(i, 1); }
 }
 function atualizarArteNano(dt, t){
@@ -7499,6 +7502,7 @@ function nanoFoge(n, dt){
 // para cima, enquanto a galinha corre e pula pelo pasto; depois de uns segundos a galinha dá um pinote, a nano voa, cai sentada,
 // fica tonta, ri e foge
 const FALA_RODEIO = ['Ei! Desce dessa galinha, nanica!', 'Isso é rodeio ou é galinheiro?', 'Segura firme aí, peoa!', 'A galinha não é cavalo, viu?', 'Olha a nano montada na galinha!', 'Oito segundos! Vai, aguenta!', 'Coitada da galinha, gente.', 'Que nano mais danada!', 'Se cair, não vem chorar pra mim!', 'Ih, a galinha não gostou nada disso.', 'Lá vai a peoa mais pequena do mundo!', 'Cuidado, ela vai te botar no chão!', 'Ô nanica, essa galinha tem que botar ovo hoje!', 'Essa nano não tem juízo nenhum.', 'Upa, upa, galinha!', 'Alguém tira uma foto disso!', 'Rodeio na minha fazenda? Só faltava essa.', 'A galinha disparou! Segura!', 'Vai assustar a galinha, menina!', 'Montaria nova, é? Que ousadia.', 'Isso que é coragem: cinco centímetros de coragem.'];
+const FALA_FORMIGAS = ['Ei! Devolve esse {i}!', 'Parecem formiguinhas carregando o {i}!', 'Ladras de {i}! Peguei vocês!', 'Esse {i} não é de vocês, nanicas!', 'Olha lá, uma procissão de nanos!', 'Vai pro café da manhã do hostel, é?', 'Pelo menos pede, né?', 'Três nanos para um {i}. Justo.', 'Eu vi isso, hein!', 'Lá se vai o meu {i}.', 'Que trabalho em equipe bonito. E ilegal!', 'Isso aí é furto de hortifrúti!', 'Vou cobrar esse {i} no aluguel da Lúcia!', 'Cuidado pra não derrubar!', 'Nem disfarçam mais.', 'Hoje tem festa no Nano Hostel.', 'Formiguinhas de chapéu!', 'Pra elas, esse {i} deve ser do tamanho de uma casa.', 'Já pensou se fosse uma melancia?', 'Ô turminha, a feira é lá na cidade!', 'Pode levar, mas divide com a Lúcia!'];
 const ARTES_NANO = {
   rodeio: {
     pode(){
@@ -7543,6 +7547,51 @@ const ARTES_NANO = {
       return false;
     },
     limpar(A){ A.gal.g.rotation.z = 0; },
+  },
+  // ---- 2. formiguinhas ladras: três nanos chegam num pé de morango maduro (ou ao lado de uma galinha, para pegar um ovo),
+  // levantam o morango gigante (para elas) acima da cabeça e saem em fila, carregando, rumo ao metrô; somem no mato
+  formigas: {
+    pode(){
+      const pes = Object.keys(S.campo).filter(k => S.campo[k].c === 'morango' && estagio(S.campo[k]) >= 2).map(k => k.split(',').map(Number));
+      const pe = maisPertoDaCamera(pes, ([x, z]) => [x + 0.5, z + 0.5]);
+      if (pe) return { item: 'morango', x: pe[0] + 0.5 + rnd(-0.2, 0.2), z: pe[1] + 0.5 + rnd(-0.2, 0.2) };
+      const G = maisPertoDaCamera(ANI.filter(a => a.d.tipo === 'galinha' && !a.d.pinto && a.g.visible && !a.res), a => [a.pos.x, a.pos.y]);
+      return G && { item: 'ovo', x: G.pos.x + 0.25, z: G.pos.y + 0.2 };
+    },
+    iniciar(A){
+      const [bx, bz] = bordaArte(A.x, A.z, 1.3);
+      for (let i = 0; i < 3; i++) nanoDaArte(A, bx + rnd(-0.15, 0.15), bz + rnd(-0.15, 0.15));
+      // rumo ao metrô dos nanos
+      const dx = NANO.metro[0] - A.x, dz = NANO.metro[1] - A.z, d = Math.hypot(dx, dz) || 1;
+      A.dir = [dx / d, dz / d]; A.ang = Math.atan2(dx, dz);
+      A.obj = objetoArte(A, malha(geo('arteVI' + A.item, () => VI[A.item]().build(1 / 20, { origin: [0.5, 0, 0.5] }))));
+      A.obj.position.set(A.x, 0, A.z); A.obj.scale.setScalar(0.01); A.obj.rotation.y = rnd(0, 6);
+    },
+    passo(A, dt, t){
+      // as três em fila, uma atrás da outra, na direção do metrô
+      const lugar = (i, ox, oz) => [ox + A.dir[0] * (i - 1) * 0.11, oz + A.dir[1] * (i - 1) * 0.11];
+      const ob = A.obj;
+      if (A.fase === 'vem'){
+        // o morango (ou o ovo) aparece no chão, como se tivesse caído do pé
+        ob.scale.setScalar(Math.min(1, ob.scale.x + dt * 3));
+        let ok = 0; A.nanos.forEach((n, i) => { const [x, z] = lugar(i, A.x, A.z); if (nanoVai(n, x, z, dt, 0.35, 'anda')){ ok++; n.g.rotation.y = A.ang; poseNano(n.rig, dt, 'segura'); } });
+        if (ok === 3){ A.fase = 'levanta'; A.ft = 0; falarNano(A.nanos[1]); Som.pop(); }
+      } else if (A.fase === 'levanta'){
+        for (const n of A.nanos){ n.g.rotation.y = A.ang; poseNano(n.rig, dt, 'carrega'); }
+        ob.position.y = Math.min(1, A.ft / 0.7) * 0.36;
+        if (A.ft > 0.9){ A.fase = 'leva'; A.ft = 0; A.ox = A.x; A.oz = A.z; reageEd(FALA_FORMIGAS, A.x, A.z, { i: A.item }); }
+      } else if (A.fase === 'leva'){
+        // marcham juntas, balançando o morango, uns dois ladrilhos e meio, e somem no mato com ele
+        A.ox += A.dir[0] * dt * 0.3; A.oz += A.dir[1] * dt * 0.3;
+        A.nanos.forEach((n, i) => { const [x, z] = lugar(i, A.ox, A.oz); n.g.position.set(x, Math.abs(Math.sin(n.rig.userData.rig.fase)) * 0.008, z); n.g.rotation.y = A.ang; poseNano(n.rig, dt, 'carrega'); });
+        ob.position.set(A.ox, 0.36 + Math.sin(t * 9) * 0.012, A.oz); ob.rotation.z = Math.sin(t * 4.5) * 0.08;
+        if (A.ft > 3 && !A.riu){ A.riu = true; falarNano(A.nanos[2]); }
+        if (A.ft > 8.5) for (const n of A.nanos) n.some = true;
+        ob.scale.setScalar(Math.max(0.01, A.nanos[0].cresce));
+        return A.nanos.every(n => n.some && n.cresce <= 0);
+      }
+      return false;
+    },
   },
 };
 // ================= guardião da mata e trilha ecológica: modelos
