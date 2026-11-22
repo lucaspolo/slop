@@ -145,6 +145,7 @@ body.feira-proto #jogo > :not(canvas){display:none}
 .curiosidade{font-size:17px;line-height:1.45;font-weight:600;margin:4px 0 14px;min-height:4.4em}
 .curiosidade.vira{animation:curVira .35s ease-out}
 @keyframes curVira{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:none}}
+.feira-cortina{position:absolute;inset:0;z-index:6;background:#fff6e2;opacity:0;pointer-events:none}
 .fc-atalhos{display:flex;gap:8px;margin:0 0 10px;flex-wrap:wrap}
 .fc-passo{display:flex;align-items:center;gap:4px;flex:none}
 .fc-passo .qtd{min-width:26px;text-align:center}
@@ -18417,25 +18418,36 @@ const CENAS = {
     restaurar(){ feiraCine = null; ed.g.visible = irmaoHud.g.visible = irmaoDani.g.visible = false; if (caminhaoFeira) caminhaoFeira.visible = false; entrarNaFeira(); },
     fim(){ this.restaurar(); },
   },
-  // a volta da feira: o caminhão já está na porteira, a família desce, o Ed conta quanto rendeu e o caminhão vai embora
+  // a volta da feira (o Lucas pediu o descanso): o caminhão já está na porteira, a família desce e o Ed conta quanto rendeu;
+  // o caminhão vai embora, o Ed anuncia que o resto do dia é só para brincar e descansar, os irmãos comemoram, e a tarde
+  // passa depressa no parquinho (descansoFeira) até a noite. Aí a cena acaba e vem a hora de nanar de sempre
   feiraVolta: {
     flag: 'viuCineFeira', nivel: () => FEIRA_DIA.nivel, icone: 'caminhao', repete: true,
-    titulo: 'Volta da feira', desc: 'A família volta da feira da cidade.', trancada: 'acontece depois do Dia de Feira',
+    titulo: 'Volta da feira', desc: 'A família volta da feira da cidade e tira o resto do dia para brincar.', trancada: 'acontece depois do Dia de Feira',
     pronta: () => false, podeRever: () => null,
     get falas(){ return feiraCine ? feiraCine.falas : []; },
-    foco: () => new THREE.Vector3(PARADA, 0.4, Z_CERCA - 0.2),
-    vista: () => (telaEstreita() ? 1.6 : 1) * 6.5,
+    foco: c => (c.passo === 'fv-brinca' && c.brinca && c.brinca.foco) || new THREE.Vector3(PARADA + 0.5, 0.4, Z_CERCA - 0.4),
+    vista: c => (telaEstreita() ? 1.6 : 1) * (c.passo === 'fv-brinca' && c.brinca && c.brinca.vista || 6.5),
     iniciar(c){
       caminhaoE.estado = 'cine';
       if (!caminhaoFeira) caminhaoFeira = criarCaminhaoFeira();
       caminhao = caminhaoFeira; naEstrada(caminhao, PARADA); caminhao.visible = true;
       for (const P of [ed, irmaoHud, irmaoDani]){ P.g.visible = false; P.pontos = []; P.aoChegar = null; P.estado = 'parado'; P.trab = null; }
-      const V = voltaFeira || { vendidos: 0, total: 0 }, irmao = Math.random() < 0.5 ? ['dani', 'Dani'] : ['hud', 'Hud'];
-      feiraCine = { falas: [['ed', 'Ed', variarF(FF.voltaEd, { n: `${V.vendidos} ${V.vendidos === 1 ? 'produto' : 'produtos'}`, r: reais(V.total) })], [...irmao, quemF(FF.voltaIrmaos, irmao[0])]] };
+      const V = voltaFeira || { vendidos: 0, total: 0 };
+      feiraCine = { falas: [
+        ['ed', 'Ed', variarF(FF.voltaEd, { n: `${V.vendidos} ${V.vendidos === 1 ? 'produto' : 'produtos'}`, r: reais(V.total) }), 'fv-parte'],
+        ['ed', 'Ed', FALA_DESCANSO_FEIRA],
+        ['hud', 'Hud', variar(FF.descansoHud)],
+        ['dani', 'Dani', variar(FF.descansoDani)],
+      ] };
       c.ok = 0; c.falou = false;
       return 'fv-desce';
     },
-    trecho(c){
+    // os irmãos pulam de alegria quando respondem
+    aoFalar(f){ if (f[0] === 'hud') irmaoHud.pulo = 0.5; if (f[0] === 'dani') irmaoDani.pulo = 0.5; if (f[2] === FALA_DESCANSO_FEIRA) ed.aceno = 1.2; },
+    trecho(c, dt){
+      if (c.passo === 'fv-parte') return trechoPartidaFeira(c);
+      if (c.passo === 'fv-brinca') return trechoDescansoFeira(c, dt);
       const desce = (P, i, alvo) => {
         if (P.g.visible || c.t < 0.4 + i * 0.55) return;
         P.g.visible = true; P.colocar(PARADA, Z_CERCA + 0.85); P.ang = P.angAlvo = Math.PI; P.pulo = 0.45; Som.pop();
@@ -18448,9 +18460,12 @@ const CENAS = {
         c.passo = 'dialogo'; mostrarFalaCine(0);
       }
     },
-    fimDasFalas(c){ $('cineDialogo').hidden = true; ed.aceno = 1.4; c.passo = 'partindo'; c.t = 0; Som.buzina(); },
-    pular(){
+    fimDasFalas(c){ $('cineDialogo').hidden = true; c.passo = 'fv-brinca'; c.t = 0; c.ini = false; },
+    // pular é ir direto para a manhã seguinte, descansado (como pular a hora de nanar)
+    pular(c){
+      descansoFeiraSolta(c);
       for (const [P, x, z] of [[ed, PARADA + 0.35, Z_CERCA - 1.1], [irmaoHud, PARADA + 1.45, Z_CERCA - 0.85], [irmaoDani, PARADA + 0.95, Z_CERCA - 1.4]]){ P.pontos = []; P.aoChegar = null; P.estado = 'parado'; P.colocar(x, z); P.g.visible = true; }
+      descansoPulado = true;
     },
     restaurar(){ feiraCine = null; fimVoltaFeira(); },
     fim(){ this.restaurar(); },
@@ -19182,6 +19197,7 @@ const CENAS = {
       const N = nanar;
       limparNanar(); S.viuNanar = true;
       if (N && N.descansou) aviso(`O Ed acordou descansado: até a tarde ele faz tudo ${Math.round((NANAR.rapido - 1) * 100)}% mais rápido.`, 'grande', 4);
+      mostrarNivelPendenteFeira();
     },
     restaurar(){ limparNanar(); if (!hudAtivo() && irmaoHud.g.visible) limparHud(); if (!daniAtivo() && irmaoDani.g.visible) limparDani(); },
   },
@@ -19449,7 +19465,7 @@ function atualizarCine(dt){
     // cena do dia de spa da família
     case 'sf-entra': case 'sf-brinca': case 'sf-ofuro': cena.trecho(c, dt); break;
     // Dia de Feira: o embarque e a volta
-    case 'fs-embarque': case 'fv-desce': cena.trecho(c, dt); break;
+    case 'fs-embarque': case 'fv-desce': case 'fv-parte': case 'fv-brinca': cena.trecho(c, dt); break;
     case 'ch-espera': cena.trecho(c, dt); break;
     // cena da aposentadoria
     case 'ap-indo': case 'ap-paga': case 'ap-galo': case 'ap-vai': cena.trecho(c, dt); break;
@@ -20435,6 +20451,7 @@ function ocupantesBrinq(e){
   const o = [];
   for (const A of [AJUDA.hud, AJUDA.dani]){ if (A.brinq && A.brinq.e === e) o[A.brinq.i] = 'sentado'; else if (A.indoBrinq && A.indoBrinq.e === e) o[A.indoBrinq.i] = 'indo'; }
   if (brinqEd && brinqEd.e === e) o[brinqEd.i] = brinqEd.espera ? 'espera' : 'sentado';
+  if (descansoBrinq) for (const q of descansoBrinq) if (q.b.e === e) o[q.b.i] = 'sentado';
   return o;
 }
 const edVaiBrincar = e => fila.some(t => t.tipo === 'parquinho' && t.alvo.x === e.x && t.alvo.z === e.z) && !(brinqEd && brinqEd.e === e);
@@ -25912,7 +25929,9 @@ const FF = {
   saidaEd: ['Caminhãozinho carregado! Hoje é Dia de Feira!', 'Tudo no lugar. Rumo à feira da cidade!', 'A sobra do celeiro vai virar alegria na cidade!', 'Bora, meninos! A feira não espera.', 'Hoje a gente vende o melhor da fazenda!', 'Toldo, caixotes e sorriso. Tudo pronto!', 'Dia de feira, dia de festa!', 'Quem chegar primeiro escolhe a janela!', 'Vamos mostrar pra cidade o que é produto da roça!', 'Carga conferida. Vamos!', 'A Dona Panqueca e o Sr. Mofi já devem estar lá!', 'Bom dia, família! Hoje é dia de feira!', 'Tudo fresquinho e embalado. Partiu!', 'Que saudade da feira! Vamos lá.', 'Caixotes amarrados, pneus calibrados. Vamos!', 'Hoje a barraca amarela vai fazer sucesso!', 'Feira boa começa cedo!', 'Sobra do celeiro no caminhão. Pra cidade!', 'Equipe completa: vendedor, repositor e caixa!', 'Prontos pra feira? Então bora!', 'Vamos vender tudinho!'],
   saidaIrmaos: [['dani', 'Eu cuido do caixa. Ninguém sai sem pagar!'], ['dani', 'Calculadora no bolso e troco separado!'], ['dani', 'Eu vou na frente, que eu ocupo o banco todo!'], ['dani', 'Já treinei o cha-ching do caixa!'], ['dani', 'Hoje o caixa vai encher!'], ['dani', 'Posso dirigir na volta?'], ['dani', 'Separei as moedinhas do troco!'], ['dani', 'Eu levo os caixotes pesados!'], ['dani', 'O pastel da Dona Panqueca me espera!'], ['dani', 'Caixa aberto, coração aberto!'], ['hud', 'E eu reponho os caixotes! Posso ir na janela?'], ['hud', 'Eu sou o repositor mais rápido da cidade!'], ['hud', 'Oba! Feira tem caldo de cana!'], ['hud', 'Eu já empilhei tudo direitinho!'], ['hud', 'Quem pega o pastel primeiro sou eu!'], ['hud', 'Será que tem fregueses do meu tamanho?'], ['hud', 'Eu levo o boné da sorte!'], ['hud', 'Vou cuidar do estoque igual cuido da horta!'], ['hud', 'Ed, eu posso buzinar?'], ['hud', 'Eu acordei cedinho só pra isso!'], ['hud', 'Feira! Feira! Feira!']],
   voltaEd: ['Voltamos! Vendemos {n} e o caixa fechou com {r}.', 'Que feira! Foram {n} vendidos, {r} no caixa.', 'Casa de novo! {N} vendidos e {r} no bolso.', 'Feira boa, hein? {N} saíram da barraca, {r} entraram.', 'Ufa, que dia! {N} vendidos, {r} de caixa.', 'Fazenda, voltamos! Rendeu {r} com {n} vendidos.', 'Missão cumprida: {n} vendidos e {r} pra fazenda.', 'A cidade adorou: {n} vendidos, {r} no caixa!', 'Voltamos cansados e felizes: {r} com {n} vendidos.', 'Que movimento! {N} vendidos, {r} no total.', 'Feira encerrada: {n} vendidos e {r} no caixa.', 'Casa, doce casa! A feira rendeu {r}.', '{N} vendidos! O caixa do Dani fechou em {r}.', 'De volta! Foram {r} com {n} na sacola dos fregueses.', 'A barraca amarela fez sucesso: {r}!', 'Que dia! {N} vendidos e {r} pra guardar.', 'Voltamos de barriga cheia e {r} no caixa!', 'Feira boa é assim: {n} vendidos, {r} no bolso.', 'Chegamos! A feira deu {r}.', 'Pronto, fazenda! Trouxemos {r} da cidade.', 'Vendemos {n}! Rendeu {r} e muita risada.'],
-  voltaIrmaos: [['dani', 'O caixa bateu certinho, centavo por centavo!'], ['dani', 'Eu quero ir de novo semana que vem!'], ['dani', 'Meu dedo cansou de contar moeda!'], ['dani', 'Caixa fechado e pastel no bucho!'], ['dani', 'Que dia! Vou dormir que nem pedra.'], ['dani', 'Ninguém saiu sem pagar. Missão cumprida!'], ['dani', 'Gorjeta boa, hein, Ed?'], ['dani', 'Na próxima eu dirijo!'], ['dani', 'O Sr. Mofi faz o melhor caldo do mundo!'], ['dani', 'Volto pra casa e já sonho com a próxima feira!'], ['hud', 'Eu repus mais caixote que todo mundo!'], ['hud', 'Posso contar pra Luma como foi?'], ['hud', 'O pastel da Dona Panqueca é o melhor!'], ['hud', 'Eu tô cansado... mas foi demais!'], ['hud', 'Semana que vem eu quero ir de novo!'], ['hud', 'Um nanico comprou de mim! Do meu tamanho!'], ['hud', 'Eu buzinei na curva, viu?'], ['hud', 'Feira é a coisa mais legal da cidade!'], ['hud', 'Meu boné da sorte funcionou!'], ['hud', 'Ed, eu fui um bom repositor?'], ['hud', 'Agora uma soneca!']],
+  // depois da volta: o Ed anuncia o descanso (a fala dele é do Lucas, sempre igual) e os irmãos comemoram
+  descansoHud: ['Oba! Eu escolho o primeiro brinquedo!', 'Brincar o resto do dia? Melhor dia da semana!', 'Eu vou no balanço até ficar tonto!', 'Uhuu! Último a chegar no parquinho é ovo podre!', 'Eba! Chega de caixote por hoje!', 'Eu sabia que você ia dizer isso, Ed!', 'Brincar e descansar? Pode deixar comigo!', 'Oba, oba, oba! Recreio até a noite!', 'Vou escorregar umas cem vezes!', 'Melhor irmão do mundo!', 'Eu tô cansado, mas pra brincar eu tenho energia!', 'Pode guardar a enxada, hoje não tem trabalho!', 'Iupiii! Vou contar pra Luma!', 'Hoje eu sou o rei do parquinho!', 'Eba! E amanhã a gente acorda descansado!', 'Brincar é o melhor descanso!', 'Corre, Dani! O gira-gira é meu!', 'Eu mereço! Repus caixote o dia inteiro!', 'Uhuu! Feira de manhã, parquinho de tarde!', 'Oba! Até o sol se pôr!', 'Eu já tô correndo pro parquinho!'],
+  descansoDani: ['Descanso merecido! Vou deitar na grama e não sair mais.', 'Até que enfim! Meu pé tá doendo de tanto ficar no caixa.', 'Ed, você é o melhor irmão do mundo!', 'Ufa! Meu dedo ainda tá contando moeda.', 'Eu topo! Mas primeiro um copo de água.', 'Brincar? Agora mesmo!', 'Vou na gangorra! Quem vem do outro lado?', 'Isso sim é um plano!', 'Eba! O caixa tá fechado, o parquinho tá aberto!', 'Trabalhamos muito, agora é festa!', 'Concordo! Hoje ninguém pega na enxada.', 'Que alegria! Vou brincar até escurecer.', 'Feira cansa, mas vale a pena. E brincar vale mais!', 'Ed, eu te ajudo a descansar!', 'Bora! O último no parquinho lava a louça!', 'Hoje eu não conto mais nada, só brinco!', 'Uhuu! Folga da família Joli Pig!', 'Eu já tava sonhando com isso!', 'Que dia bom! Feira, pastel e agora brincadeira!', 'Combinado! Depois a gente nana cedinho.', 'Eba! Descanso de campeão!'],
 };
 const variarF = (lista, rep = {}) => variar(lista).replace(/\{([a-zA-Z])\}/g, (m, k) => { const v = rep[k.toLowerCase()]; if (v == null) return m; return k === k.toUpperCase() ? String(v).charAt(0).toUpperCase() + String(v).slice(1) : v; });
 const quemF = (lista, quem) => variar(lista.filter(f => f[0] === quem), lista)[1];
@@ -25927,7 +25946,9 @@ const quemF = (lista, quem) => variar(lista.filter(f => f[0] === quem), lista)[1
 // rende (vendas, gorjetas e XP) entra no save ao voltar (sairDaFeira), com a sobra de volta ao celeiro, e a cena feiraVolta
 // deixa a família na porteira.
 const FEIRA_DIA = {
-  nivel: 55, intervalo: 7, duracao: 300, produtos: 6, maxQtd: 20, vitrine: 6, repoe: 2,
+  nivel: 55, intervalo: 7, duracao: 300,
+  // sai só até o meio da tarde (ateHora) e volta sempre de tarde (o relógio fica entre volta[0] e volta[1])
+  ateHora: 0.5, volta: [0.45, 0.62], produtos: 6, maxQtd: 20, vitrine: 6, repoe: 2,
   // fregueses: paciência em segundos (na fila ela cai pela metade); um chega a cada chegada[0] s no começo e chegada[1] s a
   // partir de rampa s de feira
   paciencia: [45, 70], chegada: [[12, 15], [7, 9]], rampa: 240,
@@ -25952,14 +25973,14 @@ let feira = null, feiraPedida = false, caminhaoFeira = null, voltaFeira = null;
 const diasParaFeira = () => (S.feira && S.feira.ultima != null ? Math.max(0, S.feira.ultima + FEIRA_DIA.intervalo - diaAtual()) : 0);
 // o calendário (o Lucas pediu): o dia da fazenda (S.dia, que vira quando amanhece; mostrado a partir de 1) com um dia da
 // semana inventado (o dia 1 é domingo), e o próximo dia em que dá para ir à feira: 7 dias depois da última, ou hoje se já
-// passou (de noite não dá, então fica para amanhã). Os seguintes são prováveis: dependem de quando a família for
+// passou (depois do meio da tarde, FEIRA_DIA.ateHora, fica para amanhã). Os seguintes são prováveis: dependem de quando a família for
 const DIAS_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 const DIAS_SEMANA_LONGO = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 function proximaFeira(){
   if (nivel() < FEIRA_DIA.nivel) return null;
   const hoje = diaAtual();
   if (feira || feiraPedida) return hoje;
-  return Math.max(hoje + (periodo().id === 'noite' ? 1 : 0), S.feira && S.feira.ultima != null ? S.feira.ultima + FEIRA_DIA.intervalo : hoje);
+  return Math.max(hoje + ((S.relogio || 0) >= FEIRA_DIA.ateHora ? 1 : 0), S.feira && S.feira.ultima != null ? S.feira.ultima + FEIRA_DIA.intervalo : hoje);
 }
 const feiraHoje = () => !!S && !feira && !feiraPedida && proximaFeira() === diaAtual();
 function calendarioHTML(){
@@ -25986,7 +26007,7 @@ const podeLevarNaFeira = p => !!PRODUTOS[p].venda && !PRODUTOS[p].so;
 // no menu da casa, a partir do nível da feira
 function itemFeira(){
   const falta = diasParaFeira();
-  const motivo = feiraPedida ? 'a família já vai sair' : falta ? `de novo em ${falta} ${falta > 1 ? 'dias' : 'dia'}` : periodo().id === 'noite' ? 'só de dia' : null;
+  const motivo = feiraPedida ? 'a família já vai sair' : falta ? `de novo em ${falta} ${falta > 1 ? 'dias' : 'dia'}` : (S.relogio || 0) >= FEIRA_DIA.ateHora ? 'só até o meio da tarde' : null;
   return { rotulo: 'Dia de Feira', sub: motivo || 'vender a sobra do celeiro na feira da cidade', icone: 'caminhao', off: !!motivo, fn: abrirCargaFeira };
 }
 // a janela da carga: até FEIRA_DIA.produtos produtos da sobra, até maxQtd de cada
@@ -26582,19 +26603,137 @@ function sairDaFeira(){
   $('jogo').classList.remove('em-feira'); redimensionar();
   Musica.parar();
   voltaFeira = { antes, vendidos: G.vendidos, total: G.dinheiro + G.gorjeta, xp: G.xp };
+  // a família volta sempre de tarde: a feira toma a manhã (de manhã, o relógio pula para a tarde)
+  S.relogio = clamp(S.relogio || 0, FEIRA_DIA.volta[0], FEIRA_DIA.volta[1]);
   hud(); salvar();
   iniciarCine('feiraVolta', true);
 }
-// o fim da cena da volta (ou o pulo dela): o XP aparece na fazenda, com o nível novo se subiu
+// o descanso depois da feira (o Lucas pediu): depois que o caminhão vai embora, o Ed anuncia FALA_DESCANSO_FEIRA, os irmãos
+// comemoram e o resto da tarde passa no parquinho, com o relógio correndo até a noite (DESCANSO_FEIRA). Uma cortina clara
+// cobre as trocas de lugar. Cada um brinca num assento (lugaresDescansoFeira: os brinquedos mais perto de casa, um por
+// brinquedo antes de dividir); sem parquinho, brincam de pega-pega na frente de casa. No fim vem a hora de nanar de sempre, e
+// a janela de nível novo (se o XP da feira subiu o Ed de nível) espera o bom dia (nivelFeiraPendente)
+const FALA_DESCANSO_FEIRA = 'Quanto trabalho, trabalhar na feira é importante mas é bem duro, hoje no restante do dia vamos só brincar e descansar.';
+const DESCANSO_FEIRA = { cobre: 0.6, brinca: 10, noite: 0.86 };
+let nivelFeiraPendente = null, descansoPulado = false, descansoBrinq = null;
+// o caminhão vai embora (o XP da feira sobe em cima do Ed) e a família se vira em roda para o anúncio
+function trechoPartidaFeira(c){
+  if (!c.ini){
+    c.ini = true; Som.buzina(); ed.aceno = 1.4;
+    const V = voltaFeira; if (V && V.xp){ V.mostrouXp = true; flutuar(ed.topo().add(new THREE.Vector3(0, 0.3, 0)), '+' + V.xp.toLocaleString('pt-BR') + ' xp', 'xp'); chipPulsa('chipDinheiro'); Som.moeda(); }
+  }
+  naEstrada(caminhao, lerp(PARADA, FIM_ESTRADA, Math.pow(Math.min(1, c.t / 3.5), 2)));
+  if (c.t >= 3.5){
+    caminhao.visible = false;
+    for (const p of [ed, irmaoHud, irmaoDani]) virarNaCena(p, PARADA + 0.92, Z_CERCA - 1.12);
+    c.passo = 'dialogo'; mostrarFalaCine(1);
+  }
+}
+function cortinaFeira(){
+  let e = $('feiraCortina');
+  if (!e){ e = document.createElement('div'); e.id = 'feiraCortina'; e.className = 'feira-cortina'; $('jogo').appendChild(e); }
+  return e;
+}
+function lugaresDescansoFeira(){
+  const bs = S.enfeites.filter(e => BRINQ[e.tipo] && ENF_VIS[e.x + ',' + e.z] && ladoBrinquedo(e));
+  if (!bs.length) return null;
+  const [hx, hz] = HUD_PORTA; bs.sort((a, b) => Math.hypot(a.x - hx, a.z - hz) - Math.hypot(b.x - hx, b.z - hz));
+  const perto = bs.filter(e => Math.hypot(e.x - bs[0].x, e.z - bs[0].z) < 9), L = [];
+  for (const e of perto) if (L.length < 3) L.push({ e, i: 0 });
+  for (const e of perto){ if (BRINQ[e.tipo].trajeto) continue; for (let i = 1; i < BRINQ[e.tipo].assentos.length && L.length < 3; i++) L.push({ e, i }); }
+  return L;
+}
+function montarDescansoFeira(B){
+  const quem = [ed, irmaoHud, irmaoDani], L = lugaresDescansoFeira();
+  for (const P of quem){ P.pontos = []; P.aoChegar = null; P.estado = 'parado'; P.trab = null; P.ferramenta(null); P.g.visible = true; P.sentado = 0; P.alt = 0; P.montado = false; }
+  B.lugares = []; B.falaT = 1.2;
+  if (L){
+    // quem não couber fica pulando do lado do primeiro brinquedo
+    quem.forEach((P, k) => {
+      const q = L[k];
+      if (q){ baseSentadoDe(P); B.lugares.push({ P, b: { e: q.e, i: q.i, tempo: 0 } }); }
+      else { const l = ladoBrinquedo(L[0].e); P.colocar(l[0] + (k - 1) * 0.5, l[1] + 0.4); B.lugares.push({ P, b: null }); }
+    });
+    descansoBrinq = B.lugares.filter(q => q.b);
+    const xs = L.map(q => q.e.x + 0.5), zs = L.map(q => q.e.z + 0.5), cx = xs.reduce((a, b) => a + b) / xs.length, cz = zs.reduce((a, b) => a + b) / zs.length;
+    const abre = Math.max(...L.map(q => Math.hypot(q.e.x + 0.5 - cx, q.e.z + 0.5 - cz)));
+    B.foco = new THREE.Vector3(cx, 0.6, cz); B.vista = clamp(3.6 + abre * 1.2, 4.6, 8);
+  } else {
+    const [mx, mz] = NANAR_LUGAR.hud.meio;
+    B.roda = { x: mx + 0.6, z: mz + 0.6 };
+    quem.forEach((P, k) => { const a = k * 2.1; P.colocar(B.roda.x + Math.cos(a) * 1.1, B.roda.z + Math.sin(a) * 1.1); });
+    B.foco = new THREE.Vector3(B.roda.x, 0.5, B.roda.z); B.vista = 4.8;
+  }
+  // o Hud e o Dani brincando sozinhos no parquinho saem dele (para não dividir o assento)
+  for (const [A, P] of [[AJUDA.hud, irmaoHud], [AJUDA.dani, irmaoDani]]) if (A.brinq || A.indoBrinq){ A.brinq = null; A.indoBrinq = null; }
+}
+function brincarDescanso(B, dt){
+  for (const q of B.lugares || []) if (q.b) andarNoBrinquedo(q.P, q.b, dt);
+  if (B.roda){
+    // pega-pega: cada um corre para um ponto da roda, e quando chega, para outro
+    for (const P of [ed, irmaoHud, irmaoDani]) if (P.estado === 'parado'){ const a = rnd(0, Math.PI * 2), r = rnd(0.5, 1.3); P.ir([[B.roda.x + Math.cos(a) * r, B.roda.z + Math.sin(a) * r]]); }
+  }
+  if ((B.falaT -= dt) > 0) return;
+  B.falaT = rnd(2.2, 3.4);
+  const sentados = (B.lugares || []).filter(q => q.b);
+  if (sentados.length && Math.random() < 0.8){ const q = sorteia(sentados); falar(q.P, variar(FALAS_BRINQ[q.b.e.tipo]), 2.6); }
+  else sorteia([ed, irmaoHud, irmaoDani]).pulo = 0.45;
+}
+// o resto da tarde: a cortina cobre, todos vão para o parquinho, a cortina abre, o relógio corre até a noite, a cortina cobre
+// de novo, todos descem dos brinquedos, ela abre e a câmera volta
+function trechoDescansoFeira(c, dt){
+  const B = c.brinca || (c.brinca = { fase: 'cobre', t: 0 }), D = DESCANSO_FEIRA, cort = cortinaFeira();
+  B.t += dt;
+  if (B.fase === 'cobre'){
+    cort.style.opacity = Math.min(1, B.t / D.cobre);
+    if (B.t >= D.cobre + 0.2){ montarDescansoFeira(B); B.fase = 'abre'; B.t = 0; }
+  } else if (B.fase === 'abre'){
+    cort.style.opacity = Math.max(0, 1 - B.t / D.cobre); brincarDescanso(B, dt);
+    if (B.t >= D.cobre){ B.fase = 'brinca'; B.t = 0; B.r0 = S.relogio || 0; }
+  } else if (B.fase === 'brinca'){
+    S.relogio = lerp(B.r0, Math.max(B.r0, D.noite), Math.min(1, B.t / D.brinca));
+    brincarDescanso(B, dt);
+    if (B.t >= D.brinca){ B.fase = 'fecha'; B.t = 0; }
+  } else if (B.fase === 'fecha'){
+    cort.style.opacity = Math.min(1, B.t / D.cobre); brincarDescanso(B, dt);
+    if (B.t >= D.cobre + 0.2){ descansoFeiraSolta(); B.fase = 'fim'; B.t = 0; }
+  } else if (B.fase === 'fim'){
+    cort.style.opacity = Math.max(0, 1 - B.t / D.cobre);
+    if (B.t >= D.cobre){ cort.remove(); c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
+  }
+}
+// todos descem dos brinquedos, para o lado de cada um
+function descansoFeiraSolta(){
+  const B = cine && cine.brinca;
+  if (B && B.lugares) for (const { P, b } of B.lugares){
+    P.sentado = 0; P.alt = 0; P.montado = false; P.pontos = []; P.aoChegar = null; P.estado = 'parado';
+    const l = b && ladoBrinquedo(b.e); if (l) P.colocar(...l);
+  }
+  if (B) B.lugares = [];
+  descansoBrinq = null;
+  const e = $('feiraCortina'); if (e) e.remove();
+}
+// o fim da cena da volta: vem a hora de nanar (o relógio já está na noite); pulada, vai direto para a manhã seguinte
 function fimVoltaFeira(){
-  const V = voltaFeira; voltaFeira = null;
-  ed.g.visible = true; irmaosVoltamDaFeira();
+  const V = voltaFeira, pulou = descansoPulado; voltaFeira = null; descansoPulado = false;
+  descansoBrinq = null; const cort = $('feiraCortina'); if (cort) cort.remove();
+  ed.g.visible = true;
   if (caminhaoFeira) caminhaoFeira.visible = false;
-  if (!V) return;
-  flutuar(ed.topo().add(new THREE.Vector3(0, 0.3, 0)), '+' + V.xp.toLocaleString('pt-BR') + ' xp', 'xp');
-  chipPulsa('chipDinheiro'); Som.moeda();
-  if (nivel() > V.antes) subiuNivel(nivel());
+  if (V && V.xp && !V.mostrouXp){ flutuar(ed.topo().add(new THREE.Vector3(0, 0.3, 0)), '+' + V.xp.toLocaleString('pt-BR') + ' xp', 'xp'); chipPulsa('chipDinheiro'); Som.moeda(); }
+  if (V && nivel() > V.antes) nivelFeiraPendente = nivel();
+  if (pulou){
+    if ((S.relogio || 0) > 0.5) S.dia = diaAtual() + 1;
+    S.relogio = NANAR.acorda; S.descansado = diaAtual();
+    for (const [P, ativo] of [[irmaoHud, hudAtivo()], [irmaoDani, daniAtivo()]]) if (!ativo) P.g.visible = false;
+    aviso(`O Ed acordou descansado: até a tarde ele faz tudo ${Math.round((NANAR.rapido - 1) * 100)}% mais rápido.`, 'grande', 4);
+    mostrarNivelPendenteFeira();
+  } else { irmaosVoltamDaFeira(); dormirPedido = true; }
   hud(); salvar();
+}
+function mostrarNivelPendenteFeira(){
+  if (!nivelFeiraPendente) return;
+  const n = nivelFeiraPendente; nivelFeiraPendente = null;
+  setTimeout(() => subiuNivel(n), 1500);
 }
 // o quadro de cima (tempo, XP, dinheiro e a sequência) e os de baixo (o pacote e os botões dos caixotes); só mexe no que mudou
 function atualizarUIFeira(F){
