@@ -25353,15 +25353,17 @@ const CORES_FEIRA = { madeira: 0xc99a66, madeira2: 0xb5854f, pau: 0x7a5232, asfa
 // beiralzinho por cima), onde vai o letreiro; embaixo dela fica o vão para ir ao caminhão
 function vBarracaFeira(larg, lonaA, lonaB, saia){
   const v = new Vox(), L = Math.round(larg * 8), D = 9, C = CORES_FEIRA, Z = -11;
-  for (const x of [0, L - 2]) v.box(x, 0, Z, x + 1, 20, Z + 1, C.pau);
+  for (const x of [0, L - 2]) v.box(x, 0, Z, x + 1, 22, Z + 1, C.pau);
   // a bancada fica na altura da barriga dos porquinhos, para o rosto de quem atende aparecer por cima
   v.box(0, 4, 0, L - 1, 4, D - 1, x => ((x >> 2) % 2 ? C.madeira : C.madeira2));
   v.box(0, 1, D - 1, L - 1, 3, D - 1, (x, y) => y === 3 ? saia : (x >> 1) % 2 ? saia : 0xfdf8ef);
   for (const x of [0, L - 1]) v.box(x, 0, 0, x, 3, D - 1, C.pau);
   const lista = x => (Math.floor(x / 3) % 2 ? lonaA : lonaB);
-  v.box(0, 12, Z + 2, L - 1, 19, Z + 2, lista);
-  for (let z = Z + 2; z <= Z + 5; z++) v.box(0, 20, z, L - 1, 20, z, lista);
-  for (let x = 0; x < L; x++) if (x % 3 === 1) v.set(x, 11, Z + 2, lista(x));
+  // o toldo: o painel de trás e a cobertura que avança até em cima de quem atende, caindo um pouco para a frente, com a franja
+  v.box(-1, 10, Z + 2, L, 21, Z + 2, x => lista(x + 1));
+  for (let z = Z + 2; z <= Z + 10; z++){ const y = 22 - Math.floor((z - Z - 2) / 4); v.box(-1, y, z, L, y, z, x => lista(x + 1)); }
+  for (let x = -1; x <= L; x++){ v.set(x, 19, Z + 10, lista(x + 1)); if ((x + 1) % 3 === 1) v.set(x, 18, Z + 10, lista(x + 1)); }
+  for (let x = -1; x <= L; x++) if ((x + 1) % 3 === 1) v.set(x, 9, Z + 2, lista(x + 1));
   return v;
 }
 function vCaixoteFeira(){ const v = new Vox(); v.box(0, 0, 0, 7, 3, 5, (x, y, z) => y === 3 || x === 0 || x === 7 || z === 0 || z === 5 ? ((x + y) % 2 ? CORES_FEIRA.madeira : CORES_FEIRA.madeira2) : 0x6b4a2e); return v; }
@@ -25435,9 +25437,9 @@ function iniciarFeiraPrototipo(){
   const nossa = malha(vBarracaFeira(FEIRA.barraca, 0xf6c945, 0xfdf8ef, 0xf6c945).build(s, { origin: [FEIRA.barraca * 4, 0, 4.5], jitter: 0.02 })); pos(nossa, 0, 0, 0);
   const pastel = malha(vBarracaFeira(FEIRA.vizinha, 0xe8483a, 0xfdf8ef, 0xe8483a).build(s, { origin: [FEIRA.vizinha * 4, 0, 4.5], jitter: 0.02 })); pos(pastel, -X, 0, 0);
   const caldo = malha(vBarracaFeira(FEIRA.vizinha, 0x5aa845, 0xfdf8ef, 0x5aa845).build(s, { origin: [FEIRA.vizinha * 4, 0, 4.5], jitter: 0.02 })); pos(caldo, X, 0, 0);
-  // os letreiros pendurados no beiral da lona
-  const letreiro = (txt, cor, x, w) => { const p = placaDeTexto(texturaTexto([[txt, 1, '#fdf8ef']], 512, 96, cor, '#fdf8ef'), w, w * 96 / 512); pos(p, x, 1.95, -1.47); };
-  letreiro('FAZENDA JOLI PIG', '#c9542a', 0, 2.6); letreiro('PASTEL', '#b5302a', -X, 1.6); letreiro('CALDO DE CANA', '#2f7a3a', X, 2.1);
+  // os letreiros em cima do toldo, deitados e virados para a câmera
+  const letreiro = (txt, cor, x, w) => { const p = placaDeTexto(texturaTexto([[txt, 1, '#fdf8ef']], 512, 96, cor, '#fdf8ef'), w, w * 96 / 512); pos(p, x, 2.82, -1.12); p.rotation.x = -1.05; };
+  letreiro('FAZENDA JOLI PIG', '#c9542a', 0, 2.9); letreiro('PASTEL', '#b5302a', -X, 1.8); letreiro('CALDO DE CANA', '#2f7a3a', X, 2.4);
   // a nossa bancada: os caixotes com os produtos em cima e a caixa registradora do Dani na ponta direita
   const PROD = ['ovo', 'leite', 'queijo', 'mel', 'bolo', 'laranja'], topo = 5 * s;
   PROD.forEach((k, i) => {
@@ -25462,14 +25464,14 @@ function iniciarFeiraPrototipo(){
   const cam = malha(vCaminhao(false, CAMINHAO_ED).build(1 / 16, { origin: [20, 0, 8.5] })); pos(cam, 0.6, 0, -3.5, 0);
   // gente: a pasteleira e o moço do caldo atrás das vizinhas, a família atrás da nossa bancada, fregueses na calçada
   const pessoa = (k, x, z, ry) => { const m = malha(geo('feiraPessoa' + k, () => vVisitante(k).build(1 / 30, { origin: [0.5, 0, 0.5], jitter: 0.02 }))); return pos(m, x, 0, z, ry); };
-  pessoa(11, -X, -0.75, 0); pessoa(7, X + 0.2, -0.75, 0);
+  pessoa(11, -X, -1.0, 0); pessoa(7, X + 0.2, -1.0, 0);
   const porco = (args, x, z, ang, esc) => { const p = new Porco(...args); pickaveis.length = 0; if (esc) p.g.scale.setScalar(esc); p.colocar(x, z); p.ang = p.angAlvo = ang; scene.add(p.g); anima.push((dt, t) => p.update(dt, t)); return p; };
-  const edF = porco([COR.ed, COR.edBolso, 'ed'], -0.35, -0.62, 0);
-  porco([COR.dani, COR.daniBolso, 'dani', MODELO_DANI], 1.42, -0.62, 0, ESCALA_DANI);
+  const edF = porco([COR.ed, COR.edBolso, 'ed'], -0.35, -0.98, 0);
+  porco([COR.dani, COR.daniBolso, 'dani', MODELO_DANI], 1.4, -1.02, 0, ESCALA_DANI);
   // o estoque no chão, atrás de quem atende (o Hud repõe dali; o caminhão fica atrás da lona)
   const est = (x, z, y) => pos(malha(geo('caixoteFeira', () => vCaixoteFeira().build(1 / 16, { origin: [4, 0, 3] }))), x, y, z);
-  est(-1.3, -1.25, 0); est(-0.8, -1.25, 0); est(-1.05, -1.25, 0.25); est(0.95, -1.3, 0);
-  const hudF = porco([COR.ed, COR.edBolso, 'hud', MODELO_HUD], -0.55, -1.0, 0.6, 0.5);
+  est(-1.3, -1.62, 0); est(-0.88, -1.62, 0); est(-1.09, -1.62, 0.25); est(0.75, -1.62, 0);
+  const hudF = porco([COR.ed, COR.edBolso, 'hud', MODELO_HUD], -0.9, -1.3, 0.6, 0.5);
   // fregueses nas três vagas (de costas para a câmera), com o balão do pedido; e mais um nano esperando na fila
   const frente = Math.PI;
   pessoa(2, -1.15, 2.05, frente);
