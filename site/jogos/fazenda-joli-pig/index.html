@@ -328,6 +328,7 @@ body.feira-proto #jogo > :not(canvas){display:none}
 .fala{position:absolute;left:0;top:0;z-index:5;max-width:220px;padding:7px 11px;background:#fff;border:3px solid var(--borda);border-radius:14px;font-weight:700;font-size:13px;line-height:1.25;pointer-events:none;transform:translate(-50%,-100%);box-shadow:0 3px 0 var(--sombra);text-align:center}
 .fala::after{content:"";position:absolute;left:50%;bottom:-11px;margin-left:-8px;border:8px solid transparent;border-top-color:var(--borda);border-bottom:0}
 .fala.beto{background:#e6f1fb}
+.fala.nano{background:#fff3c4;font-size:12px;padding:5px 9px}
 .fala.jaca{background:#e8f6dc}
 .fala.pelucio{background:#fde4e1}
 .fala.picoca{background:#f6efdf}
@@ -6373,10 +6374,11 @@ function nanoRig(k, mala, esc = NANO.sNano){
 // as poses da nano articulada (o índice 0 é o lado esquerdo dela, o 1 o direito). Rotação em x leva o membro para a frente
 // (negativo) ou para trás; em z, abre o braço para fora (positivo no direito, negativo no esquerdo). modo: parado, anda,
 // corre, sobe (escada), senta, acena (com a mão direita), carrega (os dois braços para cima, segurando algo na cabeça),
-// empurra (os braços para a frente), rema, pula (os braços para cima e as pernas encolhidas), segura (as mãos na frente)
+// empurra (os braços para a frente), rema, pula (os braços para cima e as pernas encolhidas), segura (as mãos na frente),
+// monta (sentada de pernas abertas, uma mão na rédea e a outra rodando no alto)
 function poseNano(g, dt, modo = 'parado'){
   const R = g && g.userData.rig; if (!R) return;
-  const ritmo = { anda: 11, corre: 17, sobe: 9, acena: 9, rema: 5, carrega: 9, empurra: 9 }[modo] || 2;
+  const ritmo = { anda: 11, corre: 17, sobe: 9, acena: 9, rema: 5, carrega: 9, empurra: 9, monta: 8 }[modo] || 2;
   R.fase += dt * ritmo;
   const s = Math.sin(R.fase), c = Math.cos(R.fase), A = { ox: [0, 0], oz: [0, 0], cx: [-0.15, -0.15], cz: [0, 0], qx: [0, 0], jx: [0, 0] };
   const pernas = amp => { A.qx = [-s * amp, s * amp]; A.jx = [Math.max(0, -s) * amp * 1.6, Math.max(0, s) * amp * 1.6]; };
@@ -6391,6 +6393,7 @@ function poseNano(g, dt, modo = 'parado'){
   else if (modo === 'acena'){ A.oz = [0, 2.5]; A.cz = [0, Math.sin(R.fase) * 0.6]; A.ox = [0.05, 0]; }
   else if (modo === 'rema'){ A.ox = [-0.9 + s * 0.6, -0.9 + s * 0.6]; A.cx = [-0.6 - c * 0.3, -0.6 - c * 0.3]; A.qx = [-1.45, -1.45]; A.jx = [1.45, 1.45]; }
   else if (modo === 'pula'){ A.oz = [-2.6, 2.6]; A.qx = [-0.7, -0.7]; A.jx = [1.2, 1.2]; }
+  else if (modo === 'monta'){ A.qx = [-1.2, -1.2]; A.jx = [1.3, 1.3]; A.ox = [-1.0, 0]; A.cx = [-0.6, 0]; A.oz = [0, 2.6]; A.cz = [0, Math.sin(R.fase * 1.5) * 0.7]; }
   else if (modo === 'segura'){ A.ox = [-1.1, -1.1]; A.cx = [-0.5, -0.5]; A.oz = [0.25, -0.25]; }
   else { A.ox = [s * 0.05, -s * 0.05]; }
   // quem puxa a mala de rodinha não balança o braço direito
@@ -7405,6 +7408,143 @@ function atualizarNanos(dt, t){
     poseNano(n.rig, dt, 'anda');
   }
 }
+// ================= as artes das nanos (o Lucas pediu): as nanos do hostel são danadas e, de vez em quando, aprontam pela
+// fazenda, sempre perto de onde a câmera está olhando. É tudo de enfeite: nada muda no save, nos itens nem no jogo. Uma arte
+// por vez; o Ed vê e comenta. Cada arte (ARTES_NANO) tem pode() (devolve o lugar, ou nada se não dá agora), iniciar(A),
+// passo(A, dt, t) (devolve true quando acabou) e limpar(A) (põe de volta o que mexeu; também roda quando uma cena começa
+// no meio). As nanos da arte (nanoDaArte) surgem do mato num ponto em volta, fazem a arte e somem no mato de novo
+const ARTE_NANO = { primeira: [45, 75], intervalo: [90, 180], tenta: 20, perto: 9, vel: 0.55, max: 70 };
+let arteNano = null, arteNanoProx = rnd(...ARTE_NANO.primeira), arteNanoUlt = null;
+// as risadinhas e gritinhos das nanos
+const RISO_NANO = ['Hihihi!', 'Iupiii!', 'Hehehe!', 'Uhuuu!', 'Kkkkk!', 'Iiihaaa!', 'Rárárá!', 'Corre!', 'Pega eu!', 'Hihi, ninguém viu!', 'Fuuui!', 'Eba!', 'Ops!', 'Foi sem querer!', 'Tchauzinho!', 'Hihihihi!', 'De novo!', 'Uiii!', 'Hehe, essa foi boa!', 'Psiu!', 'Foge, foge!', 'Tô nem aí!'];
+const pertoDaCamera = (x, z, r = ARTE_NANO.perto) => Math.hypot(x - cam.alvo.x, z - cam.alvo.z) < r;
+// o que estiver mais perto do centro da câmera, dentro do raio (pos devolve [x, z])
+function maisPertoDaCamera(lista, pos, r = ARTE_NANO.perto){
+  let melhor = null, dm = r;
+  for (const o of lista){ const [x, z] = pos(o), d = Math.hypot(x - cam.alvo.x, z - cam.alvo.z); if (d < dm){ dm = d; melhor = o; } }
+  return melhor;
+}
+// um ponto a r do lugar, fora da água, de onde as nanos saem do mato (e para onde fogem)
+function bordaArte(x, z, r = 1.4){
+  for (let i = 0; i < 12; i++){ const a = rnd(0, Math.PI * 2), px = x + Math.sin(a) * r, pz = z + Math.cos(a) * r; if (!naAgua(px, pz)) return [px, pz]; }
+  return [x + r, z];
+}
+function nanoDaArte(A, x, z){
+  const g = new THREE.Group(), rig = nanoRig(Math.floor(Math.random() * 40), false);
+  g.add(rig); g.position.set(x, 0, z); g.scale.setScalar(0.01); scene.add(g);
+  const n = { g, rig, cresce: 0 };
+  n.fala = { g, nome: 'nano', topo: () => g.position.clone().add(new THREE.Vector3(0, 0.42, 0)) };
+  A.nanos.push(n); return n;
+}
+const falarNano = (n, lista = RISO_NANO) => { const f = variar(lista); falar(n.fala, f, Math.min(2.6, tempoDeLeitura(f))); };
+// anda (ou corre) até o ponto; devolve true quando chega
+function nanoVai(n, x, z, dt, vel = ARTE_NANO.vel, modo = vel > 0.4 ? 'corre' : 'anda'){
+  const g = n.g, dx = x - g.position.x, dz = z - g.position.z, d = Math.hypot(dx, dz), p = vel * dt;
+  if (d <= p){ g.position.x = x; g.position.z = z; g.position.y = n.chao || 0; return true; }
+  g.position.x += dx / d * p; g.position.z += dz / d * p; g.rotation.y = Math.atan2(dx, dz);
+  g.position.y = (n.chao || 0) + Math.abs(Math.sin(n.rig.userData.rig.fase)) * 0.008;
+  poseNano(n.rig, dt, modo); return false;
+}
+// um pulo em arco de a até b (vetores), em dur segundos; devolve true quando chega
+function nanoPula(n, a, b, k, alto = 0.25){
+  n.g.position.lerpVectors(a, b, Math.min(1, k)); n.g.position.y += Math.sin(Math.min(1, k) * Math.PI) * alto;
+  return k >= 1;
+}
+// o Ed comenta, se está na fazenda e perto; vira para olhar se está parado
+function reageEd(lista, x, z){
+  if (!ed.g.visible || cine || Math.hypot(ed.pos.x - x, ed.pos.y - z) > 14) return;
+  if (ed.estado === 'parado') ed.olhar(x, z);
+  const f = variar(lista); falar(ed, f, tempoDeLeitura(f));
+}
+function iniciarArteNano(id, lugar){
+  const def = ARTES_NANO[id], A = Object.assign({ id, def, t: 0, ft: 0, nanos: [], fase: 'vem' }, lugar);
+  arteNano = A; arteNanoUlt = id; def.iniciar(A);
+  return A;
+}
+function encerrarArteNano(){
+  const A = arteNano; arteNano = null; arteNanoProx = rnd(...ARTE_NANO.intervalo);
+  if (!A) return;
+  try { if (A.def.limpar) A.def.limpar(A); } catch (e){ console.error(e); }
+  for (const n of A.nanos) scene.remove(n.g);
+  for (let i = FALAS.length - 1; i >= 0; i--) if (A.nanos.some(n => n.fala === FALAS[i].quem)){ FALAS[i].el.remove(); FALAS.splice(i, 1); }
+}
+function atualizarArteNano(dt, t){
+  const A = arteNano;
+  if (A){
+    if (cine || !nanoHostel){ encerrarArteNano(); return; }
+    A.t += dt; A.ft += dt;
+    // as nanos brotam do mato e, no fim, somem nele (n.some)
+    for (const n of A.nanos){
+      if (n.some){ n.cresce = Math.max(0, n.cresce - dt * 4); n.g.scale.setScalar(Math.max(0.01, n.cresce)); }
+      else if (n.cresce < 1){ n.cresce = Math.min(1, n.cresce + dt * 4); n.g.scale.setScalar(n.cresce); }
+    }
+    let fim;
+    try { fim = A.def.passo(A, dt, t) || A.t > (A.def.max || ARTE_NANO.max); } catch (e){ console.error(e); fim = true; }
+    if (fim) encerrarArteNano();
+    return;
+  }
+  if (!nanoHostel || cine || !ed.g.visible || vistaEd) return;
+  if ((arteNanoProx -= dt) > 0) return;
+  arteNanoProx = ARTE_NANO.tenta;
+  const ids = Object.keys(ARTES_NANO).filter(id => id !== arteNanoUlt).sort(() => Math.random() - 0.5);
+  for (const id of ids){ const lugar = ARTES_NANO[id].pode(); if (lugar){ iniciarArteNano(id, lugar); return; } }
+}
+// a nano foge para o mato e some (a arte acaba quando todas sumiram)
+function nanoFoge(n, dt){
+  if (!n.saida) n.saida = bordaArte(n.g.position.x, n.g.position.z, 1.5);
+  if (!n.some && nanoVai(n, n.saida[0], n.saida[1], dt, 0.7)) n.some = true;
+  return n.some && n.cresce <= 0;
+}
+// ---- 1. rodeio de galinha: uma nano chega de mansinho por trás de uma galinha, pula nas costas dela e sai montada, com a mão
+// para cima, enquanto a galinha corre e pula pelo pasto; depois de uns segundos a galinha dá um pinote, a nano voa, cai sentada,
+// fica tonta, ri e foge
+const FALA_RODEIO = ['Ei! Desce dessa galinha, nanica!', 'Isso é rodeio ou é galinheiro?', 'Segura firme aí, peoa!', 'A galinha não é cavalo, viu?', 'Olha a nano montada na galinha!', 'Oito segundos! Vai, aguenta!', 'Coitada da galinha, gente.', 'Que nano mais danada!', 'Se cair, não vem chorar pra mim!', 'Ih, a galinha não gostou nada disso.', 'Lá vai a peoa mais pequena do mundo!', 'Cuidado, ela vai te botar no chão!', 'Ô nanica, essa galinha tem que botar ovo hoje!', 'Essa nano não tem juízo nenhum.', 'Upa, upa, galinha!', 'Alguém tira uma foto disso!', 'Rodeio na minha fazenda? Só faltava essa.', 'A galinha disparou! Segura!', 'Vai assustar a galinha, menina!', 'Montaria nova, é? Que ousadia.', 'Isso que é coragem: cinco centímetros de coragem.'];
+const ARTES_NANO = {
+  rodeio: {
+    pode(){
+      const G = maisPertoDaCamera(ANI.filter(a => a.d.tipo === 'galinha' && !a.d.pinto && !a.res && a.g.visible && !a.nado), a => [a.pos.x, a.pos.y]);
+      return G && { gal: G, x: G.pos.x, z: G.pos.y };
+    },
+    iniciar(A){ const [x, z] = bordaArte(A.x, A.z, 1.3); A.n = nanoDaArte(A, x, z); },
+    passo(A, dt, t){
+      const G = A.gal, n = A.n, g = n.g;
+      if (!ANI.includes(G) || G.res){ n.some = true; return n.cresce <= 0; }
+      // as costas da galinha (ela olha para +z)
+      const costas = () => new THREE.Vector3(G.g.position.x - Math.sin(G.ang) * 0.09, G.g.position.y + 0.4, G.g.position.z - Math.cos(G.ang) * 0.09);
+      if (A.fase === 'vem'){
+        // a galinha fica ciscando parada enquanto a nano chega de mansinho, por trás
+        G.alvo = null; G.espera = Math.max(G.espera, 0.5);
+        if (nanoVai(n, G.pos.x - Math.sin(G.ang) * 0.3, G.pos.y - Math.cos(G.ang) * 0.3, dt, 0.35, 'anda')){ A.fase = 'sobe'; A.ft = 0; A.de = g.position.clone(); g.rotation.y = G.ang; falarNano(n); Som.pop(); }
+        if (A.t > 15) A.fase = 'foge';
+      } else if (A.fase === 'sobe'){
+        G.alvo = null;
+        poseNano(n.rig, dt, 'pula');
+        if (nanoPula(n, A.de, costas(), A.ft / 0.45, 0.3)){ A.fase = 'monta'; A.ft = 0; A.troca = 0; G.pulo = 0.4; Som.co(); reageEd(FALA_RODEIO, G.pos.x, G.pos.y); }
+      } else if (A.fase === 'monta'){
+        // a galinha dispara pelo pasto, pulando e sacudindo, com a nano em cima
+        if ((A.troca -= dt) <= 0 || !G.alvo){ A.troca = rnd(0.5, 1); const [tx, tz] = sorteia(G.pasto); G.alvo = [tx + rnd(0.2, 0.8), tz + rnd(0.2, 0.8)]; }
+        if (G.pulo <= 0 && Math.random() < dt * 1.2){ G.pulo = 0.4; Som.co(); }
+        G.g.rotation.z = Math.sin(t * 17) * 0.14;
+        g.position.copy(costas()); g.rotation.set(0, G.ang, G.g.rotation.z);
+        poseNano(n.rig, dt, 'monta');
+        if (A.ft > 5.5){
+          A.fase = 'voa'; A.ft = 0; G.pulo = 0.4; G.alvo = null; G.espera = rnd(1, 2); G.g.rotation.z = 0; Som.galoAlarme();
+          const lado = Math.random() < 0.5 ? 1 : -1, a = G.ang + lado * Math.PI / 2;
+          A.de = g.position.clone(); A.para = new THREE.Vector3(G.pos.x + Math.sin(a) * 0.7, 0, G.pos.y + Math.cos(a) * 0.7);
+        }
+      } else if (A.fase === 'voa'){
+        // o pinote: a nano sai rodando pelo ar e cai sentada
+        poseNano(n.rig, dt, 'pula'); g.rotation.x = A.ft * 11;
+        if (nanoPula(n, A.de, A.para, A.ft / 0.7, 0.45)){ A.fase = 'tonta'; A.ft = 0; g.rotation.set(0, g.rotation.y, 0); g.position.y = 0; poeira(g.position.x, g.position.z); Som.pop(); }
+      } else if (A.fase === 'tonta'){
+        poseNano(n.rig, dt, 'senta'); g.position.y = 0.04; g.rotation.z = Math.sin(t * 7) * 0.18;
+        if (A.ft > 1.6){ A.fase = 'foge'; A.ft = 0; g.rotation.z = 0; g.position.y = 0; falarNano(n); }
+      } else return nanoFoge(n, dt);
+      return false;
+    },
+    limpar(A){ A.gal.g.rotation.z = 0; },
+  },
+};
 // ================= guardião da mata e trilha ecológica: modelos
 // o fogo: brasas embaixo e labaredas de vermelho a amarelo; fase muda as pontas, para tremer
 function vFogo(fase = 0){
@@ -25449,6 +25589,7 @@ function quadro(agoraP){
   if (jaca.g.visible) jaca.update(dt, t);
   atualizarCaminhao(dt);
   for (const a of ANI) a.update(dt, t);
+  atualizarArteNano(dt, t);
   atualizarOndas(dt);
   atualizarGalos(dt, t);
   for (const b of BOLHAS){ b.position.y = b.userData.base + Math.sin(t * 3 + (b.userData.fase || 0)) * 0.04; }
@@ -25666,7 +25807,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { feira: ganchoFeira(), nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
+  window.__fazenda = { feira: ganchoFeira(), nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: id => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, l) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => [n.g.position.x, n.g.position.y, n.g.position.z]) }, encerrar: () => encerrarArteNano() }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
     galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { circulo: { forcar: () => { discoJogo.forcarCirculo = true; discoJogo.prox = 0; }, fazer: fazerCirculo, lote: loteParaCirculo, grupo: () => grupoCirculo, soltar: soltarGrupoCirculo, CIRCULO }, sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, puxar: () => { discoJogo.forcarPuxar = true; discoJogo.prox = 0; }, puxao: () => puxao, obj: () => discoJogo, abducao: () => abducao, presente: { soltar: presenteEt, obj: () => caixaEt, abrir: abrirCaixaEt }, visita: { forcar: () => { discoJogo.forcarVisita = true; discoJogo.prox = 0; }, obj: () => etVisita, itens: itensEt, trocar: trocarEt, pedido: pedidoEt, temDisco: temDiscoJardim, VISITA_ET } }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(AMPLIACAO).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
