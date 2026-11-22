@@ -7479,6 +7479,31 @@ function caminhoDeAgua(a, b){
 }
 // as ondinhas do barquinho, na altura da água (o lago ou o chafariz)
 function soltarOndaArte(A, x, z, forte){ const n = ONDAS.length; soltarOnda(x, z, forte); if (ONDAS.length > n) ONDAS[n].m.position.y = A.agua + 0.012; }
+// um porco (o Ed ou um irmão) perto do brinquedo, ou indo brincar nele
+function porcoNoParquinho(e){
+  if (edVaiBrincar(e) || (brinqEd && brinqEd.e === e)) return true;
+  for (const A of [AJUDA.hud, AJUDA.dani]) if ((A.brinq && A.brinq.e === e) || (A.indoBrinq && A.indoBrinq.e === e)) return true;
+  return [ed, irmaoHud, irmaoDani].some(P => P && P.g.visible && Math.hypot(P.pos.x - e.x - 0.5, P.pos.y - e.z - 0.5) < 1.3);
+}
+// os assentos ocupados de um brinquedo para a animação dele: os porcos e as nanos da arte do parquinho
+function sentadosBrinq(e){
+  const o = ocupantesBrinq(e).map(q => q === 'sentado'), A = arteNano;
+  if (A && A.id === 'parquinho' && A.e === e) for (const n of A.nanos) if (n.sentada || n.trajeto) o[n.assento] = true;
+  return o;
+}
+// a nano no escorregador: sobe a escada, anda na plataforma, escorrega sentada, levanta e dá a volta (como os porcos, em
+// trajetoEscorregador, mas com o tamanho dela)
+function escorregaNano(n, m, dt){
+  const W3 = (x, y, z) => m.localToWorld(new THREE.Vector3((x - 8) / 16, y / 16, (z - 8) / 16));
+  if (!n.trajeto){ const w = W3(8, 0, -2.5); if (!nanoVai(n, w.x, w.z, dt, 0.55)) return; n.trajeto = { fase: 'sobe', t: 0 }; }
+  const B = n.trajeto, g = n.g; B.t += dt;
+  const em = (x, y, z, sentada) => { const w = W3(x, y, z); g.position.set(w.x, w.y - (sentada ? 0.1 : 0), w.z); g.rotation.set(0, m.rotation.y, 0); };
+  if (B.fase === 'sobe'){ const k = Math.min(1, B.t / 2.4); em(8, k * 14, -1.5); poseNano(n.rig, dt, 'sobe'); if (k >= 1){ B.fase = 'topo'; B.t = 0; } }
+  else if (B.fase === 'topo'){ const k = Math.min(1, B.t / 1); em(8, 14, lerp(-1.5, 4, k)); poseNano(n.rig, dt, 'anda'); if (k >= 1){ B.fase = 'desce'; B.t = 0; if (Math.random() < 0.5) falarNano(n); } }
+  else if (B.fase === 'desce'){ const k = Math.min(1, B.t / 1.2), z = lerp(5.5, 15.5, k * k); em(8, Math.max(3, 14 - (z - 6) * 11 / 9), z, true); poseNano(n.rig, dt, 'senta'); if (k >= 1){ B.fase = 'fim'; B.t = 0; } }
+  else if (B.fase === 'fim'){ em(8, 0, 18); poseNano(n.rig, dt, 'parado'); if (B.t > 0.5){ B.fase = 'volta'; B.t = 0; B.pts = [[-2, 18], [-2, -2.5], [8, -2.5]].map(([x, z]) => W3(x, 0, z)); } }
+  else if (B.fase === 'volta'){ const p = B.pts[0]; if (nanoVai(n, p.x, p.z, dt, 0.8)){ B.pts.shift(); if (!B.pts.length){ B.fase = 'sobe'; B.t = 0; } } }
+}
 // um objeto da arte (o morango roubado, o chapéu): some junto quando a arte acaba
 function objetoArte(A, m){ scene.add(m); A.objs.push(m); return m; }
 function iniciarArteNano(id, lugar){
@@ -7534,6 +7559,8 @@ const FALA_NAVEGA = ['Olha, uma nano navegando numa folha!', 'Ahoy, capitã!', '
 // o que a nano grita lá do barquinho
 const FALA_MARUJA = ['Terra à vista!', 'Iça a vela!', 'Rema, rema!', 'Capitã no comando!', 'Ahoy!', 'Mar calmo hoje!', 'Olha a onda!', 'Rumo ao horizonte!', 'Eu sou a rainha do lago!', 'Vento a favor!', 'Uhuuu, que viagem!', 'Sem pato à vista!', 'Navegando!', 'Ninguém me alcança!', 'Isso é vida!', 'Próximo porto: a margem!', 'Âncoras ao mar! Brincadeira.', 'Tô vendo um peixe gigante!', 'Splash!', 'Hihi, molhei o pé!'];
 const NAVEGA = { lago: -0.25, fonte: 2 / 16 };
+const FALA_PARQUINHO = ['As nanos tomaram conta do parquinho!', 'Ei, esse {b} é dos grandes!', 'Que farra no parquinho!', 'Cabe mais uma nano aí?', 'Segura firme, nanicas!', 'Esse {b} nunca foi tão bem usado.', 'Quem deixou vocês brincarem aí?', 'Elas brincam mais que o Hud e o Dani juntos!', 'Cuidado pra não voar longe!', 'Pra elas, isso é um parque de diversões.', 'Parquinho lotado de gente miúda!', 'Ê, que alegria!', 'Depois deixa um pouquinho pra mim, hein!', 'Tem fila pro {b}?', 'Olha as nanos {n}!', 'Elas acham que ninguém tá vendo.', 'Que gritaria mais fininha!', 'Aposto que fogem quando eu chegar perto.', 'Diversão de cinco centímetros.', 'Isso é que é aproveitar a fazenda.', 'Brinca, mas não quebra, hein!'];
+const FALA_PARQUINHO_FOGE = ['Ué, cadê todo mundo?', 'Era só eu chegar...', 'Fugiram! Eu nem ia brigar.', 'Pode voltar, nanicas, tem lugar!', 'Tô com cara de bravo, é?', 'Eu só queria brincar junto!', 'Que debandada!', 'Sumiram que nem fumaça.', 'Assustei as coitadas.', 'O parquinho ficou vazio de repente.', 'Voltem! Eu empurro o balanço!', 'Nossa, que pressa.', 'Nem deu tempo de dar oi.', 'Eu sou grande, mas sou legal!', 'Tchau, turminha!', 'Correram mais que o Hud atrás de bolo.', 'Agora o brinquedo é meu. Brincadeira!', 'Que medo de porco é esse?', 'Até a próxima, nanicas!', 'Ah, que pena, tava tão bonitinho.', 'Elas vão voltar quando eu sair, aposto.'];
 const ARTES_NANO = {
   rodeio: {
     pode(){
@@ -7849,6 +7876,63 @@ const ARTES_NANO = {
         // o barquinho fica boiando e some junto com ela
         if (nanoFoge(n, dt)) return true;
         B.scale.setScalar(Math.max(0.01, n.some ? n.cresce : 1));
+      }
+      return false;
+    },
+  },
+  // ---- 7. parquinho dos grandes: com um brinquedo do parquinho livre perto da câmera, umas nanos sobem nele e brincam (o
+  // brinquedo mexe como se tivesse gente: sentadosBrinq); no escorregador sobem a escada, escorregam e dão a volta. Quando um
+  // porco chega perto (ou vai brincar ali) pulam fora e fogem; senão, brincam uns 16 s e vão embora. Os assentos continuam
+  // livres para o Ed e os irmãos (ocupantesBrinq não vê as nanos)
+  parquinho: {
+    pode(){
+      const livres = (S.enfeites || []).filter(e => BRINQ[e.tipo] && ENF_VIS[e.x + ',' + e.z] && !ocupantesBrinq(e).some(Boolean) && !porcoNoParquinho(e));
+      const e = maisPertoDaCamera(livres, e => [e.x + 0.5, e.z + 0.5]);
+      return e && { e, x: e.x + 0.5, z: e.z + 0.5 };
+    },
+    iniciar(A){
+      const T = BRINQ[A.e.tipo], k = Math.min(3, T.assentos.length);
+      for (let i = 0; i < k; i++){ const [x, z] = bordaArte(A.x, A.z, 1.3), n = nanoDaArte(A, x, z); n.assento = i; n.atraso = i * 0.5; }
+    },
+    passo(A, dt, t){
+      const e = A.e, T = BRINQ[e.tipo], m = ENF_VIS[e.x + ',' + e.z];
+      if (!m || !S.enfeites.includes(e)){ for (const n of A.nanos) n.some = true; return A.nanos.every(n => n.cresce <= 0); }
+      m.updateMatrixWorld(true);
+      if (A.fase === 'vem' || A.fase === 'brinca'){
+        // um porco chegando (ou indo brincar ali): todas pulam fora
+        if (porcoNoParquinho(e) || ocupantesBrinq(e).some(Boolean) || A.cansou || A.t > 30){
+          A.fase = 'foge'; Som.pop(); falarNano(sorteia(A.nanos));
+          for (const n of A.nanos){ n.sentada = false; n.trajeto = null; n.de = n.g.position.clone(); const [x, z] = bordaArte(n.g.position.x, n.g.position.z, 0.35); n.para = new THREE.Vector3(x, 0, z); n.ft = 0; }
+          if (A.fase === 'foge' && A.t > 3 && !A.saiu && ed.g.visible && Math.hypot(ed.pos.x - A.x, ed.pos.y - A.z) < 1.6){ A.saiu = true; reageEd(FALA_PARQUINHO_FOGE, A.x, A.z); }
+          return false;
+        }
+        let sentadas = 0;
+        for (const n of A.nanos){
+          if ((n.atraso -= dt) > 0) { poseNano(n.rig, dt, 'parado'); continue; }
+          if (T.trajeto){ escorregaNano(n, m, dt); sentadas++; continue; }
+          const s = T.assentos[n.assento], parte = m.userData.partes[s.parte];
+          const w = parte.localToWorld(new THREE.Vector3(s.p[0] / 16, s.p[1] / 16, s.p[2] / 16)), ang = m.rotation.y + parte.rotation.y + s.ang;
+          if (n.sentada){ n.g.position.set(w.x, w.y - 0.1, w.z); n.g.rotation.set(0, ang, 0); poseNano(n.rig, dt, s.montado ? 'monta' : 'senta'); sentadas++; }
+          else if (n.subindo != null){
+            n.subindo += dt / 0.4; poseNano(n.rig, dt, 'pula');
+            if (nanoPula(n, n.de, w.clone().setY(w.y - 0.1), n.subindo, 0.15)){ n.sentada = true; n.subindo = null; }
+          } else if (nanoVai(n, w.x, w.z, dt, 0.55)){ n.subindo = 0; n.de = n.g.position.clone(); }
+        }
+        if (sentadas && A.fase === 'vem'){ A.fase = 'brinca'; A.ft = 0; }
+        if (A.fase === 'brinca'){
+          if ((A.tRiso = (A.tRiso || 1.5) - dt) <= 0){ A.tRiso = rnd(2.5, 4.5); falarNano(sorteia(A.nanos)); }
+          if (A.ft > 3 && !A.ed){ A.ed = true; reageEd(FALA_PARQUINHO, A.x, A.z, { b: T.nome, n: T.no }); }
+          if (A.ft > 16) A.cansou = true;
+        }
+      } else {
+        // pulam do brinquedo para o chão e fogem
+        let ok = 0;
+        for (const n of A.nanos){
+          if (n.foi){ if (nanoFoge(n, dt)) ok++; continue; }
+          n.ft += dt; poseNano(n.rig, dt, 'pula');
+          if (nanoPula(n, n.de, n.para, n.ft / 0.45, 0.2)) n.foi = true;
+        }
+        return ok === A.nanos.length;
       }
       return false;
     },
@@ -20794,7 +20878,7 @@ function atualizarEnfeites(dt, t){
     if (U.cordao) U.cordao.rotation.x = Math.sin(t * 1.7 + U.fase) * 0.14;
     if (U.globo) U.globo.rotateOnAxis(EIXO_GLOBO, dt * 0.35);
     if (U.discoJ) animarDisco(U.discoJ, t + U.fase);
-    if (U.brinq && BRINQ[U.brinq.tipo].anima) BRINQ[U.brinq.tipo].anima(m, U, dt, t, ocupantesBrinq(U.brinq).map(q => q === 'sentado'));
+    if (U.brinq && BRINQ[U.brinq.tipo].anima) BRINQ[U.brinq.tipo].anima(m, U, dt, t, sentadosBrinq(U.brinq));
   }
   atualizarComedouro(dt, t);
   atualizarFogueiraEd();
