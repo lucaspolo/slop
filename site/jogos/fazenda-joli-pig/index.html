@@ -94,6 +94,11 @@ button{font:inherit;color:inherit}
 .hud-topo.aperto2 #horaFalta{min-width:2.5em}
 /* estrelas atrás do mapa, que aparecem à noite */
 #estrelas{position:fixed;inset:0;pointer-events:none;opacity:0}
+/* protótipo do Dia de Feira (?feira) */
+body.feira-proto #jogo > :not(canvas){display:none}
+.feira-hud{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);left:50%;transform:translateX(-50%);display:flex;gap:14px;background:#fffdf6;border:3px solid #3b2a20;border-radius:14px;padding:6px 14px;font:800 15px system-ui,sans-serif;color:#3b2a20;white-space:nowrap}
+.feira-hud .fh-tempo{color:#c9542a}
+.feira-aviso{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 10px);left:50%;transform:translateX(-50%);background:rgba(59,42,32,.85);color:#fffdf6;border-radius:10px;padding:5px 12px;font:700 12px system-ui,sans-serif;white-space:nowrap}
 /* a ocular do observatório: o céu pela luneta grande, por cima de tudo */
 .ocular{position:absolute;inset:0;z-index:45;background:#03040a;opacity:0;transition:opacity .5s;touch-action:none;pointer-events:auto}
 .ocular.on{opacity:1}
@@ -2730,9 +2735,12 @@ function vLambreta(){
   v.box(-10, 8, -1, -9, 9, 1, 0xe0483c);
   return v;
 }
-function vCaminhao(cafe){
+// cores: [lataria, lataria escura, branco], como no Joli Market (o caminhãozinho amarelo do Ed, CAMINHAO_ED)
+function vCaminhao(cafe, cores){
   const v = new Vox();
-  const azul = cafe ? 0xf2a9b8 : 0xa9cff0, azulE = cafe ? 0x8a5a3c : 0x7fb3e0, branco = cafe ? 0xfdf3e6 : 0xfdf8ef, vidro = 0x9fc8e0;
+  let azul = cafe ? 0xf2a9b8 : 0xa9cff0, azulE = cafe ? 0x8a5a3c : 0x7fb3e0, branco = cafe ? 0xfdf3e6 : 0xfdf8ef;
+  const vidro = 0x9fc8e0;
+  if (cores) [azul, azulE, branco] = cores;
   if (cafe){
     for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++) if (x * x + z * z <= 17) v.box(12 + x, 25, 8 + z, 12 + x, 31, 8 + z, (X, Y) => Y === 28 ? 0xe0408a : 0xfdf8ef);
     for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) if (x * x + z * z <= 10) v.set(12 + x, 31, 8 + z, 0x6b4226);
@@ -25333,6 +25341,161 @@ async function iniciar(){
     edObj: () => ed,
     alturas: () => Object.fromEntries([['ed', ed], ['hud', irmaoHud], ['dani', irmaoDani], ['beto', beto], ['jaca', jaca], ['pelucio', pelucio], ['patrinho', patrinho], ['maurinho', maurinho], ['milton', milton]].filter(([, P]) => P && P.g).map(([n, P]) => { const b = new THREE.Box3().setFromObject(P.g); return [n, +(b.max.y - P.g.position.y).toFixed(3)]; })) }, plantio: { todos: plantarTodosVazios, vazios: vaziosParaPlantar, modo: () => modo, ligar: k => ligarModo({ tipo: 'plantar', param: k }, { icone: k }) }, comecarChuva, estacaoAtual, rendCultura, verificarFigurinhas, chamarHud, irmaoHud: () => irmaoHud, plantarFrutifera, comprarColmeia, construirFabrica, ganharXP, nivel, ajudantes: { tarefa: q => (q === 'dani' ? tarefaDani : tarefaHud), alvos: () => alvosHud() }, fichas: { FICHAS_BICHOS, abrir: abrirFicha, retrato: retratoBicho, tela: (x, y, z) => tela(new THREE.Vector3(x, y, z)) }, ampliacao: { AMPLIACAO, AMPLIA_OBRA, ampliar, ampliada, larga: fabLarga, preco: precoAmpliacao, precoReforma, itens: id => { const r = { itens: [], estado: '' }; itensAmpliacao(id, r); return r; }, alas: () => [...ALAS], visivel: loteAlaVisivel, terminar: () => { if (S.obra) S.obra.fim = 0; } }, estFab, enfileirar, comprarMelhoria, comprarIrrigador, IRRIG, irrigadorJato, volumeNaTela, Som, pelucio: () => pelucio, cine: () => cine, avancarCine, chamarPelucio, jaca: () => jaca, visita: () => visita, despedirBeto, cam, alvoNaTela, comprarAlimentador, abrirCaderno, simularAnimais, S: () => S, ed: () => ed, fila, ANI, chamarBeto, abrirBeto, tela, campo, executar, simular, caminhaoE };
 }
+// ================= Dia de Feira: protótipo do cenário (?feira), para o Lucas aprovar a vista antes da mecânica. Sem save.
+// A câmera fica do lado da rua, no alto, olhando a barraca de frente e de cima (como a cozinha do Overcooked); a barraca
+// da fazenda fica no meio, entre a do pastel (à esquerda) e a do caldo de cana (à direita). Unidade: 1 = 8 cubinhos.
+// x cresce para a direita da tela, z para perto da câmera (a calçada dos fregueses)
+const FEIRA = { elev: 1.05, fov: 30, largTela: 11.6, largCelular: 5.2, alvo: [0, 0.5, -0.25], barraca: 3.4, vizinha: 3, vao: 0.55 };
+const CAMINHAO_ED = [0xf6e27c, 0xd9b84a, 0xfdf3d6];
+const CORES_FEIRA = { madeira: 0xc99a66, madeira2: 0xb5854f, pau: 0x7a5232, asfalto: 0x5d6168, asfalto2: 0x565a61, faixa: 0xf2d14a, calcada: 0xd9d3c7, calcada2: 0xcbc4b6, meio: 0xb9b2a4 };
+// uma barraca de feira vista de cima: sem teto, para a bancada e quem atende aparecerem. A bancada de madeira com a saia
+// listrada na frente, e atrás de quem atende, nos dois paus altos, a lona listrada esticada no alto como um painel (com um
+// beiralzinho por cima), onde vai o letreiro; embaixo dela fica o vão para ir ao caminhão
+function vBarracaFeira(larg, lonaA, lonaB, saia){
+  const v = new Vox(), L = Math.round(larg * 8), D = 9, C = CORES_FEIRA, Z = -11;
+  for (const x of [0, L - 2]) v.box(x, 0, Z, x + 1, 20, Z + 1, C.pau);
+  // a bancada fica na altura da barriga dos porquinhos, para o rosto de quem atende aparecer por cima
+  v.box(0, 4, 0, L - 1, 4, D - 1, x => ((x >> 2) % 2 ? C.madeira : C.madeira2));
+  v.box(0, 1, D - 1, L - 1, 3, D - 1, (x, y) => y === 3 ? saia : (x >> 1) % 2 ? saia : 0xfdf8ef);
+  for (const x of [0, L - 1]) v.box(x, 0, 0, x, 3, D - 1, C.pau);
+  const lista = x => (Math.floor(x / 3) % 2 ? lonaA : lonaB);
+  v.box(0, 12, Z + 2, L - 1, 19, Z + 2, lista);
+  for (let z = Z + 2; z <= Z + 5; z++) v.box(0, 20, z, L - 1, 20, z, lista);
+  for (let x = 0; x < L; x++) if (x % 3 === 1) v.set(x, 11, Z + 2, lista(x));
+  return v;
+}
+function vCaixoteFeira(){ const v = new Vox(); v.box(0, 0, 0, 7, 3, 5, (x, y, z) => y === 3 || x === 0 || x === 7 || z === 0 || z === 5 ? ((x + y) % 2 ? CORES_FEIRA.madeira : CORES_FEIRA.madeira2) : 0x6b4a2e); return v; }
+function vCaixaRegistradora(){ const v = new Vox(); v.box(0, 0, 0, 6, 3, 5, 0x3f6fd0); v.box(1, 4, 0, 5, 6, 2, 0x2f5aa8); v.box(2, 5, -1, 4, 6, -1, 0x9fe8a8); v.box(1, 4, 3, 5, 4, 5, 0xe8e2d4); v.box(0, 1, 6, 6, 2, 6, 0xd9a441); return v; }
+// o tacho de fritar pastel (o óleo dourado) e a vitrine com os pastéis
+function vTachoPastel(){ const v = new Vox(); v.ell(0, 2, 0, 5, 3, 5, 0x3a3a3e); v.box(-4, 4, -4, 4, 5, 4, (x, y, z) => Math.hypot(x, z) < 4.2 ? (y === 5 ? 0xf2c14a : 0x3a3a3e) : null); v.box(-6, 4, -1, -5, 4, 1, 0x2a2a2a); return v; }
+function vVitrinePastel(){
+  const v = new Vox(); v.box(0, 0, 0, 13, 0, 6, 0xd9d3c7); v.box(0, 1, 0, 13, 6, 6, (x, y, z) => x === 0 || x === 13 || z === 0 || z === 6 || y === 6 ? 0xd8f0ff : null);
+  for (const [x, z] of [[2, 2], [6, 3], [10, 2], [4, 4], [8, 4]]) v.box(x, 1, z, x + 2, 2, z + 1, (X, Y) => Y === 2 ? 0xe0a050 : 0xc98a3a);
+  return v;
+}
+// a moenda de cana: a caixa verde, os dois rolos, o volante de ferro (que gira, à parte) e o bico do caldo
+function vMoenda(){ const v = new Vox(); v.box(-5, 0, -4, 5, 9, 4, 0x3f9a4a); v.box(-4, 10, -3, 4, 12, 3, 0x2f7a3a); v.box(-3, 12, -2, 3, 13, 2, 0x9aa3ad); v.box(-1, 4, 5, 1, 5, 7, 0x9aa3ad); v.box(-2, 3, 8, 2, 3, 8, 0x9aa3ad); return v; }
+function vVolanteMoenda(){ const v = new Vox(); for (let a = 0; a < 40; a++){ const t = a / 40 * Math.PI * 2; v.set(0, Math.round(Math.sin(t) * 7), Math.round(Math.cos(t) * 7), 0x3a3a3e); } for (let r = -7; r <= 7; r++){ v.set(0, r, 0, 0x3a3a3e); v.set(0, 0, r, 0x3a3a3e); } v.box(0, -1, -1, 0, 1, 1, 0xd8302a); v.box(-3, 6, 0, -1, 7, 0, 0xd8302a); return v; }
+function vCanas(){ const v = new Vox(); for (let i = 0; i < 9; i++){ const x = (i % 3) * 2, y = Math.floor(i / 3) * 2; v.box(x, y, 0, x + 1, y + 1, 26, (X, Y, Z) => Z % 6 === 0 ? 0xc9b25a : 0x9cc45a); } return v; }
+function vCopoCaldo(){ const v = new Vox(); v.box(0, 0, 0, 2, 4, 2, (x, y) => y >= 4 ? 0xfdf8ef : 0xd8e88a); return v; }
+// as casinhas baixas do fundo da rua
+function vFachada(k){
+  const v = new Vox(), cor = [0xf2c14a, 0x8fc8e8, 0xf28fac, 0x9ad08a, 0xf2a96a, 0xd8c8f0][k % 6], W = 22 + (k % 3) * 4, H = 26 + (k % 2) * 6;
+  v.box(0, 0, 0, W - 1, H - 1, 5, (x, y) => y < 3 ? 0xb9b2a4 : cor);
+  v.box(0, H, -1, W - 1, H + 1, 6, 0xb5482f);
+  const pt = Math.floor(W / 2) - 2; v.box(pt, 0, 6, pt + 4, 12, 6, 0x7a4a2c);
+  for (const x of [3, W - 8]) v.box(x, 14, 6, x + 4, 19, 6, (X, Y) => X === x + 2 || Y === 16 ? 0xfdf8ef : 0x9fc8e0);
+  return v;
+}
+// o balão do pedido do freguês: os itens com a quantidade e a barrinha de paciência embaixo
+function texPedido(itens, paciencia){
+  const W = 64 + itens.length * 92, c = document.createElement('canvas'); c.width = W; c.height = 150;
+  const g = c.getContext('2d');
+  g.lineWidth = 6; g.strokeStyle = '#3b2a20'; g.fillStyle = '#fff';
+  const r = 18, x0 = 6, y0 = 6, x1 = W - 6, y1 = 112;
+  g.beginPath(); g.moveTo(x0 + r, y0); g.lineTo(x1 - r, y0); g.quadraticCurveTo(x1, y0, x1, y0 + r); g.lineTo(x1, y1 - r); g.quadraticCurveTo(x1, y1, x1 - r, y1);
+  g.lineTo(W / 2 + 12, y1); g.lineTo(W / 2, y1 + 22); g.lineTo(W / 2 - 12, y1); g.lineTo(x0 + r, y1); g.quadraticCurveTo(x0, y1, x0, y1 - r); g.lineTo(x0, y0 + r); g.quadraticCurveTo(x0, y0, x0 + r, y0); g.closePath(); g.fill(); g.stroke();
+  itens.forEach(([k, q], i) => {
+    const x = 32 + i * 92; if (ICONE[k]) g.drawImage(ICONE[k].canvas, x, 16, 62, 62);
+    g.font = '800 30px system-ui, sans-serif'; g.fillStyle = '#3b2a20'; g.textAlign = 'center'; g.fillText('×' + q, x + 34, 104);
+  });
+  g.fillStyle = '#e8e2d4'; g.fillRect(16, 138, W - 32, 10);
+  g.fillStyle = paciencia > 0.5 ? '#5aa845' : paciencia > 0.25 ? '#f2c13a' : '#e8483a'; g.fillRect(16, 138, (W - 32) * paciencia, 10);
+  const t = new THREE.CanvasTexture(c); t.userData = { w: W }; return t;
+}
+function balaoPedido(itens, paciencia){
+  const t = texPedido(itens, paciencia), s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
+  const h = 0.62; s.scale.set(h * t.userData.w / 150, h, 1); s.renderOrder = 10; return s;
+}
+function iniciarFeiraPrototipo(){
+  document.body.classList.add('feira-proto'); document.title = 'Dia de Feira · Fazenda Joli Pig · slop';
+  $('carregando').hidden = true;
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  scene = new THREE.Scene(); scene.background = new THREE.Color(0xbfe3f2);
+  gerarIcones();
+  scene.add(new THREE.HemisphereLight(0xfffaf0, 0x9a8f78, 0.62));
+  const luz = new THREE.DirectionalLight(0xfff2dc, 0.72); luz.position.set(-5, 12, 7); luz.castShadow = true;
+  Object.assign(luz.shadow.camera, { left: -10, right: 10, top: 10, bottom: -10, near: 1, far: 40 }); luz.shadow.mapSize.set(2048, 2048); luz.shadow.bias = -0.0006;
+  scene.add(luz, luz.target);
+  camera = new THREE.PerspectiveCamera(FEIRA.fov, 1, 0.1, 200);
+  const C = CORES_FEIRA, s = 1 / 8, anima = [];
+  const pos = (m, x, y, z, ry = 0) => { m.position.set(x, y, z); m.rotation.y = ry; scene.add(m); return m; };
+  const bloco = (w, h, d, cor, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color: cor })); m.receiveShadow = true; return pos(m, x, y, z); };
+  // o chão: o asfalto da rua fechada para a feira, a faixa amarela lá atrás e a calçada com o meio-fio na frente
+  bloco(40, 0.1, 9.4, C.asfalto, 0, -0.05, -1.6);
+  for (let x = -18; x <= 18; x += 2.2) bloco(1.2, 0.02, 0.12, C.faixa, x, 0.01, -4.2);
+  bloco(40, 0.16, 3.4, C.calcada, 0, 0.03, 5.2); bloco(40, 0.2, 0.18, C.meio, 0, 0.05, 3.58);
+  for (let x = -19.5; x <= 19.5; x += 1) bloco(0.04, 0.02, 3.3, C.calcada2, x, 0.12, 5.2);
+  // as casinhas do fundo
+  for (let i = 0; i < 9; i++){ const v = vFachada(i), m = malha(v.build(s, { origin: [0, 0, 6], jitter: 0.02 })); pos(m, -18 + i * 4.3, 0, -6.4); }
+  // as três barracas
+  const X = FEIRA.barraca / 2 + FEIRA.vao + FEIRA.vizinha / 2;
+  const nossa = malha(vBarracaFeira(FEIRA.barraca, 0xf6c945, 0xfdf8ef, 0xf6c945).build(s, { origin: [FEIRA.barraca * 4, 0, 4.5], jitter: 0.02 })); pos(nossa, 0, 0, 0);
+  const pastel = malha(vBarracaFeira(FEIRA.vizinha, 0xe8483a, 0xfdf8ef, 0xe8483a).build(s, { origin: [FEIRA.vizinha * 4, 0, 4.5], jitter: 0.02 })); pos(pastel, -X, 0, 0);
+  const caldo = malha(vBarracaFeira(FEIRA.vizinha, 0x5aa845, 0xfdf8ef, 0x5aa845).build(s, { origin: [FEIRA.vizinha * 4, 0, 4.5], jitter: 0.02 })); pos(caldo, X, 0, 0);
+  // os letreiros pendurados no beiral da lona
+  const letreiro = (txt, cor, x, w) => { const p = placaDeTexto(texturaTexto([[txt, 1, '#fdf8ef']], 512, 96, cor, '#fdf8ef'), w, w * 96 / 512); pos(p, x, 1.95, -1.47); };
+  letreiro('FAZENDA JOLI PIG', '#c9542a', 0, 2.6); letreiro('PASTEL', '#b5302a', -X, 1.6); letreiro('CALDO DE CANA', '#2f7a3a', X, 2.1);
+  // a nossa bancada: os caixotes com os produtos em cima e a caixa registradora do Dani na ponta direita
+  const PROD = ['ovo', 'leite', 'queijo', 'mel', 'bolo', 'laranja'], topo = 5 * s;
+  PROD.forEach((k, i) => {
+    const x = -1.32 + i * 0.44, cx = malha(geo('caixoteFeira', () => vCaixoteFeira().build(1 / 16, { origin: [4, 0, 3] }))); pos(cx, x, topo, 0.18);
+    for (const [dx, dz] of [[-0.1, -0.05], [0.1, 0.06], [0, -0.02]]){ const it = malha(geo('feiraVI' + k, () => VI[k]().build(1 / 40, { origin: [0.5, 0, 0.5] })), false); pos(it, x + dx, topo + 0.2, 0.18 + dz); }
+  });
+  pos(malha(geo('caixaRegistradora', () => vCaixaRegistradora().build(1 / 16, { origin: [3.5, 0, 3] }))), 1.48, topo, 0.15, -0.3);
+  // o pacote do freguês que o Ed está montando, na frente da bancada (uma sacola de papel com o que já entrou)
+  const sacola = bloco(0.26, 0.3, 0.18, 0xd9b27a, -0.15, topo + 0.15, 0.62);
+  // as vizinhas: o tacho e a vitrine do pastel, a moenda com o volante girando, as canas e os copos do caldo
+  pos(malha(vTachoPastel().build(1 / 16, { origin: [0, 0, 0] })), -X - 0.6, topo, 0.1);
+  pos(malha(vVitrinePastel().build(1 / 16, { origin: [7, 0, 3.5] })), -X + 0.6, topo, 0.2);
+  pos(malha(vMoenda().build(1 / 16, { origin: [0, 0, 0] })), X - 0.5, topo, 0.05);
+  const vol = malha(vVolanteMoenda().build(1 / 16, { origin: [0, 0, 0] })); pos(vol, X - 0.5 + 6.5 / 16, topo + 0.45, 0.05); anima.push(dt => { vol.rotation.x += dt * 2.4; });
+  pos(malha(vCanas().build(1 / 16, { origin: [2.5, 0, 13] })), X + 0.65, topo, 0.15, 0.25);
+  for (let i = 0; i < 4; i++) pos(malha(geo('copoCaldo', () => vCopoCaldo().build(1 / 24, { origin: [1.5, 0, 1.5] }))), X + 0.2 + i * 0.16, topo, 0.55);
+  // o vapor do tacho
+  const vapor = [];
+  for (let i = 0; i < 6; i++){ const m = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })); scene.add(m); vapor.push({ m, t: i / 6 }); }
+  anima.push(dt => vapor.forEach(V => { V.t = (V.t + dt * 0.4) % 1; V.m.position.set(-X - 0.6 + Math.sin(V.t * 9 + V.m.id) * 0.06, topo + 0.35 + V.t * 0.9, 0.1); V.m.material.opacity = 0.5 * (1 - V.t); V.m.scale.setScalar(0.6 + V.t); }));
+  // o caminhãozinho amarelo atrás da barraca, de traseira para ela, com caixotes na caçamba
+  const cam = malha(vCaminhao(false, CAMINHAO_ED).build(1 / 16, { origin: [20, 0, 8.5] })); pos(cam, 0.6, 0, -3.5, 0);
+  // gente: a pasteleira e o moço do caldo atrás das vizinhas, a família atrás da nossa bancada, fregueses na calçada
+  const pessoa = (k, x, z, ry) => { const m = malha(geo('feiraPessoa' + k, () => vVisitante(k).build(1 / 30, { origin: [0.5, 0, 0.5], jitter: 0.02 }))); return pos(m, x, 0, z, ry); };
+  pessoa(11, -X, -0.75, 0); pessoa(7, X + 0.2, -0.75, 0);
+  const porco = (args, x, z, ang, esc) => { const p = new Porco(...args); pickaveis.length = 0; if (esc) p.g.scale.setScalar(esc); p.colocar(x, z); p.ang = p.angAlvo = ang; scene.add(p.g); anima.push((dt, t) => p.update(dt, t)); return p; };
+  const edF = porco([COR.ed, COR.edBolso, 'ed'], -0.35, -0.62, 0);
+  porco([COR.dani, COR.daniBolso, 'dani', MODELO_DANI], 1.42, -0.62, 0, ESCALA_DANI);
+  // o estoque no chão, atrás de quem atende (o Hud repõe dali; o caminhão fica atrás da lona)
+  const est = (x, z, y) => pos(malha(geo('caixoteFeira', () => vCaixoteFeira().build(1 / 16, { origin: [4, 0, 3] }))), x, y, z);
+  est(-1.3, -1.25, 0); est(-0.8, -1.25, 0); est(-1.05, -1.25, 0.25); est(0.95, -1.3, 0);
+  const hudF = porco([COR.ed, COR.edBolso, 'hud', MODELO_HUD], -0.55, -1.0, 0.6, 0.5);
+  // fregueses nas três vagas (de costas para a câmera), com o balão do pedido; e mais um nano esperando na fila
+  const frente = Math.PI;
+  pessoa(2, -1.15, 2.05, frente);
+  porco([0xe8a0a8, 0xd77f8c, 'feiraP1'], 0, 2.05, frente);
+  porco([COR.beto, COR.betoBolso, 'beto'], 1.15, 2.05, frente);
+  const nano = malha(geo('nano5', () => vNano(5, false).build(NANO.sNano * 1.35, { origin: [0.5, 0, 0.5], jitter: 0.02 }))); pos(nano, 2.3, 0, 2.7, frente);
+  pessoa(6, -2.6, 2.9, frente + 0.4);
+  const bal = (itens, p, x, y) => { const b = balaoPedido(itens, p); b.position.set(x, y, 2.05); scene.add(b); };
+  bal([['ovo', 6], ['leite', 2]], 0.8, -1.15, 2.35); bal([['mel', 1]], 0.45, 0, 1.75); bal([['queijo', 2], ['bolo', 1], ['laranja', 4]], 0.2, 1.15, 1.9);
+  // o quadro de cima: tempo, XP e dinheiro (só para ver o espaço que ocupa)
+  document.body.insertAdjacentHTML('beforeend', `<div class="feira-hud"><span class="fh-tempo">3:42</span><span>⭐ 1.240 XP</span><span>R$ 3.180</span></div><div class="feira-aviso">Protótipo do cenário do Dia de Feira</div>`);
+  let ant = performance.now();
+  (function quadroF(ag){
+    requestAnimationFrame(quadroF);
+    const dt = Math.min(0.1, (ag - ant) / 1000 || 0), t = ag / 1000; ant = ag;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (canvas.width !== Math.round(w * renderer.getPixelRatio()) || canvas.height !== Math.round(h * renderer.getPixelRatio())){ renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+    // a distância que faz a largura pedida caber na tela (a barraca inteira no celular, as três no computador)
+    const larg = w / h < 0.8 ? FEIRA.largCelular : FEIRA.largTela, hf = Math.atan(Math.tan(FEIRA.fov * Math.PI / 360) * camera.aspect), d = larg / 2 / Math.tan(hf);
+    const [ax, ay, az] = FEIRA.alvo;
+    camera.position.set(ax, ay + d * Math.sin(FEIRA.elev), az + d * Math.cos(FEIRA.elev)); camera.lookAt(ax, ay, az);
+    for (const f of anima) f(dt, t);
+    renderer.render(scene, camera);
+  })(ant);
+  window.__feira = { FEIRA, camera, scene, ed: edF, hud: hudF };
+}
 // ================= visualizador dos modelos (?modelos): os mesmos desenhos do jogo, sem carregar nem gravar o save
 function catalogoModelos(){
   const vox = fn => () => { const v = fn(), m = malha(v.build(1 / 16)); m.userData.cubos = v.m.size; return m; };
@@ -25565,7 +25728,8 @@ function iniciarPwa(){
     document.addEventListener('visibilitychange', () => { if (!document.hidden) conferir(); });
   }).catch(() => {});
 }
-if (new URLSearchParams(location.search).has('modelos')) iniciarModelos(); else { iniciar(); iniciarPwa(); }
+const PARAMS = new URLSearchParams(location.search);
+if (PARAMS.has('modelos')) iniciarModelos(); else if (PARAMS.has('feira')) iniciarFeiraPrototipo(); else { iniciar(); iniciarPwa(); }
 })();
 </script>
 </body>
