@@ -75,6 +75,22 @@ button{font:inherit;color:inherit}
 .selo-estacao{position:absolute;right:-7px;bottom:-6px;width:17px;height:17px;display:grid}
 .selo-estacao svg,#chuvaIco svg{width:100%;height:100%;display:block}
 #chuvaIco{flex:none;width:14px;height:16px}
+/* o selo do caminhãozinho no relógio: hoje dá para ir ao Dia de Feira */
+.selo-feira{position:absolute;left:-9px;top:-5px;z-index:1;width:18px;height:18px;display:grid;place-items:center;border-radius:50%;background:var(--papel);border:2px solid var(--borda);animation:seloFeira 1.6s ease-in-out infinite}
+.selo-feira img{width:13px;height:13px}
+@keyframes seloFeira{50%{transform:scale(1.15)}}
+/* o calendário da fazenda (na janela do relógio): duas semanas, com hoje e os dias de feira */
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:0 0 10px}
+.cal-sem{font-size:11px;font-weight:800;text-align:center;color:var(--tinta-suave)}
+.cal-dia{position:relative;height:44px;border:2px solid var(--borda);border-radius:10px;background:var(--papel-2);display:grid;place-items:center;font-weight:800;font-size:14px}
+.cal-dia.passou{opacity:.45}
+.cal-dia.hoje{background:var(--amarelo);box-shadow:0 0 0 2px var(--rosa)}
+.cal-dia.feira{background:#cdeab0}
+.cal-dia.hoje.feira{background:#cdeab0}
+.cal-dia.talvez{border-style:dashed}
+.cal-dia img{position:absolute;right:1px;bottom:1px;width:17px;height:17px}
+.cal-legenda{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;font-weight:700;color:var(--tinta-suave);margin:-4px 0 10px}
+.cal-legenda i{display:inline-block;width:11px;height:11px;border:2px solid var(--borda);border-radius:4px;vertical-align:-1px;margin-right:4px}
 .tempo.tarde{background:#ffe1b8}
 .tempo.tarde .anel{--c:#e8743a;--miolo:#ffe1b8}
 .tempo.noite{background:#2c3a6a;color:#fff8e9}
@@ -587,7 +603,7 @@ body.modelos #tela{position:absolute;top:var(--md-topo,84px);left:300px;width:ca
     <div class="seg" id="chipAdubo" title="Adubo" hidden><img data-icone="adubo" alt=""><span id="adubo">0</span></div>
     <span class="sep" aria-hidden="true"></span>
     <div class="seg toque tempo" id="chipHora" title="Hora do dia" role="button" tabindex="0">
-      <span class="relogio"><span class="anel" id="hora" aria-hidden="true"></span><span class="selo-estacao" id="chipEstacao"><span id="estacao"></span></span></span>
+      <span class="relogio"><span class="selo-feira" id="chipFeira" hidden title="Hoje dá para ir à feira"><img data-icone="caminhao" alt=""></span><span class="anel" id="hora" aria-hidden="true"></span><span class="selo-estacao" id="chipEstacao"><span id="estacao"></span></span></span>
       <span id="chuvaIco" title="Chovendo" hidden></span><span id="horaFalta"></span>
     </div>
   </div>
@@ -21194,10 +21210,11 @@ function atualizarCiclo(dt){
   const prox = PERIODOS[(PERIODOS.indexOf(q) + 1) % PERIODOS.length];
   const nanando = q.id === 'noite' && !ateNanar;
   const txtFalta = sono || nanando ? 'Zzz' : falta >= 60 ? `${Math.ceil(falta / 60)} min` : `${Math.ceil(falta)} s`;
+  const fh = feiraHoje(); if ($('chipFeira').hidden === fh){ $('chipFeira').hidden = !fh; barraSuja = true; }
   if ($('horaFalta').textContent !== txtFalta){
     $('horaFalta').textContent = txtFalta; barraSuja = true;
-    $('chipHora').title = sono || nanando ? 'Noite: hora de nanar' : ateNanar ? `Noite: faltam ${txtFalta} para a hora de nanar`
-      : `${q.nome}: faltam ${txtFalta} para ${prox.id === 'dia' ? 'amanhecer' : prox.id === 'tarde' ? 'a tarde' : 'anoitecer'}${q.id === 'noite' ? ' (o Ed está com sono)' : ''}`;
+    $('chipHora').title = `Dia ${diaAtual() + 1}, ${DIAS_SEMANA_LONGO[diaAtual() % 7]}. ` + (sono || nanando ? 'Noite: hora de nanar' : ateNanar ? `Noite: faltam ${txtFalta} para a hora de nanar`
+      : `${q.nome}: faltam ${txtFalta} para ${prox.id === 'dia' ? 'amanhecer' : prox.id === 'tarde' ? 'a tarde' : 'anoitecer'}${q.id === 'noite' ? ' (o Ed está com sono)' : ''}`);
   }
   const pct = (passou * 100).toFixed(1);
   if ($('hora').dataset.pct !== pct){ $('hora').dataset.pct = pct; $('hora').style.setProperty('--p', pct); }
@@ -21252,7 +21269,10 @@ function criarGotas(){
 function abrirEstacao(){
   const e = estacaoAtual();
   const min = chovendo() ? 0 : Math.max(0, Math.ceil((S.proxChuva - Date.now()) / 60000));
-  abrirJanela(topo('semente', e.nome, 'A estação segue o calendário', 'azul') + `<div class="janela-corpo">
+  const d = diaAtual();
+  abrirJanela(topo('semente', `Dia ${d + 1}`, `${DIAS_SEMANA_LONGO[d % 7]} · ${periodo().nome.toLowerCase()} · ${e.nome.toLowerCase()}`, 'azul') + `<div class="janela-corpo">
+    ${calendarioHTML()}
+    <h3 style="margin:16px 0 8px;font-size:15px">${e.nome}: a estação segue o calendário de verdade</h3>
     <p>${e.art} ${e.nome.toLowerCase()}, estas culturas rendem ${PCT_ESTACAO}% a mais na colheita.${e.culturas.some(c => CULTURAS[c].rend < 2) ? ` As que dão só 1 por colheita colhem o mesmo, mas o Beto e o Jaca pagam ${PCT_ESTACAO}% a mais, e esse bônus de preço não soma com a oferta do dia.` : ''} São elas:</p>
     <div class="linhas">${e.culturas.filter(c => CULTURAS[c].nivel <= nivel() + 5).map(c => `<div class="linha"><img src="${icone(CULTURAS[c].produto || c)}" alt=""><div class="nome">${CULTURAS[c].nome}<small>${CULTURAS[c].rend < 2 ? `${reais(PRODUTOS[c].venda)} → ${reais(Math.round(PRODUTOS[c].venda * BONUS_ESTACAO))} cada` : `${CULTURAS[c].rend} → ${rendCultura(c)} por canteiro`}${CULTURAS[c].nivel > nivel() ? ` · nível ${CULTURAS[c].nivel}` : ''}</small></div></div>`).join('')}</div>
     <p style="margin-top:12px">${chovendo() ? 'Está chovendo agora: a chuva rega todos os canteiros.' : `A próxima chuva vem em mais ou menos ${min} min. Ela rega todos os canteiros sozinha.`}</p></div>`);
@@ -25791,6 +25811,38 @@ const IRMAOS_FEIRA = {
 };
 let feira = null, feiraPedida = false, caminhaoFeira = null, voltaFeira = null;
 const diasParaFeira = () => (S.feira && S.feira.ultima != null ? Math.max(0, S.feira.ultima + FEIRA_DIA.intervalo - diaAtual()) : 0);
+// o calendário (o Lucas pediu): o dia da fazenda (S.dia, que vira quando amanhece; mostrado a partir de 1) com um dia da
+// semana inventado (o dia 1 é domingo), e o próximo dia em que dá para ir à feira: 7 dias depois da última, ou hoje se já
+// passou (de noite não dá, então fica para amanhã). Os seguintes são prováveis: dependem de quando a família for
+const DIAS_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+const DIAS_SEMANA_LONGO = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+function proximaFeira(){
+  if (nivel() < FEIRA_DIA.nivel) return null;
+  const hoje = diaAtual();
+  if (feira || feiraPedida) return hoje;
+  return Math.max(hoje + (periodo().id === 'noite' ? 1 : 0), S.feira && S.feira.ultima != null ? S.feira.ultima + FEIRA_DIA.intervalo : hoje);
+}
+const feiraHoje = () => !!S && !feira && !feiraPedida && proximaFeira() === diaAtual();
+function calendarioHTML(){
+  const hoje = diaAtual(), ini = hoje - (hoje % 7), prox = proximaFeira(), teve = new Set((S.feira && S.feira.dias) || (S.feira && S.feira.ultima != null ? [S.feira.ultima] : []));
+  const cel = d => {
+    const ehFeira = prox != null && d === prox, talvez = prox != null && d > prox && (d - prox) % FEIRA_DIA.intervalo === 0;
+    const cls = ['cal-dia', d < hoje ? 'passou' : '', d === hoje ? 'hoje' : '', ehFeira || talvez ? 'feira' : '', talvez ? 'talvez' : ''].filter(Boolean).join(' ');
+    const ic = teve.has(d) ? 'moeda' : ehFeira || talvez ? 'caminhao' : null;
+    return `<div class="${cls}" title="Dia ${d + 1}${d === hoje ? ' (hoje)' : ''}${ehFeira ? ': dá para ir à feira' : talvez ? ': provável feira' : teve.has(d) ? ': teve feira' : ''}">${d + 1}${ic ? `<img src="${icone(ic)}" alt="">` : ''}</div>`;
+  };
+  let h = `<div class="cal">${DIAS_SEMANA.map(n => `<div class="cal-sem">${n}</div>`).join('')}${Array.from({ length: 14 }, (_, i) => cel(ini + i)).join('')}</div>`;
+  let txt;
+  if (prox == null) txt = `O Dia de Feira libera no nível ${FEIRA_DIA.nivel}. Depois, dá para ir de 7 em 7 dias.`;
+  else {
+    h += `<div class="cal-legenda"><span><i style="background:var(--amarelo)"></i>hoje</span><span><i style="background:#cdeab0"></i>dia de feira</span><span><i style="background:#cdeab0;border-style:dashed"></i>provável, se a família for no dia</span>${teve.size ? `<span><img src="${icone('moeda')}" alt="" style="width:14px;height:14px;vertical-align:-2px;margin-right:3px">teve feira</span>` : ''}</div>`;
+    const k = prox - hoje;
+    txt = feira || feiraPedida ? 'Hoje é Dia de Feira: a família já vai.' : k === 0 ? 'Hoje dá para ir à feira! Toque na casa e escolha "Dia de Feira".'
+      : k === 1 ? `A próxima feira é amanhã, ${DIAS_SEMANA_LONGO[prox % 7]} (dia ${prox + 1}).` : `A próxima feira é daqui a ${k} dias, ${DIAS_SEMANA_LONGO[prox % 7]} (dia ${prox + 1}).`;
+    txt += ' A feira acontece de 7 em 7 dias, contados do dia em que a família foi; um dia sem ir não se perde, ela fica esperando.';
+  }
+  return h + `<p>${txt}</p>`;
+}
 const podeLevarNaFeira = p => !!PRODUTOS[p].venda && !PRODUTOS[p].so;
 // no menu da casa, a partir do nível da feira
 function itemFeira(){
@@ -26364,7 +26416,7 @@ function sairDaFeira(){
   S.dinheiro += G.dinheiro + G.gorjeta; S.xp += G.xp;
   for (const k of F.prods){ const q = (F.vit[k] || 0) + (F.est[k] || 0) + (F.pacote[k] || 0); if (q) S.celeiro[k] = (S.celeiro[k] || 0) + q; }
   if (!S.feira) S.feira = {};
-  S.feira.ultima = S.feiraCarga ? S.feiraCarga.dia : diaAtual(); S.feira.vezes = (S.feira.vezes || 0) + 1; S.feira.recorde = Math.max(S.feira.recorde || 0, G.xp);
+  S.feira.ultima = S.feiraCarga ? S.feiraCarga.dia : diaAtual(); S.feira.dias = [...(S.feira.dias || []), S.feira.ultima].slice(-12); S.feira.vezes = (S.feira.vezes || 0) + 1; S.feira.recorde = Math.max(S.feira.recorde || 0, G.xp);
   delete S.feiraCarga;
   for (const f of FALAS) f.el.remove(); FALAS.length = 0;
   clearTimeout(F.centroT); F.ui.raiz.remove();
