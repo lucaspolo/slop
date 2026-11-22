@@ -7507,6 +7507,8 @@ const FALA_FORMIGAS = ['Ei! Devolve esse {i}!', 'Parecem formiguinhas carregando
 const FALA_CARONA = ['Hum, tô me sentindo mais pesado hoje.', 'Ué, quem tá aí atrás?', 'Tem uma nano nas minhas costas, né?', 'Eu sei que você tá aí, nanica!', 'Carona de graça, é?', 'Ei! Eu não sou ônibus!', 'Isso aqui não é o Nano Metrô!', 'Tô sentindo cócegas nas costas.', 'Quem deixou eu virar táxi?', 'Desce daí, sua danadinha!', 'Pelo menos segura firme!', 'Próxima parada: o hostel!', 'Tô levando passageiro sem saber?', 'Ai! Quem puxou meu macacão?', 'Alguém subiu aqui, eu senti!', 'Essa carona vai custar um morango.', 'Porco-táxi, às suas ordens.', 'Eu ouvi uma risadinha atrás de mim.', 'Tá gostando da vista daí de cima?', 'Já falei que hoje não tem carona!', 'Se a Lúcia souber disso...'];
 const FALA_ESCONDE = ['Tô vendo umas cabecinhas na horta!', 'Esconde-esconde no meu canteiro? Achei vocês!', 'Quem plantou nano aqui? Eu não plantei!', 'Essa horta tá dando nano agora?', 'Um, dois, três... achei!', 'Olha lá, apareceu outra!', 'Saiam daí, vão amassar as plantas!', 'Parece aquele jogo de martelinho!', 'Eu vi um chapéu se mexendo ali!', 'Nano não é semente, viu?', 'Tem alguém rindo no meio da plantação.', 'Ô turminha, aqui é horta, não parquinho!', 'Que colheita esquisita essa.', 'Vou contar até dez, hein!', 'Lá vem uma cabecinha de novo!', 'Esconderijo bom, mas o chapéu entrega.', 'Se eu regar, vocês crescem também?', 'Tô de olho em vocês!', 'Achei! E achei você também!', 'Isso que é se enterrar na brincadeira.', 'As minhocas devem estar confusas.'];
 const ESCONDE = { fundo: -0.42, pescoco: -0.01, espia: 2.2 };
+const FALA_TOCA_PORTA = ['Ué, ninguém?', 'Quem tocou a campainha?', 'Oi? Tem alguém aí?', 'Juro que ouvi a campainha.', 'De novo essa brincadeira?', 'Era o carteiro? Não era.', 'Hum, tô ouvindo risadinha...', 'Se for as nanos, eu pego vocês!', 'Ninguém. De novo.', 'Engraçadinhas, hein!', 'Alguém tocou e fugiu!', 'Vou instalar uma câmera aqui.', 'Ô de fora! Tem alguém?', 'Deve ter sido o vento. Mas vento não toca campainha.', 'Era o Milton? Não, ele buzina.', 'Larguei o videogame à toa.', 'Que coisa, toda vez isso.', 'Tô vendo um chapeuzinho atrás da moita!', 'Se tocar de novo, não abro mais.', 'Ninguém? Então eu volto pro sofá.', 'Tá bom, nanicas, essa foi boa.'];
+const FALA_TOCA = ['Toca e corre? Essa é velha!', 'Eu vi quem foi, hein!', 'A nanica tocou e saiu correndo!', 'Coitado de quem foi abrir.', 'Essa campainha não descansa.', 'Nanos danadas, tocando a campainha dos outros!', 'Ali! Ela tá escondida ali!', 'Clássico! Toca e corre.', 'Ninguém merece essa brincadeira.', 'Ela mal alcança a campainha e já apronta.', 'Aposto que foi a Lúcia que ensinou.', 'Tô vendo você aí, nanica!', 'Vou colocar a campainha mais alto.', 'Ai, ai, essas nanos.', 'Deu até pena de quem abriu a porta.', 'Toca, corre e ainda ri. Que coragem.', 'Pelo menos fica para o café!', 'Essa brincadeira eu também fazia.', 'Mais uma vez e eu conto pra Lúcia!', 'A campainha tocou e a nano sumiu. Mistério resolvido.', 'Corre, nanica, que lá vem bronca!'];
 const ARTES_NANO = {
   rodeio: {
     pode(){
@@ -7697,6 +7699,54 @@ const ARTES_NANO = {
       }
       return false;
     },
+  },
+  // ---- 5. toca e corre: uma nano corre até a porta da casa, pula para alcançar a campainha (dim-dom) e sai correndo para se
+  // esconder ali perto. Quem está em casa (o Hud ou o Dani, se não estão na fazenda) sai na porta, olha para os lados, não vê
+  // ninguém, reclama e entra de novo. A nano ri escondida e foge
+  toca: {
+    pode(){
+      if (!pertoDaCamera(HUD_PORTA[0], HUD_PORTA[1], 12)) return null;
+      return { x: HUD_PORTA[0], z: HUD_PORTA[1] };
+    },
+    iniciar(A){
+      const [x, z] = bordaArte(A.x, A.z + 1, 1.3); A.n = nanoDaArte(A, x, z);
+      // quem abre a porta: um irmão que está dentro de casa (escondido), se houver
+      const casa = [[irmaoHud, S.viuCineHud], [irmaoDani, S.viuCineDani]].filter(([p, viu]) => p && viu && !p.g.visible).map(([p]) => p);
+      A.quem = casa.length ? sorteia(casa) : null;
+      A.lado = Math.random() < 0.5 ? -1 : 1;
+    },
+    passo(A, dt, t){
+      const n = A.n, g = n.g, Q = A.quem;
+      if (A.fase === 'vem'){
+        if (nanoVai(n, A.x + 0.28, A.z + 0.12, dt, 0.6)){ A.fase = 'toca'; A.ft = 0; g.rotation.y = Math.PI; }
+        if (A.t > 15){ A.fase = 'foge'; }
+      } else if (A.fase === 'toca'){
+        // dois pulinhos para alcançar a campainha
+        poseNano(n.rig, dt, 'pula'); g.position.y = Math.abs(Math.sin(A.ft * 6)) * 0.13;
+        if (A.ft > 0.5 && !A.tocou){ A.tocou = true; Som.campainha(); }
+        if (A.ft > 1.05){ g.position.y = 0; A.fase = 'corre'; A.ft = 0; A.tToque = A.t; falarNano(n); A.esc = [A.x + A.lado * rnd(1, 1.35), A.z + rnd(0.9, 1.25)]; }
+      } else if (A.fase === 'corre' || A.fase === 'escondida'){
+        if (A.fase === 'corre' && nanoVai(n, A.esc[0], A.esc[1], dt, 0.95)){ A.fase = 'escondida'; A.ft = 0; }
+        if (A.fase === 'escondida'){ g.rotation.y = Math.atan2(A.x - g.position.x, A.z - g.position.z); poseNano(n.rig, dt, 'senta'); g.position.y = 0.03; }
+        // a porta se abre
+        if (Q && !A.saiu && A.t - A.tToque > 1.6 && !cine){
+          A.saiu = true; A.tPorta = A.t;
+          Q.g.visible = true; Q.estado = 'arte'; Q.pontos = []; Q.aoChegar = null; Q.colocar(...HUD_PORTA); Q.ang = Q.angAlvo = 0.3; Q.pulo = 0.45; Som.pop();
+        }
+        if (A.saiu && Q){
+          const dp = A.t - A.tPorta;
+          // olha para um lado e para o outro
+          Q.angAlvo = 0.3 + Math.sin(dp * 2) * 0.9;
+          if (dp > 0.7 && !A.falou){ A.falou = true; const f = variar(FALA_TOCA_PORTA); falar(Q, f, tempoDeLeitura(f)); }
+          if (dp > 1.6 && !A.ed){ A.ed = true; reageEd(FALA_TOCA, A.x, A.z); }
+          if (dp > 4.2 && Q.g.visible && Q.estado === 'arte'){ Q.g.visible = false; Q.estado = 'parado'; A.entrou = true; falarNano(n); }
+        }
+        if (!Q && A.t - A.tToque > 2.5 && !A.ed){ A.ed = true; reageEd(FALA_TOCA, A.x, A.z); }
+        if (A.fase === 'escondida' && (Q ? A.entrou && A.t - A.tPorta > 5.4 : A.t - A.tToque > 5)){ A.fase = 'foge'; g.position.y = 0; }
+      } else return nanoFoge(n, dt);
+      return false;
+    },
+    limpar(A){ const Q = A.quem; if (Q && Q.estado === 'arte'){ Q.g.visible = false; Q.estado = 'parado'; } },
   },
 };
 // ================= guardião da mata e trilha ecológica: modelos
@@ -12799,6 +12849,8 @@ const Som = {
   nivel(){ [523, 659, 784, 1047].forEach((f, i) => this.tom(f, 0.16, 'square', 0.05, 0, i * 0.1)); },
   erro(){ this.tom(200, 0.18, 'square', 0.05, 140); },
   pop(){ this.tom(300, 0.1, 'sine', 0.1, 900); },
+  // a campainha da casa: dim-dom
+  campainha(){ this.tom(784, 0.4, 'sine', 0.08); this.tom(622, 0.6, 'sine', 0.08, 0, 0.32); },
 };
 
 // ================= cena: chão e enfeites
