@@ -6375,10 +6375,11 @@ function nanoRig(k, mala, esc = NANO.sNano){
 // (negativo) ou para trás; em z, abre o braço para fora (positivo no direito, negativo no esquerdo). modo: parado, anda,
 // corre, sobe (escada), senta, acena (com a mão direita), carrega (os dois braços para cima, segurando algo na cabeça),
 // empurra (os braços para a frente), rema, pula (os braços para cima e as pernas encolhidas), segura (as mãos na frente),
-// monta (sentada de pernas abertas, uma mão na rédea e a outra rodando no alto)
+// monta (sentada de pernas abertas, uma mão na rédea e a outra rodando no alto), garupa (agarrada nas costas de alguém,
+// de pernas balançando)
 function poseNano(g, dt, modo = 'parado'){
   const R = g && g.userData.rig; if (!R) return;
-  const ritmo = { anda: 11, corre: 17, sobe: 9, acena: 9, rema: 5, carrega: 9, empurra: 9, monta: 8 }[modo] || 2;
+  const ritmo = { anda: 11, corre: 17, sobe: 9, acena: 9, rema: 5, carrega: 9, empurra: 9, monta: 8, garupa: 3 }[modo] || 2;
   R.fase += dt * ritmo;
   const s = Math.sin(R.fase), c = Math.cos(R.fase), A = { ox: [0, 0], oz: [0, 0], cx: [-0.15, -0.15], cz: [0, 0], qx: [0, 0], jx: [0, 0] };
   const pernas = amp => { A.qx = [-s * amp, s * amp]; A.jx = [Math.max(0, -s) * amp * 1.6, Math.max(0, s) * amp * 1.6]; };
@@ -6393,6 +6394,7 @@ function poseNano(g, dt, modo = 'parado'){
   else if (modo === 'acena'){ A.oz = [0, 2.5]; A.cz = [0, Math.sin(R.fase) * 0.6]; A.ox = [0.05, 0]; }
   else if (modo === 'rema'){ A.ox = [-0.9 + s * 0.6, -0.9 + s * 0.6]; A.cx = [-0.6 - c * 0.3, -0.6 - c * 0.3]; A.qx = [-1.45, -1.45]; A.jx = [1.45, 1.45]; }
   else if (modo === 'pula'){ A.oz = [-2.6, 2.6]; A.qx = [-0.7, -0.7]; A.jx = [1.2, 1.2]; }
+  else if (modo === 'garupa'){ A.ox = [-2.1, -2.1]; A.cx = [-0.7, -0.7]; A.oz = [0.35, -0.35]; A.qx = [-0.9 + s * 0.25, -0.9 - s * 0.25]; A.jx = [1.1, 1.1]; }
   else if (modo === 'monta'){ A.qx = [-1.2, -1.2]; A.jx = [1.3, 1.3]; A.ox = [-1.0, 0]; A.cx = [-0.6, 0]; A.oz = [0, 2.6]; A.cz = [0, Math.sin(R.fase * 1.5) * 0.7]; }
   else if (modo === 'segura'){ A.ox = [-1.1, -1.1]; A.cx = [-0.5, -0.5]; A.oz = [0.25, -0.25]; }
   else { A.ox = [s * 0.05, -s * 0.05]; }
@@ -7432,8 +7434,8 @@ function bordaArte(x, z, r = 1.4){
 function nanoDaArte(A, x, z){
   const g = new THREE.Group(), rig = nanoRig(Math.floor(Math.random() * 40), false);
   g.add(rig); g.position.set(x, 0, z); g.scale.setScalar(0.01); scene.add(g);
-  const n = { g, rig, cresce: 0 };
-  n.fala = { g, nome: 'nano', topo: () => g.position.clone().add(new THREE.Vector3(0, 0.42, 0)) };
+  const n = { g, rig, cresce: 0, escala: 1 };
+  n.fala = { g, nome: 'nano', topo: () => g.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.42, 0)) };
   A.nanos.push(n); return n;
 }
 const falarNano = (n, lista = RISO_NANO) => { const f = variar(lista); falar(n.fala, f, Math.min(2.6, tempoDeLeitura(f))); };
@@ -7467,8 +7469,7 @@ function encerrarArteNano(){
   const A = arteNano; arteNano = null; arteNanoProx = rnd(...ARTE_NANO.intervalo);
   if (!A) return;
   try { if (A.def.limpar) A.def.limpar(A); } catch (e){ console.error(e); }
-  for (const n of A.nanos) scene.remove(n.g);
-  for (const m of A.objs) scene.remove(m);
+  for (const o of [...A.nanos.map(n => n.g), ...A.objs]) if (o.parent) o.parent.remove(o);
   for (let i = FALAS.length - 1; i >= 0; i--) if (A.nanos.some(n => n.fala === FALAS[i].quem)){ FALAS[i].el.remove(); FALAS.splice(i, 1); }
 }
 function atualizarArteNano(dt, t){
@@ -7478,8 +7479,8 @@ function atualizarArteNano(dt, t){
     A.t += dt; A.ft += dt;
     // as nanos brotam do mato e, no fim, somem nele (n.some)
     for (const n of A.nanos){
-      if (n.some){ n.cresce = Math.max(0, n.cresce - dt * 4); n.g.scale.setScalar(Math.max(0.01, n.cresce)); }
-      else if (n.cresce < 1){ n.cresce = Math.min(1, n.cresce + dt * 4); n.g.scale.setScalar(n.cresce); }
+      if (n.some) n.cresce = Math.max(0, n.cresce - dt * 4); else if (n.cresce < 1) n.cresce = Math.min(1, n.cresce + dt * 4);
+      n.g.scale.setScalar(Math.max(0.01, n.cresce) * n.escala);
     }
     let fim;
     try { fim = A.def.passo(A, dt, t) || A.t > (A.def.max || ARTE_NANO.max); } catch (e){ console.error(e); fim = true; }
@@ -7503,6 +7504,7 @@ function nanoFoge(n, dt){
 // fica tonta, ri e foge
 const FALA_RODEIO = ['Ei! Desce dessa galinha, nanica!', 'Isso é rodeio ou é galinheiro?', 'Segura firme aí, peoa!', 'A galinha não é cavalo, viu?', 'Olha a nano montada na galinha!', 'Oito segundos! Vai, aguenta!', 'Coitada da galinha, gente.', 'Que nano mais danada!', 'Se cair, não vem chorar pra mim!', 'Ih, a galinha não gostou nada disso.', 'Lá vai a peoa mais pequena do mundo!', 'Cuidado, ela vai te botar no chão!', 'Ô nanica, essa galinha tem que botar ovo hoje!', 'Essa nano não tem juízo nenhum.', 'Upa, upa, galinha!', 'Alguém tira uma foto disso!', 'Rodeio na minha fazenda? Só faltava essa.', 'A galinha disparou! Segura!', 'Vai assustar a galinha, menina!', 'Montaria nova, é? Que ousadia.', 'Isso que é coragem: cinco centímetros de coragem.'];
 const FALA_FORMIGAS = ['Ei! Devolve esse {i}!', 'Parecem formiguinhas carregando o {i}!', 'Ladras de {i}! Peguei vocês!', 'Esse {i} não é de vocês, nanicas!', 'Olha lá, uma procissão de nanos!', 'Vai pro café da manhã do hostel, é?', 'Pelo menos pede, né?', 'Três nanos para um {i}. Justo.', 'Eu vi isso, hein!', 'Lá se vai o meu {i}.', 'Que trabalho em equipe bonito. E ilegal!', 'Isso aí é furto de hortifrúti!', 'Vou cobrar esse {i} no aluguel da Lúcia!', 'Cuidado pra não derrubar!', 'Nem disfarçam mais.', 'Hoje tem festa no Nano Hostel.', 'Formiguinhas de chapéu!', 'Pra elas, esse {i} deve ser do tamanho de uma casa.', 'Já pensou se fosse uma melancia?', 'Ô turminha, a feira é lá na cidade!', 'Pode levar, mas divide com a Lúcia!'];
+const FALA_CARONA = ['Hum, tô me sentindo mais pesado hoje.', 'Ué, quem tá aí atrás?', 'Tem uma nano nas minhas costas, né?', 'Eu sei que você tá aí, nanica!', 'Carona de graça, é?', 'Ei! Eu não sou ônibus!', 'Isso aqui não é o Nano Metrô!', 'Tô sentindo cócegas nas costas.', 'Quem deixou eu virar táxi?', 'Desce daí, sua danadinha!', 'Pelo menos segura firme!', 'Próxima parada: o hostel!', 'Tô levando passageiro sem saber?', 'Ai! Quem puxou meu macacão?', 'Alguém subiu aqui, eu senti!', 'Essa carona vai custar um morango.', 'Porco-táxi, às suas ordens.', 'Eu ouvi uma risadinha atrás de mim.', 'Tá gostando da vista daí de cima?', 'Já falei que hoje não tem carona!', 'Se a Lúcia souber disso...'];
 const ARTES_NANO = {
   rodeio: {
     pode(){
@@ -7590,6 +7592,50 @@ const ARTES_NANO = {
         ob.scale.setScalar(Math.max(0.01, A.nanos[0].cresce));
         return A.nanos.every(n => n.some && n.cresce <= 0);
       }
+      return false;
+    },
+  },
+  // ---- 3. carona no Ed: uma nano corre atrás do Ed, pula e se agarra nas costas dele, de pernas balançando, e vai de carona
+  // um tempo; o Ed sente o peso, comenta, e ela pula de volta para o chão e foge rindo. A nano fica presa no corpo do Ed
+  // (ed.corpo), então acompanha o balanço dele; a escala dela desfaz a do Ed
+  carona: {
+    pode(){
+      if (!ed.g.visible || trator || vistaEd || ed.sentado || ed.alt || ed.estado === 'trabalhando' || !pertoDaCamera(ed.pos.x, ed.pos.y)) return null;
+      return { x: ed.pos.x, z: ed.pos.y };
+    },
+    iniciar(A){ const [x, z] = bordaArte(ed.pos.x, ed.pos.y, 1.2); A.n = nanoDaArte(A, x, z); },
+    passo(A, dt, t){
+      const n = A.n, g = n.g, atras = () => [ed.pos.x - Math.sin(ed.ang) * 0.22, ed.pos.y - Math.cos(ed.ang) * 0.22];
+      if (A.fase === 'vem'){
+        const [x, z] = atras();
+        if (!ed.g.visible || ed.sentado || ed.alt || trator || A.t > 14){ A.fase = 'foge'; return false; }
+        if (nanoVai(n, x, z, dt, Math.hypot(x - g.position.x, z - g.position.z) > 0.6 ? 0.9 : 0.5)){
+          // agarra nas costas: vai para dentro do corpo do Ed
+          const gc = ed.corpo.children[0].geometry; if (!gc.boundingBox) gc.computeBoundingBox();
+          const bb = gc.boundingBox, e = ed.g.scale.y;
+          A.costas = new THREE.Vector3(0, bb.min.y + (bb.max.y - bb.min.y) * 0.3, bb.min.z - 0.02 / e);
+          ed.corpo.add(g); n.escala = 1 / e; g.position.set(0, 0, A.costas.z - 0.1 / e); g.rotation.set(0, 0, 0);
+          A.fase = 'sobe'; A.ft = 0; A.de = g.position.clone(); Som.pop(); falarNano(n);
+        }
+      } else if (A.fase === 'sobe'){
+        poseNano(n.rig, dt, 'pula');
+        if (nanoPula(n, A.de, A.costas, A.ft / 0.4, 0.15 / ed.g.scale.y)){ A.fase = 'carona'; A.ft = 0; }
+      } else if (A.fase === 'carona'){
+        if (!ed.g.visible){ n.some = true; return n.cresce <= 0; }
+        g.position.copy(A.costas); g.position.y += Math.sin(t * 6) * 0.004;
+        poseNano(n.rig, dt, 'garupa');
+        if (A.ft > 3 && !A.riu){ A.riu = true; falarNano(n); }
+        if (A.ft > 5.5 && !A.notou){ A.notou = true; reageEd(FALA_CARONA, ed.pos.x, ed.pos.y); }
+        // depois de uns 11 s, ou se o Ed vai sentar, subir ou trabalhar, ela pula fora
+        if (A.ft > 11 || ed.sentado || ed.alt || ed.estado === 'trabalhando' || trator){
+          const w = g.getWorldPosition(new THREE.Vector3());
+          ed.corpo.remove(g); scene.add(g); n.escala = 1; g.position.copy(w); g.rotation.set(0, ed.ang + Math.PI, 0);
+          A.fase = 'desce'; A.ft = 0; A.de = w; A.para = new THREE.Vector3(ed.pos.x - Math.sin(ed.ang) * 0.55, 0, ed.pos.y - Math.cos(ed.ang) * 0.55);
+        }
+      } else if (A.fase === 'desce'){
+        poseNano(n.rig, dt, 'pula');
+        if (nanoPula(n, A.de, A.para, A.ft / 0.5, 0.2)){ A.fase = 'foge'; A.ft = 0; poeira(g.position.x, g.position.z); falarNano(n); }
+      } else return nanoFoge(n, dt);
       return false;
     },
   },
@@ -25856,7 +25902,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { feira: ganchoFeira(), nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: id => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, l) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => [n.g.position.x, n.g.position.y, n.g.position.z]) }, encerrar: () => encerrarArteNano() }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
+  window.__fazenda = { feira: ganchoFeira(), nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: id => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, l) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => n.g.getWorldPosition(new THREE.Vector3()).toArray()) }, encerrar: () => encerrarArteNano() }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
     galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { circulo: { forcar: () => { discoJogo.forcarCirculo = true; discoJogo.prox = 0; }, fazer: fazerCirculo, lote: loteParaCirculo, grupo: () => grupoCirculo, soltar: soltarGrupoCirculo, CIRCULO }, sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, puxar: () => { discoJogo.forcarPuxar = true; discoJogo.prox = 0; }, puxao: () => puxao, obj: () => discoJogo, abducao: () => abducao, presente: { soltar: presenteEt, obj: () => caixaEt, abrir: abrirCaixaEt }, visita: { forcar: () => { discoJogo.forcarVisita = true; discoJogo.prox = 0; }, obj: () => etVisita, itens: itensEt, trocar: trocarEt, pedido: pedidoEt, temDisco: temDiscoJardim, VISITA_ET } }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(AMPLIACAO).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
