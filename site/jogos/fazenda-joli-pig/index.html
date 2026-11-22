@@ -7505,6 +7505,8 @@ function nanoFoge(n, dt){
 const FALA_RODEIO = ['Ei! Desce dessa galinha, nanica!', 'Isso é rodeio ou é galinheiro?', 'Segura firme aí, peoa!', 'A galinha não é cavalo, viu?', 'Olha a nano montada na galinha!', 'Oito segundos! Vai, aguenta!', 'Coitada da galinha, gente.', 'Que nano mais danada!', 'Se cair, não vem chorar pra mim!', 'Ih, a galinha não gostou nada disso.', 'Lá vai a peoa mais pequena do mundo!', 'Cuidado, ela vai te botar no chão!', 'Ô nanica, essa galinha tem que botar ovo hoje!', 'Essa nano não tem juízo nenhum.', 'Upa, upa, galinha!', 'Alguém tira uma foto disso!', 'Rodeio na minha fazenda? Só faltava essa.', 'A galinha disparou! Segura!', 'Vai assustar a galinha, menina!', 'Montaria nova, é? Que ousadia.', 'Isso que é coragem: cinco centímetros de coragem.'];
 const FALA_FORMIGAS = ['Ei! Devolve esse {i}!', 'Parecem formiguinhas carregando o {i}!', 'Ladras de {i}! Peguei vocês!', 'Esse {i} não é de vocês, nanicas!', 'Olha lá, uma procissão de nanos!', 'Vai pro café da manhã do hostel, é?', 'Pelo menos pede, né?', 'Três nanos para um {i}. Justo.', 'Eu vi isso, hein!', 'Lá se vai o meu {i}.', 'Que trabalho em equipe bonito. E ilegal!', 'Isso aí é furto de hortifrúti!', 'Vou cobrar esse {i} no aluguel da Lúcia!', 'Cuidado pra não derrubar!', 'Nem disfarçam mais.', 'Hoje tem festa no Nano Hostel.', 'Formiguinhas de chapéu!', 'Pra elas, esse {i} deve ser do tamanho de uma casa.', 'Já pensou se fosse uma melancia?', 'Ô turminha, a feira é lá na cidade!', 'Pode levar, mas divide com a Lúcia!'];
 const FALA_CARONA = ['Hum, tô me sentindo mais pesado hoje.', 'Ué, quem tá aí atrás?', 'Tem uma nano nas minhas costas, né?', 'Eu sei que você tá aí, nanica!', 'Carona de graça, é?', 'Ei! Eu não sou ônibus!', 'Isso aqui não é o Nano Metrô!', 'Tô sentindo cócegas nas costas.', 'Quem deixou eu virar táxi?', 'Desce daí, sua danadinha!', 'Pelo menos segura firme!', 'Próxima parada: o hostel!', 'Tô levando passageiro sem saber?', 'Ai! Quem puxou meu macacão?', 'Alguém subiu aqui, eu senti!', 'Essa carona vai custar um morango.', 'Porco-táxi, às suas ordens.', 'Eu ouvi uma risadinha atrás de mim.', 'Tá gostando da vista daí de cima?', 'Já falei que hoje não tem carona!', 'Se a Lúcia souber disso...'];
+const FALA_ESCONDE = ['Tô vendo umas cabecinhas na horta!', 'Esconde-esconde no meu canteiro? Achei vocês!', 'Quem plantou nano aqui? Eu não plantei!', 'Essa horta tá dando nano agora?', 'Um, dois, três... achei!', 'Olha lá, apareceu outra!', 'Saiam daí, vão amassar as plantas!', 'Parece aquele jogo de martelinho!', 'Eu vi um chapéu se mexendo ali!', 'Nano não é semente, viu?', 'Tem alguém rindo no meio da plantação.', 'Ô turminha, aqui é horta, não parquinho!', 'Que colheita esquisita essa.', 'Vou contar até dez, hein!', 'Lá vem uma cabecinha de novo!', 'Esconderijo bom, mas o chapéu entrega.', 'Se eu regar, vocês crescem também?', 'Tô de olho em vocês!', 'Achei! E achei você também!', 'Isso que é se enterrar na brincadeira.', 'As minhocas devem estar confusas.'];
+const ESCONDE = { fundo: -0.42, pescoco: -0.01, espia: 2.2 };
 const ARTES_NANO = {
   rodeio: {
     pode(){
@@ -7636,6 +7638,63 @@ const ARTES_NANO = {
         poseNano(n.rig, dt, 'pula');
         if (nanoPula(n, A.de, A.para, A.ft / 0.5, 0.2)){ A.fase = 'foge'; A.ft = 0; poeira(g.position.x, g.position.z); falarNano(n); }
       } else return nanoFoge(n, dt);
+      return false;
+    },
+  },
+  // ---- 4. esconde-esconde na horta: três nanos brincam escondidas no meio da plantação, enterradas até o pescoço. Uma cabecinha
+  // aparece, olha para os lados e afunda; logo aparece outra noutro canto (como um joguinho de martelo). Se o Ed chega perto,
+  // ou depois de uns 18 s, saem todas da terra de uma vez, pulando, e fogem rindo
+  esconde: {
+    pode(){
+      const pes = Object.keys(S.campo).filter(k => estagio(S.campo[k]) >= 1).map(k => k.split(',').map(Number));
+      const pe = maisPertoDaCamera(pes, ([x, z]) => [x + 0.5, z + 0.5]);
+      if (!pe) return null;
+      // os canteiros plantados em volta (até 2 ladrilhos), para as nanos se espalharem
+      const perto = pes.filter(([x, z]) => Math.abs(x - pe[0]) <= 2 && Math.abs(z - pe[1]) <= 2);
+      return { x: pe[0] + 0.5, z: pe[1] + 0.5, pes: perto };
+    },
+    iniciar(A){
+      for (let i = 0; i < 3; i++){
+        const [x, z] = sorteia(A.pes), n = nanoDaArte(A, x + rnd(0.2, 0.8), z + rnd(0.2, 0.8));
+        n.cresce = 1; n.g.position.y = ESCONDE.fundo; n.g.rotation.y = rnd(0, 6); n.espia = 0; n.espera = 0.6 + i * 1.3;
+      }
+      A.fase = 'brinca';
+    },
+    passo(A, dt, t){
+      const E = ESCONDE;
+      if (A.fase === 'brinca'){
+        const edPerto = ed.g.visible && A.nanos.some(n => Math.hypot(ed.pos.x - n.g.position.x, ed.pos.y - n.g.position.z) < 1.1);
+        for (const n of A.nanos){
+          poseNano(n.rig, dt, 'parado');
+          // espia: sobe até o pescoço, olha para um lado e para o outro, e afunda; depois muda de canteiro, por baixo da terra
+          if (n.espia > 0){
+            n.espia -= dt;
+            const k = n.espia > E.espia - 0.25 ? (E.espia - n.espia) / 0.25 : n.espia < 0.25 ? n.espia / 0.25 : 1;
+            n.g.position.y = lerp(E.fundo, E.pescoco, Math.max(0, Math.min(1, k)));
+            n.g.rotation.y = n.olha + Math.sin((E.espia - n.espia) * 3.2) * 0.9;
+            if (n.espia <= 0){ n.g.position.y = E.fundo; const [x, z] = sorteia(A.pes); n.g.position.x = x + rnd(0.2, 0.8); n.g.position.z = z + rnd(0.2, 0.8); n.espera = rnd(0.8, 2.6); }
+          } else if ((n.espera -= dt) <= 0){
+            n.espia = E.espia; n.olha = Math.atan2(cam.alvo.x - n.g.position.x, cam.alvo.z - n.g.position.z) + rnd(-0.6, 0.6);
+            // às vezes sai uma risadinha abafada lá de baixo
+            if (Math.random() < 0.3) falarNano(n);
+          }
+        }
+        if (A.t > 6 && !A.ed){ A.ed = true; reageEd(FALA_ESCONDE, A.x, A.z); }
+        if (edPerto || A.t > 18){
+          A.fase = 'pula'; A.ft = 0; Som.pop();
+          for (const n of A.nanos){ n.de = n.g.position.clone(); n.para = n.de.clone().setY(0); n.para.x += rnd(-0.25, 0.25); n.para.z += rnd(-0.25, 0.25); n.atraso = rnd(0, 0.35); poeira(n.de.x, n.de.z); }
+          falarNano(A.nanos[0]);
+        }
+      } else if (A.fase === 'pula'){
+        // saem da terra de uma vez, pulando, e fogem cada uma para um lado
+        let ok = 0;
+        for (const n of A.nanos){
+          if (n.foi){ if (nanoFoge(n, dt)) ok++; continue; }
+          poseNano(n.rig, dt, 'pula');
+          if (nanoPula(n, n.de, n.para, Math.max(0, A.ft - n.atraso) / 0.5, 0.35)){ n.foi = true; n.saida = bordaArte(n.g.position.x, n.g.position.z, 1.6); }
+        }
+        return ok === A.nanos.length;
+      }
       return false;
     },
   },
