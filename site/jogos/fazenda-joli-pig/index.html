@@ -7505,6 +7505,13 @@ function escorregaNano(n, m, dt){
   else if (B.fase === 'fim'){ em(8, 0, 18); poseNano(n.rig, dt, 'parado'); if (B.t > 0.5){ B.fase = 'volta'; B.t = 0; B.pts = [[-2, 18], [-2, -2.5], [8, -2.5]].map(([x, z]) => W3(x, 0, z)); } }
   else if (B.fase === 'volta'){ const p = B.pts[0]; if (nanoVai(n, p.x, p.z, dt, 0.8)){ B.pts.shift(); if (!B.pts.length){ B.fase = 'sobe'; B.t = 0; } } }
 }
+// o espantalho sem o chapéu de palha (as duas últimas camadas de vEspantalho), e o chapéu sozinho, com a fita vermelha
+function vEspantalhoSemChapeu(){ const v = vEspantalho(); for (const [k, e] of [...v.m]) if (e.y >= 21) v.m.delete(k); return v; }
+function vChapeuEspantalho(){ const v = new Vox(); for (const e of vEspantalho().m.values()) if (e.y >= 21) v.set(e.x, e.y - 21, e.z, e.c); return v; }
+// o chapéu fora do espantalho: em quem pegou, a nano fica quase toda embaixo dele
+let chapeuFora = null;
+function segueChapeu(A, g, m){ if (!A.chapeu) return; A.chapeu.position.set(g.position.x, g.position.y + 0.2, g.position.z); A.chapeu.rotation.set(0, g.rotation.y, 0); }
+function devolverChapeu(){ const C = chapeuFora; if (!C) return; if (ENF_VIS[C.e.x + ',' + C.e.z] === C.m) C.m.geometry = C.geo; chapeuFora = null; }
 // um objeto da arte (o morango roubado, o chapéu): some junto quando a arte acaba
 function objetoArte(A, m){ scene.add(m); A.objs.push(m); return m; }
 function iniciarArteNano(id, lugar){
@@ -7534,10 +7541,16 @@ function atualizarArteNano(dt, t){
     if (fim) encerrarArteNano();
     return;
   }
+  // o chapéu do espantalho volta: com a nano, se ele está perto da câmera; senão, sozinho, um tempo depois
+  if (chapeuFora && (chapeuFora.volta -= dt) <= 0){
+    if (ENF_VIS[chapeuFora.e.x + ',' + chapeuFora.e.z] !== chapeuFora.m) chapeuFora = null;
+    else if (nanoHostel && !cine && !vistaEd && ARTES_NANO.chapeuVolta.pode()){ iniciarArteNano('chapeuVolta', ARTES_NANO.chapeuVolta.pode()); return; }
+    else if (chapeuFora.volta < -CHAPEU_NANO.espera) devolverChapeu();
+  }
   if (!nanoHostel || cine || !ed.g.visible || vistaEd) return;
   if ((arteNanoProx -= dt) > 0) return;
   arteNanoProx = ARTE_NANO.tenta;
-  const ids = Object.keys(ARTES_NANO).filter(id => id !== arteNanoUlt).sort(() => Math.random() - 0.5);
+  const ids = Object.keys(ARTES_NANO).filter(id => id !== arteNanoUlt && ARTES_NANO[id].auto !== false).sort(() => Math.random() - 0.5);
   for (const id of ids){ const lugar = ARTES_NANO[id].pode(); if (lugar){ iniciarArteNano(id, lugar); return; } }
 }
 // a nano foge para o mato e some (a arte acaba quando todas sumiram)
@@ -7577,6 +7590,9 @@ const FALA_TCHAU_NANO = ['Tchau, Ed!', 'Vamos pra cidade!', 'Até mais!', 'Uhuuu
 // os lugares no teto do baú (x ao longo do caminhão, de trás para a frente, e z de lado), a altura do teto e a traseira,
 // em coordenadas do caminhão (vCaminhao, 1/16 com a origem em [20, 0, 8.5]); no caminhão do café a xícara fica no meio do teto
 const CAMINHAO_NANO = { lugares: [[-1.02, -0.2], [0.1, 0.18], [0.3, -0.12]], teto: 25 / 16, traseira: -1.24 };
+const FALA_CHAPEU = ['Ei! Devolve o chapéu do espantalho!', 'O chapéu tá andando sozinho!', 'Coitado do espantalho, ficou careca!', 'Que chapéu enorme pra uma nano!', 'Agora os passarinhos vão rir dele.', 'Ladra de chapéu!', 'Ela sumiu debaixo do chapéu!', 'Esse chapéu fica melhor no espantalho, viu?', 'Chapéu de palha, a nova moda nano.', 'Olha o chapéu correndo pela fazenda!', 'O espantalho vai pegar sol na cabeça!', 'Tá enxergando alguma coisa aí embaixo?', 'Devolve até o fim do dia, hein!', 'Escalou o espantalho só pra isso?', 'Cuidado pra não tropeçar na aba!', 'Agora sim, uma nano elegante.', 'Roubo de chapéu à luz do dia!', 'Vou ter que fazer outro chapéu.', 'Aposto que ela vai usar de barraca.', 'Espantalho sem chapéu não espanta nada!', 'Até o espantalho ficou sem graça.'];
+const FALA_CHAPEU_VOLTA = ['Olha, devolveram o chapéu!', 'Ufa, o espantalho tá completo de novo.', 'Obrigado por devolver, nanica!', 'Que nano honesta!', 'O chapéu voltou! Bem passadinho até.', 'Pronto, espantalho elegante outra vez.', 'Eu sabia que vocês iam devolver.', 'Era emprestado, então. Tudo bem.', 'Bem-vindo de volta, chapéu!', 'Devolveu e ainda ajeitou. Caprichosa!', 'Agora sim, pode espantar os passarinhos.', 'O passeio do chapéu acabou.', 'Que bom, eu ia ter que fazer outro.', 'Ela escalou de novo só pra devolver!', 'Chapéu no lugar, tudo em paz.', 'Gostou de passear com ele?', 'Nano educada é outra coisa.', 'Até que combinava com você, nanica.', 'Missão devolução cumprida!', 'O espantalho agradece!'];
+const CHAPEU_NANO = { volta: [40, 80], espera: 60 };
 const ARTES_NANO = {
   rodeio: {
     pode(){
@@ -8161,6 +8177,103 @@ const ARTES_NANO = {
       }
       return A.nanos.every(n => n.foi);
     },
+  },
+  // ---- 11. o chapéu do espantalho: uma nano escala um espantalho perto da câmera pela frente, sobe na cabeça, pega o chapéu
+  // de palha (que nela fica enorme: parece um chapéu andando sozinho) e pula para o chão; dá uma volta com ele e some no mato.
+  // O espantalho fica careca (o desenho troca para vEspantalhoSemChapeu) até a nano voltar com o chapéu, de 40 a 80 s depois
+  // (chapeuVolta), escalar de novo e pôr no lugar. Se o espantalho não está perto da câmera nessa hora, o chapéu volta sozinho
+  chapeu: {
+    pode(){
+      if (chapeuFora) return null;
+      const es = (S.enfeites || []).filter(e => e.tipo === 'espantalho' && ENF_VIS[e.x + ',' + e.z]);
+      const e = maisPertoDaCamera(es, e => [e.x + 0.5, e.z + 0.5]);
+      return e && { e, x: e.x + 0.5, z: e.z + 0.5, m: ENF_VIS[e.x + ',' + e.z] };
+    },
+    iniciar(A){ const [x, z] = bordaArte(A.x, A.z, 1.3); A.n = nanoDaArte(A, x, z); },
+    passo(A, dt, t){
+      const n = A.n, g = n.g, m = A.m, L = (x, y, z) => m.localToWorld(new THREE.Vector3((x - 8) / 16, y / 16, (z - 8) / 16));
+      if (ENF_VIS[A.e.x + ',' + A.e.z] !== m && A.fase !== 'foge'){ A.fase = 'foge'; if (A.chapeu) A.chapeu.visible = false; }
+      if (A.fase === 'vem'){
+        const b = L(7.5, 0, 10.9);
+        if (nanoVai(n, b.x, b.z, dt, 0.55)){ A.fase = 'escala'; A.ft = 0; falarNano(n); }
+        if (A.t > 15) A.fase = 'foge';
+      } else if (A.fase === 'escala' || A.fase === 'devolve'){
+        // sobe pela frente do espantalho (de costas para a câmera) até a cabeça
+        const k = Math.min(1, A.ft / 3), p = L(7.5, k * 19, 10.9);
+        g.position.copy(p); g.rotation.set(0, m.rotation.y + Math.PI, 0); poseNano(n.rig, dt, 'sobe');
+        if (A.chapeu) segueChapeu(A, g, m);
+        if (k >= 1){ A.de = g.position.clone(); A.fase = A.fase === 'escala' ? 'topo' : 'poe'; A.ft = 0; }
+      } else if (A.fase === 'topo'){
+        // em cima da cabeça, pega o chapéu: o espantalho fica careca e o chapéu vai para a cabeça da nano
+        poseNano(n.rig, dt, 'pula');
+        if (nanoPula(n, A.de, L(7.5, 21, 7.5), A.ft / 0.4, 0.1)){
+          A.geoOriginal = m.geometry; m.geometry = geo('enfespantalhoSemChapeu', () => vEspantalhoSemChapeu().build(1 / 16, { origin: [8, 0, 8] }));
+          A.chapeu = objetoArte(A, malha(geo('chapeuEspantalho', () => vChapeuEspantalho().build(1 / 16, { origin: [7.5, 0, 7.5] }))));
+          segueChapeu(A, g, m); Som.pop(); reageEd(FALA_CHAPEU, A.x, A.z);
+          A.fase = 'pula'; A.ft = 0; A.de = g.position.clone(); const a = m.rotation.y + rnd(-0.8, 0.8); A.para = new THREE.Vector3(A.x + Math.sin(a) * 0.8, 0, A.z + Math.cos(a) * 0.8);
+        }
+      } else if (A.fase === 'pula'){
+        poseNano(n.rig, dt, 'pula'); segueChapeu(A, g, m);
+        if (nanoPula(n, A.de, A.para, A.ft / 0.7, 0.35)){ A.fase = 'passeia'; A.ft = 0; poeira(A.para.x, A.para.z); falarNano(n); A.alvo = null; A.voltas = 0; }
+      } else if (A.fase === 'passeia'){
+        // um chapéu andando sozinho pela fazenda
+        if (!A.alvo){ A.alvo = bordaArte(A.x, A.z, rnd(0.8, 1.6)); A.voltas++; }
+        if (nanoVai(n, A.alvo[0], A.alvo[1], dt, 0.5)) A.alvo = null;
+        segueChapeu(A, g, m);
+        if (A.voltas > 3){ A.fase = 'foge'; chapeuFora = { e: A.e, m, geo: A.geoOriginal, volta: rnd(...CHAPEU_NANO.volta) }; }
+      } else {
+        if (A.chapeu){ segueChapeu(A, g, m); A.chapeu.scale.setScalar(Math.max(0.01, n.some ? n.cresce : 1)); }
+        return nanoFoge(n, dt);
+      }
+      return false;
+    },
+    // a arte pode acabar no meio (uma cena): o espantalho fica careca e o chapéu volta depois, como sempre
+    limpar(A){ if (A.geoOriginal && !chapeuFora) chapeuFora = { e: A.e, m: A.m, geo: A.geoOriginal, volta: rnd(...CHAPEU_NANO.volta) }; },
+  },
+  // a volta do chapéu: a nano chega com ele na cabeça, escala o espantalho de novo e põe o chapéu no lugar
+  chapeuVolta: {
+    auto: false,
+    pode(){
+      const C = chapeuFora;
+      if (!C || C.volta > 0 || ENF_VIS[C.e.x + ',' + C.e.z] !== C.m || !pertoDaCamera(C.e.x + 0.5, C.e.z + 0.5)) return null;
+      return { e: C.e, m: C.m, x: C.e.x + 0.5, z: C.e.z + 0.5 };
+    },
+    iniciar(A){
+      const [x, z] = bordaArte(A.x, A.z, 1.4); A.n = nanoDaArte(A, x, z);
+      A.chapeu = objetoArte(A, malha(geo('chapeuEspantalho', () => vChapeuEspantalho().build(1 / 16, { origin: [7.5, 0, 7.5] }))));
+      segueChapeu(A, A.n.g, A.m);
+    },
+    passo(A, dt, t){
+      const n = A.n, g = n.g, m = A.m, L = (x, y, z) => m.localToWorld(new THREE.Vector3((x - 8) / 16, y / 16, (z - 8) / 16));
+      if (ENF_VIS[A.e.x + ',' + A.e.z] !== m){ chapeuFora = null; return true; }
+      if (A.fase === 'vem'){
+        const b = L(7.5, 0, 10.9);
+        if (A.chapeu) segueChapeu(A, g, m);
+        if (nanoVai(n, b.x, b.z, dt, 0.45)){ A.fase = 'escala'; A.ft = 0; }
+      } else if (A.fase === 'escala'){
+        const k = Math.min(1, A.ft / 3); g.position.copy(L(7.5, k * 19, 10.9)); g.rotation.set(0, m.rotation.y + Math.PI, 0); poseNano(n.rig, dt, 'sobe'); segueChapeu(A, g, m);
+        if (k >= 1){ A.fase = 'poe'; A.ft = 0; A.de = A.chapeu.position.clone(); }
+      } else if (A.fase === 'poe'){
+        // levanta o chapéu e encaixa na cabeça do espantalho
+        poseNano(n.rig, dt, 'carrega');
+        const k = Math.min(1, A.ft / 0.8), alvo = L(7.5, 21, 7.5);
+        A.chapeu.position.lerpVectors(A.de, alvo, k); A.chapeu.position.y += Math.sin(k * Math.PI) * 0.12; A.chapeu.rotation.set(0, m.rotation.y, 0);
+        if (k >= 1){
+          m.geometry = chapeuFora.geo; chapeuFora = null; A.chapeu.visible = false; Som.pop();
+          reageEd(FALA_CHAPEU_VOLTA, A.x, A.z);
+          A.fase = 'desce'; A.ft = 0; A.de = g.position.clone(); A.para = L(7.5, 0, 22).setY(0);
+        }
+      } else if (A.fase === 'desce'){
+        poseNano(n.rig, dt, 'pula');
+        if (nanoPula(n, A.de, A.para, A.ft / 0.6, 0.15)){ A.fase = 'tchau'; A.ft = 0; falarNano(n); }
+      } else if (A.fase === 'tchau'){
+        g.rotation.y = m.rotation.y; poseNano(n.rig, dt, 'acena');
+        if (A.ft > 1.4) A.fase = 'foge';
+      } else return nanoFoge(n, dt);
+      return false;
+    },
+    // se a volta acaba no meio, o chapéu volta para o espantalho de uma vez
+    limpar(){ devolverChapeu(); },
   },
 };
 // ================= guardião da mata e trilha ecológica: modelos
@@ -26427,7 +26540,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { feira: ganchoFeira(), nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: (id, extra) => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, Object.assign(l, extra)) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => n.g.getWorldPosition(new THREE.Vector3()).toArray()) }, encerrar: () => encerrarArteNano(), visita: { chamar: () => chamarBeto(), despedir: () => despedirBeto(), estado: () => caminhaoE.estado, caminhao: () => caminhao } }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
+  window.__fazenda = { feira: ganchoFeira(), nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: (id, extra) => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, Object.assign(l, extra)) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => n.g.getWorldPosition(new THREE.Vector3()).toArray()) }, encerrar: () => encerrarArteNano(), chapeu: () => chapeuFora, visita: { chamar: () => chamarBeto(), despedir: () => despedirBeto(), estado: () => caminhaoE.estado, caminhao: () => caminhao } }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
     galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { circulo: { forcar: () => { discoJogo.forcarCirculo = true; discoJogo.prox = 0; }, fazer: fazerCirculo, lote: loteParaCirculo, grupo: () => grupoCirculo, soltar: soltarGrupoCirculo, CIRCULO }, sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, puxar: () => { discoJogo.forcarPuxar = true; discoJogo.prox = 0; }, puxao: () => puxao, obj: () => discoJogo, abducao: () => abducao, presente: { soltar: presenteEt, obj: () => caixaEt, abrir: abrirCaixaEt }, visita: { forcar: () => { discoJogo.forcarVisita = true; discoJogo.prox = 0; }, obj: () => etVisita, itens: itensEt, trocar: trocarEt, pedido: pedidoEt, temDisco: temDiscoJardim, VISITA_ET } }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(AMPLIACAO).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
