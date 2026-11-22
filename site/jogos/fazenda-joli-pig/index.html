@@ -125,17 +125,17 @@ body.feira-proto #jogo > :not(canvas){display:none}
 .feira-centro{position:absolute;left:0;right:0;top:30%;text-align:center;font-family:var(--f-titulo);font-size:min(15vw,78px);line-height:1.05;color:#fff;-webkit-text-stroke:8px var(--borda);paint-order:stroke fill;pointer-events:none;z-index:13;padding:0 16px}
 .feira-centro.pula{animation:feiraPula .5s ease-out}
 @keyframes feiraPula{0%{transform:scale(.3);opacity:0}60%{transform:scale(1.15);opacity:1}100%{transform:scale(1)}}
-.feira-base{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 10px);transform:translateX(-50%);width:min(560px,calc(100% - 20px));display:grid;gap:6px;pointer-events:none;z-index:12}
+.feira-base{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 10px);transform:translateX(-50%);width:min(560px,calc(100% - 20px));display:grid;grid-template-columns:minmax(0,1fr);gap:6px;pointer-events:none;z-index:12}
 @media (min-width:760px) and (min-aspect-ratio:1/1){.feira-base{width:min(940px,calc(100% - 24px));grid-template-columns:minmax(0,1fr) auto;align-items:stretch}.feira-prods{padding:5px}.fp-prod{width:70px;flex:none}}
 .feira-pacote{display:flex;align-items:center;gap:6px;min-height:46px;padding:5px 10px;pointer-events:auto;overflow-x:auto}
 .feira-pacote .fpk-rot{font-weight:800;font-size:13px;white-space:nowrap}
-.feira-pacote .fpk-dica{font-weight:600;font-size:12.5px;color:var(--tinta-suave);white-space:nowrap}
+.feira-pacote .fpk-dica{flex:1;min-width:0;font-weight:600;font-size:12.5px;line-height:1.2;color:var(--tinta-suave)}
 .fpk-item{all:unset;flex:none;display:inline-flex;align-items:center;gap:2px;padding:2px 7px 2px 3px;border:2px solid var(--borda);border-radius:10px;background:#e9f5dc;font-weight:800;font-size:14px;cursor:pointer}
 .fpk-item img{width:26px;height:26px}
 .fpk-item.errado{background:#ffd6cf;border-color:var(--vermelho)}
-.feira-prods{display:flex;gap:6px;padding:6px;justify-content:center;pointer-events:auto}
-.fp-prod{all:unset;box-sizing:border-box;flex:1;max-width:86px;min-width:0;display:grid;justify-items:center;padding:4px 2px 3px;border:3px solid var(--borda);border-radius:12px;background:var(--amarelo);box-shadow:0 3px 0 var(--sombra);cursor:pointer}
-.fp-prod img{width:34px;height:34px}
+.feira-prods{display:flex;gap:5px;padding:6px;justify-content:center;pointer-events:auto;min-width:0}
+.fp-prod{all:unset;box-sizing:border-box;flex:1 1 0;max-width:86px;min-width:0;overflow:hidden;display:grid;justify-items:center;padding:4px 1px 3px;border:3px solid var(--borda);border-radius:12px;background:var(--amarelo);box-shadow:0 3px 0 var(--sombra);cursor:pointer}
+.fp-prod img{width:min(34px,90%);height:auto;aspect-ratio:1}
 .fp-prod b{font-family:var(--f-titulo);font-size:16px;line-height:1.05}
 .fp-prod small{font-size:10.5px;font-weight:700;color:var(--tinta-suave);white-space:nowrap}
 .fp-prod.vazio{background:var(--papel-2);opacity:.6}
@@ -25692,7 +25692,7 @@ function enquadramentoJogoFeira(F, w, h){
   if (F.enq && F.enq.chave === chave) return F.enq;
   const cel = w / h < 0.8, cam = new THREE.PerspectiveCamera(FEIRA.fov, w / h, 0.1, 200), v = new THREE.Vector3(), y = (x, yy, z) => (1 - v.set(x, yy, z).project(cam).y) / 2 * h;
   let r = null;
-  for (let L = cel ? 4.2 : 10; L <= (cel ? 7.5 : 16) && !r; L += 0.1) for (let z = -0.5; z <= 2.5; z += 0.05){
+  for (let L = cel ? 4.6 : 10; L <= (cel ? 7.5 : 16) && !r; L += 0.1) for (let z = -0.5; z <= 2.5; z += 0.05){
     enquadrarFeira(cam, w, h, [0, 0.4, z], L); cam.updateMatrixWorld();
     if (y(0, 2.75, -1.69) >= 46 && y(0, 0, FEIRA_DIA.zVaga) <= h - ui - 55){ r = { L, z }; break; }
   }
@@ -25980,8 +25980,21 @@ function montarUIFeira(F){
   F.ui.prods.addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (b) pegarFeira(b.dataset.k); });
   F.ui.pacote.addEventListener('click', e => { const b = e.target.closest('[data-tira]'); if (b) tirarDoPacote(b.dataset.tira); });
   const toque = $('feiraToque'), ray = new THREE.Raycaster(), v2 = new THREE.Vector2();
+  // no celular em pé só cabe a nossa barraca: arrastar para os lados leva a câmera até as vizinhas; o toque que não arrastou
+  // vale quando o dedo sai
   toque.addEventListener('pointerdown', e => {
     e.preventDefault(); e.stopPropagation(); Som.voltar();
+    try { toque.setPointerCapture(e.pointerId); } catch (er){}
+    F.dedo = { id: e.pointerId, x: e.clientX, pan0: F.panAlvo || 0, moveu: false };
+  });
+  toque.addEventListener('pointermove', e => {
+    const D = F.dedo; if (!D || D.id !== e.pointerId) return;
+    const dx = e.clientX - D.x; if (Math.abs(dx) > 10) D.moveu = true;
+    if (D.moveu && emPeFeira() && F.enq){ F.panAlvo = clamp(D.pan0 - dx * F.enq.L / innerWidth, -F.P.X, F.P.X); F.arrastou = true; }
+  });
+  const fimDedo = e => { const D = F.dedo; if (!D || D.id !== e.pointerId) return; F.dedo = null; if (!D.moveu && e.type === 'pointerup') tocarFeira(e); };
+  toque.addEventListener('pointerup', fimDedo); toque.addEventListener('pointercancel', fimDedo);
+  const tocarFeira = e => {
     if (feira !== F || F.fase !== 'vendendo') return;
     v2.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(v2, F.camera);
     const hits = ray.intersectObjects([...Object.values(F.caixas).map(c => c.alvo), ...F.alvosVaga]);
@@ -25991,8 +26004,9 @@ function montarUIFeira(F){
     const d = h.object.userData.feira;
     if (d.k) pegarFeira(d.k);
     else { const c = F.vagas[d.vaga]; if (c && c.estado === 'esperando'){ F.sel = c; Som.pop(); c.pulo = 0.3; } }
-  });
+  };
 }
+const emPeFeira = () => innerWidth / innerHeight < 0.8;
 function centroFeira(F, txt, dur = 1){
   const e = F.ui.centro; e.textContent = txt; e.hidden = false; e.classList.remove('pula'); void e.offsetWidth; e.classList.add('pula');
   clearTimeout(F.centroT); F.centroT = setTimeout(() => { if (feira === F) e.hidden = true; }, dur * 1000);
@@ -26010,7 +26024,8 @@ const quique = u => (u >= 1 ? 1 : 1 + 2.2 * Math.pow(u - 1, 3) + 1.2 * Math.pow(
 function atualizarFeira(dt, t){
   const F = feira, R = F.R; dt *= F.escala || 1; F.t += dt;
   // no celular só cabe a nossa barraca: no lanche a câmera vai até o caldo de cana
-  F.camX = lerp(F.camX || 0, innerWidth / innerHeight < 0.8 && (F.fase === 'lanche' || (F.fase === 'desmontando' && F.t > 2.5)) ? F.P.X : 0, Math.min(1, dt * 1.6));
+  if (!emPeFeira()) F.panAlvo = 0; else if (F.fase === 'lanche' || (F.fase === 'desmontando' && F.t > 2.5)) F.panAlvo = F.P.X;
+  F.camX = F.dedo && F.dedo.moveu ? F.panAlvo || 0 : lerp(F.camX || 0, F.panAlvo || 0, Math.min(1, dt * 2.5));
   const E = enquadramentoJogoFeira(F, innerWidth, innerHeight);
   enquadrarFeira(F.camera, innerWidth, innerHeight, [F.camX, 0.4, E.z], E.L);
   for (const f of F.anima) f(dt, t);
@@ -26066,20 +26081,22 @@ function faseMontagem(F){
   if (F.passo >= marcos.length && F.t > 1.9 + n * 0.22){
     // as vizinhas dão bom dia e começa a contagem
     const [q1, t1] = variar(FF.vizinhos.filter(f => f[0] === 'panqueca'), 'vizPanqueca'), [q2, t2] = variar(FF.vizinhos.filter(f => f[0] === 'mofi'), 'vizMofi');
-    falar(P.panqueca, t1, tempoDeLeitura(t1)); P.panqueca.aceno = 1.6;
-    setTimeout(() => { if (feira === F){ falar(P.mofi, t2, tempoDeLeitura(t2)); P.mofi.aceno = 1.6; } }, 1300);
+    falar(P.panqueca, t1, tempoDeLeitura(t1)); P.panqueca.aceno = 1.6; F.panAlvo = -P.X;
+    setTimeout(() => { if (feira === F){ falar(P.mofi, t2, tempoDeLeitura(t2)); P.mofi.aceno = 1.6; F.panAlvo = P.X; } }, 1600);
     mudarFase(F, 'contagem');
   }
 }
 function faseContagem(F){
-  const marcos = [0.6, 1.6, 2.6, 3.6];
+  const marcos = [1.4, 2.3, 3.2, 4.1];
   if (F.passo < 4 && F.t >= marcos[F.passo]){
     const txt = ['3', '2', '1', 'Abriu a barraca!'][F.passo];
     centroFeira(F, txt, F.passo === 3 ? 1.4 : 0.9); Som.tom(F.passo === 3 ? 990 : 660, F.passo === 3 ? 0.35 : 0.12, 'square', 0.04);
     F.passo++;
+    if (F.passo === 3) F.panAlvo = 0;
     if (F.passo === 4){
       mudarFase(F, 'vendendo'); F.ui.base.hidden = false; falar(F.ed, 'Oinc! Barraca aberta!', 2.4);
       if (!(S.feira && S.feira.vezes)) setTimeout(() => { if (feira === F) aviso('Toque nos caixotes (ou nos botões de baixo) para o Ed montar o pacote. Quando ele fica igual ao pedido, o Ed entrega.', '', 7); }, 1500);
+      if (emPeFeira() && !F.arrastou) setTimeout(() => { if (feira === F && !F.arrastou) aviso('Arraste para os lados para ver as barracas vizinhas.', '', 4); }, S.feira && S.feira.vezes ? 1500 : 9000);
     }
   }
 }
@@ -26159,7 +26176,7 @@ function criarFregues(F, tipo, quem){
   if (!c.p){ c.g.castShadow = true; }
   // a altura (para o balão e a fala)
   c.g.updateMatrixWorld(true); c.alt = new THREE.Box3().setFromObject(c.g).max.y;
-  c.falante = c.p || { g: c.g, nome: 'visitante', topo: () => new THREE.Vector3(c.x, c.alt + 0.05, c.z) };
+  c.falante = { g: c.g, nome: c.p ? c.p.nome : 'visitante', topo: () => new THREE.Vector3(c.x, c.alt + (c.balao ? 0.92 : 0.08), c.z) };
   return c;
 }
 function irFregues(c, pts, cb){ if (c.p) c.p.ir(pts, cb); else { c.pts = pts.slice(); c.cb = cb; if (!pts.length && cb) cb(); } }
@@ -26455,7 +26472,7 @@ function atualizarUIFeira(F){
   const sigP = F.prods.map(k => `${F.vit[k]}/${F.est[k]}`).join(',');
   if (sigP !== U.sigP){
     U.sigP = sigP;
-    for (const b of U.prods.children){ const k = b.dataset.k; b.querySelector('[data-v]').textContent = F.vit[k]; b.querySelector('[data-e]').textContent = F.est[k] ? '+' + F.est[k] : 'estoque 0'; b.classList.toggle('vazio', !F.vit[k] && !F.est[k]); }
+    for (const b of U.prods.children){ const k = b.dataset.k; b.querySelector('[data-v]').textContent = F.vit[k]; b.querySelector('[data-e]').textContent = '+' + (F.est[k] || 0); b.classList.toggle('vazio', !F.vit[k] && !F.est[k]); }
   }
   const c = F.sel, sigK = `${JSON.stringify(F.pacote)}|${c ? F.fregueses.indexOf(c) + c.tipo + (c.quem || '') : ''}|${F.fregueses.length}`;
   if (sigK !== U.sigK){
