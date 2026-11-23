@@ -907,7 +907,45 @@ const COR = {
 };
 
 // ================= dados do jogo
-const W = 52, H = 51;
+const W = 74, H = 72;
+// ================= zonas do mapa
+// O mapa é dividido em zonas, cada uma um retângulo (x, z é o canto de cima, w e h o tamanho). Tudo o que fica dentro de
+// uma zona (construções, terrenos, cercados, pomar, enfeites fixos, os lugares das cenas) é escrito em coordenadas locais,
+// a partir do canto dela (naZona, zp, zx, zz). Para ampliar o mapa: mude W, H e as zonas aqui, confira as linhas que
+// ligam uma zona à outra (os caminhos, a cerca, a estrada; montarMapa e CAMINHOS_CANTO) e guarde as zonas de agora em
+// ZONAS_ANTES para a migração dos saves (migrarZonas). O mapa 4 (o Lucas pediu o dobro da área) é o primeiro assim
+const ZONAS = {
+  sede:         { x: 0,  z: 0,  w: 20, h: 6 },   // a casa, o poço e o celeiro, com o caminho de cima (z 5)
+  fabricas:     { x: 20, z: 0,  w: 54, h: 6 },   // a fileira das fábricas e a composteira, de frente para o caminho de cima
+  horta:        { x: 0,  z: 6,  w: 18, h: 21 },  // o galpão, os terrenos da horta, o caminho da porteira e a cerca de baixo
+  cercados:     { x: 18, z: 6,  w: 25, h: 21 },  // os galinheiros e os currais, com o coletor e o alimentador no meio
+  pomar:        { x: 43, z: 6,  w: 31, h: 21 },  // o terreiro, o torrador, as colmeias e o pomar
+  mata:         { x: 0,  z: 27, w: 32, h: 45 },  // a estrada, a orla, a floresta (parcelas) e a cachoeira
+  clareira:     { x: 32, z: 27, w: 6,  h: 12 },  // as construções da mata, do outro lado da estrada
+  lago:         { x: 38, z: 27, w: 23, h: 8 },   // o lago do canto, a ponte, a rua do lago e os patos
+  plantio:      { x: 38, z: 35, w: 18, h: 13 },  // os terrenos, o pomar e as colmeias do canto
+  observatorio: { x: 32, z: 39, w: 6,  h: 9 },
+  resort:       { x: 56, z: 35, w: 18, h: 13 },
+  spa:          { x: 31, z: 49, w: 23, h: 23 },
+  festa:        { x: 54, z: 49, w: 20, h: 23 },  // o museu e o campo do ArraiEd
+};
+const zx = (id, x) => ZONAS[id].x + x, zz = (id, z) => ZONAS[id].z + z;
+const zp = (id, x, z) => [ZONAS[id].x + x, ZONAS[id].z + z];
+const zps = (id, l) => l.map(([x, z]) => zp(id, x, z));
+// os campos de coordenada que naZona passa para o mapa: números (x, z, x0...), pares ([x, z]), listas de pares e retângulos
+const NUM_X = ['x', 'x0', 'x1', 'col'], NUM_Z = ['z', 'z0', 'z1'], PARES_ZONA = ['porta', 'portao', 'saida', 'placa', 'pe', 'meio'];
+function naZona(id, o){
+  const Z = ZONAS[id], r = { ...o, zona: id };
+  for (const k of NUM_X) if (typeof r[k] === 'number') r[k] += Z.x;
+  for (const k of NUM_Z) if (typeof r[k] === 'number') r[k] += Z.z;
+  for (const k of PARES_ZONA) if (Array.isArray(r[k]) && typeof r[k][0] === 'number') r[k] = zp(id, r[k][0], r[k][1]);
+  if (Array.isArray(r.slots)) r.slots = zps(id, r.slots);
+  if (Array.isArray(r.cerca)) r.cerca = [...zp(id, r.cerca[0], r.cerca[1]), ...zp(id, r.cerca[2], r.cerca[3])];
+  if (r.ala) r.ala = naZona(id, r.ala);
+  return r;
+}
+// a zona de um ponto do mapa (a primeira que tem ele dentro; null nas linhas entre as zonas)
+const zonaEm = (x, z) => Object.keys(ZONAS).find(k => { const Z = ZONAS[k]; return x >= Z.x && x < Z.x + Z.w && z >= Z.z && z < Z.z + Z.h; }) || null;
 const CULTURAS = {
   cenoura:  { nome:'Cenoura',  plural:'cenouras',  semente:4,  tempo:40,  venda:3,   rend:4, xp:2,  nivel:1 },
   alface:   { nome:'Alface',   plural:'alfaces',   semente:6,  tempo:70,  venda:5,   rend:4, xp:3,  nivel:1 },
@@ -1009,15 +1047,15 @@ const FRUTIFERAS = {
 // o pomar em blocos de seis covas: o primeiro vem com o pomar; os outros são terrenos de pomar comprados a leste.
 // Os do canto Sul (canto: true), na faixa do meio atrás das fábricas da mata, só ficam à venda depois que o Ed tira a cerca de lá
 const POMAR_BLOCOS = [
-  { slots: [[39, 14], [41, 14], [43, 14], [39, 17], [41, 17], [43, 17]] },
-  { nivel: 13, preco: 3000, x0: 46, z0: 7, x1: 51, z1: 11, slots: [[47, 8], [49, 8], [51, 8], [47, 10], [49, 10], [51, 10]] },
-  { nivel: 18, preco: 6000, x0: 46, z0: 14, x1: 51, z1: 18, slots: [[47, 15], [49, 15], [51, 15], [47, 17], [49, 17], [51, 17]] },
-  { nivel: 30, preco: 30000, canto: true, x0: 30, z0: 33, x1: 34, z1: 37, slots: [[30, 34], [32, 34], [34, 34], [30, 36], [32, 36], [34, 36]] },
-  { nivel: 30, preco: 45000, canto: true, x0: 36, z0: 33, x1: 40, z1: 37, slots: [[36, 34], [38, 34], [40, 34], [36, 36], [38, 36], [40, 36]] },
+  naZona('pomar', { slots: [[8, 13], [10, 13], [12, 13], [8, 16], [10, 16], [12, 16]] }),
+  naZona('pomar', { nivel: 13, preco: 3000, x0: 15, z0: 4, x1: 20, z1: 8, slots: [[16, 5], [18, 5], [20, 5], [16, 7], [18, 7], [20, 7]] }),
+  naZona('pomar', { nivel: 18, preco: 6000, x0: 15, z0: 13, x1: 20, z1: 17, slots: [[16, 14], [18, 14], [20, 14], [16, 16], [18, 16], [20, 16]] }),
+  naZona('plantio', { nivel: 30, preco: 30000, canto: true, x0: 4, z0: 6, x1: 8, z1: 10, slots: [[4, 7], [6, 7], [8, 7], [4, 9], [6, 9], [8, 9]] }),
+  naZona('plantio', { nivel: 30, preco: 45000, canto: true, x0: 10, z0: 6, x1: 14, z1: 10, slots: [[10, 7], [12, 7], [14, 7], [10, 9], [12, 9], [14, 9]] }),
   // a fileira de baixo, entre o pomar e a cerca da fazenda (o Lucas pediu): seis covas numa fileira só, com o Ed colhendo do
   // lado da cerca (z 20, que é gramado também antes de arrendar o canto). Fica no fim da lista para não mudar o número das
   // covas que já existiam. Nível 25: depois de todas as frutíferas (20) e antes do pomar do canto (30)
-  { nivel: 25, preco: 15000, x0: 38, z0: 19, x1: 50, z1: 20, slots: [[39, 19], [41, 19], [43, 19], [45, 19], [47, 19], [49, 19]] },
+  naZona('pomar', { nivel: 25, preco: 15000, x0: 7, z0: 18, x1: 19, z1: 19, slots: [[8, 18], [10, 18], [12, 18], [14, 18], [16, 18], [18, 18]] }),
 ];
 const POMAR_SLOTS = POMAR_BLOCOS.flatMap(b => b.slots);
 const blocoDoSlot = i => Math.floor(i / 6);
@@ -1026,7 +1064,7 @@ const blocoAberto = b => !POMAR_BLOCOS[b].canto || (S && S.canto === 2);
 const blocoEm = (x, z) => POMAR_BLOCOS.findIndex((b, k) => k > 0 && blocoAberto(k) && x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1);
 // as três primeiras ficam na frente do pomar; as do canto Sul (a partir de COLMEIA_CANTO) numa fileira atrás do pomar de lá,
 // só depois que o Ed tira a cerca. Cada colmeia ajuda o pomar do mesmo lado da fazenda
-const COLMEIA_SLOTS = [[39, 11], [41, 11], [43, 11], [32, 39], [34, 39], [36, 39], [38, 39]];
+const COLMEIA_SLOTS = [...zps('pomar', [[8, 8], [10, 8], [12, 8]]), ...zps('plantio', [[6, 12], [8, 12], [10, 12], [12, 12]])];
 const COLMEIA_CANTO = 3;
 const colmeiaAberta = i => i < COLMEIA_CANTO || (S && S.canto === 2);
 const COLMEIA = { nivel: 10, preco: 800, tempo: 720, rend: 2, xp: 4, ajuda: 0.1 };
@@ -1202,11 +1240,11 @@ const loteObraVisivel = k => !!S && (loteObraAberto(k) || (nivel() >= OBRAS[k].n
 // do coletor. Vêm prontos, com cerca, porteira e pasto. Cada bicho mora num cercado (d.c: 0 o primeiro, 1 o novo).
 // A cerca de baixo do curral novo é a da fazenda
 const CERCADOS = {
-  galinheiro2: { tp: 'galinha', nivel: 30, preco: 60000, cerca: [29, 7, 36, 11], portao: [29, 9] },
-  curral2:     { tp: 'vaca',    nivel: 30, preco: 75000, cerca: [29, 14, 36, 21], portao: [29, 18] },
+  galinheiro2: naZona('cercados', { tp: 'galinha', nivel: 30, preco: 60000, cerca: [17, 4, 24, 8], portao: [17, 6] }),
+  curral2:     naZona('cercados', { tp: 'vaca',    nivel: 30, preco: 75000, cerca: [17, 13, 24, 20], portao: [17, 17] }),
   // o galinheiro dos patos fica no terreno novo (canto), na ponta leste do lago: a saída é um vão na cerca de lá, com
   // uma rampa de tábuas até a água (o ladrilho de lago à esquerda dela)
-  patos:       { tp: 'pato',    nivel: 32, preco: 80000, cerca: [47, 22, 51, 29], portao: [49, 22], saida: [47, 24], canto: true, placa: 'patos' },
+  patos:       naZona('lago', { tp: 'pato',    nivel: 32, preco: 80000, cerca: [18, 0, 22, 7], portao: [20, 0], saida: [18, 2], canto: true, placa: 'patos' }),
 };
 const CERCADO_DE = { galinha: 'galinheiro2', vaca: 'curral2' };
 const cercadoFeito = id => !!(S && S.cercados && S.cercados[id]);
@@ -1238,17 +1276,17 @@ const velEd = () => (degrau('botas') || { vel: 2.7 }).vel;
 const IRRIGADOR = { nivel: 14, preco: 2000 };
 // coletor de ovos e ordenhadeira: os bichos produzem para uma caixa; o xp e o celeiro só vêm quando o Ed esvazia a caixa
 const COLETOR = {
-  galinha: { nome: 'Coletor de ovos', nivel: 8, preco: 2500, x: 27, z: 8, lugar: 'galinheiro' },
-  vaca:    { nome: 'Ordenhadeira', nivel: 12, preco: 4000, x: 27, z: 17, lugar: 'curral' },
+  galinha: naZona('cercados', { nome: 'Coletor de ovos', nivel: 8, preco: 2500, x: 15, z: 5, lugar: 'galinheiro' }),
+  vaca:    naZona('cercados', { nome: 'Ordenhadeira', nivel: 12, preco: 4000, x: 15, z: 16, lugar: 'curral' }),
   // os dos patos ficam do lado de fora da cerca de cima, dos dois lados da porteira, girados para o pasto (ry)
-  pato:    { nome: 'Coletor de ovos de pata', nivel: 34, preco: 25000, x: 48, z: 21, lugar: 'galinheiro dos patos', ry: Math.PI / 2 },
+  pato:    naZona('lago', { nome: 'Coletor de ovos de pata', nivel: 34, preco: 25000, x: 19, z: -1, lugar: 'galinheiro dos patos', ry: Math.PI / 2 }),
 };
 // automação das construções, terreiro de café incluído: esteira de saída e repetidor de receita
 const ESTEIRA = { preco: 1500 }, REPETIDOR = { preco: 3000 };
 const ALIMENTADOR = {
-  galinha: { nivel: 5, preco: 1000, x: 27, z: 10, lugar: 'galinheiro' },
-  vaca:    { nivel: 6, preco: 1000, x: 27, z: 19, lugar: 'curral' },
-  pato:    { nivel: 33, preco: 15000, x: 50, z: 21, lugar: 'galinheiro dos patos', ry: Math.PI / 2 },
+  galinha: naZona('cercados', { nivel: 5, preco: 1000, x: 15, z: 7, lugar: 'galinheiro' }),
+  vaca:    naZona('cercados', { nivel: 6, preco: 1000, x: 15, z: 18, lugar: 'curral' }),
+  pato:    naZona('lago', { nivel: 33, preco: 15000, x: 21, z: -1, lugar: 'galinheiro dos patos', ry: Math.PI / 2 }),
 };
 // os textos de cada bicho no coletor e no alimentador
 const COMO_BICHO = {
@@ -1312,8 +1350,8 @@ const nivelDe = xp => { let n = 1; while (xp >= xpPara(n + 1)) n++; return n; };
 // fileira de grama até a cerca de baixo (no mapa 3 eles desceram HORTA_DESCE ladrilhos, ver migrarHorta); os do
 // canto Sul (canto: true), na primeira faixa atrás das fábricas da mata, têm preço e nível próprios e só existem com a cerca de
 // lá tirada
-const LOTES = [{ x:2, z:10 }, { x:7, z:10 }, { x:12, z:10 }, { x:2, z:16 }, { x:7, z:16 }, { x:12, z:16 },
-  { x:30, z:28, canto: true, preco: 30000, nivel: 30 }, { x:35, z:28, canto: true, preco: 40000, nivel: 30 }];
+const LOTES = [...[{ x:2, z:7 }, { x:7, z:7 }, { x:12, z:7 }, { x:2, z:15 }, { x:7, z:15 }, { x:12, z:15 }].map(l => naZona('horta', l)),
+  naZona('plantio', { x:4, z:1, canto: true, preco: 30000, nivel: 30 }), naZona('plantio', { x:9, z:1, canto: true, preco: 40000, nivel: 30 })];
 // o n-ésimo terreno da horta comprado: preço e nível mínimo (o primeiro já vem com a fazenda)
 const PRECO_LOTE = [0, 300, 800, 2000, 4000, 7000];
 const NIVEL_LOTE = [1, 2, 4, 8, 11, 15];
@@ -1327,77 +1365,92 @@ const iT = (x, z) => z * W + x;
 const tipo = (x, z) => (x < 0 || z < 0 || x >= W || z >= H) ? null : TIPO[iT(x, z)];
 const setT = (x, z, t) => { TIPO[iT(x, z)] = t; };
 const PREDIOS = [
-  { id:'casa',       nome:'Casa do Ed',          x0:3,  z0:1,  x1:6,  z1:4,  porta:[5, 5] },
-  { id:'celeiro',    nome:'Celeiro',             x0:15, z0:0,  x1:19, z1:4,  porta:[17, 5] },
-  { id:'poco',       nome:'Poço',                x0:10, z0:3,  x1:10, z1:3,  porta:[10, 4] },
-  { id:'galinheiro', nome:'Galinheiro',          x0:24, z0:8,  x1:25, z1:9,  porta:[23, 9] },
-  { id:'curral',     nome:'Curral',              x0:24, z0:16, x1:25, z1:16, porta:[23, 17] },
-  { id:'correio',    nome:'Caixa de correio',    x0:16, z0:20, x1:16, z1:20, porta:[17, 20] },
+  naZona('sede', { id:'casa',       nome:'Casa do Ed',          x0:3,  z0:1,  x1:6,  z1:4,  porta:[5, 5] }),
+  naZona('sede', { id:'celeiro',    nome:'Celeiro',             x0:15, z0:0,  x1:19, z1:4,  porta:[17, 5] }),
+  naZona('sede', { id:'poco',       nome:'Poço',                x0:10, z0:3,  x1:10, z1:3,  porta:[10, 4] }),
+  naZona('cercados', { id:'galinheiro', nome:'Galinheiro',          x0:12, z0:5,  x1:13, z1:6,  porta:[11, 6] }),
+  naZona('cercados', { id:'curral',     nome:'Curral',              x0:12, z0:15, x1:13, z1:15, porta:[11, 16] }),
+  naZona('horta', { id:'correio',    nome:'Caixa de correio',    x0:16, z0:19, x1:16, z1:19, porta:[17, 19] }),
   // área de produção: as construções ficam de frente para a estradinha de terra (z = 5)
-  { id:'moinho',     nome:'Moinho',              x0:21, z0:2,  x1:22, z1:3,  porta:[21, 4], fab:'moinho' },
-  { id:'queijaria',  nome:'Queijaria',           x0:25, z0:2,  x1:26, z1:3,  porta:[25, 4], fab:'queijaria' },
+  naZona('fabricas', { id:'moinho',     nome:'Moinho',              x0:5,  z0:2,  x1:6,  z1:3,  porta:[5, 4], fab:'moinho' }),
+  naZona('fabricas', { id:'queijaria',  nome:'Queijaria',           x0:12, z0:2,  x1:13, z1:3,  porta:[12, 4], fab:'queijaria' }),
   // a queijaria, a padaria e a cozinha ficam a 8 ladrilhos uma da outra: ampliadas (AMPLIACAO), cada uma ganha os dois
   // ladrilhos da direita (x1 passa a x0 + 3, ajustarLargura) e ainda sobram quatro de gramado entre elas
-  { id:'padaria',    nome:'Padaria',             x0:33, z0:2,  x1:34, z1:3,  porta:[33, 4], fab:'padaria' },
-  { id:'cozinha',    nome:'Cozinha de doces',    x0:41, z0:2,  x1:42, z1:3,  porta:[41, 4], fab:'cozinha' },
-  { id:'terreiro',   nome:'Terreiro de café',    x0:38, z0:8,  x1:40, z1:9,  porta:[39, 7], fab:'terreiro' },
-  { id:'torrador',   nome:'Torrador de café',    x0:43, z0:8,  x1:44, z1:9,  porta:[44, 7], fab:'torrador', ry: Math.PI },
+  naZona('fabricas', { id:'padaria',    nome:'Padaria',             x0:24, z0:2,  x1:25, z1:3,  porta:[24, 4], fab:'padaria' }),
+  naZona('fabricas', { id:'cozinha',    nome:'Cozinha de doces',    x0:36, z0:2,  x1:37, z1:3,  porta:[36, 4], fab:'cozinha' }),
+  naZona('pomar', { id:'terreiro',   nome:'Terreiro de café',    x0:7,  z0:5,  x1:9,  z1:6,  porta:[8, 4], fab:'terreiro' }),
+  naZona('pomar', { id:'torrador',   nome:'Torrador de café',    x0:12, z0:5,  x1:13, z1:6,  porta:[13, 4], fab:'torrador', ry: Math.PI }),
   // as construções da mata ficam numa clareira do outro lado da estrada, de frente para ela, perto da floresta
-  { id:'chocolateria', nome:'Chocolateria',      x0:25, z0:22, x1:26, z1:23, porta:[24, 22], fab:'chocolateria', ry: -Math.PI / 2 },
-  { id:'oficina',    nome:'Oficina de borracha', x0:25, z0:27, x1:26, z1:28, porta:[24, 27], fab:'oficina', ry: -Math.PI / 2 },
+  naZona('clareira', { id:'chocolateria', nome:'Chocolateria',      x0:2, z0:0, x1:3, z1:1, porta:[1, 0], fab:'chocolateria', ry: -Math.PI / 2 }),
+  naZona('clareira', { id:'oficina',    nome:'Oficina de borracha', x0:2, z0:5, x1:3, z1:6, porta:[1, 5], fab:'oficina', ry: -Math.PI / 2 }),
   // a fábrica de barras veio depois, na mesma fileira, abaixo da oficina: a clareira cresceu até ela (CLAREIRA_ATE)
-  { id:'chocobarra', nome:'Fábrica de barras',   x0:25, z0:31, x1:26, z1:32, porta:[24, 31], fab:'chocobarra', ry: -Math.PI / 2 },
+  naZona('clareira', { id:'chocobarra', nome:'Fábrica de barras',   x0:2, z0:9, x1:3, z1:10, porta:[1, 9], fab:'chocobarra', ry: -Math.PI / 2 }),
   // o galinheiro e o curral novos só existem depois de comprados (CERCADOS): ficam no fundo do cercado, longe da porteira
-  { id:'galinheiro2', nome:'Galinheiro novo',   x0:34, z0:8,  x1:35, z1:9,  porta:[33, 9], lote: true },
-  { id:'curral2',    nome:'Curral novo',         x0:34, z0:16, x1:35, z1:16, porta:[33, 17], lote: true },
+  naZona('cercados', { id:'galinheiro2', nome:'Galinheiro novo',   x0:22, z0:5,  x1:23, z1:6,  porta:[21, 6], lote: true }),
+  naZona('cercados', { id:'curral2',    nome:'Curral novo',         x0:22, z0:15, x1:23, z1:15, porta:[21, 16], lote: true }),
   // a casinha dos patos, no fundo do cercado deles, com a porta para o pasto (-z)
-  { id:'patos',      nome:'Galinheiro dos patos', x0:49, z0:27, x1:50, z1:28, porta:[49, 26], lote: true },
+  naZona('lago', { id:'patos',      nome:'Galinheiro dos patos', x0:20, z0:5, x1:21, z1:6, porta:[20, 4], lote: true }),
   // as obras novas do Maurinho (OBRAS): o lugar fica gramado até a obra começar
-  { id:'resort',     nome:'Resort das Aposentadas', x0:45, z0:32, x1:51, z1:37, porta:[48, 38], obra: 'resort' },
-  { id:'observatorio', nome:'Observatório',      x0:24, z0:35, x1:28, z1:38, porta:[27, 39], obra: 'observatorio' },
+  naZona('resort', { id:'resort',     nome:'Resort das Aposentadas', x0:6, z0:5, x1:12, z1:10, porta:[9, 11], obra: 'resort' }),
+  naZona('observatorio', { id:'observatorio', nome:'Observatório',      x0:1, z0:4, x1:5, z1:7, porta:[4, 8], obra: 'observatorio' }),
   // o museu, de frente para a câmera, no campo da festa do ArraiEd, perto da fogueira (o Lucas pediu): na festa ele some
   // para abrir espaço para a roda (museuNaFesta)
-  { id:'museu',      nome:'Museu da fazenda',    x0:45, z0:44, x1:48, z1:46, porta:[46, 47], obra: 'museu' },
+  naZona('festa', { id:'museu',      nome:'Museu da fazenda',    x0:10, z0:12, x1:13, z1:14, porta:[11, 15], obra: 'museu' }),
   // o spa dos pigs, no canto de baixo encostado na estrada (o Lucas pediu ali; o observatório subiu para trás dele), deitado
   // (9 × 6) para ficar mais longe do observatório e girado 180° (ry), com a entrada virada para dentro do mapa: virada para
   // o sul ela dava para fora (o Lucas pediu). A porta fica no norte, do lado direito, e o caminho vem da estrada até ela
-  { id:'spa',        nome:'Spa dos pigs',        x0:23, z0:44, x1:31, z1:49, porta:[30, 43], obra: 'spa', ry: Math.PI, ala: { x0: 32, z0: 44, x1: 36, z1: 49, etapa: 2 } },
-  { id:'galpao',     nome:'Galpão do trator',    x0:0,  z0:7,  x1:3,  z1:8,  porta:[1, 9], obra: 'galpao' },
+  naZona('spa', { id:'spa',        nome:'Spa dos pigs',        x0:1, z0:3, x1:9, z1:8, porta:[8, 2], obra: 'spa', ry: Math.PI, ala: { x0: 10, z0: 3, x1: 14, z1: 8, etapa: 2 } }),
+  naZona('horta', { id:'galpao',     nome:'Galpão do trator',    x0:0,  z0:1,  x1:3,  z1:2,  porta:[1, 3], obra: 'galpao' }),
   // fora do mapa de ladrilhos: no fim da pista, ao norte dela (fora: sem ladrilho, sem lote; o Maurinho trabalha na beira da fazenda)
-  { id:'hangar',     nome:'Hangar do PIG-MTP',   x0:47, z0:-6, x1:51, z1:-5, porta:[49, -4], obra: 'hangar', fora: true },
+  { id:'hangar',     nome:'Hangar do PIG-MTP',   x0:W - 5, z0:-6, x1:W - 1, z1:-5, porta:[W - 3, -4], obra: 'hangar', fora: true },
 ];
 const PREDIO = {}; PREDIOS.forEach(p => { PREDIO[p.id] = p; });
 // as da fileira das fábricas saíram para a queijaria, a padaria e a cozinha caberem ampliadas (o Lucas pediu)
-const ARVORES = [[0,1,0],[1,5,1],[0,10,2],[1,18,0],[13,1,1],[24,0,0],[37,9,0],[37,18,2],[2,0,1],[9,0,0],[0,20,1],[45,13,1],[51,20,0],[16,13,2]];
-const ARBUSTOS = [[8,1],[14,7],[1,11]];
+// [x, z, modelo]
+const ARVORES = [[...zp('sede', 0, 1), 0], [...zp('sede', 1, 5), 1], [...zp('horta', 0, 7), 2], [...zp('horta', 1, 17), 0], [...zp('sede', 13, 1), 1], [...zp('fabricas', 11, 0), 0], [...zp('pomar', 6, 6), 0], [...zp('pomar', 6, 17), 2], [...zp('sede', 2, 0), 1], [...zp('sede', 9, 0), 0], [...zp('horta', 0, 19), 1], [...zp('pomar', 14, 10), 1], [...zp('pomar', 20, 19), 0], [...zp('horta', 16, 10), 2]];
+const ARBUSTOS = [zp('sede', 8, 1), zp('horta', 14, 1), zp('horta', 1, 8)];
 // a cerca da fazenda (Z_CERCA), com a porteira (X_PORTEIRA); a estrada passa logo abaixo e dobra para o sul na coluna COL_CURVA.
 // A orla vai de Z_ORLA até a mata, e a mata vai de Z_MATA até o fim do mapa
-const Z_CERCA = 21, X_PORTEIRA = 17, Z_ORLA = 23, Z_MATA = 27, X_FIM_MATA = 17, COL_CURVA = 21;
-// a última linha da clareira das construções da mata (ia até Z_CERCA + 8; cresceu com a fábrica de barras)
-const CLAREIRA_ATE = Z_CERCA + 12;
+// Z_CAMINHO é o caminho de cima, de frente para a casa, o celeiro e as fábricas
+const Z_CAMINHO = zz('sede', 5), Z_CERCA = zz('horta', 20), X_PORTEIRA = zx('horta', 17), Z_ORLA = zz('mata', 1), Z_MATA = zz('mata', 5), X_FIM_MATA = zx('mata', 26), COL_CURVA = zx('mata', 30);
+// a última linha da clareira das construções da mata (cresceu com a fábrica de barras)
+const CLAREIRA_ATE = zz('clareira', 11);
 // o canto Sul: S.canto é 1 depois de pagar e 2 depois que o Ed tira a cerca. A cerca do curral novo fica, senão as vacas saem
-const ARRENDAMENTO = { nivel: 30, preco: 120000, xCerca: 27, placa: [47.5, 22.7], ed: { k: 'cercaCanto', x: 47, z: 20 } };
+const ARRENDAMENTO = { nivel: 30, preco: 120000, xCerca: zx('cercados', 15), placa: zp('lago', 18.5, 0.7), ed: { k: 'cercaCanto', x: zx('lago', 18), z: Z_CERCA - 1 } };
 // o lago do canto Sul, logo depois da cerca, e a ponte que leva da fazenda para o outro lado. LAGO: as colunas de água de cada linha
-const LAGO = { 22: [32, 43], 23: [30, 45], 24: [29, 46], 25: [30, 46], 26: [31, 44] };
-const PONTE = { x: 37, z0: 22, z1: 26 };
+const LAGO = Object.fromEntries([[3, 14], [1, 16], [0, 17], [1, 17], [2, 15]].map(([a, b], z) => [zz('lago', z), [zx('lago', a), zx('lago', b)]]));
+const PONTE = naZona('lago', { x: 8, z0: 0, z1: 4 });
 // a floresta à venda, da coluna 0 até a beira da estrada; cada parcela tem uma trilha reta na coluna col, e a de trás continua a da frente
+// a mata é uma grade de parcelas de 9 × 8 (PARCELA_TAM), em três colunas a partir de Z_MATA: col é a coluna da trilha, e
+// frente, a parcela da frente na mesma coluna (só dá para comprar com ela comprada, porque a trilha continua a dela). As
+// parcelas vão uma depois da outra, na ordem da lista; mais parcelas é só pôr outra fileira na lista e crescer a zona mata
+const PARCELA_TAM = { w: 9, h: 8 };
+const parcela = (c, f, o) => { const x0 = [0, 9, 18][c], z0 = 5 + f * PARCELA_TAM.h; return naZona('mata', { ...o, x0, z0, x1: x0 + PARCELA_TAM.w - 1, z1: z0 + PARCELA_TAM.h - 1, col: x0 + [4, 5, 4][c] }); };
 const PARCELAS = [
-  { nivel: 20, preco: 15000, x0: 9, z0: 27, x1: 17, z1: 34, col: 14, arvores: ['cacaueiro', 'seringueira', 'seringueira', 'cacaueiro', 'cacaueiro', 'seringueira'] },
-  { nivel: 22, preco: 20000, x0: 0, z0: 27, x1: 8, z1: 34, col: 4, arvores: ['acaizeiro', 'cupuacuzeiro', 'cupuacuzeiro', 'acaizeiro', 'acaizeiro', 'cupuacuzeiro'] },
-  { nivel: 24, preco: 28000, x0: 9, z0: 35, x1: 17, z1: 42, col: 14, arvores: ['guaranazeiro', 'guaranazeiro', 'cacaueiro', 'guaranazeiro', 'guaranazeiro', 'cacaueiro'] },
-  { nivel: 26, preco: 40000, x0: 0, z0: 35, x1: 8, z1: 42, col: 4, arvores: ['castanheira', 'seringueira', 'acaizeiro', 'castanheira', 'castanheira', 'seringueira'] },
-  // a do fundo, no sul da mata (o Lucas pediu um nível com pouca novidade), continua a trilha da parcela da frente, na
-  // mesma coluna. A sexta, a oeste dela (nível 46), virou a cachoeira (CACHOEIRA)
-  { nivel: 44, preco: 120000, x0: 9, z0: 43, x1: 17, z1: 50, col: 14, arvores: ['castanheira', 'guaranazeiro', 'cupuacuzeiro', 'castanheira', 'guaranazeiro', 'cupuacuzeiro'] },
+  parcela(1, 0, { nivel: 20, preco: 15000, frente: -1, arvores: ['cacaueiro', 'seringueira', 'seringueira', 'cacaueiro', 'cacaueiro', 'seringueira'] }),
+  parcela(0, 0, { nivel: 22, preco: 20000, frente: -1, arvores: ['acaizeiro', 'cupuacuzeiro', 'cupuacuzeiro', 'acaizeiro', 'acaizeiro', 'cupuacuzeiro'] }),
+  parcela(1, 1, { nivel: 24, preco: 28000, frente: 0, arvores: ['guaranazeiro', 'guaranazeiro', 'cacaueiro', 'guaranazeiro', 'guaranazeiro', 'cacaueiro'] }),
+  parcela(0, 1, { nivel: 26, preco: 40000, frente: 1, arvores: ['castanheira', 'seringueira', 'acaizeiro', 'castanheira', 'castanheira', 'seringueira'] }),
+  // a do nível 44 (o Lucas pediu um nível com pouca novidade). A sexta de antes (nível 46) virou a cachoeira (CACHOEIRA)
+  parcela(1, 2, { nivel: 44, preco: 120000, frente: 2, arvores: ['castanheira', 'guaranazeiro', 'cupuacuzeiro', 'castanheira', 'guaranazeiro', 'cupuacuzeiro'] }),
+  // as do mapa 4 (o Lucas pediu: nível 60, R$ 500 mil cada): a terceira coluna inteira e o fundo da do meio. O fundo da
+  // primeira coluna, atrás da cachoeira, fica fechado (não tem trilha que chegue lá)
+  parcela(2, 0, { nivel: 60, preco: 500000, frente: -1, arvores: ['seringueira', 'cacaueiro', 'acaizeiro', 'seringueira', 'cacaueiro', 'acaizeiro'] }),
+  parcela(2, 1, { nivel: 60, preco: 500000, frente: 5, arvores: ['cacaueiro', 'castanheira', 'cupuacuzeiro', 'cacaueiro', 'castanheira', 'cupuacuzeiro'] }),
+  parcela(1, 3, { nivel: 60, preco: 500000, frente: 4, arvores: ['acaizeiro', 'seringueira', 'guaranazeiro', 'acaizeiro', 'seringueira', 'guaranazeiro'] }),
+  parcela(2, 2, { nivel: 60, preco: 500000, frente: 6, arvores: ['guaranazeiro', 'cupuacuzeiro', 'seringueira', 'guaranazeiro', 'cupuacuzeiro', 'seringueira'] }),
+  parcela(1, 4, { nivel: 60, preco: 500000, frente: 7, arvores: ['cupuacuzeiro', 'castanheira', 'cacaueiro', 'cupuacuzeiro', 'castanheira', 'cacaueiro'] }),
+  parcela(2, 3, { nivel: 60, preco: 500000, frente: 8, arvores: ['acaizeiro', 'guaranazeiro', 'castanheira', 'acaizeiro', 'guaranazeiro', 'castanheira'] }),
+  parcela(2, 4, { nivel: 60, preco: 500000, frente: 10, arvores: ['seringueira', 'castanheira', 'cupuacuzeiro', 'seringueira', 'castanheira', 'cupuacuzeiro'] }),
 ];
 // a sexta parcela (nível 46, R$ 160 mil) existiu por um tempo; quem comprou recebe o dinheiro de volta (migrar)
-const PARCELA_SEXTA = { preco: 160000 };
+const PARCELA_SEXTA = { preco: 160000 }, PARCELAS_MAPA3 = 5;
 // a cachoeira no canto oeste do fundo da mata (o Lucas pediu; ficou no lugar da sexta parcela): o paredão de pedra na beira
 // do mapa, a queda d'água e o lago embaixo, onde os bichos da mata vêm beber. mapa: uma linha por z, a partir de x0 e z0:
 // P paredão (ladrilho 'pedra'), L lago ('lago', a mesma água do lago da fazenda), m margem de areia e pedrinhas ('margem',
 // sem árvore), . mata. queda: o centro da queda em z e a largura; pedras: as pedras da beira [x, z, raio, altura], onde os
 // pássaros pousam. Ninguém da fazenda anda por lá
-const CACHOEIRA = { x0: 0, z0: 43, x1: 8, z1: 50,
+const CACHOEIRA = { ...naZona('mata', { x0: 0, z0: 21, x1: 8, z1: 28 }),
   mapa: [
     'PPmmmmm..',
     'PPmLLLLm.',
@@ -1407,17 +1460,18 @@ const CACHOEIRA = { x0: 0, z0: 43, x1: 8, z1: 50,
     'PPmLLLLLm',
     'PPmmLLLm.',
     'PP.mmmm..'],
-  queda: { z: 46.35, larg: 0.8 }, alto: 21,
-  pedras: [[2.55, 44.7, 0.32, 0.3], [7.35, 44.45, 0.3, 0.26], [6.75, 49.25, 0.34, 0.28], [2.55, 48.45, 0.3, 0.3], [5.7, 43.45, 0.24, 0.2]] };
+  queda: { z: zz('mata', 24.35), larg: 0.8 }, alto: 21,
+  pedras: [[2.55, 22.7, 0.32, 0.3], [7.35, 22.45, 0.3, 0.26], [6.75, 27.25, 0.34, 0.28], [2.55, 26.45, 0.3, 0.3], [5.7, 21.45, 0.24, 0.2]].map(([x, z, r, a]) => [zx('mata', x), zz('mata', z), r, a]) };
 const naCachoeira = (x, z) => x >= CACHOEIRA.x0 && x <= CACHOEIRA.x1 && z >= CACHOEIRA.z0 && z <= CACHOEIRA.z1;
 // duas árvores por fileira, uma de cada lado da trilha; o Ed colhe em pé na trilha
 const MATA_SLOTS = PARCELAS.flatMap((P, p) => P.arvores.map((tipo, k) => { const z = P.z0 + 1 + (k >> 1) * 2; return { x: P.col + (k % 2 ? 1 : -1), z, pe: [P.col, z], tipo, p }; }));
 const MATA_XZ = MATA_SLOTS.map(s => [s.x, s.z]);
-const FENOS = [[14,3],[14,4]];
-const FLORES = [[8,3],[2,3],[9,7],[16,7],[1,20],[0,4],[12,20],[4,20],[18,7],[24,4],[31,4],[42,7]];
+const FENOS = [zp('sede', 14, 3), zp('sede', 14, 4)];
+const FLORES = [zp('sede', 8, 3), zp('sede', 2, 3), zp('horta', 9, 1), zp('horta', 16, 1), zp('horta', 1, 19), zp('sede', 0, 4), zp('horta', 12, 19), zp('horta', 4, 19), zp('cercados', 6, 4), zp('fabricas', 11, 4), zp('fabricas', 22, 4), zp('pomar', 11, 4)];
 const PASTO_G = [], PASTO_V = [], PASTO_CERCADO = { galinha: [], vaca: [], pato: [] };
 // o galinheiro e o curral do começo: cerca, porteira para o caminho e pasto
-const CERCA_GALINHEIRO = [19, 7, 26, 11], CERCA_CURRAL = [19, 14, 26, 21];
+const CERCA_GALINHEIRO = [...zp('cercados', 7, 4), ...zp('cercados', 14, 8)], CERCA_CURRAL = [...zp('cercados', 7, 13), ...zp('cercados', 14, 20)];
+const PORTAO_GALINHEIRO = zp('cercados', 7, 6), PORTAO_CURRAL = zp('cercados', 7, 17);
 function montarMapa(){
   // a orla não tem árvores altas, que esconderiam a estrada e o arco na câmera inclinada
   for (let z = Z_ORLA; z < H; z++) for (let x = 0; x < W; x++) setT(x, z, z >= Z_MATA ? 'mata' : x <= X_FIM_MATA ? 'orla' : 'orlaF');
@@ -1427,21 +1481,23 @@ function montarMapa(){
   for (let z = Z_CERCA + 1; z < H; z++){ setT(COL_CURVA, z, 'estrada'); setT(COL_CURVA + 1, z, 'cerca'); for (let x = COL_CURVA + 2; x < W; x++) setT(x, z, 'canto'); }
   setT(X_PORTEIRA, Z_CERCA, 'portao');
   // a clareira das construções da mata, no canto do terreno abandonado, com uma passagem na cerca para cada porta
-  for (let x = COL_CURVA + 2; x <= COL_CURVA + 7; x++) for (let z = Z_CERCA + 1; z <= CLAREIRA_ATE; z++) setT(x, z, 'grama');
+  for (let x = ZONAS.clareira.x; x < ZONAS.clareira.x + ZONAS.clareira.w; x++) for (let z = ZONAS.clareira.z; z <= CLAREIRA_ATE; z++) setT(x, z, 'grama');
   for (const id of ['chocolateria', 'oficina', 'chocobarra']){ const pt = PREDIOS.find(q => q.id === id).porta; setT(COL_CURVA + 1, pt[1], 'caminho'); }
   for (const z in LAGO){ const [a, b] = LAGO[z]; for (let x = a; x <= b; x++) setT(x, +z, 'lago'); }
   CACHOEIRA.mapa.forEach((l, k) => [...l].forEach((c, i) => { const t = { P: 'pedra', L: 'lago', m: 'margem' }[c]; if (t) setT(CACHOEIRA.x0 + i, CACHOEIRA.z0 + k, t); }));
   for (let z = PONTE.z0; z <= PONTE.z1; z++) setT(PONTE.x, z, 'ponte');
-  for (let z = 5; z < Z_CERCA; z++) setT(X_PORTEIRA, z, 'caminho');
-  for (let x = 4; x <= W - 1; x++) setT(x, 5, 'caminho');
-  setT(10, 4, 'caminho'); setT(18, 9, 'caminho'); setT(18, 18, 'caminho');
+  for (let z = Z_CAMINHO; z < Z_CERCA; z++) setT(X_PORTEIRA, z, 'caminho');
+  for (let x = zx('sede', 4); x <= W - 1; x++) setT(x, Z_CAMINHO, 'caminho');
+  setT(...PREDIO.poco.porta, 'caminho');
+  // do caminho da porteira até a porteira do galinheiro e a do curral
+  for (const [px, pz] of [PORTAO_GALINHEIRO, PORTAO_CURRAL]) for (let x = X_PORTEIRA + 1; x < px; x++) setT(x, pz, 'caminho');
   // o lugar da composteira (nível 16) fica reservado desde o começo, e a porta dela é um trecho de caminho
   for (let x = COMPOSTEIRA.x0; x <= COMPOSTEIRA.x1; x++) for (let z = COMPOSTEIRA.z0; z <= COMPOSTEIRA.z1; z++) setT(x, z, 'predio');
   setT(COMPOSTEIRA.porta[0], COMPOSTEIRA.porta[1], 'caminho');
   LOTES.forEach((l, i) => { if (!l.canto) for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) setT(x, z, 'campo'); });
   for (const [[x0, z0, x1, z1], pasto] of [[CERCA_GALINHEIRO, 'pastoG'], [CERCA_CURRAL, 'pastoV']])
     for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) setT(x, z, x === x0 || x === x1 || z === z0 || z === z1 ? 'cerca' : pasto);
-  setT(19, 9, 'portao'); setT(19, 18, 'portao');
+  setT(...PORTAO_GALINHEIRO, 'portao'); setT(...PORTAO_CURRAL, 'portao');
   for (const p of PREDIOS) if (!p.lote && !p.nova && !p.obra) for (let x = p.x0; x <= p.x1; x++) for (let z = p.z0; z <= p.z1; z++){ setT(x, z, 'predio'); PREDIO_EM[iT(x, z)] = p; }
   for (const [x, z] of ARVORES) setT(x, z, 'arvore');
   for (const [x, z] of ARBUSTOS) setT(x, z, 'arvore');
@@ -3388,7 +3444,7 @@ const LUMA_SITU = {
 };
 const SAIDAS_LUMA = ['cava', 'mato', 'cenoura', 'vaca', 'patos', 'soneca', 'cachoeira'];
 // na cachoeira: de onde ela pula, até onde afunda (a água fica em -0,25) e quão rápido nada de cachorrinho
-const LUMA_NADO = { margem: [4.2, 43.45], pulo: [4.2, 44.62], fundo: -0.4, vel: 0.6 };
+const LUMA_NADO = { margem: zp('mata', 4.2, 21.45), pulo: zp('mata', 4.2, 22.62), fundo: -0.4, vel: 0.6 };
 const FALAS_LUMA_CACHOEIRA = ['Au! (tibum!)', 'Auuu! (pulou de olhos fechados)', 'Au au! (nado de cachorrinho!)', 'Au? (é gelada!)', 'Au! (só a cabecinha pra fora)', 'Au au au! (olha eu nadando!)', 'Auuu! (que coragem!)', 'Au! (bate as patinhas rapidinho)', 'Au? (cadê o chão?)', 'Au! (as orelhas boiando)', 'Au au! (água da cachoeira é diferente!)', 'Auuu! (a chihuahua mais corajosa do mundo)', 'Au! (espirra água pelo focinho)', 'Au au! (nada atrás de uma folha)', 'Au? (o peixinho me olhou)', 'Au! (late pra queda d\'água)', 'Auuu! (essa água eu gosto!)', 'Au au! (nadando que nem pato!)', 'Au! (pega uma bolha com a boca)', 'Au? (por que eu tinha medo?)', 'Au! (rabinho de leme)'];
 const FALAS_LUMA_SECA = ['Au! (se sacode do focinho ao rabo)', 'Au au! (chuva de chihuahua!)', 'Auuu! (sacode as orelhas)', 'Au! (fica toda arrepiada)', 'Au? (encolheu de molhada)', 'Au! (se sacode e espirra)', 'Au au! (rola na areia pra secar)', 'Au! (sacode de novo, só pra garantir)', 'Auuu! (tremendo de frio e feliz)', 'Au! (pelo todo espetado)', 'Au au! (de novo! de novo!)', 'Au! (respingo pra todo lado)', 'Au? (cadê minha toalha?)', 'Au! (sacode a patinha de trás)', 'Auuu! (que mergulho!)', 'Au au! (fica pingando na margem)', 'Au! (gira e se sacode)', 'Au? (agora sou uma chihuahua de pelúcia molhada)', 'Au! (late pra cachoeira, satisfeita)', 'Au au! (amanhã eu volto!)', 'Au! (se sacode até as orelhas virarem hélice)'];
 const FALAS_ED_LUMA_NADA = ['Luma! Você pulou na água?!', 'Aoooa! A Luma tá nadando!', 'Olha a Luma no nado de cachorrinho!', 'Luma, você não tinha medo de água?', 'Hehe, vem, Luma! Nada até aqui!', 'Oinc! Que coragem, Luma!', 'A Luma veio nadar comigo!', 'Cuidado, Luma, a água é funda pra você!', 'Luma, você é uma nadadora!', 'Que fofura, só a cabecinha pra fora!', 'Luma! Bate as patinhas, isso!', 'Aoooa! Família toda na cachoeira!', 'Luma, depois não vai se sacudir em mim, hein!', 'Hehe, a Luma descobriu a cachoeira!', 'Olha a Luma, toda corajosa!', 'Luma, os patos iam ficar com inveja!', 'Vem, Luma! Aqui tá gostoso!', 'Que nado mais bonitinho, Luma!', 'Oinc! A chihuahua mais corajosa da mata!', 'Luma, não vai atrás dos peixinhos!', 'Aoooa! Até a Luma quis mergulhar!'];
@@ -3613,7 +3669,7 @@ const lumaPodeNadar = () => periodo().id !== 'noite' && !chovendo() && cachoeira
 // os pontos do nado dela: um ou dois de dentro do lago (com o Ed na água, nada até perto dele) e a volta para o pulo
 function pontosNadoLuma(){
   const l = [];
-  for (let z = 45; z <= 48; z++) for (let x = 3; x <= 6; x++) if (tipo(x, z) === 'lago') l.push([x + 0.5 + rnd(-0.25, 0.25), z + 0.5 + rnd(-0.25, 0.25)]);
+  for (let z = CACHOEIRA.z0 + 2; z <= CACHOEIRA.z0 + 5; z++) for (let x = CACHOEIRA.x0 + 3; x <= CACHOEIRA.x0 + 6; x++) if (tipo(x, z) === 'lago') l.push([x + 0.5 + rnd(-0.25, 0.25), z + 0.5 + rnd(-0.25, 0.25)]);
   const r = [sorteia(l)], N = nadoDe(ed);
   if (N && N.fase === 'nada') r.push([ed.pos.x + 0.45, ed.pos.y + 0.35]);
   else if (Math.random() < 0.6) r.push(sorteia(l));
@@ -5655,7 +5711,7 @@ const lumaNoTatu = () => !!luma && luma.estado === 'fora' && luma.acao === 'tatu
 // mata e agradece o cuidado do Ed com os bichos e as árvores. Depois aparece de vez em quando: sai da floresta, anda
 // um pouco pela orla deixando pegadas ao contrário, fala e volta sumindo nas folhas. Nada disso mexe no save
 const CURUPIRA = { escala: 1 / 22, primeira: [240, 480], intervalo: [600, 1080], vel: 1.1 };
-const CURUPIRA_CENA = { ed: [13.5, Z_MATA - 1.6], cu: [12.6, Z_MATA - 0.5] };
+const CURUPIRA_CENA = { ed: [zx('mata', 13.5), Z_MATA - 1.6], cu: [zx('mata', 12.6), Z_MATA - 0.5] };
 let curupira = null, proxCurupira = 0;
 function criarCurupira(){
   const g = new THREE.Group(), m = malha(geo('curupira', () => vCurupira().build(CURUPIRA.escala, { origin: [0.5, 0, 0.5], jitter: 0.02 })));
@@ -5833,7 +5889,7 @@ const VISITA_CACHOEIRA = { primeira: [6, 14], intervalo: [18, 40],
   pesos: { porcoRio: 2, anta: 2, onca: 0.8, jaguatirica: 1.5, quati: 2, cutia: 2, tamandua: 1.2, jabuti: 0.8, tatu: 1, arara: 2, tucano: 1.5, papagaio: 1 },
   // a velocidade de cada um pela margem, em ladrilhos por segundo
   vel: { porcoRio: 0.55, anta: 0.45, onca: 0.6, jaguatirica: 0.7, quati: 0.65, cutia: 1.1, tamandua: 0.4, jabuti: 0.12, tatu: 0.45 },
-  bebe: [5, 9], molho: [8, 13], agua: -0.3, centro: [5, 46.5] };
+  bebe: [5, 9], molho: [8, 13], agua: -0.3, centro: zp('mata', 5, 24.5) };
 let visitaCachoeira = null, proxVisitaCachoeira = null, beirasCach = null;
 // os lugares de beber: cada ladrilho de margem encostado na água, virado para ela, com o caminho pela margem até a mata
 // mais perto (de onde o bicho sai e para onde volta) e, se a água ali é funda o bastante, o ponto onde a anta fica de molho
@@ -5911,7 +5967,7 @@ function atualizarVisitaCachoeira(dt, t){
 // Dani, sem trabalho e de dia, de vez em quando vão também (nadarAjudante). Na água cada um anda sozinho pelos pontos
 // (passoNado), sem o passo do Porco, e fica afundado até o peito (fundo, na escala dele). Precisa das duas parcelas da
 // trilha oeste (cachoeiraAberta). Não mexe no save
-const NADO = { entrada: [4.5, 42.55], margem: [4.5, 43.4], pulo: [4.5, 44.65], queda: [2.42, 46.35], peito: 0.37, vel: 0.5, pulando: 0.6,
+const NADO = { entrada: zp('mata', 4.5, 20.55), margem: zp('mata', 4.5, 21.4), pulo: zp('mata', 4.5, 22.65), queda: zp('mata', 2.42, 24.35), peito: 0.37, vel: 0.5, pulando: 0.6,
   debaixo: 3.2, pontos: [2, 3], espera: [25, 60], intervalo: [70, 150], chance: 0.45 };
 const nados = new Map();
 const nadoDe = p => nados.get(p) || null;
@@ -5923,7 +5979,7 @@ const FALAS_QUEDA = ['Aaaah! Que massagem!', 'Brrrr! Que gelada!', 'Ducha de cac
 // os pontos por onde ele nada: os ladrilhos de dentro do lago, longe da margem
 function pontosDoNado(){
   const l = [];
-  for (let z = 45; z <= 48; z++) for (let x = 3; x <= 6; x++) if (tipo(x, z) === 'lago') l.push([x + 0.5 + rnd(-0.2, 0.2), z + 0.5 + rnd(-0.2, 0.2)]);
+  for (let z = CACHOEIRA.z0 + 2; z <= CACHOEIRA.z0 + 5; z++) for (let x = CACHOEIRA.x0 + 3; x <= CACHOEIRA.x0 + 6; x++) if (tipo(x, z) === 'lago') l.push([x + 0.5 + rnd(-0.2, 0.2), z + 0.5 + rnd(-0.2, 0.2)]);
   const n = Math.floor(rnd(NADO.pontos[0], NADO.pontos[1] + 1)), r = [];
   while (r.length < n && l.length) r.push(l.splice(Math.floor(Math.random() * l.length), 1)[0]);
   // a queda entra no meio da volta, e a volta termina no ponto do pulo, para sair pela margem
@@ -6201,7 +6257,7 @@ function atualizarBeijaFlor(dt, t){
 // ================= cena da mata (nível 20): o Ed sai da fazenda, vai até a beira da floresta e os bichos saem para comemorar
 // em volta dele. Os que andam saem da mata e param do lado dele pulando; o tucano e o papagaio descem das copas e voam em
 // roda da cabeça do Ed. Depois da última fala, todo mundo volta para a floresta. Nada disso fica no save.
-const MATA_CINE = { ed: [13.5, Z_MATA - 1.6], az: Math.PI * 5 / 4, saida: Z_MATA + 0.9 };
+const MATA_CINE = { ed: [zx('mata', 13.5), Z_MATA - 1.6], az: Math.PI * 5 / 4, saida: Z_MATA + 0.9 };
 let mataCine = null;
 function montarMataCine(){
   limparMataCine();
@@ -6675,10 +6731,10 @@ function vEnvelope(){
 // ================= a Lúcia e o aluguel do Nano Hostel (nível 12)
 // depois da cena dela, de tempos em tempos (só com o jogo aberto) ela sai do hostel e deixa o aluguel na porta da casa.
 // S.aluguelEspera é o relógio da próxima visita, em segundos; S.aluguel é o valor do envelope que espera o Ed na porta
-const ALUGUEL = { valor: 300, minutos: [20, 35], vel: 0.6, porta: [5.62, 5.3] };
-const CAMINHO_ALUGUEL = [[17.35, 0.02], [17.35, -0.25], [12.9, -0.25], [12.9, 5.5], [5.2, 5.5], [5.2, 5.32]];
+const ALUGUEL = { valor: 300, minutos: [20, 35], vel: 0.6, porta: zp('sede', 5.62, 5.3) };
+const CAMINHO_ALUGUEL = zps('sede', [[17.35, 0.02], [17.35, -0.25], [12.9, -0.25], [12.9, 5.5], [5.2, 5.5], [5.2, 5.32]]);
 // na cena ela já vem de trás do celeiro e para ao lado do Ed, no caminho de terra
-const LUCIA_CENA = [[14.4, -0.3], [12.9, -0.3], [12.9, 4.6], [13.15, 5.15]];
+const LUCIA_CENA = zps('sede', [[14.4, -0.3], [12.9, -0.3], [12.9, 4.6], [13.15, 5.15]]);
 let lucia = null, envelope = null, bolhaEnvelope = null;
 // o balão some junto com ela
 const LUCIA_FALA = { nome: 'lucia', get g(){ return lucia ? lucia.g : { visible: false }; }, topo: () => (lucia ? lucia.g.position.clone() : new THREE.Vector3(ALUGUEL.porta[0], 0, ALUGUEL.porta[1])).add(new THREE.Vector3(0, 0.5, 0)) };
@@ -6877,10 +6933,10 @@ const NOMES_APOSENTADA = ['Dona Gema', 'Dona Cocota', 'Dona Pipoca', 'Dona Canji
 // ficam na frente dela, e fora do canteiro de flores do (18, 7); o galinheiro novo tem o coletor e o alimentador na saída,
 // então eles se encontram embaixo dele. O galo do galinheiro canta a despedida
 const LUGAR_APOSENTA = [
-  { galinha: [18.5, 8.45], ed: [17.58, 9.38], galo: 'galinheiro' },
+  { galinha: zp('cercados', 6.5, 5.45), ed: zp('cercados', 5.58, 6.38), galo: 'galinheiro' },
   // sai: o primeiro passo da saída. No galinheiro novo ela volta pelo corredor entre o galinheiro e o curral (z 12 e 13),
   // onde o Ed está: ela vai pela fileira de cima, longe dele, e a rota segue dali
-  { galinha: [28.5, 12.45], ed: [27.58, 13.44], galo: 'galinheiro2', sai: [26.6, 12.35] },
+  { galinha: zp('cercados', 16.5, 9.45), ed: zp('cercados', 15.58, 10.44), galo: 'galinheiro2', sai: zp('cercados', 14.6, 9.35) },
 ];
 const FALAS_APOSENTA_ED = ['{nome}, foram {ovos} ovos! Aqui está seu bônus de aposentadoria: {bonus}.', 'Parabéns, {nome}! {ovos} ovos botados com carinho. Tome seu bônus: {bonus}.', '{nome}, a fazenda deve muito a você: {ovos} ovos! O bônus é de {bonus}.', 'Que carreira, {nome}! {ovos} ovos. Aqui vai um bônus de {bonus}.', '{nome}, {ovos} ovos é recorde! Seu bônus: {bonus}, um real por ovo.', 'Hoje é dia de festa, {nome}! Por {ovos} ovos, aqui estão {bonus}.', '{nome}, contei direitinho: {ovos} ovos. O bônus fica em {bonus}.', 'Muito obrigado, {nome}! Foram {ovos} ovos de primeira. Tome {bonus} de bônus.', '{nome}, você merece descansar! {ovos} ovos, {bonus} de bônus.', 'Aoooa, {nome}! {ovos} ovos fresquinhos. Seu bônus de aposentadoria: {bonus}.', '{nome}, esse envelope é seu: {bonus}, um real por cada um dos {ovos} ovos.', '{nome}, que trabalho bonito: {ovos} ovos! Aqui está o seu bônus de {bonus}.', 'Obrigado por tudo, {nome}! Foram {ovos} ovos. O bônus é de {bonus}.', '{nome}, a horta cresceu com seus {ovos} ovos! Tome {bonus} de bônus.', 'Que orgulho, {nome}! {ovos} ovos na conta. Seu bônus: {bonus}.', '{nome}, foram {ovos} ovos de carinho. Aqui estão {bonus}.', '{nome}, galinha campeã! {ovos} ovos. Bônus de {bonus} na sua malinha.', '{nome}, o galinheiro não seria o mesmo sem os seus {ovos} ovos. Tome {bonus}!', 'Hoje a festa é sua, {nome}! {ovos} ovos e um bônus de {bonus}.', '{nome}, um real por ovo, como combinado: {ovos} ovos, {bonus}!', '{nome}, que carreira linda! {ovos} ovos. Aqui vai o seu bônus de {bonus}.'];
 const FALAS_APOSENTA_GALINHA = ['Có-có-có! (abre um sorrisão de bico)', 'Cóóó... có-có! (abraça o envelope)', 'Có! Có-có-có! (dá uma voltinha de alegria)', 'Có-có... (bate as asas, emocionada)', 'Cocó? Cocó-có! (guarda o envelope na malinha)', 'Có-có-có-có! (ajeita o chapéu)', 'Cóóó! (dá uma bicadinha de carinho no Ed)', 'Có-có! Có! (faz uma reverência)', 'Có-có-có! (estufa o peito, orgulhosa)', 'Có-có-có! (pula de alegria)', 'Cóóó-có! (acena com a asa)', 'Có-có! (guarda o envelope debaixo da asa)', 'Cóóó! (dá um abraço de asa no Ed)', 'Có-có-có! (faz uma dancinha)', 'Có! (enxuga o olho com a pena, mas sorri)', 'Cocó! (põe o envelope na malinha com cuidado)', 'Có-có-có-có! (conta o dinheiro)', 'Cóóó-có! (dá um pulinho de alegria)', 'Có! Có! (bate as asas de orgulho)', 'Có-có... (faz carinho no Ed com o bico)', 'Cocóóó! (agradece com uma reverência)'];
@@ -7130,9 +7186,9 @@ function itensHospede(h){
 // da entrada, as aposentadas chegam pela ponte com as malinhas e fazem fila do lado, o Ed corta a fita e elas entram.
 // Os lugares (mundo): todos em meia-lua de frente para o meio; as galinhas ficam à esquerda do Ed na tela, em duas
 // fileiras de três (a linha da tela, com a câmera de sempre, é a diagonal x menos, z mais)
-const RESORT_CENA = { ed: [47.55, 39.25], maurinho: [49.35, 39.35], hud: [48.15, 40.1], dani: [50.3, 38.75], luma: [48.95, 40.35], meio: [48.5, 39.45],
-  fita: [48.5, 37.94], corte: [48.3, 38.62], ponte: [37.5, 26.4], entra: 38.55,
-  fila: i => { const k = i % 3, f = Math.floor(i / 3); return [46.8 - 0.47 * k - 0.42 * f, 40.0 + 0.47 * k - 0.42 * f]; }, max: 6 };
+const RESORT_CENA = { ed: zp('resort', 8.55, 12.25), maurinho: zp('resort', 10.35, 12.35), hud: zp('resort', 9.15, 13.1), dani: zp('resort', 11.3, 11.75), luma: zp('resort', 9.95, 13.35), meio: zp('resort', 9.5, 12.45),
+  fita: zp('resort', 9.5, 10.94), corte: zp('resort', 9.3, 11.62), ponte: zp('lago', 8.5, 4.4), entra: zz('resort', 11.55),
+  fila: i => { const k = i % 3, f = Math.floor(i / 3); return zp('resort', 7.8 - 0.47 * k - 0.42 * f, 13 + 0.47 * k - 0.42 * f); }, max: 6 };
 let inauguracao = null, fitaResort = null;
 // quem está na cena: o Ed, o Maurinho e os irmãos que vieram
 const naInauguracao = () => [ed, maurinho, ...(inauguracao && inauguracao.hud ? [irmaoHud] : []), ...(inauguracao && inauguracao.dani ? [irmaoDani] : [])];
@@ -8578,7 +8634,7 @@ function itensOcorrencia(alvo){
 // ================= trilha ecológica: um mirante na beira da mata; de dia e de tarde chegam visitantes que sobem nele,
 // fazem a trilha e deixam uma contribuição na caixinha. Quanto mais saudável a mata, maior a contribuição. Os nanos do
 // Nano Hostel ganham um mirante do tamanho deles. Os visitantes não ficam no save.
-const MIRANTE = { nivel: 21, preco: 12000, x0: 15, z0: 24, x1: 16, z1: 25, taxa: 70, primeira: [40, 90], intervalo: [240, 480], vel: 0.85, escada: 0.7, sV: 1 / 44 };
+const MIRANTE = { nivel: 21, preco: 12000, ...naZona('mata', { x0: 15, z0: 2, x1: 16, z1: 3 }), taxa: 70, primeira: [40, 90], intervalo: [240, 480], vel: 0.85, escada: 0.7, sV: 1 / 44 };
 let miranteM = null, miranteTopo = null, placaMirante = null, bolhaMirante = null, grupoTrilha = null, proxTrilha = null, miniMirante = null;
 const centroMirante = () => [(MIRANTE.x0 + MIRANTE.x1 + 1) / 2, (MIRANTE.z0 + MIRANTE.z1 + 1) / 2];
 function montarMirante(){
@@ -11490,7 +11546,7 @@ function realizarPedido(P){
   hud(); salvar();
 }
 // ---- a cena da chuva de meteoros: a família deitada em cangas na frente do observatório, olhando o céu
-const CHUVA_CENA = { z: 40.25, x0: 23.2, passo: 1.02, vista: 6.4 };
+const CHUVA_CENA = { z: zz('observatorio', 9.25), x0: zx('observatorio', 0.2), passo: 1.02, vista: 6.4 };
 let chuvaCena = null;
 function limparChuvaCena(){
   const C = chuvaCena; if (!C) return;
@@ -11652,10 +11708,10 @@ const ladoDoPouso = () => chaoPerto(...pousoMundo(), 3) || frenteTorre();
 const PLANETARIO = { ingresso: 400, sessao: 7, excursao: 0.75, spa: 0.3, max: 30000 };
 const FALAS_PLANETARIO = ['Oinc! (sai da sessão de olho arregalado)', 'Oinc oinc! (aponta pro céu, contando o que viu)', 'Óinc! (viu Saturno de dia!)', 'Oinc! (quer voltar amanhã)', 'Oinc-oinc! (imita uma estrela cadente)', 'Óóinc! (que cúpula linda por dentro)', 'Oinc! (comprou um chaveiro de cometa)', 'Oinc oinc! (sessão de planetário nota dez)', 'Oinc! (ainda vendo estrelinha)', 'Óinc! (achou a constelação do Porquinho)', 'Oinc! (piscando, desacostumou com o sol)', 'Oinc-oinc! (conta das luas de Júpiter)', 'Oinc! (dá tchau pra cúpula)', 'Óinc! (melhor passeio da excursão)', 'Oinc oinc! (quer ser astronauta)', 'Oinc! (cochilou na sessão e não conta pra ninguém)', 'Óóinc! (a nebulosa parece algodão-doce)', 'Oinc! (vai contar pros netos)', 'Oinc-oinc! (tirou foto da luneta)', 'Oinc! (saiu cantarolando)'];
 const planetarioAberto = () => obraConcluida('observatorio') && periodo().id !== 'noite';
-// da porta do spa até a porta da torre e de volta: pelo caminho de cima do spa, a descida em x 28 e a rua de baixo
+// da porta do spa até a porta da torre e de volta: pelo caminho de cima do spa, pelo gramado ao lado da descida e pela rua de baixo
 function desvioPlanetario(){
-  const [dx, dz] = portaTorre();
-  return [[28.5, 43.5], [28.5, 40.5], [dx, 40.5], [dx, dz + 1.3], [dx, dz + 0.15, 'planetario'], [dx, dz + 1.3], [dx, 40.5], [28.5, 40.5], [28.5, 43.5]];
+  const [dx, dz] = portaTorre(), xs = zx('spa', 6.5), zs = zz('spa', 2.5), zr = RUA_BAIXO_Z + 0.5;
+  return [[xs, zs], [xs, zr], [dx, zr], [dx, dz + 1.3], [dx, dz + 0.15, 'planetario'], [dx, dz + 1.3], [dx, zr], [xs, zr], [xs, zs]];
 }
 // chegou na porta da torre: some lá dentro a sessão inteira e paga o ingresso
 function entrarNoPlanetario(v){
@@ -11881,8 +11937,8 @@ function limparVolta(){
 // origem no meio da roda (ARRAIA.meio); os ângulos da roda contam a partir de +x, com 90° para o sul (a frente da câmera)
 // A roda (11 ladrilhos de largura, contando os postes) encosta na beira de baixo e na da direita do mapa; as duas barracas
 // ficam atrás dela, do lado do museu e do resort
-const ARRAIA = { nivel: 50, meio: [46.7, 45.3], ed: 90, roda: 2.3, fora: 4.2, perto: 3.4, inicio: 0.66, fim: 0.82, noite: 0.78, mastro: [0.75, -1.3],
-  postes: [30, 90, 150, 210, 270, 330], raioPostes: 5.3, barracas: [[40.5, 42.4, 'milho'], [43.4, 39.6, 'pescaria']], disco: [3.3, 3.1, -2.6] };
+const ARRAIA = { nivel: 50, meio: zp('festa', 11.7, 13.3), ed: 90, roda: 2.3, fora: 4.2, perto: 3.4, inicio: 0.66, fim: 0.82, noite: 0.78, mastro: [0.75, -1.3],
+  postes: [30, 90, 150, 210, 270, 330], raioPostes: 5.3, barracas: [[...zp('festa', 5.5, 10.4), 'milho'], [...zp('festa', 8.4, 7.6), 'pescaria']], disco: [3.3, 3.1, -2.6] };
 // a quadrilha: uma volta inteira da roda em tempo segundos; luma, o lugar da Luma na roda (o mesmo de lumaSaiPara)
 const ARRAIA_QUADRILHA = { tempo: 12, luma: 62 };
 // as cartelas do fim da festa: [frase, assinatura, texto corrido]; espera, os segundos antes de aceitar o toque. Depois da
@@ -12984,7 +13040,7 @@ function gerarIcones(){
 }
 const icone = n => (ICONE[n] || ICONE.semente).url;
 
-const cam = { alvo: new THREE.Vector3(14, 0, 12), az: Math.PI / 4, azAlvo: Math.PI / 4, vista: 16, el: Math.atan(1 / Math.SQRT2) };
+const cam = { alvo: new THREE.Vector3(14, 0, zz('horta', 9)), az: Math.PI / 4, azAlvo: Math.PI / 4, vista: 16, el: Math.atan(1 / Math.SQRT2) };
 function iniciarRender(){
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -13122,7 +13178,7 @@ const geo = (chave, fn) => GEO[chave] || (GEO[chave] = fn());
 const CHAVE_SALVO = 'fazendaJoliPig.v1';
 let S = null;
 function estadoNovo(){
-  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedidos: [], versao: 3, mapa: 3, feito: [], dicas: true, alimentador: {}, coletor: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], pomarBlocos: [], colmeias: [], enfeites: [], guardados: {}, parcelas: [], mata: [], trufas: [], maca: null, macaAte: 0, anotado: false, som: true, nAnimal: 0, vendeu: 0, viuCineInicio: false, salvoEm: Date.now() };
+  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedidos: [], versao: 3, mapa: 4, feito: [], dicas: true, alimentador: {}, coletor: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], pomarBlocos: [], colmeias: [], enfeites: [], guardados: {}, parcelas: [], mata: [], trufas: [], maca: null, macaAte: 0, anotado: false, som: true, nAnimal: 0, vendeu: 0, viuCineInicio: false, salvoEm: Date.now() };
   const l = LOTES[2];
   for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) s.campo[x + ',' + z] = { e: 'grama' };
   for (const [dx, dz] of [[2, 2], [3, 2], [2, 3], [3, 3]]) s.campo[(l.x + dx) + ',' + (l.z + dz)] = { e: 'arado' };
@@ -13156,12 +13212,16 @@ function migrar(){
   }
   if (!(S.mapa >= 2)) migrarMapa();
   if (!(S.mapa >= 3)) migrarHorta();
+  if (!(S.mapa >= 4)) migrarZonas();
   // a sexta parcela da mata virou a cachoeira: quem já tinha comprado recebe o dinheiro de volta (as árvores dela saem)
-  if (Array.isArray(S.parcelas) && S.parcelas.length > PARCELAS.length){
-    if (S.parcelas.slice(PARCELAS.length).some(Boolean)){ S.dinheiro += PARCELA_SEXTA.preco; parcelaDevolvida = true; }
-    S.parcelas.length = PARCELAS.length;
+  // (antes do mapa 4, que trouxe parcelas novas no lugar dela na lista)
+  if (!(S.mapa >= 4)){
+    if (Array.isArray(S.parcelas) && S.parcelas.length > PARCELAS_MAPA3){
+      if (S.parcelas.slice(PARCELAS_MAPA3).some(Boolean)){ S.dinheiro += PARCELA_SEXTA.preco; parcelaDevolvida = true; }
+      S.parcelas.length = PARCELAS_MAPA3;
+    }
+    if (Array.isArray(S.mata) && S.mata.length > PARCELAS_MAPA3 * 6) S.mata.length = PARCELAS_MAPA3 * 6;
   }
-  if (Array.isArray(S.mata) && S.mata.length > MATA_SLOTS.length) S.mata.length = MATA_SLOTS.length;
   // as fábricas novas viraram a ampliação da original (o Lucas pediu): quem tinha a cópia fica com a original ampliada, na
   // reforma maior das duas, e a fila, o que estava pronto, a esteira e o repetidor da cópia passam para a original. A obra
   // que estava em andamento na cópia entra pronta
@@ -13190,6 +13250,8 @@ let parcelaDevolvida = false;
 // fábricas, o meio da fazenda e o sul). Os terrenos de canteiros foram redesenhados, então cada canteiro vai para o mesmo
 // lugar do seu terreno. O que não couber no lugar novo (enfeite, trufa, maçã) é conferido ao abrir (conferirMapaNovo)
 const mapaNovoZ = z => z + (z >= 6) + 4 * (z >= 11) + (z >= 21);
+// os terrenos da horta no mapa 3, para levar os saves do mapa 1 até lá
+const LOTES_MAPA3 = [{ x: 2, z: 10 }, { x: 7, z: 10 }, { x: 12, z: 10 }, { x: 2, z: 16 }, { x: 7, z: 16 }, { x: 12, z: 16 }];
 const mapaNovoX = (x, z) => x + (x >= 7) + (x >= 10) + (x >= 18) + (x >= 20)
   + (z < 6 ? (x >= 23) + (x >= 27) + 10 * (x >= 30) : z < 17 ? 10 * (x >= 23) + (x >= 27) + (x >= 30) : 0);
 let mapaMigrado = false;
@@ -13198,7 +13260,7 @@ function migrarMapa(){
   for (const k in S.campo){
     const [x, z] = k.split(',').map(Number);
     if (x < 2 || x > 13 || z < 7 || z > 14) continue;
-    const l = ((z - 7) >> 2) * 3 + ((x - 2) >> 2), L = LOTES[l];
+    const l = ((z - 7) >> 2) * 3 + ((x - 2) >> 2), L = LOTES_MAPA3[l];
     campo[(L.x + (x - 2) % 4) + ',' + (L.z - HORTA_DESCE + (z - 7) % 4)] = S.campo[k];
   }
   S.campo = campo;
@@ -13222,6 +13284,36 @@ function migrarHorta(){
   S.campo = campo;
   for (const e of S.enfeites || []) if (e && naHorta(e.x, e.z)) e.z += HORTA_DESCE;
   S.mapa = 3; hortaMigrada = true;
+}
+// o mapa 4 (o Lucas pediu o dobro da área, mantendo as construções e o que está em volta delas): cada ponto do mapa 3
+// anda com a sua região. Fica congelado aqui para converter os saves; daqui para a frente as zonas (ZONAS) guardam o lugar
+// de cada coisa, e a próxima ampliação converte pelas zonas
+function mapa4(x, z){
+  if (z < 6){   // a fileira de cima: a sede e as fábricas, espaçadas
+    const d = x < 20 ? 0 : x < 24 ? 4 : x < 30 ? 7 : x < 38 ? 11 : x < 46 ? 15 : 18;
+    return [x + d, z];
+  }
+  if (z < 21 || (z < 22 && x < 46)){   // o meio da fazenda, até a cerca: a horta, os cercados e o pomar
+    if (x < 18) return [x, z + (z < 10 ? 0 : z < 14 ? 3 : 5)];
+    return [x + (x < 37 ? 6 : 12), z + (z < 7 ? 0 : z < 14 ? 3 : 5)];
+  }
+  if (z < 22) return [x + 9, z + 5];   // o coletor e o alimentador dos patos, na cerca
+  if (x < 18) return [x, z + 5];       // a orla, a mata e a cachoeira
+  if (x < 23) return [x + 9, z + 5];   // o matagal, a estrada e a cerca dela
+  if (x < 29 && z < 34) return [x + 9, z + 5];   // a clareira
+  if (z < 28 || (x >= 47 && z < 30)) return [x + 9, z + 5];   // o lago, a ponte, a rua do lago e os patos
+  if (z < 41) return [x + (x < 30 ? 9 : x < 42 ? 12 : 17), z + 8];   // o observatório e a descida, o plantio, o resort
+  return x < 40 ? [x + 9, z + 8] : [x + 19, z + 17];   // o spa; o museu e o campo da festa
+}
+let zonasMigradas = false;
+function migrarZonas(){
+  const mv = (o, kx = 'x', kz = 'z') => { if (o && typeof o[kx] === 'number' && typeof o[kz] === 'number'){ const [x, z] = mapa4(o[kx], o[kz]); o[kx] = x; o[kz] = z; } };
+  const chaves = c => { const n = {}; for (const k in c){ const [x, z] = k.split(',').map(Number); n[mapa4(x, z).join(',')] = c[k]; } return n; };
+  S.campo = chaves(S.campo || {});
+  if (S.circulo && S.circulo.tiles) S.circulo.tiles = chaves(S.circulo.tiles);
+  (S.enfeites || []).forEach(e => mv(e)); (S.trufas || []).forEach(t => mv(t)); (S.animais || []).forEach(d => mv(d));
+  if (S.maca){ mv(S.maca); mv(S.maca, 'ax', 'az'); }
+  S.mapa = 4; zonasMigradas = true;
 }
 // depois de migrar o save, ao abrir: enfeite que caiu fora de um gramado livre volta para a loja, e trufa ou maçã que
 // não ficou ao lado de uma árvore some (nasce outra depois)
@@ -13273,7 +13365,7 @@ function conferirMapaNovo(){
   const pertoDeArvore = (x, z) => tipo(x, z) === 'grama' && ARVORES.some(([ax, az]) => Math.abs(ax - x) + Math.abs(az - z) === 1);
   if (Array.isArray(S.trufas)) S.trufas = S.trufas.filter(t => pertoDeArvore(t.x, t.z));
   if (S.maca && !pertoDeArvore(S.maca.x, S.maca.z)) S.maca = null;
-  const txt = 'A fazenda cresceu! As construções ficaram mais espaçadas, o galinheiro e o curral novos ficam ao lado dos primeiros e sobrou espaço para o que vem por aí.'
+  const txt = 'A fazenda dobrou de tamanho! As construções ficaram mais espaçadas, com tudo o que estava em volta delas, e a mata ganhou sete parcelas novas.'
     + textoEnfeitesVoltaram(n);
   setTimeout(() => aviso(txt, 'grande', 7), 1800);
 }
@@ -13653,7 +13745,8 @@ function montarCachoeira(){
   const m = malha(geo('cachoeira', () => vCachoeira().build(1 / 8, { origin: [0, 0, 0], jitter: 0.03 })));
   m.position.set(C.x0, 0, C.z0); scene.add(m);
   // árvores em cima do paredão, longe da queda
-  for (const [x, z, i] of [[0.6, 44, 1], [0.5, 48.7, 0], [1.05, 49.7, 2], [0.4, 45.1, 2]]){
+  for (const [x, dz, i] of [[0.6, 1, 1], [0.5, 5.7, 0], [1.05, 6.7, 2], [0.4, 2.1, 2]]){
+    const z = C.z0 + dz;
     const k = Math.floor((z - C.z0) * 8), a = malha(geo('copa' + i, () => vCopa(i).build(1 / 8, { origin: [4, 0, 4] })), false);
     a.position.set(x, topoCachoeira(k) / 8 - 0.02, z); a.rotation.y = Math.floor(hash(k, 79, i) * 4) * Math.PI / 2; scene.add(a);
   }
@@ -13716,12 +13809,12 @@ function montarPlacasMata(){
     if (PLACA_MATA[p]){ scene.remove(PLACA_MATA[p]); const k = pickaveis.indexOf(PLACA_MATA[p]); if (k >= 0) pickaveis.splice(k, 1); PLACA_MATA[p] = null; }
     if (BOLHA_MATA[p]){ scene.remove(BOLHA_MATA[p]); BOLHAS.splice(BOLHAS.indexOf(BOLHA_MATA[p]), 1); BOLHA_MATA[p] = null; }
     // as parcelas de trás só têm acesso pela trilha da parcela da frente
-    if (parcelaComprada(p) || (p >= 2 && !parcelaComprada(p - 2))) return;
+    if (parcelaComprada(p) || (P.frente >= 0 && !parcelaComprada(P.frente))) return;
     const pl = malha(geo('placa', () => vPlaca().build(1 / 16, { origin: [8, 0, 8] })));
     const tx = placaDeTexto(texturaTexto([['MATA À VENDA', 1, '#2f7a3a'], [`nível ${P.nivel}`, 0.7, '#7a4a2a']], 256, 112, '#f3e3c3'), 13 / 16, 6 / 16);
     tx.position.set(0, 11 / 16, 1.1 / 16); pl.add(tx);
     // as da frente ficam na orla, onde as árvores não as escondem
-    const zPlaca = p < 2 ? P.z0 - 2.4 : P.z0 - 0.4;
+    const zPlaca = P.frente < 0 ? P.z0 - 2.4 : P.z0 - 0.4;
     pl.position.set(P.col + 1.3, 0, zPlaca);
     scene.add(pl); PLACA_MATA[p] = pl;
     pl.traverse(o => { o.userData.alvo = { k: 'parcela', p }; }); pickaveis.push(pl);
@@ -13799,8 +13892,12 @@ let placaCanto = null, bolhaCanto = null;
 // os caminhos do canto Sul (o Lucas pediu, como os da fazenda): a rua da beira do lago, que sai da ponte para os dois
 // lados; a descida até a rua de baixo, que encontra o caminho do spa; a rua de baixo, que passa na porta do observatório e
 // do resort; e o ramal até a porta do museu. [x0, z0, x1, z1] de cada trecho. Ficam de terra, como a rua de cima, e o varal
-// de luzes vai por eles também (VARAL.canto)
-const CAMINHOS_CANTO = [[27, 27, 46, 27], [29, 28, 29, 42], [27, 40, 48, 40], [48, 39, 48, 39], [44, 41, 44, 47], [45, 47, 45, 47]];
+// de luzes vai por eles também (VARAL.canto). Cada rua sai das zonas que ela liga: a do lago, da clareira até os patos; a
+// descida, entre o observatório e o plantio, até a porta do spa; a de baixo, da porta do observatório até a do resort
+const RUA_LAGO_Z = zz('lago', 5), RUA_BAIXO_Z = zz('observatorio', 9), DESCIDA_X = zx('observatorio', 6), RAMAL_X = zx('festa', 9);
+const CAMINHOS_CANTO = [[zx('clareira', 4), RUA_LAGO_Z, zx('lago', 17), RUA_LAGO_Z], [DESCIDA_X, RUA_LAGO_Z + 1, DESCIDA_X, zz('spa', 1)],
+  [zx('observatorio', 4), RUA_BAIXO_Z, zx('resort', 9), RUA_BAIXO_Z], [zx('resort', 9), RUA_BAIXO_Z - 1, zx('resort', 9), RUA_BAIXO_Z - 1],
+  [RAMAL_X, RUA_BAIXO_Z + 1, RAMAL_X, zz('festa', 15)], [RAMAL_X + 1, zz('festa', 15), RAMAL_X + 1, zz('festa', 15)]];
 const noCaminhoCanto = (x, z) => CAMINHOS_CANTO.some(([x0, z0, x1, z1]) => x >= x0 && x <= x1 && z >= z0 && z <= z1);
 function liberarTilesDoCanto(){
   // as construções da clareira, o lago e a ponte continuam lá; os terrenos de canteiros e as colmeias de lá passam a existir
@@ -14070,8 +14167,8 @@ function refazerCercas(){
 // do Ed quando é tocado, às vezes tem ciúme quando o Ed recolhe os ovos e às vezes foge. Nada disso vai para o save:
 // ao abrir o jogo ele está no mourão
 const POUSO_GALO = {
-  galinheiro: { mourao: [20, 11], ry: Math.PI / 2, dentro: [20, 10], fora: [20, 12] },
-  galinheiro2: { mourao: [30, 11], ry: Math.PI / 2, dentro: [30, 10], fora: [30, 12] },
+  galinheiro: { mourao: zp('cercados', 8, 8), ry: Math.PI / 2, dentro: zp('cercados', 8, 7), fora: zp('cercados', 8, 9) },
+  galinheiro2: { mourao: zp('cercados', 18, 8), ry: Math.PI / 2, dentro: zp('cercados', 18, 7), fora: zp('cercados', 18, 9) },
 };
 const ALTURA_MOURAO = 13 / 16, GIRO_GALO = 0.6, ESCALA_GALO = 1 / 19;
 // os pivôs das partes, em cubinhos: o pescoço e os ombros
@@ -14476,7 +14573,7 @@ const obraVis = { estado: '', tfala: 0, pontos: null, aqui: null, acao: null, es
 // parede mais perto e trabalha ali um pouco (OBRA_ACOES, segundos de cada ação)
 const OBRA_ACOES = { trena: [4, 6.5], martelo: [3, 5], prancheta: [3, 4.5], apontar: [2, 3] };
 function pontosObra(id){
-  if (PREDIO[id].fora){ const p = PREDIO[id], out = []; for (let x = p.x0 - 2; x <= p.x1; x++) if (andavel(x, 0) && rota(PARADA | 0, Z_CERCA - 1, x, 0)) out.push([x + 0.5, 0.45]); return out.length ? out : [[44.5, 0.5]]; }
+  if (PREDIO[id].fora){ const p = PREDIO[id], out = []; for (let x = p.x0 - 2; x <= p.x1; x++) if (andavel(x, 0) && rota(PARADA | 0, Z_CERCA - 1, x, 0)) out.push([x + 0.5, 0.45]); return out.length ? out : [[W - 7.5, 0.5]]; }
   const p = PREDIO[id], out = [], baixos = cubinhosBaixos(id);
   const livre = (x, z) => !baixos.some(([bx, bz]) => Math.abs(bx - x) < 0.36 && Math.abs(bz - z) < 0.36);
   for (let x = p.x0 - 1; x <= p.x1 + 1; x++) for (let z = p.z0 - 1; z <= p.z1 + 1; z++){
@@ -16262,7 +16359,7 @@ const CAMINHAO_MARKET = [false, [['JOLI', 1, '#2f6fb3'], ['MARKET', 0.62, '#e040
 // (montarGradeSpa, caminhoSpa, como as hóspedes do resort) e pulam para o lugar da atividade. De noite não chega ninguém, e
 // quem está lá termina o que faz e vai embora. Os visitantes não ficam no save; só os totais (S.spaEntradas, S.spaReais e
 // S.spaHoje, o dia de hoje)
-Object.assign(SPA, { entrada: 300, xp: 250, vao: [22, 43], giro: Math.PI, chegada: [70, 150], primeira: [6, 15], familia: [240, 480], max: 8,
+Object.assign(SPA, { entrada: 300, xp: 250, vao: [COL_CURVA + 1, zz('spa', 2)], giro: Math.PI, chegada: [70, 150], primeira: [6, 15], familia: [240, 480], max: 8,
   vel: 0.55, velFamilia: 0.85, quer: [2, 4], paga: [15.2, 36.5], porta: [12, 47], maxSauna: 3,
   tempo: { lama: [14, 24], ofuro: [12, 20], sauna: [9, 15], ducha: [3.5, 5], cadeira: [14, 24], passeio: [2, 4] },
   peso: { lama: 4, ofuro: 2, sauna: 2, cadeira: 3, passeio: 1 },
@@ -16361,7 +16458,7 @@ function estradaDoSpa(){
 // o estacionamento do ônibus de excursão (o Lucas pediu, no gramado entre a estrada e a cerca de cima do spa): x0 a x1,
 // z0 a z1, com um vão na cerca da estrada (entrada) e o asfalto com a vaga pintada e a placa por cima (montarEstacionamento).
 // O ônibus para em vaga (o meio dele), de frente para +x, com a porta virada para o spa
-const ESTACIONAMENTO = { x0: 23, x1: 27, z0: 41, z1: 42, entrada: 22, vaga: [25.2, 42] };
+const ESTACIONAMENTO = { ...naZona('spa', { x0: 1, x1: 5, z0: 0, z1: 1 }), entrada: COL_CURVA + 1, vaga: zp('spa', 3.2, 1) };
 function abrirPassagemSpa(refazer = true){
   const [vx, vz] = SPA.vao, [ax] = mundoSpa(SPA.porta[0] + 0.5, 0), x1 = Math.floor(ax), E = ESTACIONAMENTO;
   const noEstac = (x, z) => x >= E.entrada && x <= E.x1 && z >= E.z0 && z <= E.z1;
@@ -17610,7 +17707,7 @@ const falasFesta = () => [
   ['ed', 'Ed', 'Obrigado, família! Essa fazenda é de todos nós.'],
   ['todos', 'Todos', 'Viva a Fazenda Joli Pig!', 'festa'],
 ];
-const PONTO_ED = [18.5, 18.5], PONTO_PELUCIO = [17.5, 19.5];
+const PONTO_ED = zp('horta', 18.5, 17.5), PONTO_PELUCIO = zp('horta', 17.5, 18.5);
 // cena do Jaca: conversa no mesmo lugar da do Pelúcio; no fim ele anda até o lugar de espera das visitas
 const JACA_ESPERA = [PARADA, Z_CERCA - 0.6], JACA_CENA = PONTO_PELUCIO, JACA_ED = PONTO_ED;
 // a missão das nanos: as falas mudam a cada vez ({n} é o número da missão, {prox} o da próxima)
@@ -17664,7 +17761,7 @@ const FALAS_PICOCA = [
   ['picoca', 'Picoça', 'Nem de pescoço vazio. Agora, vamos ver esse café?'],
 ];
 // onde a Picoça fica na conversa e esperando a venda, do ladinho do Pelúcio
-const PONTO_PICOCA = [19.7, 19.1], ESPERA_PICOCA = [PARADA + 1, Z_CERCA - 0.45];
+const PONTO_PICOCA = zp('horta', 19.7, 18.1), ESPERA_PICOCA = [PARADA + 1, Z_CERCA - 0.45];
 // a caneca da Joli Coffee vai para o Ed, uma vez só (na reprise só a festinha)
 function presenteDaPicoca(){
   if (cine.presente || cine.reprise) return;
@@ -17678,19 +17775,19 @@ function limparPicoca(){
   caminhao.visible = false;
 }
 // cena do Hud: a porta da casa, onde o Ed espera, onde o Hud para e o canteiro da demonstração (no primeiro terreno)
-const HUD_PORTA = [5.5, 5.6], HUD_ED = [9.5, 6.5], HUD_PARA = [8.5, 6.5];
+const HUD_PORTA = zp('sede', 5.5, 5.6), HUD_ED = zp('sede', 9.5, 6.5), HUD_PARA = zp('sede', 8.5, 6.5);
 // cena do Dani: o Ed e o Hud conversam na frente da casa e o Dani chega pela estradinha de cima, vindo do leste.
 // Os três ficam numa fileira de lado na tela (Hud à esquerda, Dani à direita) e o Ed um pouco atrás, no meio: virados
 // para o meio, os três mostram o rosto para a câmera (que fica no lado +x +z)
-const DANI_CENA = { ed: [9.42, 6.11], hud: [8.89, 7.21], dani: [10.41, 5.69], entra: [19.5, 5.5], meio: [9.6, 6.5] };
+const DANI_CENA = { ed: zp('sede', 9.42, 6.11), hud: zp('sede', 8.89, 7.21), dani: zp('sede', 10.41, 5.69), entra: zp('sede', 19.5, 5.5), meio: zp('sede', 9.6, 6.5) };
 // a demonstração usa o canteiro do canto do primeiro terreno; o Hud fica no gramado ao lado, entre o canteiro e a câmera
 const canteiroHud = () => { const l = LOTES[2]; return [l.x + 3, l.z + 3]; };
-const HUD_DEMO = [16.4, 11.5];
+const HUD_DEMO = zp('horta', 16.4, 8.5);
 // cena inicial: [Ed, Beto] logo depois da porteira e depois de entrar; ficam um de cada lado na tela, de perfil para a câmera
-const INI_PORTAO = [[18.0, 18.4], [17.2, 19.2]], INI_DENTRO = [[17.8, 17.5], [17.0, 18.3]];
+const INI_PORTAO = [zp('horta', 18, 17.4), zp('horta', 17.2, 18.2)], INI_DENTRO = [zp('horta', 17.8, 16.5), zp('horta', 17, 17.3)];
 // o passeio da câmera na fala 3: casa, celeiro, galinhas e o primeiro terreno
 // [x, z, vista, altura, vista na tela estreita]; vista = altura visível em ladrilhos
-const PASSEIO = [[4.8, 3.0, 9, 1, 12.5], [17, 2.4, 9, 1.1, 16], [22.6, 9.6, 7, 0.3, 10], [14, 10, 12, 0.3, 16.2]], PASSEIO_T = 1.5;
+const PASSEIO = [[...zp('sede', 4.8, 3), 9, 1, 12.5], [...zp('sede', 17, 2.4), 9, 1.1, 16], [...zp('cercados', 10.6, 6.6), 7, 0.3, 10], [...zp('horta', 14, 7), 12, 0.3, 16.2]], PASSEIO_T = 1.5;
 const telaEstreita = () => innerWidth / innerHeight < 0.8;
 const centroDe = (a, b) => new THREE.Vector3((a[0] + b[0]) / 2 + 0.25, 0.35, (a[1] + b[1]) / 2 + 0.6);
 // as galinhas cacarejam e dão um pulinho
@@ -17746,7 +17843,7 @@ function presenteMiltonCena(){
 }
 // Festa: o Ed no cruzamento em frente ao celeiro, os outros em meia-lua na frente dele
 // a lambreta para à frente do caminhão e sai primeiro, senão atravessaria os outros veículos na estrada
-const FESTA_ED = [17.5, 6.5], FESTA_VAN = PARADA - 3.4, FESTA_LAMBRETA = PARADA + 3;
+const FESTA_ED = zp('sede', 17.5, 6.5), FESTA_VAN = PARADA - 3.4, FESTA_LAMBRETA = PARADA + 3;
 const festaRoda = () => ({ pelucio: [-1.5, 0.3], beto: [-0.95, 1.2], jaca: [0.2, 1.5], hud: [1.15, 0.95], patrinho: [0.95, -0.15] });
 const CORES_FESTA = [0xff4d6d, 0xffd23f, 0x4dabf7, 0x69db7c, 0xf783ac, 0xffffff, 0xb197fc];
 function confete(x, y, z, n = 1, espalha = 0.8){
@@ -17776,7 +17873,7 @@ function limparFesta(){
 // Um cafezinho (nível 3+, se repete): o Ed para na frente da casa com uma mesinha, chocolate quente e bolo ou fruta, às vezes com o Milton e um convidado.
 // Não mexe em nada do save além de S.viuCafezinho; o relógio da próxima vez fica só na memória.
 // centro da mesinha: primeiro a fileira z = 4 a leste da casa (longe do milho do primeiro terreno), depois a estradinha z = 5
-const CAFE_LUGARES = [[13, 4.5], [9, 4.5], [12.5, 5], [10.5, 5]];
+const CAFE_LUGARES = zps('sede', [[13, 4.5], [9, 4.5], [12.5, 5], [10.5, 5]]);
 // a mesa gira 45 graus, para um lado dela ficar de frente para a câmera; posições no sistema da mesa: x para a direita da tela, z para a câmera
 const CAFE_ASSENTO = { ed: [0, -0.85], hud: [-0.85, 0], conv: [0.85, 0] };
 const CAFE_BANCO = 6 / 19, CAFE_TOPO = 11 / 19, CAFE_PRATO = [-0.25, 0.15], CAFE_CANECA = [0.28, 0.15], CAFE_GIRO = Math.PI / 4;
@@ -18961,10 +19058,10 @@ const CENAS = {
     foco(c){
       const p = c.passo, v = (x, z) => new THREE.Vector3(x, 0.4, z);
       const dx = telaEstreita() ? -2.4 : 0; // em tela estreita a câmera abre mais para a esquerda, onde a van para
-      if (p === 'f-chega') return v(16.6 + dx, 14.5);
-      if (p === 'f-sobem'){ const zs = [beto, jaca, pelucio, patrinho].filter(q => q.g.visible).map(q => q.pos.y); return v(17.3 + dx, zs.length ? clamp(zs.reduce((a, b) => a + b) / zs.length, 8.5, 17.5) : 15); }
-      if (p === 'festa' && c.t >= 2.4) return v(16.4, 14.5);
-      return v(17.4, 7.3);
+      if (p === 'f-chega') return v(zx('horta', 16.6) + dx, zz('horta', 13.5));
+      if (p === 'f-sobem'){ const zs = [beto, jaca, pelucio, patrinho].filter(q => q.g.visible).map(q => q.pos.y); return v(zx('horta', 17.3) + dx, zs.length ? clamp(zs.reduce((a, b) => a + b) / zs.length, zz('sede', 8.5), zz('horta', 16.5)) : zz('horta', 14)); }
+      if (p === 'festa' && c.t >= 2.4) return v(zx('horta', 16.4), zz('horta', 13.5));
+      return v(...zp('sede', 17.4, 7.3));
     },
     vista(c){
       const f = telaEstreita() ? 1.45 : 1, p = c.passo;
@@ -19020,7 +19117,7 @@ const CENAS = {
             const [lx, lz] = lugar(nome);
             p.g.visible = true; p.colocar(x0, Z_CERCA + 0.85); p.ang = p.angAlvo = Math.PI; p.estado = 'parado'; p.pontos = [];
             const subida = veic !== 'caminhao' ? [[x0 + (veic === 'van' ? 1.9 : -1.9), Z_CERCA + 0.85], [PARADA, Z_CERCA + 0.4], [PARADA, Z_CERCA - 0.6]] : [[x0 + (nome === 'jaca' ? 0.25 : -0.2), Z_CERCA + 0.4], [x0 + (nome === 'jaca' ? 0.25 : -0.2), Z_CERCA - 0.6]];
-            p.ir([...subida, [Ex, 9.6], [lx, lz]], () => chegou(p));
+            p.ir([...subida, [Ex, zz('sede', 9.6)], [lx, lz]], () => chegou(p));
           }
           if (c.n >= c.total && ed.estado === 'parado'){
             ed.olhar(Ex, Ez + 1.3); ed.angAlvo = anguloPerto(ed.angAlvo, cam.azAlvo, 0.42);
@@ -20581,7 +20678,7 @@ function encerrarCine(){
 const COMPOSTEIRA = {
   nivel: 16,
   // gramado livre ao lado da estrada de terra, à direita das construções; a porta fica no caminho de cima da fazenda
-  x0: 48, z0: 2, x1: 49, z1: 3, porta: [48, 4],
+  ...naZona('fabricas', { x0: 46, z0: 2, x1: 47, z1: 3, porta: [46, 4] }),
   restoMax: 60, restosPorSaco: 3, xpSaco: 1,
   cerejasPorResto: 4,
   comida: ['rabanete', 'cenoura', 'alface', 'couve', 'tomate', 'batata', 'milho', 'cebola', 'laranja', 'goiaba', 'manga'], lote: 5,
@@ -21989,18 +22086,21 @@ function pontosDeLuz(){
 // Os mourões ficam na beira dos caminhos (em ladrilhos): a rua de terra na beira de baixo e o caminho até a porteira
 // na beira de lá. A luz que ele espalha vem do mapa de luz (MAPA_LUZ), sem luz de verdade do three.js
 // subida: segundos que o varal leva para brotar do chão quando anoitece
+// mourões de a até b, com as pontas, a cada passo mais ou menos
+const postesVaral = (a, b, passo = 3) => { const n = Math.max(1, Math.round((b - a) / passo)); return Array.from({ length: n + 1 }, (_, i) => +(a + (b - a) * i / n).toFixed(2)); };
 const VARAL = { nivel: 8, preco: 2000, xp: 10, alto: ALTO_VARAL, subida: 1.2,
   linhas: [
-    { eixo: 'x', w: 5.92, pos: [4.1, 7, 10, 13.5, 17.08, 20, 23, 26, 29, 32, 35, 38, 41, 44, 47, 49.5, 51.85] },
-    { eixo: 'z', w: 17.08, pos: [5.92, 9, 12, 15, 18, 20.85] },
+    { eixo: 'x', w: Z_CAMINHO + 0.92, pos: [zx('sede', 4.1), zx('sede', 7), zx('sede', 10), zx('sede', 13.5), ...postesVaral(X_PORTEIRA + 0.08, W - 0.15)] },
+    { eixo: 'z', w: X_PORTEIRA + 0.08, pos: postesVaral(Z_CAMINHO + 0.92, Z_CERCA - 0.15) },
   ],
   // no canto Sul, depois que a cerca sai (linhasVaral): a rua da beira do lago, a descida e a rua de baixo (CAMINHOS_CANTO),
   // com os mourões dos cantos em comum, como na fazenda. O ramal do museu fica sem, para não esbarrar nos postes do ArraiEd
   canto: [
-    { eixo: 'x', w: 27.08, pos: [27.1, 29.08, 32, 35, 38, 41, 44, 46.9] },
-    { eixo: 'z', w: 29.08, pos: [27.08, 30.5, 34, 37.5, 40.92] },
-    { eixo: 'x', w: 40.92, pos: [27.1, 29.08, 32, 35, 38, 41, 44.08] },
+    { eixo: 'x', w: RUA_LAGO_Z + 0.08, pos: [zx('clareira', 4.1), ...postesVaral(DESCIDA_X + 0.08, zx('lago', 17.9))] },
+    { eixo: 'z', w: DESCIDA_X + 0.08, pos: postesVaral(RUA_LAGO_Z + 0.08, RUA_BAIXO_Z + 0.92, 3.5) },
+    { eixo: 'x', w: RUA_BAIXO_Z + 0.92, pos: [zx('observatorio', 4.1), ...postesVaral(DESCIDA_X + 0.08, RAMAL_X + 0.08)] },
   ] };
+
 const linhasVaral = () => S && S.canto === 2 ? VARAL.linhas.concat(VARAL.canto) : VARAL.linhas;
 // o canto abriu com o varal já comprado: ele é montado de novo, com as linhas de lá
 function refazerVaral(){ if (!varalMalha) return; scene.remove(varalMalha); varalMalha.traverse(o => { if (o.geometry) o.geometry.dispose(); }); varalMalha = null; montarVaral(); }
@@ -22474,7 +22574,7 @@ let aviao, helice, teco, jato, voo = { estado: 'fora', t: 0 }, motorSom = null, 
 // com o hangar novo, o jatinho às vezes pernoita: numa visita de tarde ou de noite o Milton dorme no hangar (voo.estado
 // 'pernoite', S.pernoite com o dia em que ele chegou), o jato fica parado na pista e na manhã seguinte ele toma o cafezinho
 // com o Ed (cafeDoMilton) e decola; sem cafezinho, decola quando começa a tarde (PERNOITE_SAI)
-const PERNOITE = { chance: 0.5, porta: [49.5, -4.25] }, PERNOITE_SAI = 0.4;
+const PERNOITE = { chance: 0.5, porta: [W - 2.5, -4.25] }, PERNOITE_SAI = 0.4;
 const FALAS_MILTON_PERNOITE = ['Hoje eu durmo no hangar novo! Amanhã cedo eu tomo um café com vocês.', 'Já está tarde pra voar. Vou pernoitar no hangar!', 'O hangar novo tem até caminha. Boa noite, fazenda!', 'Vou deixar o PIG-MTP descansar. E eu também!', 'Pernoite no hangar, café da manhã com o Ed. Combinado?', 'A torre de controle diz: hora de dormir!', 'Amanhã eu decolo cedinho, depois do café.', 'Que hangar caprichado! Vou testar a cama.', 'Voo noturno? Hoje não. Hangar!', 'Boa noite, Ed! Guarda um pedaço de bolo pra mim.', 'O jatinho fica na pista e eu fico no hangar. Até amanhã!', 'Boa noite, Ed! Vou dormir no hangar.', 'Hoje fico por aqui. Amanhã tem café?', 'O jatinho descansa e o piloto também!', 'Amanhã cedinho eu decolo. Boa noite!', 'Que bom ter um hangar na fazenda!', 'Vou dormir ouvindo os grilos!', 'Pernoite na fazenda! Que alegria.', 'Boa noite, família! Até o café da manhã.', 'O hangar novo é mais confortável que hotel!', 'Amanhã tem bolo no café, né?'];
 const FALAS_CAFE_PERNOITE = ['Bom dia, Ed! Dormi no hangar novo como um anjo.', 'Bom dia! Nada como um café antes de decolar.', 'Dormi feito pedra. O hangar é uma beleza!', 'Bom dia, família! O PIG-MTP já está com o tanque cheio.', 'Café da manhã na fazenda é outra coisa!', 'Bom dia! A torre de controle me acordou com o galo.', 'Antes de voar, um cafezinho com o irmão!', 'Bom dia, Ed! Que noite tranquila.', 'Pernoite aprovado! Volto mais vezes.', 'Hoje o céu está lindo pra decolar. Mas primeiro, o bolo!', 'Bom dia! Até o jatinho dormiu bem.', 'Bom dia! Que cama boa a do hangar!', 'Bom dia, Ed! Cadê o café?', 'Dormi ouvindo o galo, que despertador!', 'Bom dia! O jatinho já tá pronto.', 'Que manhã bonita pra voar!', 'Café com o irmão antes de decolar!', 'Bom dia, família! Que noite gostosa.', 'Acordei com cheiro de bolo!', 'Bom dia! O céu tá limpinho hoje.', 'Pernoite perfeito! Agora o café.'];
 // o avião não atrapalha a cena: fora ou pernoitando parado na pista
@@ -23583,7 +23683,7 @@ let tarefaAtual = null;
 // param { acao, semente }: o Ed anda até o galpão, sobe, vai pela rota até o terreno, faz as quatro fileiras em zigue-zague
 // (cada canteiro na hora em que o trator passa em cima), volta e guarda o trator. Atrás vai o arado, a plantadeira ou a
 // carreta, que enche com a colheita
-const TRATOR = { vel: 2.6, velLote: 1.5, escala: 1 / 14, assento: [-0.43, 0.8], vaga: [2.05, 8.1], giro: 7 };
+const TRATOR = { vel: 2.6, velLote: 1.5, escala: 1 / 14, assento: [-0.43, 0.8], vaga: zp('horta', 2.05, 2.1), giro: 7 };
 let trator = null, tratorVis = null;
 const contarTrator = (lote, acao) => tilesDoLote(lote).filter(([x, z]) => { const t = campo(x, z); if (!t || reservado({ k: 'tile', x, z })) return false; return acao === 'arar' ? t.e === 'grama' : acao === 'plantar' ? t.e === 'arado' : CONDICAO.colher(t); }).length;
 function checarTrator(tipoA, alvo, param){
@@ -24310,7 +24410,7 @@ function subiuNivel(n){
   if (n === COLMEIA.nivel) libs.push('colmeias');
   if (n === ADUBO.nivel) libs.push('adubo na loja');
   if (POMAR_BLOCOS.some(B => B.nivel === n && !B.canto)) libs.push('mais um terreno de pomar');
-  if (PARCELAS.some(P => P.nivel === n)){ libs.push(n === PARCELAS[0].nivel ? 'mata nativa do outro lado da estrada' : 'mais uma parcela de mata'); montarPlacasMata(); }
+  if (PARCELAS.some(P => P.nivel === n)){ const q = PARCELAS.filter(P => P.nivel === n).length; libs.push(n === PARCELAS[0].nivel ? 'mata nativa do outro lado da estrada' : q > 1 ? `${q} parcelas novas de mata` : 'mais uma parcela de mata'); montarPlacasMata(); }
   if (n === MIRANTE.nivel && parcelaComprada(0)){ libs.push('mirante da mata'); montarPlacaMirante(); }
   if (n === ARRENDAMENTO.nivel){ libs.push('o terreno abandonado, para arrendar'); montarPlacaCanto(); }
   if (n === HUD.nivel){ libs.push('a ajuda do Hud'); setTimeout(() => aviso('O Hud, irmão pequenino do Ed, pode regar, tirar o mato e colher por você. Toque na casa para chamar.', '', 6), 4200); }
@@ -25928,7 +26028,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Freguesia</b>${nv(FREGUESIA.nivel)}: em cada visita, o Beto e o Jaca pagam o preço cheio até ${reais(FREGUESIA.base)} mais ${reais(FREGUESIA.porNivel)} por nível de cada produto (no seu nível, ${reais(demandaVisita())}). O que passar disso eles pagam ${Math.round(FREGUESIA.resto * 100)}%. A conta recomeça na visita seguinte, e o Pelúcio e o Patrinho ficam de fora.</li>
       <li><b>Estações:</b> seguem o calendário. As culturas da estação colhem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais. ${nomesRend1()}, que rendem 1, valem ${Math.round((BONUS_ESTACAO - 1) * 100)}% a mais no Beto e no Jaca, mas esse bônus de preço não soma com a oferta do dia. Toque no selo da estação para ver quais.</li>
       <li><b>Figurinhas:</b> metas de longo prazo no caderno, que dão xp.</li>
-      <li><b>Floresta</b>${nv(PARCELAS[0].nivel)}: do outro lado da estrada há uma mata nativa protegida, vendida em ${PARCELAS.length} parcelas, nos níveis ${PARCELAS.map(P => P.nivel).join(', ')}. O Ed só coleta das árvores que já estão lá, sem plantar nem cortar: ${Object.values(NATIVAS).map(N => N.nomeP.toLowerCase()).join(', ')}. Cada árvore guarda uma coleta pronta, mesmo com o jogo fechado. No fundo da mata, no canto oeste, fica uma cachoeira com um lago, onde os bichos vêm beber água.</li>
+      <li><b>Floresta</b>${nv(PARCELAS[0].nivel)}: do outro lado da estrada há uma mata nativa protegida, vendida em ${PARCELAS.length} parcelas, nos níveis ${[...new Set(PARCELAS.map(P => P.nivel))].join(', ')}. O Ed só coleta das árvores que já estão lá, sem plantar nem cortar: ${Object.values(NATIVAS).map(N => N.nomeP.toLowerCase()).join(', ')}. Cada árvore guarda uma coleta pronta, mesmo com o jogo fechado. No lado oeste da mata, no fim da trilha da primeira coluna, fica uma cachoeira com um lago, onde os bichos vêm beber água.</li>
       <li><b>Trufas</b>${nv(CENAS.patrinho.nivel())}: depois da visita do Patrinho, de vez em quando nasce uma trufa perto de uma árvore, enquanto você joga. Siga o cheirinho que sobe do chão e toque ali para o Ed cavar. Só o Patrinho compra: use o botão Ligar e ele vem de lambreta pagar ${reais(PRODUTOS.trufa.venda)} por trufa.</li>
       <li><b>Luma:</b> a irmã chihuahua dos porquinhos. De vez em quando ela sai pela portinha da casa para brincar com a bolinha roxa, em volta do chafariz se tiver um, e, se o Ed estiver por perto, dá uma mordidinha no rabicó dele. Ela também tem as aventuras dela: leva o envelope do aluguel ou o cartão-postal até o Ed, cava e acha moedinha, osso ou sementes, arranca o mato dos canteiros e leva para a composteira, foge com uma cenoura do canteiro (o Ed corre atrás), late para as vacas e para os patos, tira soneca no sol de manhã, corre atrás do disco voador e do redemoinho, pula nas poças da chuva, recebe o Beto e o Jaca na porteira, acompanha a galinha aposentada e pede biscoito no cafezinho. Na janela Cenas, o cartão da Luma tem um botão para cada uma.</li>
       ${S.viuCineLucia ? `<li><b>Aluguel do Nano Hostel:</b> de vez em quando a Lúcia, dona do hostel, deixa ${reais(ALUGUEL.valor)} num envelope na porta da casa. Toque nele para o Ed pegar.</li>` : ''}
@@ -26247,7 +26347,7 @@ function arrastar(dx, dy){
 }
 // numa cena de câmera livre (cameraLivre), o jogador mexe na câmera como no jogo; mexer solta a câmera da cena na hora
 function camLivreNaCena(){ if (!cine || !cine.cena.cameraLivre || cine.passo === 'voltando-camera') return false; cine.camLivre = true; return true; }
-function zoom(f){ if (cine && !camLivreNaCena()) return; cam.vista = clamp(cam.vista * f, 5, 40); }
+function zoom(f){ if (cine && !camLivreNaCena()) return; cam.vista = clamp(cam.vista * f, 5, 50); }
 function girar(s){ if (cine && !camLivreNaCena()) return; cam.azAlvo += s * Math.PI / 2; fecharMenu(); Som.clique(); }
 
 // ================= laço principal
@@ -26498,7 +26598,7 @@ async function iniciar(){
   construirChao();
   construirCenario();
   montarMata(); montarCachoeira();
-  if (mapaMigrado) conferirMapaNovo(); else if (hortaMigrada) conferirHorta();
+  if (mapaMigrado || zonasMigradas) conferirMapaNovo(); else if (hortaMigrada) conferirHorta();
   if (!Array.isArray(S.parcelas)) S.parcelas = []; if (!Array.isArray(S.mata)) S.mata = [];
   PARCELAS.forEach((_, p) => { if (parcelaComprada(p)) abrirParcela(p); });
   montarPlacasMata();
