@@ -448,6 +448,7 @@ O Lucas pediu otimizações sem mexer na imagem nem no jogo. O que foi medido e 
 ## Enfeites
 
 - Cada enfeite ocupa um ladrilho de gramado (`ENFEITES`, `montarEnfeite`, `livreParaEnfeite`), em cubinhos de 1/16 com a frente para +z; "Girar" muda `e.rot` de 90 em 90 graus. O ladrilho vira `feno` (ninguém passa).
+- Enfeite não vai no ladrilho da porta de uma construção (`portaDePredio`, em `livreSemColetor` e em `guardarEnfeitesForaDoLugar`): o ladrilho vira `feno`, a porta fica trancada e o Ed diz que não tem caminho. Quando as fábricas chegaram mais perto, a porta da cozinha caiu num poste e a receita saía da fila; ao abrir, o enfeite que está numa porta ou em cima de uma construção volta para a loja, com aviso.
 - Os do nível 7 em diante, menos o chafariz e a estátua, vieram depois (o Lucas pediu mais enfeites). Os que fazem alguma coisa (`atualizarEnfeites`, chamado todo quadro):
   - Canteiro de flores (2): a até `FLOR_COLMEIA.raio` (3) ladrilhos de uma colmeia comprada, contados em quadrado como no espantalho, ela dá o dobro de mel por coleta (`rendColmeia`, `floresDaColmeia`; o Lucas pediu). O canteiro que ajuda ganha três abelhas voando em volta, um pouco acima das flores (`criarAbelhas`, que `atualizarAbelhas` refaz quando um canteiro de flores perto de colmeia é posto, guardado ou mudado de lugar). O menu da colmeia e o do canteiro dizem se as flores estão ajudando.
   - Casinha da Luma (7): de manhã, 3 em 4 sonecas da Luma são deitada na porta da casinha mais perto (`casinhaParaLuma`, na aventura `soneca`), virada para fora.

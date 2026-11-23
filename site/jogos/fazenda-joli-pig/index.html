@@ -13439,7 +13439,7 @@ function guardarEnfeitesForaDoLugar(){
   const ok = [], volta = [];
   for (const e of S.enfeites){
     const x = e.x, z = e.z;
-    const livre = tipo(x, z) === 'grama' && loteDe(x, z) < 0 && !campo(x, z) && blocoEm(x, z) <= 0 && !loteDeCercado(x, z) && !obraLoteEm(x, z) && !ok.some(o => o.x === x && o.z === z) && !ladrilhoDeBeirada(x, z);
+    const livre = tipo(x, z) === 'grama' && !portaDePredio(x, z) && loteDe(x, z) < 0 && !campo(x, z) && blocoEm(x, z) <= 0 && !loteDeCercado(x, z) && !obraLoteEm(x, z) && !ok.some(o => o.x === x && o.z === z) && !ladrilhoDeBeirada(x, z);
     (livre ? ok : volta).push(e);
   }
   for (const e of volta) S.guardados[e.tipo] = (S.guardados[e.tipo] || 0) + 1;
@@ -21755,11 +21755,13 @@ const ENF_VIS = {};
 const perto1 = (a, x, z) => Math.max(Math.abs(a.x - x), Math.abs(a.z - z)) <= 1;
 const pertoDoColetor = (x, z) => Object.values(COLETOR).some(C => perto1(C, x, z));
 // as regras de sempre, sem a do coletor
+// o ladrilho da porta de uma construção: ali não vai enfeite, senão ninguém entra (o Ed dizia que não tinha caminho)
+const portaDePredio = (x, z) => PREDIOS.some(p => p.porta && p.porta[0] === x && p.porta[1] === z);
 function livreSemColetor(x, z){
   const t = tipo(x, z);
   if (t !== 'grama' && t !== 'pastoV') return false;
   if (loteDe(x, z) >= 0 || campo(x, z) || blocoEm(x, z) > 0 || loteDeCercado(x, z) || obraLoteEm(x, z)) return false;
-  if (S.enfeites.some(e => e.x === x && e.z === z)) return false;
+  if (S.enfeites.some(e => e.x === x && e.z === z) || portaDePredio(x, z)) return false;
   if (Math.hypot(ed.pos.x - x - 0.5, ed.pos.y - z - 0.5) < 0.6) return false;
   return t === 'grama';
 }
@@ -27365,6 +27367,14 @@ async function iniciar(){
   climaInicio();
   if (!Array.isArray(S.enfeites)) S.enfeites = []; if (!S.guardados) S.guardados = {};
   liberarLugarComposteira();
+  // o enfeite que ficou na porta ou em cima de uma construção (quando as fábricas chegaram mais perto, a porta da cozinha
+  // caiu num enfeite e o Ed não conseguia entrar) volta para a loja
+  const fechando = S.enfeites.filter(e => portaDePredio(e.x, e.z) || tipo(e.x, e.z) === 'predio');
+  if (fechando.length){
+    S.enfeites = S.enfeites.filter(e => !fechando.includes(e));
+    for (const e of fechando) S.guardados[e.tipo] = (S.guardados[e.tipo] || 0) + 1;
+    setTimeout(() => aviso(`${fechando.length > 1 ? fechando.length + ' enfeites estavam' : 'Um enfeite estava'} na porta de uma construção e ${fechando.length > 1 ? 'voltaram' : 'voltou'} para a loja, em Enfeites`, 'ruim', 5), 2500);
+  }
   for (const e of S.enfeites) montarEnfeite(e);
   montarVaral();
   if (!Array.isArray(S.pomar)) S.pomar = []; if (!Array.isArray(S.colmeias)) S.colmeias = [];
