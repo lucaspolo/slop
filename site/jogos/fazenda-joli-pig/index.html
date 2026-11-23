@@ -27069,11 +27069,11 @@ function eventos(){
   addEventListener('keyup', e => controleEd.teclas.delete(e.key.toLowerCase()));
   addEventListener('blur', () => controleEd.teclas.clear());
   montarControleEd();
-  // com a aba escondida o jogo não anda: ao voltar, pausa o Hud e os pedidos pelo tempo que ficou fora
-  let escondidoEm = 0;
+  // com a aba escondida o jogo não anda: ao voltar, pausa o Hud, o Dani, a maçã e os pedidos pelo tempo que ficou fora
+  // (voltouDoIntervalo, que também pega o computador que dormiu de tela aberta, sem esse aviso)
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden){ escondidoEm = Date.now(); salvar(); Som.pausar(); }
-    else { Som.voltar(); if (escondidoEm){ pausarRelogios(Date.now() - escondidoEm); escondidoEm = 0; hud(); salvar(); } }
+    if (document.hidden){ salvar(); Som.pausar(); }
+    else { Som.voltar(); if (voltouDoIntervalo(Date.now())){ hud(); salvar(); } }
   });
   addEventListener('pagehide', salvar);
 }
@@ -27092,6 +27092,17 @@ function girar(s){ if (cine && !camLivreNaCena()) return; cam.azAlvo += s * Math
 
 // ================= laço principal
 let ultimoReal = Date.now(), ultimoQuadro = performance.now(), tSalvo = 0;
+// o último instante em que o jogo estava rodando. Um intervalo de mais de INTERVALO_FORA ms sem quadro (aba escondida,
+// app no fundo, computador dormindo, celular que congelou a página sem avisar) é tempo fora do jogo: o Hud, o Dani, a
+// maçã e os prazos dos pedidos param (pausarRelogios). A volta da aba e o primeiro quadro usam a mesma marca, então o
+// intervalo não conta duas vezes. A fazenda (plantas, bichos, fábricas) continua contando, por ultimoReal
+let ultimoVivo = Date.now();
+const INTERVALO_FORA = 4000;
+function voltouDoIntervalo(agora){
+  const fora = agora - ultimoVivo; ultimoVivo = agora;
+  if (fora <= INTERVALO_FORA) return false;
+  pausarRelogios(fora); return true;
+}
 // ================= o ritmo do laço
 // Limite de quadros (o Lucas aprovou): em tela de 90 Hz ou mais o navegador chama o laço 90, 120 ou 144 vezes por segundo,
 // e o jogo desenhava todas. Agora ele mede o ritmo da tela (o intervalo curto mais comum entre as chamadas) e, acima de
@@ -27135,6 +27146,7 @@ function simular(dt){
 }
 function quadro(agoraP){
   requestAnimationFrame(quadro);
+  voltouDoIntervalo(Date.now());
   if (pularQuadro(agoraP)) return;
   const m0 = OTIM.medidor ? performance.now() : 0;
   const agora = Date.now();
@@ -27427,7 +27439,7 @@ async function iniciar(){
   // quem já tinha o terreno limpo antes de os lotes existirem fica sabendo deles uma vez
   if (S.canto === 2 && !S.avisoLotesCanto){ S.avisoLotesCanto = true; setTimeout(avisoLotesCanto, 2500); }
   $('carregando').hidden = true;
-  ultimoReal = Date.now();
+  ultimoReal = ultimoVivo = Date.now();
   if (chegando) receberFazenda(chegando);
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
@@ -27922,7 +27934,7 @@ function entrarNaFeira(){
   const R = FEIRA_DIA, cena = new THREE.Scene(), cam = new THREE.PerspectiveCamera(FEIRA.fov, innerWidth / innerHeight, 0.1, 200);
   const P = montarPalcoFeira(cena), prods = ORDEM_PRODUTOS.filter(k => S.feiraCarga.itens[k] > 0);
   const F = feira = {
-    R, cena, camera: cam, salvo: { scene, camera }, P, anima: P.anima, fase: 'chegada', t: 0, tempo: R.duracao, decorrido: 0,
+    R, cena, camera: cam, salvo: { scene, camera }, P, anima: P.anima, fase: 'chegada', t: 0, tempo: R.duracao, decorrido: 0, t0: Date.now(),
     prods, est: {}, vit: {}, pacote: {}, caixas: {}, fregueses: [], vagas: [null, null, null], fila: [], sel: null,
     acoes: [], edOcupado: false, hudOcupado: false, urgente: null, combo: 1, prox: 1.2, ultIrmao: -999, usados: new Set(), part: [], sacolaVoa: null,
     ganho: { dinheiro: 0, gorjeta: 0, xp: 0, pedidos: 0, perdidos: 0, estrelas: 0, comboMax: 1, vendidos: 0 }, ui: {}, sinal: '',
@@ -28439,6 +28451,8 @@ function sairDaFeira(){
   for (const c of F.fregueses) tirarBalao(F, c);
   F.cena.traverse(o => { if (o.isSprite && o.material.map) o.material.map.dispose(); });
   scene = F.salvo.scene; camera = F.salvo.camera; feira = null;
+  // na feira a fazenda não aparece: o tempo dela não conta para o Hud, o Dani, a maçã e os prazos dos pedidos
+  pausarRelogios(Date.now() - F.t0);
   $('jogo').classList.remove('em-feira'); redimensionar();
   Musica.parar();
   voltaFeira = { antes, vendidos: G.vendidos, total: G.dinheiro + G.gorjeta, xp: G.xp };
@@ -28865,7 +28879,7 @@ function entrarNoResgate(){
   if (resgate) return;
   const R = RESGATE, cena = new THREE.Scene(), cam = new THREE.PerspectiveCamera(R.fov, innerWidth / innerHeight, 0.1, 200);
   const P = montarPalcoResgate(cena);
-  const G = resgate = { R, cena, camera: cam, salvo: { scene, camera }, P, fase: 'chegada', t: 0, tempo: R.duracao, decorrido: 0, sitios: [], salvos: { porco: 0, galinha: 0, vaca: 0 },
+  const G = resgate = { R, cena, camera: cam, salvo: { scene, camera }, P, fase: 'chegada', t: 0, tempo: R.duracao, decorrido: 0, t0: Date.now(), sitios: [], salvos: { porco: 0, galinha: 0, vaca: 0 },
     bordo: [], sobindo: [], descendo: [], multidao: [], barcos: [], part: [], ondas: [], ui: {}, alvo: null, camAlvo: new THREE.Vector3(20, 0, -15), primeira: !(S.resgate && S.resgate.vezes) };
   scene = cena; camera = cam;
   for (const f of FALAS) f.el.remove(); FALAS.length = 0;
@@ -29252,6 +29266,8 @@ function sairDoResgate(){
   removeEventListener('keydown', G.tecla); removeEventListener('keyup', G.tecla);
   G.cena.traverse(o => { if (o.isSprite && o.material.map) o.material.map.dispose(); });
   scene = G.salvo.scene; camera = G.salvo.camera; resgate = null;
+  // no resgate a fazenda não aparece: o tempo dele não conta para o Hud, o Dani, a maçã e os prazos dos pedidos
+  pausarRelogios(Date.now() - G.t0);
   $('jogo').classList.remove('em-feira', 'em-resgate'); redimensionar();
   Musica.parar();
   voltaResgate = { antes, n: P.n, xp: P.xp, dinheiro: P.dinheiro };
