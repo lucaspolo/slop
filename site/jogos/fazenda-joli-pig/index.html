@@ -942,6 +942,7 @@ function naZona(id, o){
   if (Array.isArray(r.slots)) r.slots = zps(id, r.slots);
   if (Array.isArray(r.cerca)) r.cerca = [...zp(id, r.cerca[0], r.cerca[1]), ...zp(id, r.cerca[2], r.cerca[3])];
   if (r.ala) r.ala = naZona(id, r.ala);
+  if (r.piscina) r.piscina = naZona(id, r.piscina);
   return r;
 }
 // a zona de um ponto do mapa (a primeira que tem ele dentro; null nas linhas entre as zonas)
@@ -1177,15 +1178,17 @@ const OBRAS = {
     },
     menu(r){ const n = (S.aposentadas || []).length; r.estado = n ? `${n > 1 ? n + ' galinhas aposentadas moram' : 'Uma galinha aposentada mora'} aqui, entre a piscina, o quiosque de coco e os chalés.` : 'Pronto para receber as galinhas que se aposentarem.'; },
   },
-  // a ala nova (o Lucas pediu, a opção A da planta): 2ª etapa, no nível 47, encostada no lado do spa que dá para o museu
+  // a ala nova (o Lucas pediu, a opção A da planta): 2ª etapa, no nível 47, encostada no lado do spa que dá para o museu.
+  // A piscina olímpica (o Lucas pediu): 3ª etapa, no nível 54, colada na ala, do lado leste
   spa: { nome: 'Spa dos pigs', nivel: 39, predio: 'spa', canto: true, icone: 'spa', andaimeAlto: 17,
     etapas: [{ preco: 100000, minutos: 15, xp: 3500, aviso: 'Spa dos pigs pronto! Os porcos visitantes já estão chegando pela estrada.' },
-      { preco: 100000, minutos: 18, xp: 5000, nivel: 47, nome: 'a ala nova', rotulo: 'Ampliar: a ala nova', aviso: 'A ala nova do spa ficou pronta! Tem tobogã de lama, pedicure dos cascos e bar de sucos.' }],
+      { preco: 100000, minutos: 18, xp: 5000, nivel: 47, nome: 'a ala nova', rotulo: 'Ampliar: a ala nova', aviso: 'A ala nova do spa ficou pronta! Tem tobogã de lama, pedicure dos cascos e bar de sucos.' },
+      { preco: 250000, minutos: 20, xp: 7000, nivel: 54, nome: 'a piscina olímpica', rotulo: 'Ampliar: a piscina olímpica', aviso: 'A piscina olímpica do spa ficou pronta! Seis raias, trampolim, arquibancada e, de vez em quando, campeonato de natação.' }],
     desc: 'Piscina de lama, ofurô de água quente, sauna, duchas e espreguiçadeiras com pepino nos olhos. Porcos da região toda vêm pela estrada, pagam a entrada e passam a tarde relaxando; a família também aparece, sem pagar.',
     pronto: 'Os porcos visitantes já estão chegando pela estrada.',
-    modelo: n => vSpa(n >= 2),
-    vestir: (m, n) => vestirSpa(m, n >= 2),
-    aoTerminar: n => n >= 2 ? abrirAlaSpa() : abrirPassagemSpa(),
+    modelo: n => vSpa(n),
+    vestir: (m, n) => vestirSpa(m, n),
+    aoTerminar: n => n >= 3 ? abrirPiscinaSpa() : n >= 2 ? abrirAlaSpa() : abrirPassagemSpa(),
     menu(r){ menuSpa(r); },
   },
   casarao: { nome: 'Casarão', nivel: 45, predio: 'casa', icone: 'casa', andaimeAlto: 42,
@@ -1403,7 +1406,9 @@ const PREDIOS = [
   // o spa dos pigs, no canto de baixo encostado na estrada (o Lucas pediu ali; o observatório subiu para trás dele), deitado
   // (9 × 6) para ficar mais longe do observatório e girado 180° (ry), com a entrada virada para dentro do mapa: virada para
   // o sul ela dava para fora (o Lucas pediu). A porta fica no norte, do lado direito, e o caminho vem da estrada até ela
-  naZona('spa', { id:'spa',        nome:'Spa dos pigs',        x0:1, z0:3, x1:9, z1:8, porta:[8, 2], obra: 'spa', ry: Math.PI, ala: { x0: 10, z0: 3, x1: 14, z1: 8, etapa: 2 } }),
+  naZona('spa', { id:'spa',        nome:'Spa dos pigs',        x0:1, z0:3, x1:9, z1:8, porta:[8, 2], obra: 'spa', ry: Math.PI, ala: { x0: 10, z0: 3, x1: 14, z1: 8, etapa: 2 },
+    // a piscina olímpica (3ª etapa), colada na ala, do lado leste; as duas últimas colunas passam da zona do spa para a da festa, vazia ali
+    piscina: { x0: 15, z0: 3, x1: 24, z1: 8, etapa: 3 } }),
   naZona('horta', { id:'galpao',     nome:'Galpão do trator',    x0:0,  z0:1,  x1:3,  z1:2,  porta:[1, 3], obra: 'galpao' }),
   // fora do mapa de ladrilhos: no fim da pista, ao norte dela (fora: sem ladrilho, sem lote; o Maurinho trabalha na beira da fazenda)
   { id:'hangar',     nome:'Hangar do PIG-MTP',   x0:W - 5, z0:-6, x1:W - 1, z1:-5, porta:[W - 3, -4], obra: 'hangar', fora: true },
@@ -10412,6 +10417,21 @@ const SPA = { larg: 72, fundo: 48, lama: [28, 55, 25, 40], ofuro: [34, 9, 7], sa
 SPA.ala = { larg: 40, vao: [19, 30], jardim: 33, bambu: [3, 40], torre: [-38, -28, 36, 46], alto: 14, escada: [-27, 39, 42],
   rampa: [-35, -30, 35, 20], lama: [-37, -19, 3, 18], pedicure: [-14, -7], zPedi: [35, 41], bacia: 31, ducha: [-20, 44],
   guardaSol: [-9, 45], bar: [-12, -5, 9, 11], prateleiraBar: 13, esmaltes: [-3, 44] };
+// a piscina olímpica (3ª etapa): no desenho, em x de -120 a -41 (no mapa, x 46 a 55, do lado leste da ala), com o mesmo
+// fundo. agua: a água (x0, x1, z0, z1), com a borda de azulejo em volta, um cubinho acima dela; seis raias de quatro
+// cubinhos (raiaZ dá o meio de cada uma), as boias das cordas em cima da primeira fileira de cada raia, os blocos de
+// largada em x bloco e bloco + 1, do lado da ala. vao: o vão na cerca da ala (x -40). Na ponta de lá: o trampolim (a torre,
+// com a escada no z escada e o tablado em y alto, e a prancha por cima da raia 6, até prancha[1]; quem pula cai em cai) e o
+// placar, no fundo. A arquibancada de madeira, de três degraus de três cubinhos, fica no fundo, de frente para a água;
+// assento: o x de cada lugar dos visitantes. O pódio do campeonato (só na cena) fica no canto do fundo, do lado da ala
+const OLIMPICA = { larg: 80, agua: [-111, -54, 6, 29], raias: 6, bloco: -52, vao: [22, 33],
+  trampolim: { torre: [-119, -115, 26, 31], escada: 32, alto: 9, prancha: [-114, -102, 27, 29], cai: [-96, 28.5], sai: -90 },
+  placar: [-119, -104, 45, 12, 23], arquibancada: [-100, -58, 36], assento: [-96, -88, -80, -72, -64],
+  podio: { x: [-50, -46, -54], z: [35, 39], alto: [6, 4, 3] }, bambu: [-115, 4] };
+SPA.olimpica = OLIMPICA;
+// o meio da raia i (de 0 a 5) em z, e a altura de cada degrau da arquibancada (o de cima do cubinho do degrau k)
+const raiaZ = i => OLIMPICA.agua[2] + 4 * i + 2.5;
+const degrauSpa = k => 2 + 2 * k;
 // a altura (em cubinhos) do fundo da calha do tobogã em cada z da rampa, e a do lado de cima dela (por onde o porco desce)
 const alturaRampa = z => { const A = SPA.ala, [, , za, zb] = A.rampa; return Math.round(A.alto - (za - z) * (A.alto - 3) / (za - zb)); };
 const topoRampa = z => { const A = SPA.ala, [, , za, zb] = A.rampa; return A.alto + 1 - (za - z) * (A.alto - 3) / (za - zb); };
@@ -10436,7 +10456,10 @@ function bambuzal(v, cx, cz, n, alto){
     for (let k = 0; k < 4; k++){ const b = k * 1.6 + i, dx = Math.round(Math.cos(b) * 1.6), dz = Math.round(Math.sin(b) * 1.6); v.set(x + dx, h - k % 2, z + dz, k % 2 ? 0x4f9a3d : 0x6cbf47); v.set(x + Math.sign(dx), h + 1 - k % 2, z + Math.sign(dz), 0x5aa847); }
   }
 }
-function vSpa(ala = false){
+// n: as etapas prontas (2: com a ala nova, 3: com a piscina olímpica); true e false valem como 2 e 1
+function vSpa(n = 1){
+  if (n === true) n = 2; else if (n === false) n = 1;
+  const ala = n >= 2, piscina = n >= 3;
   const v = new Vox(), R = SPA, X1 = R.larg - 1, Z1 = R.fundo - 1, A = R.ala;
   const branco = 0xfdf8ef, rosa = 0xf07aa8, turquesa = 0x3fb8b0, amarelo = 0xf2c335, madeira = 0x8a5a36, madeiraE = 0x6e4428, madeiraC = 0xc99a66, inox = 0xc8d0d8;
   const lajota = (x, y, z) => { const h = hash(x >> 2, 5, z >> 2); return h < 0.33 ? 0xe9e2d3 : h < 0.66 ? 0xe1d8c6 : 0xd9cfbc; };
@@ -10521,7 +10544,9 @@ function vSpa(ala = false){
   // os bambuzais: no canto do fundo à direita e no jardim da entrada
   bambuzal(v, ...R.bambuzal[0], 7, 22);
   bambuzal(v, ...(ala ? A.bambu : R.bambuzal[1]), 4, 14);
-  if (ala) alaDoSpa(v, { lajota, bambu, pedra, lama, branco, rosa, turquesa, amarelo, madeira, madeiraE, madeiraC, inox });
+  const C = { lajota, bambu, pedra, lama, branco, rosa, turquesa, amarelo, madeira, madeiraE, madeiraC, inox, piscina };
+  if (ala) alaDoSpa(v, C);
+  if (piscina) piscinaDoSpa(v, C);
   return v;
 }
 function alaDoSpa(v, C){
@@ -10531,7 +10556,8 @@ function alaDoSpa(v, C){
   v.box(-16, 0, A.vao[0], -1, 0, A.vao[1], (x, y, z) => ((x >> 1) + (z >> 1)) % 2 ? 0xcfc4ae : 0xc2b69e);
   // a cerca de bambu dos três lados de fora
   for (let x = X0; x <= -1; x++) for (const z of [0, Z1]) v.box(x, 1, z, x, (x + z) % 2 ? 5 : 6, z, C.bambu);
-  for (let z = 1; z < Z1; z++) v.box(X0, 1, z, X0, (X0 + z) % 2 ? 5 : 6, z, C.bambu);
+  // com a piscina olímpica, a cerca do lado dela abre no vão (OLIMPICA.vao), com o caminho de pedra passando
+  for (let z = 1; z < Z1; z++) if (!(C.piscina && z >= OLIMPICA.vao[0] && z <= OLIMPICA.vao[1])) v.box(X0, 1, z, X0, (X0 + z) % 2 ? 5 : 6, z, C.bambu);
   // a piscina de lama nova, igual à do spa: borda de pedra de cantos arredondados, a lama e uns montinhos
   const [l0, l1, m0, m1] = A.lama;
   v.box(l0 - 2, 1, m0 - 2, l1 + 2, 2, m1 + 2, C.pedra);
@@ -10595,6 +10621,63 @@ function alaDoSpa(v, C){
   for (let x = b0; x <= b1; x++){ v.set(x, 5, zq, x % 3 ? laranja : 0x6e4a2a); v.set(x, 2, zq, x % 2 ? laranja : 0x8a5a36); }
   for (const x of [b0, b1]) v.box(x, 8, zq + 1, x, 12, zq + 1, C.madeira);
   v.box(b0 + 1, 9, zq + 1, b1 - 1, 12, zq + 1, (x, y) => y === 9 || y === 12 || x === b0 + 1 || x === b1 - 1 ? laranja : C.branco);
+}
+// a piscina olímpica (3ª etapa), no x negativo do desenho, depois da ala (OLIMPICA)
+function piscinaDoSpa(v, C){
+  const P = OLIMPICA, X1 = -SPA.ala.larg - 1, X0 = X1 + 1 - P.larg, Z1 = SPA.fundo - 1, [a0, a1, b0, b1] = P.agua;
+  const azul = 0x3a8fd0, vermelho = 0xe0404a, marinho = 0x1d3a5f, cinza = 0x5a6068;
+  const pedrinha = (x, y, z) => ((x >> 1) + (z >> 1)) % 2 ? 0xcfc4ae : 0xc2b69e;
+  // o chão de lajotas, o caminho de pedra que atravessa o vão da ala e a cerca de bambu dos três lados de fora
+  v.box(X0, 0, 0, X1, 0, Z1, C.lajota);
+  v.box(X1 - 3, 0, P.vao[0] + 2, X1 + 5, 0, P.vao[1] - 2, pedrinha);
+  for (let x = X0; x <= X1; x++) for (const z of [0, Z1]) v.box(x, 1, z, x, (x + z) % 2 ? 5 : 6, z, C.bambu);
+  for (let z = 1; z < Z1; z++) v.box(X0, 1, z, X0, (X0 + z) % 2 ? 5 : 6, z, C.bambu);
+  // a borda de azulejo (branca em cima, azul do lado) e a água um cubinho abaixo dela, com a faixa escura no fundo de
+  // cada raia e o T perto de cada ponta
+  v.box(a0 - 1, 1, b0 - 1, a1 + 1, 2, b1 + 1, (x, y, z) => y === 2 ? ((x + z) % 2 ? 0xfdf8ef : 0xf1ece2) : 0x9fd3ea);
+  v.box(a0, 2, b0, a1, 2, b1, null);
+  v.box(a0, 1, b0, a1, 1, b1, (x, y, z) => {
+    const k = (z - b0) % 4, faixa = k === 2 && x >= a0 + 2 && x <= a1 - 2, ponta = (x === a0 + 2 || x === a1 - 2) && k >= 1;
+    if (faixa || ponta) return 0x3f9fd8;
+    const h = hash(x, 21, z); return h < 0.12 ? 0x8ad8f2 : h < 0.55 ? 0x5cc4e8 : 0x52bce2;
+  });
+  // as cordas das raias: uma boia a cada dois cubinhos, vermelhas perto das pontas e brancas e azuis no meio
+  for (let i = 1; i < P.raias; i++){ const z = b0 + 4 * i; for (let x = a0; x <= a1; x += 2) v.set(x, 2, z, x - a0 < 5 || a1 - x < 5 ? vermelho : (x >> 1) % 2 ? 0xfdf8ef : azul); }
+  // os blocos de largada, um por raia, do lado da ala
+  for (let i = 0; i < P.raias; i++){ const z0 = b0 + 4 * i + 1; v.box(P.bloco, 1, z0, P.bloco + 1, 3, z0 + 2, (x, y) => y === 3 ? 0x2f6fb3 : y === 2 ? 0xfdf8ef : 0xd8dde2); v.set(P.bloco + 1, 2, z0 + 1, [vermelho, C.amarelo, 0x6cbf47, C.rosa, 0xb48be0, 0xf08a24][i]); }
+  // as bandeirinhas de virada, atravessando a piscina perto de cada ponta
+  for (const x of [a0 + 4, a1 - 4]){
+    for (const z of [b0 - 1, b1 + 1]) v.box(x, 3, z, x, 9, z, C.inox);
+    for (let z = b0; z <= b1; z++){ v.set(x, 9, z, 0xfdf8ef); if (z % 2 === 0) v.set(x, 8, z, [vermelho, C.amarelo, azul, C.rosa][(z >> 1) % 4]); }
+  }
+  // as escadinhas de inox no fundo da piscina
+  for (const lx of [a1 - 12, a0 + 14]) for (const x of [lx, lx + 3]){ v.box(x, 3, b1 + 1, x, 5, b1 + 1, C.inox); v.box(x, 2, b1, x, 5, b1, C.inox); }
+  // o trampolim: a torre branca de faixas azuis, o tablado com o guarda-corpo (aberto na prancha e no alto da escada), a
+  // escada de inox do lado do fundo e a prancha turquesa de ponta branca, por cima da raia 6
+  const T = P.trampolim, [t0, t1, u0, u1] = T.torre, [p0, p1, q0, q1] = T.prancha, TY = T.alto;
+  v.box(t0, 1, u0, t1, TY - 1, u1, (x, y) => y % 3 === 0 ? azul : 0xfdf8ef);
+  v.box(t0, TY, u0, t1, TY, u1, (x, y, z) => (z >> 1) % 2 ? C.madeiraC : 0xb98a56);
+  for (let x = t0; x <= t1; x++) for (let z = u0; z <= u1; z++){
+    if (x > t0 && x < t1 && z > u0 && z < u1) continue;
+    if ((x === t1 && z >= q0 && z <= q1) || (z === u1 && x > t0 && x < t1)) continue;
+    v.box(x, TY + 1, z, x, TY + 2, z, (xx, y) => y === TY + 2 ? azul : C.inox);
+  }
+  for (const x of [t0 + 1, t1 - 1]) v.box(x, 1, T.escada, x, TY + 3, T.escada, C.inox);
+  for (let y = 2; y <= TY; y += 2) v.box(t0 + 2, y, T.escada, t1 - 2, y, T.escada, C.inox);
+  v.box(p0, TY, q0, p1, TY, q1, x => x >= p1 - 1 ? 0xfdf8ef : C.turquesa);
+  v.box(p0 + 2, TY - 1, q0, p0 + 2, TY - 1, q1, C.inox);
+  // o placar no fundo, de dois pés: o letreiro vem por cima, em vestirSpa; embaixo dele, as seis luzinhas das raias
+  const [g0, g1, gz, gy0, gy1] = P.placar;
+  for (const x of [g0 + 1, g1 - 1]) v.box(x, 1, gz, x, gy0 - 1, gz + 1, cinza);
+  v.box(g0, gy0, gz, g1, gy1, gz + 1, (x, y) => x === g0 || x === g1 || y === gy0 || y === gy1 ? 0x2a4a72 : marinho);
+  for (let i = 0; i < P.raias; i++) v.set(g0 + 3 + 2 * i, gy0 + 2, gz - 1, C.amarelo);
+  // a arquibancada de madeira: três degraus de três cubinhos, o encosto no fundo e as bandeirinhas em cima dele
+  const [w0, w1, z0] = P.arquibancada;
+  for (let k = 0; k < 3; k++){ const top = degrauSpa(k); v.box(w0, 1, z0 + 3 * k, w1, top, z0 + 8, (x, y) => y === top ? ((x >> 1) % 2 ? C.madeiraC : 0xb98a56) : y % 2 ? C.madeira : C.madeiraE); }
+  v.box(w0, 1, z0 + 9, w1, 8, z0 + 9, (x, y) => y === 8 ? C.madeira : C.madeiraE);
+  for (let x = w0 + 1; x < w1; x += 3) v.set(x, 9, z0 + 9, [vermelho, C.amarelo, azul, C.rosa, 0x6cbf47][((x - w0) / 3 | 0) % 5]);
+  // um bambuzal no canto da frente, do lado de fora da torre
+  bambuzal(v, ...P.bambu, 5, 16);
 }
 // ================= os porcos visitantes do spa (o Lucas pediu): porcos de verdade, de quatro patas, com cor, padrão,
 // orelha, focinho e tamanho sorteados pela semente (tracosPorcoSpa). Cubinhos de 1/60 (eram de 1/30 e ficavam estranhos no
@@ -12495,6 +12578,9 @@ const VI = {
   galinha(){ return vGalinha(); }, vaca(){ return vVaca(); }, galo(){ return vGalo(); }, pintinho(){ return vPintinho(); },
   aposentada(){ return vGalinhaAposentada(); }, cartao(){ return vCartaoPostal(); },
   porcoSpa(){ return vPorcoSpaInteiro(8); },
+  // a medalha de ouro do campeonato de natação, com a fita
+  medalha(){ const v = new Vox(); for (let y = 0; y < 6; y++){ v.box(-4 + Math.floor(y / 2), 5 + y, 0, -3 + Math.floor(y / 2), 5 + y, 0, 0xe0404a); v.box(3 - Math.floor(y / 2), 5 + y, 0, 4 - Math.floor(y / 2), 5 + y, 0, 0x3a8fd0); }
+    for (let x = -4; x <= 4; x++) for (let y = -4; y <= 4; y++){ const d = Math.hypot(x, y); if (d <= 4.3) v.box(x, y + 4, 1, x, y + 4, 2, d > 3.2 ? 0xb8901a : (x + y) % 3 === 0 && d < 2 ? 0xfff1a8 : 0xf2c335); } return v; },
   // o spa: uma tina de lama com borda de pedra e um porquinho rosa com a cabeça de fora
   spa(){
     const v = new Vox(), pedra = (x, y, z) => hash(x, y, z) < 0.5 ? 0xb9b1a3 : 0xa59d8f, lama = (x, y, z) => hash(x, 1, z) < 0.4 ? 0x6e4628 : 0x7a5232, rosa = 0xf3b4ac;
@@ -12681,6 +12767,12 @@ const TEMAS = {
     { tipo: 'triangle', vol: 0.05, leg: 0.6, notas: 'C3:1 G2:1 C3:1 G2:1 F2:1 C3:1 G2:1 D3:1 C3:1 G2:1 E3:1 C3:1 G2:1 D3:1 C3:2' },
     { tipo: 'x', vol: 0.025, notas: 'x:.5 r:.5 x:.5 x:.5 x:.5 r:.5 x:.5 x:.5 x:.5 r:.5 x:.5 x:.5 x:.5 r:.5 x:.5 x:.5 x:.5 r:.5 x:.5 x:.5 x:.5 r:.5 x:.5 x:.5 x:.5 r:.5 x:.5 x:.5 x:.5 r:.5 x:.5 x:.5' } ] },
   // Dia de spa da família: bossinha preguiçosa em fá maior, com sininho de vez em quando
+  // Campeonato de natação: marchinha de abertura de jogos em sol maior, com o metal da fanfarra e o tarol
+  campeonato: { bpm: 132, ganho: 1.3, loop: true, faixas: [
+    { tipo: 'square', vol: 0.02, leg: 0.55, notas: 'G4:.5 B4:.5 D5:.5 G5:1 G5:.5 F#5:.5 E5:.5 D5:1 B4:.5 C5:.5 D5:.5 E5:.5 D5:.5 C5:.5 B4:.5 A4:1 A4:.5 C5:.5 E5:.5 A5:1 G5:.5 F#5:.5 E5:.5 D5:1 G5:.5 F#5:.5 E5:.5 F#5:.5 G5:1.5' },
+    { tipo: 'triangle', vol: 0.05, leg: 0.6, notas: 'G2:.5 D3:.5 G2:.5 D3:.5 G2:.5 D3:.5 G2:.5 D3:.5 C3:.5 G2:.5 C3:.5 G2:.5 D3:.5 A2:.5 D3:.5 A2:.5 A2:.5 E3:.5 A2:.5 E3:.5 D3:.5 A2:.5 D3:.5 A2:.5 G2:.5 D3:.5 D3:.5 A2:.5 G2:1 G2:1' },
+    { tipo: 'sine', vol: 0.012, notas: 'G3+B3+D4:4 C4+E4+G4:2 D4+F#4+A4:2 A3+C4+E4:2 D4+F#4+A4:2 G3+B3+D4:4' },
+    { tipo: 'x', vol: 0.022, notas: 'x:.25 x:.25 x:.5 r:.5 x:.5 x:.25 x:.25 x:.5 r:.5 x:.5 x:.25 x:.25 x:.5 r:.5 x:.5 x:.25 x:.25 x:.5 r:.5 x:.5 x:.25 x:.25 x:.5 r:.5 x:.5 x:.25 x:.25 x:.5 r:.5 x:.5 x:.25 x:.25 x:.5 r:.5 x:.5 x:.25 x:.25 x:.5 x:.5 x:.5' } ] },
   spaFamilia: { bpm: 88, ganho: 1.4, loop: true, faixas: [
     { tipo: 'sine', vol: 0.03, leg: 0.8, notas: 'A5:1 C6:.5 A5:.5 G5:1 F5:1 E5:1 G5:.5 E5:.5 D5:2 F5:1 A5:.5 F5:.5 E5:1 D5:1 C5:1 E5:.5 G5:.5 F5:2' },
     { tipo: 'triangle', vol: 0.045, leg: 0.7, notas: 'F3:1 C3:1 F3:1 C3:1 G2:1 D3:1 G2:1 D3:1 C3:1 G2:1 C3:1 G2:1 F2:1 C3:1 F3:2' },
@@ -14793,13 +14885,13 @@ function montarPlacasObras(){
 function abrirLoteObra(k, devolver = true){
   const O = OBRAS[k], p = PREDIO[O.predio];
   if (!p || !p.obra || p.fora) return;
-  // a ala de uma etapa (a do spa) entra quando a etapa dela começa
-  const A = p.ala, comAla = !!A && (etapasObra(k) >= A.etapa || (obraEmAndamento(k) && S.obra.n >= A.etapa));
-  const naAla = (x, z) => comAla && x >= A.x0 && x <= A.x1 && z >= A.z0 && z <= A.z1;
+  // a ala de uma etapa (a do spa, e a piscina olímpica dele) entra quando a etapa dela começa
+  const alas = [p.ala, p.piscina].filter(A => A && (etapasObra(k) >= A.etapa || (obraEmAndamento(k) && S.obra.n >= A.etapa)));
+  const naAla = (x, z) => alas.some(A => x >= A.x0 && x <= A.x1 && z >= A.z0 && z <= A.z1);
   const dentro = (x, z) => (x >= p.x0 && x <= p.x1 && z >= p.z0 && z <= p.z1) || (x === p.porta[0] && z === p.porta[1]) || naAla(x, z);
   if (devolver && Array.isArray(S.enfeites)){ if (!S.guardados) S.guardados = {}; devolverEnfeites(dentro, `${O.de || 'do'} ${O.nome.toLowerCase()}`); }
   for (let x = p.x0; x <= p.x1; x++) for (let z = p.z0; z <= p.z1; z++){ setT(x, z, 'predio'); PREDIO_EM[iT(x, z)] = p; }
-  if (comAla) for (let x = A.x0; x <= A.x1; x++) for (let z = A.z0; z <= A.z1; z++){ setT(x, z, 'predio'); PREDIO_EM[iT(x, z)] = p; }
+  for (const A of alas) for (let x = A.x0; x <= A.x1; x++) for (let z = A.z0; z <= A.z1; z++){ setT(x, z, 'predio'); PREDIO_EM[iT(x, z)] = p; }
 }
 function motivoObra(k){
   const O = OBRAS[k], E = O.etapas[etapasObra(k)];
@@ -16464,25 +16556,37 @@ Object.assign(SPA, { entrada: 300, xp: 250, vao: [COL_CURVA + 1, zz('spa', 2)], 
 Object.assign(SPA.ala, { max: 12, entrada: 360, sucoValor: 80, baseEscada: [-25, 40.5], rampaTempo: 1.3 });
 Object.assign(SPA.peso, { toboga: 3, pedicure: 2, bar: 2 });
 Object.assign(SPA.tempo, { tobogaFim: [4, 7], pedicure: [12, 20], bar: [6, 10] });
-const maxSpa = () => alaSpaPronta() ? SPA.ala.max : SPA.max;
+// com a piscina olímpica (o Lucas pediu): mais gente de uma vez e chegando mais seguido (o intervalo vezes fatorChegada).
+// As atividades dela: nadar uma raia (sobe no bloco, mergulha, vai até a outra ponta e volta, a velNado ladrilhos por
+// segundo), o trampolim (um por vez, como o tobogã: quem vai fica com o lugar de onde cai, desde que sai andando até sair
+// da água) e a arquibancada (de pé no degrau, os porquinhos torcem por quem está nadando; a família senta)
+Object.assign(OLIMPICA, { max: 16, fatorChegada: 0.75, velNado: [0.5, 0.7], velEd: 0.95 });
+Object.assign(SPA.peso, { raia: 3, trampolim: 2, arquibancada: 2 });
+Object.assign(SPA.tempo, { bloco: [0.6, 1.2], arquibancada: [12, 20] });
+Object.assign(SPA.altura, { raia: 0.14, trampolim: 0.14 });
+Object.assign(SPA.sentado, { raia: 0.02, trampolim: 0.02 });
+const maxSpa = () => piscinaPronta() ? OLIMPICA.max : alaSpaPronta() ? SPA.ala.max : SPA.max;
 const entradaSpa = () => alaSpaPronta() ? SPA.ala.entrada : SPA.entrada;
 const FRUTAS_BAR = [['laranja', 'suco de laranja', 0xf08a24], ['coco', 'água de coco', 0xf3efe0]];
 // os esmaltes da pedicure: [nome, cor]
 const ESMALTES = [['rosa', 0xf07aa8], ['vermelho', 0xe0404a], ['lilás', 0xb48be0], ['turquesa', 0x3fb8b0], ['amarelo', 0xf2c335], ['dourado', 0xd4a82a]];
 const spaAberto = () => !!S && etapasObra('spa') >= 1;
 const alaSpaPronta = () => !!S && etapasObra('spa') >= 2;
+const piscinaPronta = () => !!S && etapasObra('spa') >= 3;
 let gradeSpa = null, lugaresSpa = null, visitantesSpa = [], proxSpa = null, proxFamiliaSpa = null, efeitoSpaT = 0;
 // do desenho (cubinhos de 1/8) para o mapa e de volta: o desenho está girado 180° em volta do meio do terreno
 const mundoSpa = (lx, lz) => [PREDIO.spa.x1 + 1 - lx / 8, PREDIO.spa.z1 + 1 - lz / 8];
 const localSpa = (x, z) => [(PREDIO.spa.x1 + 1 - x) * 8, (PREDIO.spa.z1 + 1 - z) * 8];
-// a grade cobre também a ala (o x negativo do desenho): a célula (x, z) do desenho fica em iSpa(x, z)
-const AL_SPA = SPA.ala.larg, GL_SPA = SPA.larg + AL_SPA, iSpa = (x, z) => z * GL_SPA + x + AL_SPA;
+// a grade cobre também a ala e a piscina olímpica (o x negativo do desenho): a célula (x, z) do desenho fica em iSpa(x, z).
+// xMinSpa: o x da primeira coluna do que já está construído
+const AL_SPA = SPA.ala.larg + OLIMPICA.larg, GL_SPA = SPA.larg + AL_SPA, iSpa = (x, z) => z * GL_SPA + x + AL_SPA;
+const xMinSpa = () => piscinaPronta() ? -AL_SPA : alaSpaPronta() ? -SPA.ala.larg : 0;
 function montarGradeSpa(){
-  const R = SPA, ala = alaSpaPronta(), v = vSpa(ala), N = GL_SPA * R.fundo, cheio = new Uint8Array(N), livre = new Uint8Array(N);
+  const R = SPA, n = etapasObra('spa'), ala = n >= 2, piscina = n >= 3, v = vSpa(n), N = GL_SPA * R.fundo, cheio = new Uint8Array(N), livre = new Uint8Array(N);
   for (const e of v.m.values()) if (e.y >= 1 && e.y <= 7 && e.x >= -AL_SPA && e.z >= 0 && e.x < R.larg && e.z < R.fundo) cheio[iSpa(e.x, e.z)] = 1;
   // a calha do tobogã não está no desenho (vem em vestirSpa): a ponta baixa dela tranca o chão embaixo
   if (ala){ const [r0, r1, za, zb] = R.ala.rampa; for (let z = zb; z <= za; z++) if (alturaRampa(z) <= 7) for (let x = r0; x <= r1; x++) cheio[iSpa(x, z)] = 1; }
-  for (let z = 1; z < R.fundo - 1; z++) for (let x = ala ? 1 - AL_SPA : 1; x < R.larg - 1; x++){
+  for (let z = 1; z < R.fundo - 1; z++) for (let x = xMinSpa() + 1; x < R.larg - 1; x++){
     let ok = 1;
     for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (cheio[iSpa(x + dx, z + dz)]) ok = 0;
     livre[iSpa(x, z)] = ok;
@@ -16505,14 +16609,24 @@ function montarGradeSpa(){
     L.push({ tipo: 'tobogaFim', x: (r0 + r1 + 1) / 2, z: 12.5, ang: Math.PI });
     for (const [x, z, a] of [[-23.5, 15, Math.PI / 2], [-23.5, 7, Math.PI / 2], [-28.5, 6, 0], [-35.5, 6, 0]]) L.push({ tipo: 'lama', x, z, ang: a });
   }
+  // na piscina olímpica: o bloco de cada raia (de frente para a água), o lugar onde cai quem pula do trampolim (sai da água
+  // no corredor do fundo, em sai) e os lugares nos dois primeiros degraus da arquibancada (de frente para a água)
+  if (piscina){
+    const P = OLIMPICA, T = P.trampolim, fundo = P.agua[3] + 3.5;
+    for (let i = 0; i < P.raias; i++) L.push({ tipo: 'raia', raia: i, x: P.bloco + 1, z: raiaZ(i), y: 0.5, ang: -Math.PI / 2 });
+    L.push({ tipo: 'trampolim', x: T.cai[0], z: T.cai[1], ang: -Math.PI / 2, perto: celulaSpa(T.sai, fundo) });
+    for (let k = 0; k < 2; k++) for (const x of P.assento){ const h = (degrauSpa(k) + 1) / 8; L.push({ tipo: 'arquibancada', x: x + 0.5, z: P.arquibancada[2] + 3 * k + 1.5, y: h, sentado: h, ang: Math.PI, perto: celulaSpa(x + 0.5, fundo) }); }
+  }
   // o ângulo de cada lugar fica guardado já no mapa (o do desenho mais o giro)
-  for (const q of L){ q.y = R.altura[q.tipo]; q.perto = celulaSpa(q.x, q.z); q.ang += R.giro; }
+  for (const q of L){ if (q.y == null) q.y = R.altura[q.tipo]; q.perto = q.perto || celulaSpa(q.x, q.z); q.ang += R.giro; }
   // quando a grade é refeita (a ala ficou pronta), quem está num lugar continua com ele
   if (lugaresSpa) for (let i = 0; i < L.length; i++){ const o = lugaresSpa.find(q => q.tipo === L[i].tipo && q.x === L[i].x && q.z === L[i].z); if (o) L[i] = o; }
   lugaresSpa = L;
 }
 // a ala nova pronta: a grade passa a ter ela (os ladrilhos viraram construção quando a etapa começou, em abrirLoteObra)
 function abrirAlaSpa(){ if (gradeSpa) montarGradeSpa(); }
+// a piscina olímpica pronta: a grade passa a ter ela (o vão da cerca da ala abre junto)
+function abrirPiscinaSpa(){ if (gradeSpa) montarGradeSpa(); }
 // a célula livre mais perto de (lx, lz)
 function celulaSpa(lx, lz){
   const R = SPA; let melhor = null, bd = Infinity;
@@ -16539,7 +16653,7 @@ function caminhoSpa(de, ate){
   out.reverse();
   return out.filter((_, i) => i % 3 === 2 || i === out.length - 1).map(([x, z]) => mundoSpa(x, z));
 }
-const celulaDe = v => { const [lx, lz] = localSpa(v.x, v.z); return [clamp(Math.floor(lx), alaSpaPronta() ? -AL_SPA : 0, SPA.larg - 1), clamp(Math.floor(lz), 0, SPA.fundo - 1)]; };
+const celulaDe = v => { const [lx, lz] = localSpa(v.x, v.z); return [clamp(Math.floor(lx), xMinSpa(), SPA.larg - 1), clamp(Math.floor(lz), 0, SPA.fundo - 1)]; };
 // a estrada até o arco: sobe pela estrada desde a ponta de baixo, passa no vão da cerca e anda pelo caminho de terra,
 // ao longo da cerca de cima do spa, até a frente do arco
 function estradaDoSpa(){
@@ -16730,8 +16844,9 @@ function proximaNoSpa(v){
   }
   if (v.feitas >= v.quer || noite){ sairDoSpa(v); return; }
   const naSauna = visitantesSpa.filter(o => o.estado === 'sauna' || o.vai === 'sauna').length;
-  const fimToboga = lugaresSpa.find(q => q.tipo === 'tobogaFim');
+  const fimToboga = lugaresSpa.find(q => q.tipo === 'tobogaFim'), fimTrampolim = lugaresSpa.find(q => q.tipo === 'trampolim');
   const tipos = Object.keys(SPA.peso).filter(t => t === 'passeio' || (t === 'sauna' ? naSauna < SPA.maxSauna : t === 'toboga' ? !!fimToboga && !ocupados.has(fimToboga)
+    : t === 'trampolim' ? !!fimTrampolim && !ocupados.has(fimTrampolim)
     : t === 'bar' ? livres(t).length && (v.tipo === 'familia' || !!frutaDoBar()) : livres(t).length));
   let soma = 0; for (const t of tipos) soma += SPA.peso[t];
   let r = Math.random() * soma, tipo = tipos[0];
@@ -16741,10 +16856,12 @@ function proximaNoSpa(v){
   if (tipo === 'sauna'){ v.vai = 'sauna'; andarNoSpa(v, celulaSpa(SPA.portaSauna[0] + 2, SPA.sauna[3] + 2)); return; }
   // o tobogã: fica com o pé da rampa (um por vez) e vai até a escada
   if (tipo === 'toboga'){ v.lugar = fimToboga; v.vai = 'toboga'; andarNoSpa(v, celulaSpa(...SPA.ala.baseEscada)); return; }
+  // o trampolim: fica com o lugar onde cai (um por vez) e vai até o pé da escada
+  if (tipo === 'trampolim'){ v.lugar = fimTrampolim; v.vai = 'trampolim'; andarNoSpa(v, pePranchaSpa()); return; }
   irAoLugarSpa(v, sorteia(livres(tipo)));
 }
 function irAoLugarSpa(v, q){ v.lugar = q; v.vai = 'lugar'; andarNoSpa(v, q.perto); }
-const livresGradeSpa = () => { const out = [], R = SPA; for (let z = 2; z < R.fundo - 4; z++) for (let x = alaSpaPronta() ? 2 - AL_SPA : 2; x < R.larg - 2; x++) if (gradeSpa[iSpa(x, z)]) out.push([x, z]); return out; };
+const livresGradeSpa = () => { const out = [], R = SPA; for (let z = 2; z < R.fundo - 4; z++) for (let x = xMinSpa() + 2; x < R.larg - 2; x++) if (gradeSpa[iSpa(x, z)]) out.push([x, z]); return out; };
 function andarNoSpa(v, cel){
   const pts = cel && caminhoSpa(celulaDe(v), cel);
   v.pts = pts || []; v.estado = v.pts.length ? 'andando' : 'chegou';
@@ -16766,7 +16883,7 @@ function sairDoSpa(v){
   if (v.tipo === 'familia' && v.p.deToalha){ trocaDeRoupaSpa(v.p, null, v.x, v.z); v.esperaGiro = GIRO.dur; }
 }
 // um pulinho em arco até (x, y, z) no mundo; o ofurô pede um pulo mais alto, por cima da tina
-function pularNoSpa(v, x, y, z, alto, depois){ v.salto = { x0: v.x, z0: v.z, y0: v.y, x1: x, z1: z, y1: y, alto, t: 0, depois }; v.estado = 'pulando'; v.ang = Math.atan2(x - v.x, z - v.z); }
+function pularNoSpa(v, x, y, z, alto, depois, dur = 0.5){ v.salto = { x0: v.x, z0: v.z, y0: v.y, x1: x, z1: z, y1: y, alto, t: 0, depois, dur }; v.estado = 'pulando'; if (Math.hypot(x - v.x, z - v.z) > 0.01) v.ang = Math.atan2(x - v.x, z - v.z); }
 const FALAS_SPA_VISITANTE = ['Oinc! (suspira, relaxado)', 'Oinc oinc! (rola de alegria)', 'Óinc... (fecha os olhinhos)', 'Oinc! (balança o rabinho enrolado)', 'Oinc-oinc! (faz bolhinha na lama)', 'Óóóinc... (que delícia)', 'Oinc! (acena com a patinha)', 'Oinc oinc! (o melhor spa da região!)', 'Oinc... (pede mais lama)', 'Óinc! (se espreguiça todinho)', 'Oinc! (cochila de novo)', 'Oinc-oinc! (dá uma piscadinha)', 'Oinc! (afunda até o focinho)', 'Oinc oinc! (espirra lama sem querer)', 'Óinc... (ronca baixinho)', 'Oinc! (faz um travesseiro de lama)', 'Oinc-oinc! (chama um amigo pra lama)', 'Óóóinc... (nunca mais quer sair)', 'Oinc! (pisca pro vizinho de ofurô)', 'Oinc oinc! (canta no vapor da sauna)', 'Óinc! (estica as patinhas na espreguiçadeira)', 'Oinc! (ajeita o pepino no olho)'];
 const FALAS_SPA_PAGA = ['Oinc! (paga a entrada)', 'Oinc oinc! (deixa as moedinhas no balcão)', 'Oinc! (toca o sininho)', 'Óinc! (pega uma toalha rosa)', 'Oinc! (escolhe a toalha listrada)', 'Oinc-oinc! (paga e já olha pra lama)', 'Oinc! (mostra o cartão fidelidade)', 'Oinc! (conta moedinha por moedinha)', 'Oinc oinc! (pergunta se a lama tá quentinha)', 'Óinc! (sorri pra recepção)', 'Oinc! (pede um pepino extra)', 'Oinc! (paga e pede a toalha mais fofinha)', 'Oinc oinc! (pergunta o preço da massagem)', 'Óinc! (deixa uma gorjeta de moedinha)', 'Oinc! (assina o livro de visitas)', 'Oinc! (pede um chinelinho)', 'Óinc! (pede a chave do armário)', 'Oinc-oinc! (já tá de touca de banho)', 'Oinc! (paga e dá uma voltinha de alegria)', 'Oinc oinc! (pergunta se a sauna tá quentinha)', 'Óinc! (paga com uma moedinha brilhante)'];
 const FALAS_SPA_FAMILIA_ENTRADA = ['Família não paga, né? Oinc!', 'Vim só dar uma relaxadinha!', 'O Ed disse que pra família é de graça!', 'Hoje é dia de spa!', 'Guarda uma toalha pra mim?', 'Cheguei! Cadê a lama mais quentinha?', 'Trabalhei a semana toda, eu mereço!', 'O spa da fazenda é o melhor da região!', 'Só uma horinha de lama e já volto!', 'Oinc! Que cheirinho de lama fresca!', 'Se precisarem de mim, tô no ofurô!', 'Oi, pessoal! Vim tirar o cansaço!', 'Família na área! Cadê o ofurô?', 'Hoje eu tô de folga! Oinc!', 'O Ed liberou, então eu vim!', 'Me guarda a espreguiçadeira da sombra?', 'Vim só pra lama. E pra sauna. E pro ofurô.', 'Deixei tudo arrumado e vim relaxar!', 'Oinc! Que spa bonito o Maurinho fez!', 'Cheguei de chinelo e tudo!', 'Hoje ninguém me tira daqui!'];
@@ -17054,7 +17171,7 @@ function atualizarSpa(dt, t){
   if (proxSpa == null) proxSpa = rnd(...SPA.primeira);
   if (proxFamiliaSpa == null) proxFamiliaSpa = rnd(...SPA.familia) * 0.5;
   if (!noite){
-    if (!excursao && (proxSpa -= dt) <= 0){ proxSpa = rnd(...SPA.chegada) * fatorLivroSpa(); chegarAoSpa(Math.random() < 0.2 ? 3 : Math.random() < 0.5 ? 2 : 1); }
+    if (!excursao && (proxSpa -= dt) <= 0){ proxSpa = rnd(...SPA.chegada) * fatorLivroSpa() * (piscinaPronta() ? OLIMPICA.fatorChegada : 1); chegarAoSpa(Math.random() < 0.2 ? 3 : Math.random() < 0.5 ? 2 : 1); }
     if ((proxFamiliaSpa -= dt) <= 0){ proxFamiliaSpa = rnd(...SPA.familia); if (!visitantesSpa.some(v => v.tipo === 'familia')) chegarFamiliaSpa(); }
   }
   for (const v of visitantesSpa.slice()){
@@ -17103,6 +17220,13 @@ function passoSpa(v, dt, t, noite){
     case 'assinando': v.t -= dt; v.corpo.rotation.x = Math.sin(v.t * 14) * 0.06; if (v.t <= 0){ v.corpo.rotation.x = 0; assinarLivroSpa(v); sairDoSpa(v); } break;
     case 'chegou':
       if (v.vai === 'toboga' && v.lugar){ subirTobogaSpa(v); break; }
+      if (v.vai === 'trampolim' && v.lugar){ subirTrampolimSpa(v); break; }
+      // a raia: sobe no bloco, espera um pouquinho agachado e mergulha
+      if (v.vai === 'lugar' && v.lugar && v.lugar.tipo === 'raia'){
+        const q = v.lugar, [x, z] = mundoSpa(q.x, q.z);
+        pularNoSpa(v, x, q.y, z, 0.22, () => { v.estado = 'bloco'; v.t = rnd(...SPA.tempo.bloco); v.ang = q.ang; });
+        break;
+      }
       if (v.vai === 'assinar'){ v.estado = 'assinando'; v.t = 1.6; v.ang = Math.PI / 2 + SPA.giro; break; }
       if (v.vai === 'fotoArco'){ v.estado = 'posando'; break; }
       if (v.vai === 'sauna'){
@@ -17131,9 +17255,20 @@ function passoSpa(v, dt, t, noite){
       v.x = lerp(a[0], b[0], f); v.z = lerp(a[1], b[1], f); v.y = lerp(a[2], b[2], f);
       v.escalando = b[2] > a[2] + 0.01;
       if (Math.hypot(b[0] - a[0], b[1] - a[1]) > 0.01) v.ang = Math.atan2(b[0] - a[0], b[1] - a[1]);
-      if (f >= 1){ v.ki++; v.kt = 0; if (v.ki >= K.length){ v.estado = 'escorregando'; v.t = 0; v.escalando = false; descerTobogaSpa(v); } }
+      if (f >= 1){ v.ki++; v.kt = 0; if (v.ki >= K.length){ v.escalando = false; if (v.kfFim){ const fim = v.kfFim; v.kfFim = null; fim(); } else { v.estado = 'escorregando'; v.t = 0; descerTobogaSpa(v); } } }
       break;
     }
+    case 'bloco': v.t -= dt; if (v.t <= 0) mergulharSpa(v); break;
+    // na ponta da prancha: dois pulinhos e o pulo
+    case 'quica': {
+      const T = OLIMPICA.trampolim; v.t += dt;
+      v.y = (T.alto + 1) / 8 + Math.abs(Math.sin(v.t * Math.PI * 2)) * 0.09;
+      if (v.t >= 1){ v.y = (T.alto + 1) / 8; pularDoTrampolimSpa(v); }
+      break;
+    }
+    case 'nadando': nadarSpa(v, dt); break;
+    // parado na água (no fim da prova do campeonato), esperando a vez de sair
+    case 'boiando': v.fase += dt * 2; break;
     case 'escorregando': {
       // desce a calha acelerando e voa até a lama, no pé da rampa
       const A = SPA.ala, [r0, r1, za, zb] = A.rampa;
@@ -17154,7 +17289,7 @@ function passoSpa(v, dt, t, noite){
       break;
     }
     case 'pulando': {
-      const S2 = v.salto; S2.t = Math.min(1, S2.t + dt / 0.5);
+      const S2 = v.salto; S2.t = Math.min(1, S2.t + dt / (S2.dur || 0.5));
       v.x = lerp(S2.x0, S2.x1, S2.t); v.z = lerp(S2.z0, S2.z1, S2.t); v.y = lerp(S2.y0, S2.y1, S2.t) + Math.sin(S2.t * Math.PI) * S2.alto;
       if (S2.t >= 1){ v.salto = null; S2.depois(); }
       break;
@@ -17164,6 +17299,11 @@ function passoSpa(v, dt, t, noite){
       if (q.tipo === 'ducha' && Math.random() < dt * 14) particula(v.x + rnd(-0.12, 0.12), 1.5, v.z + rnd(-0.12, 0.12), 0x9ad8f0, -1);
       if ((q.tipo === 'lama' || q.tipo === 'tobogaFim') && Math.random() < dt * 0.6) respingoSpa(v.x, v.z, 'lama', 2);
       if (q.tipo === 'pedicure' && Math.random() < dt * 1.2) particula(v.x + rnd(-0.12, 0.12), 0.45, v.z + rnd(-0.12, 0.12), sorteia(ESMALTES)[1], 0.3);
+      // na arquibancada, torce por quem está nadando
+      if (q.tipo === 'arquibancada' && Math.random() < dt * 0.35 && visitantesSpa.some(o => o.estado === 'nadando' || o.estado === 'bloco')){
+        v.pulo = 0.3; if (v.tipo === 'familia') v.p.aceno = 1;
+        if (Math.random() < 0.25){ const f = variar(v.tipo === 'familia' ? FALAS_SPA_FAMILIA_TORCIDA : FALAS_SPA_TORCIDA); falar(v, f, Math.min(2.6, tempoDeLeitura(f))); }
+      }
       // hora de sair: pula de volta para o chão (de noite sai antes)
       if (v.t <= 0 || (noite && v.t > 1.5)){
         if (v.tipo === 'porco') v.pep.visible = false;
@@ -17188,7 +17328,8 @@ function passoSpa(v, dt, t, noite){
       break;
   }
 }
-const dentroDoSpa = (x, z) => { const P = PREDIO.spa, A = P.ala; return (x >= P.x0 && x < P.x1 + 1 && z >= P.z0 && z < P.z1 + 1) || (alaSpaPronta() && x >= A.x0 && x < A.x1 + 1 && z >= A.z0 && z < A.z1 + 1); };
+const dentroDoSpa = (x, z) => { const P = PREDIO.spa, A = P.ala, O = P.piscina; return (x >= P.x0 && x < P.x1 + 1 && z >= P.z0 && z < P.z1 + 1) || (alaSpaPronta() && x >= A.x0 && x < A.x1 + 1 && z >= A.z0 && z < A.z1 + 1)
+  || (piscinaPronta() && x >= O.x0 && x < O.x1 + 1 && z >= O.z0 && z < O.z1 + 1); };
 // ----- a ala nova: o tobogã, a pedicure e o bar de sucos
 function subirTobogaSpa(v){
   const A = SPA.ala, [ex] = A.escada, ym = (A.alto + 1) / 8, cx = (A.rampa[0] + A.rampa[1] + 1) / 2, m = (lx, lz) => mundoSpa(lx, lz);
@@ -17199,6 +17340,211 @@ function descerTobogaSpa(v){
   if (naTelaSpa(v.x, v.z)) Som.tom(900, 1.1, 'sine', 0.03, 260);
   if (Math.random() < 0.6){ const f = variar(v.tipo === 'familia' ? FALAS_SPA_FAMILIA_TOBOGA : FALAS_SPA_TOBOGA); falar(v, f, Math.min(2.6, tempoDeLeitura(f))); }
 }
+// ----- a piscina olímpica: a raia, o trampolim e o mergulho
+// o pé da escada do trampolim (a célula livre mais perto dele, no corredor do fundo)
+const pePranchaSpa = () => { const T = OLIMPICA.trampolim; return celulaSpa(T.torre[0] + 2.5, T.escada + 2.5); };
+const somAguaSpa = (v, forte) => { if (naTelaSpa(v.x, v.z)){ Som.tom(forte ? 220 : 320, forte ? 0.32 : 0.2, 'sine', forte ? 0.07 : 0.05, forte ? 90 : 150); Som.ruido(forte ? 0.3 : 0.18, forte ? 0.05 : 0.03, 900); } };
+// do bloco para a água, de focinho para baixo; nada até a outra ponta e volta, e sai pulando para o deck
+function mergulharSpa(v, depois){
+  const q = v.lugar, [a0, a1] = OLIMPICA.agua, [x, z] = mundoSpa(a1 - 2.5, q.z);
+  v.mergulho = 1;
+  pularNoSpa(v, x, SPA.altura.raia, z, 0.3, () => {
+    v.mergulho = 0; respingoSpa(v.x, v.z, 'agua', 14); somAguaSpa(v);
+    v.estado = 'nadando'; v.nado = { pts: [mundoSpa(a0 + 1.5, q.z), mundoSpa(a1 - 1.5, q.z)], vel: rnd(...OLIMPICA.velNado) };
+    if (Math.random() < 0.3){ const f = variar(v.tipo === 'familia' ? FALAS_SPA_FAMILIA_NADO : FALAS_SPA_NADO); falar(v, f, Math.min(2.6, tempoDeLeitura(f))); }
+    if (depois) depois(v);
+  }, 0.55);
+}
+// nadando pelos pontos de v.nado (no mundo): a esteira de espuma atrás e, em cada virada, um respingo. nado.ritmo (a prova
+// do campeonato) muda a velocidade no caminho; nado.fim troca a saída da água
+function nadarSpa(v, dt){
+  const N = v.nado; if (!N){ v.estado = 'parado'; v.t = 0.5; return; }
+  const P = N.pts[0];
+  if (P){
+    const dx = P[0] - v.x, dz = P[1] - v.z, d = Math.hypot(dx, dz), passo = N.vel * (N.ritmo ? N.ritmo(v, N) : 1) * dt;
+    if (d > 0.001) v.ang = Math.atan2(dx, dz);
+    v.fase += dt * 9;
+    if (d > passo){ v.x += dx / d * passo; v.z += dz / d * passo; }
+    else { v.x = P[0]; v.z = P[1]; N.pts.shift(); if (N.pts.length){ if (naTelaSpa(v.x, v.z)) respingoSpa(v.x, v.z, 'agua', 6); if (N.virada) N.virada(v); } }
+    if (naTelaSpa(v.x, v.z) && Math.random() < dt * 6) particula(v.x - Math.sin(v.ang) * 0.16 + rnd(-0.05, 0.05), 0.27, v.z - Math.cos(v.ang) * 0.16 + rnd(-0.05, 0.05), 0xe8f8ff, 0.35);
+  }
+  if (N.pts.length) return;
+  v.nado = null;
+  if (N.fim){ N.fim(v); return; }
+  sairDaAguaSpa(v);
+}
+function sairDaAguaSpa(v){
+  const q = v.lugar, [cx, cz] = q.perto, [x, z] = mundoSpa(cx + 0.5, cz + 0.5);
+  pularNoSpa(v, x, 1 / 8, z, 0.3, () => { v.lugar = null; v.estado = 'parado'; v.t = rnd(0.3, 1.2); });
+}
+// o trampolim: até o pé da escada, sobe, passa pelo tablado e anda até a ponta da prancha (pelos pontos de v.kf, como o
+// tobogã); lá dá dois pulinhos e pula dando uma cambalhota
+function subirTrampolimSpa(v){
+  const T = OLIMPICA.trampolim, ym = (T.alto + 1) / 8, lx = T.torre[0] + 2.5, pz = (T.prancha[2] + T.prancha[3] + 1) / 2, m = mundoSpa;
+  v.kf = [[v.x, v.z, v.y, 0], [...m(lx, T.escada + 1.3), 1 / 8, 0.5], [...m(lx, T.escada + 1.3), ym, 2.2], [...m(lx, pz), ym, 0.7], [...m(T.prancha[1] + 0.2, pz), ym, 1.7]];
+  v.ki = 1; v.kt = 0; v.estado = 'subindo';
+  v.kfFim = () => { v.estado = 'quica'; v.t = 0; };
+}
+function pularDoTrampolimSpa(v){
+  const q = v.lugar, [x, z] = mundoSpa(q.x, q.z), T = OLIMPICA.trampolim;
+  if (Math.random() < 0.6){ const f = variar(v.tipo === 'familia' ? FALAS_SPA_FAMILIA_TRAMPOLIM : FALAS_SPA_TRAMPOLIM); falar(v, f, Math.min(2.6, tempoDeLeitura(f))); }
+  v.mergulho = 2;
+  pularNoSpa(v, x, q.y, z, 0.55, () => {
+    v.mergulho = 0; respingoSpa(v.x, v.z, 'agua', 22); somAguaSpa(v, true);
+    for (let i = 0; i < 10; i++) particula(v.x + rnd(-0.1, 0.1), 0.3, v.z + rnd(-0.1, 0.1), 0xffffff, 1.6);
+    v.estado = 'nadando'; v.nado = { pts: [mundoSpa(T.sai, q.z)], vel: rnd(...OLIMPICA.velNado) * 0.8 };
+  }, 0.9);
+}
+const FALAS_SPA_NADO = ['Oinc! (mergulha de focinho)', 'Oinc oinc! (nado cachorrinho, digo, porquinho)', 'Óinc! (bate as patinhas bem rápido)', 'Oinc! (água fresquinha!)', 'Oinc-oinc! (faz bolhinhas)', 'Oinc! (vai de costas)', 'Óóinc! (que piscina enorme!)',
+  'Oinc! (prende o fôlego)', 'Oinc oinc! (aposta corrida com a boia)', 'Oinc! (nada de touca e tudo)', 'Óinc! (dá uma cambalhota na virada)', 'Oinc-oinc! (sente o vento nas orelhas molhadas)', 'Oinc! (nada em linha retinha)', 'Oinc oinc! (olha a raia do vizinho)',
+  'Óinc! (espirra água sem querer)', 'Oinc! (treinando pro campeonato!)', 'Oinc-oinc! (o rabinho faz de leme)', 'Oinc! (cospe um esguicho)', 'Óóóinc! (melhor que lama? quase)', 'Oinc! (nada borboleta, mais ou menos)', 'Oinc oinc! (chega ofegante e feliz)'];
+const FALAS_SPA_TRAMPOLIM = ['Oinc! (lá vou eeeeu!)', 'Óóóinc! (cambalhota!)', 'Oinc oinc! (olha a altura!)', 'Oinc! (fecha os olhinhos e pula)', 'Oinc-oinc! (bomba!)', 'Óinc! (pulo de anjo!)', 'Oinc! (segura o focinho)',
+  'Oinc oinc! (quica, quica e vai!)', 'Óinc! (nota dez, juízes!)', 'Oinc! (um, dois, três!)', 'Oinc-oinc! (splash garantido!)', 'Oinc! (pula de barriga, ai!)', 'Óóinc! (que frio na barriga!)', 'Oinc! (faz pose antes de pular)',
+  'Oinc oinc! (abre caminho lá embaixo!)', 'Óinc! (de novo, de novo!)', 'Oinc! (gira no ar!)', 'Oinc-oinc! (voa como passarinho)', 'Oinc! (acena pra arquibancada)', 'Óóóinc! (mergulho perfeito!)', 'Oinc! (tibum!)'];
+const FALAS_SPA_TORCIDA = ['Oinc! (bate os cascos na arquibancada)', 'Oinc oinc! (vai, vai, vai!)', 'Óinc! (assobia pros nadadores)', 'Oinc! (agita a toalha)', 'Oinc-oinc! (olha a braçada!)', 'Oinc! (pula de alegria)', 'Óóinc! (que mergulho!)',
+  'Oinc oinc! (puxa um coro)', 'Oinc! (aplaude com as patinhas)', 'Óinc! (torce pela raia do meio)', 'Oinc! (faz uma ola sozinho)', 'Oinc-oinc! (isso, isso!)', 'Oinc! (grita o nome do amigo)', 'Óinc! (mais rápido!)',
+  'Oinc oinc! (que virada!)', 'Oinc! (bate palminha de casco)', 'Óóóinc! (quase lá!)', 'Oinc! (fica na ponta dos cascos pra ver)', 'Oinc-oinc! (dá nota dez)', 'Oinc! (pede bis)', 'Óinc! (sopra uma cornetinha)'];
+const FALAS_SPA_FAMILIA_NADO = ['Água fresquinha! Que delícia!', 'Olha minha braçada!', 'Quem chegar por último é ovo podre!', 'Isso é melhor que ofurô!', 'Nado de porquinho, patente minha!', 'Glub glub! Engoli um pouquinho.', 'Uma raia inteira sem parar!',
+  'Vou treinar pro campeonato!', 'Ai, a água entrou na orelha!', 'Bora, mais uma virada!', 'Ninguém me alcança!', 'Nado de costas pra ver o céu.', 'Essa piscina é enorme!', 'Respira, braçada, respira!',
+  'O Maurinho caprichou nessa piscina!', 'Tô nadando que nem peixe!', 'Mergulho de focinho!', 'Ufa! Cansei, mas foi bom.', 'Mais uma volta e saio.', 'Que vista daqui de dentro!', 'Splash! Ops, molhei a arquibancada.'];
+const FALAS_SPA_FAMILIA_TRAMPOLIM = ['Lá vou eu!', 'Olha a cambalhota!', 'Bomba!', 'Nota dez, hein!', 'Daqui de cima dá pra ver a fazenda toda!', 'Um, dois, três e já!', 'Segura que eu vou!',
+  'Pulo de anjo!', 'Abre espaço aí embaixo!', 'Ai, que alto! Vou mesmo assim!', 'Quem pula mais bonito?', 'Iiiiihá!', 'Mergulho olímpico!', 'Essa vai pro placar!',
+  'Prende o nariz e vai!', 'Tibum!', 'Ninguém conta que eu fechei os olhos!', 'Mais alto que o tobogã!', 'Esse trampolim quica bem!', 'Olha eu voando!', 'De novo, de novo!'];
+const FALAS_SPA_FAMILIA_TORCIDA = ['Vai, vai, vai!', 'Que braçada bonita!', 'Isso! Mais rápido!', 'Olha a virada!', 'Bravo! Bravo!', 'Daqui a gente vê tudo!', 'Quase lá!',
+  'Que mergulho!', 'Nota dez pra essa raia!', 'Ê, nadador!', 'Força! Força!', 'Eu torço pra todo mundo!', 'Essa arquibancada é boa demais!', 'Que nado lindo!',
+  'Vai, porquinho!', 'Uhuu! Que velocidade!', 'Assim que se nada!', 'Mais uma volta!', 'Isso que é piscina!', 'Que espetáculo!', 'Bis! Bis!'];
+// ----- o campeonato de natação (o Lucas pediu): uma cena que se repete de tempos em tempos (CAMPEONATO.intervalo, em
+// minutos de jogo aberto), de dia, com a piscina olímpica pronta e o Ed parado há um tempinho (parado, em ms). O spa
+// esvazia; de quatro a seis nadadores (às vezes alguém da família, sempre na primeira vez se der) esperam atrás dos blocos,
+// a torcida já está na arquibancada e o Ed é o juiz, no canto da frente. Eles sobem nos blocos, o Ed apita, todos mergulham
+// e nadam ida e volta (vel, em ladrilhos por segundo, e um ritmo que sobe e desce no caminho); quem bate primeiro na parede
+// dos blocos ganha. O placar mostra a ordem; os três primeiros andam até o pódio, que aparece num puf no canto do fundo, e
+// ganham as medalhas de ouro, prata e bronze. Cada torcedor paga o ingresso: a bilheteria entra no fim (na reprise, não)
+const CAMPEONATO = { intervalo: [25, 45], nadadores: [4, 6], torcida: [9, 13], ingresso: 250, vel: [0.8, 0.98], ritmo: 0.16, chanceFamilia: 0.5, parado: 15000 };
+const MEDALHAS = [[0xf2c335, 0xb8901a], [0xd8dde2, 0x9aa3ab], [0xd08a4a, 0x9a5e2a]];
+let campeonato = null, proxCampeonato = null;
+const sorteioCampeonato = () => Date.now() + rnd(...CAMPEONATO.intervalo) * 60000;
+// o pódio: três blocos (o do meio mais alto) com o número na frente, virados para a água (OLIMPICA.podio, no desenho)
+function vPodio(){
+  const v = new Vox(), D = OLIMPICA.podio, [z0, z1] = D.z, cores = [0xf2c335, 0xd8dde2, 0xd08a4a];
+  D.x.forEach((x0, i) => {
+    const h = D.alto[i];
+    v.box(x0, 1, z0, x0 + 3, h, z1, (x, y) => y === h ? 0xfdf8ef : 0x2f6fb3);
+    // o número (1, 2, 3) em cubinhos na frente
+    const num = [[[1, 0], [1, 1], [1, 2]], [[0, 2], [1, 2], [2, 1], [1, 0], [2, 0], [0, 0]], [[0, 2], [1, 2], [2, 1], [1, 1], [2, 0], [1, 0], [0, 0]]][i];
+    for (const [dx, dy] of num) v.set(x0 + 3 - dx, h - 2 + dy, z0 - 1, cores[i]);
+  });
+  return v;
+}
+// a medalha: a fita em V nas cores da fazenda e o disco, para pendurar no peito (em cubinhos de 1/60)
+function vMedalha(i){
+  const v = new Vox(), [c, e] = MEDALHAS[i];
+  for (let y = 0; y < 6; y++){ v.set(-3 + Math.floor(y / 2), 6 + y, 0, 0xe0404a); v.set(3 - Math.floor(y / 2), 6 + y, 0, 0x3a8fd0); }
+  for (let x = -2; x <= 2; x++) for (let y = 0; y <= 4; y++){ const d = Math.hypot(x, y - 2); if (d <= 2.5) v.set(x, 1 + y, 1, d > 1.7 ? e : c); }
+  return v;
+}
+function medalhaNoPeito(v, i){
+  const m = malha(geo('medalha' + i, () => vMedalha(i).build(1 / 60, { origin: [0.5, 0, 0.5] })));
+  if (v.tipo === 'porco'){ m.scale.setScalar(1.5); m.position.set(0, 7 / 60, 21 / 60); m.rotation.x = -0.2; v.corpo.add(m); }
+  else { const alto = v.p.altura || 1.3; m.scale.setScalar(2.2); m.position.set(0, alto * 0.4, 0.27); v.p.corpo.add(m); }
+  v.medalha = m;
+}
+function apitoSpa(quem){
+  falar(quem, 'Priiiiii!', 1.4);
+  if (naTelaSpa(quem.x, quem.z)){ Som.tom(2900, 0.22, 'square', 0.025, 3100); Som.tom(3100, 0.45, 'square', 0.025, 2800, 0.24); }
+}
+function fanfarraSpa(){ [523, 659, 784, 1047, 784, 1047].forEach((f, i) => Som.tom(f, i === 5 ? 0.5 : 0.16, 'square', 0.03, 0, i * 0.14)); }
+function textoPlacar(linhas){
+  const K = campeonato; if (!K || !K.placar) return;
+  if (K.placar.material.map) K.placar.material.map.dispose();
+  K.placar.material.map = texturaTexto(linhas, 256, 96, '#1d3a5f'); K.placar.material.needsUpdate = true;
+}
+// todo mundo da cena se mexe como os visitantes; parados, ninguém procura atividade. A torcida pula, e mais na prova,
+// quando alguém grita o nome de quem ainda está nadando
+function passoCampeonato(dt, t){
+  const K = campeonato; if (!K) return;
+  const prova = !!cine && cine.passo === 'cn-prova';
+  for (const v of [...K.nadadores, ...K.torcida, K.arbitro]){
+    if (v.estado === 'parado' || v.estado === 'atividade' || (v.estado === 'bloco' && !prova)) v.t = 999;
+    if (v.estado === 'parado' && v.lugar === null && K.torcida.includes(v) && Math.random() < dt * (prova ? 1.3 : 0.3)) v.pulo = 0.35;
+    passoSpa(v, dt, t, false); animarSpa(v, dt, t);
+  }
+  if (prova && Math.random() < dt * 0.6){
+    const a = sorteia(K.torcida), n = sorteia(K.nadadores.filter(v => v.estado === 'nadando'));
+    if (a && n) falar(a, variar(FALAS_CAMP_TORCIDA).split('{nome}').join(n.apelido), 1.6);
+  }
+}
+function limparCampeonato(){
+  const K = campeonato; if (!K) return;
+  for (const v of [...K.nadadores, ...K.torcida, K.arbitro]){
+    if (v.medalha){ if (v.medalha.parent) v.medalha.parent.remove(v.medalha); v.medalha = null; }
+    v.g.visible = false; scene.remove(v.g); const k = pickaveis.indexOf(v.g); if (k >= 0) pickaveis.splice(k, 1);
+    if (v.tipo === 'familia'){ v.p.toalha(null); v.p.sentado = 0; v.p.corpo.rotation.set(0, 0, 0); }
+  }
+  for (const m of [K.podio, K.placar]) if (m) scene.remove(m);
+  campeonato = null;
+  // o Ed de verdade aparece na porta do spa
+  ed.g.visible = true; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; ed.colocar(...portaSpaMundo());
+}
+function pagarCampeonato(K){
+  if (K.pago) return; K.pago = true;
+  const val = K.bilheteria;
+  S.dinheiro += val; S.spaReais = (S.spaReais || 0) + val; S.campeonatos = (S.campeonatos || 0) + 1; S.campeonatoReais = (S.campeonatoReais || 0) + val;
+  if (!S.spaHoje || S.spaHoje.dia !== diaAtual()) S.spaHoje = { dia: diaAtual(), n: 0, reais: 0 };
+  S.spaHoje.reais += val;
+  chipPulsa('chipDinheiro'); Som.moeda();
+  aviso(`Bilheteria do campeonato de natação: ${reais(val)}.`, 'grande', 3.5);
+}
+// quem bate na parede dos blocos: entra na ordem, fica boiando e comemora; o primeiro acende o placar
+function chegouCampeonato(v){
+  const K = campeonato; if (!K) return;
+  K.ordem.push(v); v.estado = 'boiando'; v.ang = -Math.PI / 2 + SPA.giro;
+  respingoSpa(v.x, v.z, 'agua', 8);
+  if (K.ordem.length === 1){
+    fanfarraSpa(); confete(v.x, 0.6, v.z, 30, 1);
+    textoPlacar([['1º LUGAR', 0.7, '#fdf8ef'], [v.apelido.toUpperCase(), 1, '#f2c335']]);
+    for (const t of K.torcida) t.pulo = 0.45;
+  }
+}
+const FALAS_CAMP_ABERTURA = ['Bem-vindos a mais um Campeonato de Natação da Fazenda Joli Pig!', 'Atenção, torcida: vai começar o campeonato de natação!', 'Hoje tem campeonato na piscina olímpica! Arquibancada cheia!', 'Senhoras e senhores porquinhos: o campeonato de natação!',
+  'Mais um campeonato! A água tá fresquinha e a torcida tá animada!', 'Apito no pescoço e cronômetro na mão: hoje eu sou o juiz!', 'Começa agora o campeonato de natação do spa!', 'Arquibancada lotada! Que dia pra um campeonato!',
+  'Bem-vindos à piscina olímpica! Hoje tem prova de ida e volta!', 'O campeonato voltou! Quem vai levar o ouro hoje?', 'Torcida, façam barulho: é dia de campeonato!', 'Ida e volta, seis raias e uma medalha de ouro. Vamos lá!',
+  'Hoje a piscina olímpica é palco de campeonato!', 'Atenção, atenção! Vai começar a prova mais esperada da fazenda!', 'Bem-vindos! O juiz aqui sou eu, e eu sou bem justo.', 'Campeonato de natação! Quem estiver na raia, capricha na braçada!',
+  'Chegou o dia: campeonato de natação no spa dos pigs!', 'Que festa! Mais um campeonato na nossa piscina!', 'Prontos pra torcer? Hoje tem campeonato!', 'Bem-vindos, nadadores e torcedores!', 'A piscina tá linda e a torcida mais ainda. Vai começar!'];
+const FALAS_CAMP_TORCIDA_ABRE = ['Oinc oinc oinc! (a arquibancada inteira bate os cascos)', 'Oinc! Oinc! Oinc! (a torcida faz uma ola)', 'Óóóinc! (todo mundo agita a toalha)', 'Oinc oinc! (alguém sopra uma cornetinha)', 'Oinc-oinc-oinc! (coro de torcida)',
+  'Oinc! (a arquibancada pula junto)', 'Óinc oinc! (faixa de torcida aberta)', 'Oinc oinc oinc! (batucada nos degraus)', 'Oinc! (assobios e palminhas de casco)', 'Óóinc! (a torcida grita o nome de todo mundo)', 'Oinc-oinc! (bandeirinha pra todo lado)',
+  'Oinc oinc! (é campeão, é campeão!)', 'Óinc! (a torcida já tá rouca)', 'Oinc! (pipoca voando na arquibancada)', 'Oinc oinc oinc! (ninguém fica sentado)', 'Óóóinc! (uma ola que dá duas voltas)', 'Oinc! (cada um torce por uma raia)',
+  'Oinc-oinc-oinc! (o barulho chega até a horta)', 'Oinc! (cornetinha, apito e palminha)', 'Óinc oinc! (que animação!)', 'Oinc oinc! (a arquibancada treme de alegria)'];
+const FALAS_CAMP_FAMILIA_LARGADA = ['Treinei a semana inteira pra esse dia!', 'Hoje a medalha de ouro é minha!', 'Ninguém conta, mas eu tô nervoso.', 'Touca? Quem precisa de touca?', 'Vou nadar tão rápido que nem vou molhar!', 'Respira fundo... respira fundo...',
+  'Olha eu aqui na raia! Torcida, me ajuda!', 'Prometo não engolir água dessa vez.', 'Se eu ganhar, o churrasco... digo, o lanchinho é por minha conta!', 'Meu plano: bater as patinhas bem rápido.', 'Já tô vendo a medalha no meu pescoço!',
+  'O segredo é a virada. Eu acho.', 'Tô pronto! Quer dizer, quase pronto.', 'Vou dedicar essa prova ao Ed!', 'Quem é esse pessoal tão rápido do meu lado?', 'Uma braçada de cada vez!', 'Pelo menos eu vou me divertir!',
+  'Eu nadei na lama a vida toda, água é moleza!', 'Hoje eu nado que nem peixe!', 'Vamos ver quem é o mais rápido da fazenda!', 'Torçam por mim, hein!'];
+const FALAS_CAMP_TORCIDA = ['Vai, {nome}!', 'Força, {nome}!', 'Mais rápido, {nome}!', 'Isso, {nome}!', '{nome}! {nome}!', 'Olha essa virada, {nome}!', 'Ninguém te segura, {nome}!',
+  'Vai que dá, {nome}!', 'Bate a patinha, {nome}!', 'Uhuu, {nome}!', 'É agora, {nome}!', 'Que braçada, {nome}!', 'Acelera, {nome}!', 'Tô contigo, {nome}!',
+  'Vamos, {nome}, falta pouco!', 'Oinc oinc, {nome}!', 'Nada, {nome}, nada!', 'Isso que é nadar, {nome}!', 'O ouro é seu, {nome}!', 'Que fôlego, {nome}!', 'Bora, {nome}!'];
+const FALAS_CAMP_CHEGADA = ['Que chegada!', 'Foi por um focinho!', 'Que prova!', 'Batida na parede!', 'Recorde da fazenda!', 'Ninguém piscou!', 'Que final emocionante!',
+  'Uau, que braçadas!', 'Foi rapidinho!', 'Que disputa!', 'Chegada apertadíssima!', 'Que virada!', 'Inacreditável!', 'Que velocidade!',
+  'Prova histórica!', 'O placar já acendeu!', 'Que nado bonito!', 'Ninguém desistiu!', 'Que espetáculo!', 'Prova de campeão!', 'A torcida foi à loucura!'];
+const FALAS_CAMP_VENCE = ['Oinc! (chora de emoção)', 'Oinc oinc! (dedica pra mãe)', 'Óóóinc! (morde a medalha, que nem atleta de verdade)', 'Oinc! (acena pra arquibancada)', 'Oinc-oinc! (pede uma foto)', 'Oinc! (dá um mergulho de alegria)', 'Óinc! (levanta as duas patinhas)',
+  'Oinc oinc! (agradece ao treinador)', 'Oinc! (o melhor dia da vida!)', 'Óóinc! (vai contar pra família toda)', 'Oinc! (faz pose de campeão)', 'Oinc-oinc! (já quer a revanche, mesmo ganhando)', 'Oinc! (pisca pro juiz)', 'Óinc! (manda beijo pra torcida)',
+  'Oinc oinc! (treinou na lama, ganhou na água!)', 'Oinc! (dá uma voltinha boiando)', 'Óóóinc! (nem acredita)', 'Oinc! (promete voltar ano que vem)', 'Oinc-oinc! (a medalha brilha que nem o sol)', 'Oinc! (abraça o nadador do lado)', 'Óinc! (ganhou por um focinho!)'];
+const FALAS_CAMP_FAMILIA_VENCE = ['Eu ganhei? Eu ganhei! Oinc!', 'Ouro pra fazenda Joli Pig!', 'Eu disse que treinei a semana inteira!', 'Essa medalha vai pra parede da sala!', 'Ed, você viu? Eu fui o mais rápido!', 'Obrigado, torcida! Vocês são demais!', 'Vou morder a medalha, que nem atleta!',
+  'Nem eu acreditei nessa chegada!', 'Foi a virada! Eu sabia que era a virada!', 'Campeão da piscina olímpica! Oinc!', 'Alguém tira uma foto, por favor!', 'Treino de lama funciona, gente!', 'Eu quero dedicar essa vitória à família!', 'Que dia! Que dia!',
+  'Ganhei por um focinho!', 'Ano que vem eu defendo o título!', 'Vou contar pra todo mundo!', 'Uhuu! Medalha de ouro!', 'Foi difícil, mas foi lindo!', 'Bati na parede e nem senti!', 'Agora eu mereço um suco do bar!'];
+const FALAS_CAMP_FAMILIA_PERDE = ['Fiquei em {pos} lugar! Ano que vem é meu.', '{pos} lugar! Pelo menos eu me diverti muito.', 'Fiquei em {pos}! Esse pessoal nada demais.', '{pos} lugar e muita água engolida!', 'Ah, fiquei em {pos}. Vou treinar mais na lama.',
+  'Fiquei em {pos}, mas a torcida gritou meu nome!', '{pos} lugar! O importante é participar, né?', 'Fiquei em {pos}. Revanche no próximo campeonato!', 'Ufa! {pos} lugar e um fôlego a menos.', '{pos} lugar! Vou pedir umas dicas pro campeão.',
+  'Fiquei em {pos}! A virada me atrapalhou.', '{pos} lugar, mas a braçada mais bonita foi a minha.', 'Fiquei em {pos}. Da próxima eu vou de touca!', '{pos}! Nada mal pra quem só nadava na lama.', 'Fiquei em {pos}, e tô feliz do mesmo jeito!',
+  '{pos} lugar! Alguém viu meu chinelo?', 'Fiquei em {pos}. Mas cheguei sorrindo!', '{pos} lugar! Vou comemorar no ofurô.', 'Fiquei em {pos}. Valeu a torcida!', '{pos} lugar! Próximo campeonato eu chego antes.', 'Fiquei em {pos}! Que piscina comprida, hein?'];
+const FALAS_CAMP_TORCIDA_FIM = ['Oinc oinc oinc! (é campeão!)', 'Óóóinc! (a torcida joga as toalhas pro alto)', 'Oinc! (todo mundo aplaude o pódio)', 'Oinc-oinc! (pede bis!)', 'Oinc oinc! (já quer o próximo campeonato)', 'Óinc! (coro pro campeão)',
+  'Oinc! (confete pra todo lado)', 'Oinc oinc oinc! (uma ola final)', 'Óóinc! (a cornetinha não para)', 'Oinc! (todo mundo quer uma foto com as medalhas)', 'Oinc-oinc! (a arquibancada inteira de pé)', 'Óinc oinc! (aplausos pra todas as raias)',
+  'Oinc! (que campeonato!)', 'Oinc oinc! (alguém chora de emoção)', 'Óóóinc! (o barulho chega até o museu)', 'Oinc! (palminha de casco sem parar)', 'Oinc-oinc! (viva os nadadores!)', 'Óinc! (a torcida canta o nome do campeão)',
+  'Oinc oinc! (ninguém quer ir embora)', 'Oinc! (bandeirinhas e assobios)', 'Óóinc! (melhor campeonato de todos!)'];
+const FALAS_CAMP_FIM = ['A bilheteria de hoje deu {reais}. Obrigado, torcida, e até o próximo campeonato!', 'Ingressos vendidos: {reais} de bilheteria! Até a próxima prova!', 'Que campeonato! E a bilheteria deu {reais}. Valeu, pessoal!',
+  'Fim de prova! A bilheteria rendeu {reais}. Todo mundo pro ofurô!', 'Obrigado, nadadores e torcedores! Bilheteria de {reais}.', 'Campeonato encerrado, com {reais} de bilheteria. Que dia!', 'A arquibancada pagou {reais} em ingressos. Volte sempre, torcida!',
+  'Medalhas entregues e {reais} na bilheteria. O Maurinho vai gostar de saber!', 'Até o próximo campeonato! A bilheteria de hoje: {reais}.', 'Que festa! E ainda entraram {reais} de bilheteria.', 'Bilheteria de {reais}! Esse campeonato já virou tradição.',
+  'Obrigado a todos! Com os {reais} da bilheteria, a piscina fica sempre brilhando.', 'Campeonato encerrado! {reais} de bilheteria e muita alegria.', 'Valeu, torcida! A bilheteria fechou em {reais}.', 'Fim do campeonato! {reais} de bilheteria, e ninguém afogou o rabinho.',
+  'Que prova bonita! Bilheteria: {reais}. Até a próxima!', 'Medalhas no peito e {reais} no caixa do spa!', 'Ingresso bem gasto! A bilheteria deu {reais}.', 'Obrigado, pessoal! {reais} de bilheteria e o recorde de animação.',
+  'E a bilheteria de hoje: {reais}! Todo mundo tá convidado pro próximo.', 'Até a próxima! Hoje a bilheteria deu {reais}.'];
 function pintarCascosSpa(v){
   if (v.tipo !== 'porco') return;
   const [nome, cor] = sorteia(ESMALTES);
@@ -17276,28 +17622,36 @@ function animarSpa(v, dt, t){
   const andando = v.estado === 'andando' || v.estado === 'chegando' || v.estado === 'saindo' || v.estado === 'subindo';
   if (andando) v.fase += dt * 10;
   const sw = andando ? Math.sin(v.fase) : 0, q = v.estado === 'atividade' ? v.lugar : null, desliza = v.estado === 'escorregando';
+  // na água (nadando ou parado no fim da prova) e no ar do mergulho (1: do bloco, de focinho para baixo; 2: do trampolim,
+  // dando uma cambalhota)
+  const nada = v.estado === 'nadando' || v.estado === 'boiando', S2 = v.estado === 'pulando' && v.mergulho ? v.salto : null;
+  const giroMergulho = S2 ? (v.mergulho === 2 ? S2.t * Math.PI * 2 : S2.t * 1.1) : 0;
   let y = v.y;
   if (v.tipo === 'porco'){
-    // deitado na lama, na espreguiçadeira, na pedicure ou descendo o tobogã: as patas dobram e a barriga encosta (o corpo
-    // desce o tamanho da pata)
-    const deita = desliza || (q && (q.tipo === 'lama' || q.tipo === 'cadeira' || q.tipo === 'pedicure' || q.tipo === 'tobogaFim'));
-    v.pernas.forEach((p, i) => { p.rotation.x = deita ? (i < 2 ? -1.35 : 1.35) : sw * (i === 0 || i === 3 ? 0.6 : -0.6); });
+    // deitado na lama, na espreguiçadeira, na pedicure, descendo o tobogã ou nadando: as patas dobram e a barriga encosta
+    // (o corpo desce o tamanho da pata); nadando, as patas batem
+    const deita = desliza || nada || (q && (q.tipo === 'lama' || q.tipo === 'cadeira' || q.tipo === 'pedicure' || q.tipo === 'tobogaFim'));
+    v.pernas.forEach((p, i) => { p.rotation.x = deita ? (i < 2 ? -1.35 : 1.35) + (nada ? Math.sin(v.fase * (v.estado === 'nadando' ? 1.4 : 0.6) + i * 1.7) * 0.45 : 0) : sw * (i === 0 || i === 3 ? 0.6 : -0.6); });
     if (deita) y -= PORCO_SPA.quadril * PORCO_SPA.escala * v.T.tam;
+    if (nada) y += Math.sin(v.fase * 0.7) * 0.012;
     v.corpo.position.y = andando ? Math.abs(Math.sin(v.fase)) * 0.012 : 0;
     // na lama ele rola de um lado para o outro; na ducha, se sacode
     v.corpo.rotation.z = q && (q.tipo === 'lama' || q.tipo === 'tobogaFim') ? Math.max(0, Math.sin(t * 0.9 + v.fase)) * 0.9 * Math.sin(t * 0.45 + v.fase) : q && q.tipo === 'ducha' ? Math.sin(t * 18) * 0.12 * (v.t < 1 ? 1 : 0) : 0;
     // subindo a escada, de focinho para cima; na rampa, de focinho para baixo
-    v.corpo.rotation.x = v.escalando ? -1.1 : desliza ? 0.5 : andando ? 0 : Math.sin(t * 1.4 + v.fase) * 0.02;
+    v.corpo.rotation.x = S2 ? giroMergulho : v.escalando ? -1.1 : desliza ? 0.5 : v.estado === 'bloco' ? 0.3 : andando ? 0 : Math.sin(t * 1.4 + v.fase) * 0.02;
   } else {
-    const p = v.p, sentado = q && SPA.sentado[q.tipo], senta = sentado || desliza;
+    const p = v.p, sentado = nada ? SPA.sentado.raia : q && (q.sentado != null ? q.sentado : SPA.sentado[q.tipo]), senta = sentado || desliza;
     p.pos.set(v.x, v.z);
-    p.pE.rotation.x = senta ? -1.3 : sw * 0.7; p.pD.rotation.x = senta ? -1.3 : -sw * 0.7;
-    if ((q && q.tipo === 'ducha') || desliza){ p.bE.rotation.set(-2.6 + Math.sin(t * 9) * 0.25, 0, -0.4); p.bD.rotation.set(-2.6 - Math.sin(t * 9) * 0.25, 0, 0.4); }
+    p.pE.rotation.x = senta ? -1.3 + (nada ? Math.sin(v.fase * 1.5) * 0.4 : 0) : sw * 0.7; p.pD.rotation.x = senta ? -1.3 - (nada ? Math.sin(v.fase * 1.5) * 0.4 : 0) : -sw * 0.7;
+    // nadando: as braçadas, um braço de cada vez, girando inteiro; parado na água, os dois para cima, comemorando
+    if (v.estado === 'nadando'){ p.bE.rotation.set(-(v.fase % (Math.PI * 2)), 0, -0.35); p.bD.rotation.set(-((v.fase + Math.PI) % (Math.PI * 2)), 0, 0.35); }
+    else if (v.estado === 'boiando'){ p.bE.rotation.set(-2.7 + Math.sin(t * 7) * 0.2, 0, -0.35); p.bD.rotation.set(-2.7 - Math.sin(t * 7) * 0.2, 0, 0.35); }
+    else if ((q && q.tipo === 'ducha') || desliza || S2){ p.bE.rotation.set(-2.6 + Math.sin(t * 9) * 0.25, 0, -0.4); p.bD.rotation.set(-2.6 - Math.sin(t * 9) * 0.25, 0, 0.4); }
     else if (p.aceno > 0){ p.aceno -= dt; p.bE.rotation.set(-sw * 0.6, 0, -0.65); p.bD.rotation.set(-0.3, 0, 2.5 + Math.sin(t * 11) * 0.35); }
     else { p.bE.rotation.set(-sw * 0.6, 0, -0.65); p.bD.rotation.set(sw * 0.6, 0, 0.65); }
     p.corpo.position.y = andando ? Math.abs(Math.sin(v.fase)) * 0.045 : 0;
-    p.corpo.rotation.set(desliza ? -0.35 : sentado ? -0.12 : 0, 0, andando ? Math.sin(v.fase) * 0.06 : 0);
-    if (sentado) y = p.sentarEm(sentado);
+    p.corpo.rotation.set(S2 ? giroMergulho : desliza ? -0.35 : v.estado === 'nadando' ? 0.45 : v.estado === 'bloco' ? 0.3 : sentado ? -0.12 : 0, 0, andando ? Math.sin(v.fase) * 0.06 : 0);
+    if (sentado) y = p.sentarEm(sentado) + (nada ? Math.sin(v.fase * 0.7) * 0.012 : 0);
   }
   if (v.pulo > 0){ v.pulo = Math.max(0, v.pulo - dt); y += Math.sin((1 - v.pulo / 0.3) * Math.PI) * 0.08; }
   v.g.position.set(v.x, y, v.z);
@@ -17305,10 +17659,13 @@ function animarSpa(v, dt, t){
   else v.g.rotation.y = anguloPerto(v.g.rotation.y, v.ang, Math.min(1, dt * 8));
 }
 const OQUE_SPA = { lama: 'Está rolando na lama.', ofuro: 'Está no ofurô quentinho.', ducha: 'Está tomando uma ducha.', cadeira: 'Está na espreguiçadeira com pepino nos olhos.', sauna: 'Está na sauna.',
-  pedicure: 'Está pintando os cascos.', bar: 'Está tomando um suco no bar.', tobogaFim: 'Acabou de cair do tobogã na lama.', toboga: 'Está no tobogã!' };
+  pedicure: 'Está pintando os cascos.', bar: 'Está tomando um suco no bar.', tobogaFim: 'Acabou de cair do tobogã na lama.', toboga: 'Está no tobogã!',
+  raia: 'Está nadando na piscina olímpica.', bloco: 'Está no bloco de largada, pronto para mergulhar.', trampolim: 'Está no trampolim!', mergulho: 'Acabou de pular do trampolim.', arquibancada: 'Está na arquibancada, torcendo por quem nada.' };
 function itensVisitanteSpa(v){
   v.pulo = 0.3;
-  const q = v.estado === 'atividade' && v.lugar, oque = v.estado === 'sauna' ? OQUE_SPA.sauna : v.estado === 'subindo' || v.estado === 'escorregando' ? OQUE_SPA.toboga : q ? (v.tipo === 'familia' && q.tipo === 'cadeira' ? 'Está descansando na espreguiçadeira.' : OQUE_SPA[q.tipo]) : v.estado === 'chegando' ? 'Está chegando.' : v.estado === 'saindo' ? 'Está indo embora, novinho em folha.' : 'Está passeando pelo spa.';
+  const q = v.estado === 'atividade' && v.lugar, L = v.lugar, oque = v.estado === 'sauna' ? OQUE_SPA.sauna
+    : v.vai === 'trampolim' && (v.estado === 'subindo' || v.estado === 'quica') ? OQUE_SPA.trampolim : v.estado === 'subindo' || v.estado === 'escorregando' ? OQUE_SPA.toboga
+    : v.estado === 'bloco' ? OQUE_SPA.bloco : (v.estado === 'nadando' || v.estado === 'boiando' || (v.estado === 'pulando' && v.mergulho)) && L ? (L.tipo === 'trampolim' ? OQUE_SPA.mergulho : OQUE_SPA.raia) : q ? (v.tipo === 'familia' && q.tipo === 'cadeira' ? 'Está descansando na espreguiçadeira.' : OQUE_SPA[q.tipo]) : v.estado === 'chegando' ? 'Está chegando.' : v.estado === 'saindo' ? 'Está indo embora, novinho em folha.' : 'Está passeando pelo spa.';
   if (v.tipo === 'familia'){
     Som.oinc(); const f = variar(FALAS_SPA_FAMILIA); falar(v, f, tempoDeLeitura(f));
     return { titulo: `${v.apelido} no spa`, icone: v.quem, estado: `Veio relaxar no spa. A família não paga a entrada. ${oque}`, itens: [] };
@@ -17317,8 +17674,19 @@ function itensVisitanteSpa(v){
   return { titulo: v.apelido, icone: 'porcoSpa', estado: `Visitante do spa. ${descricaoPorcoSpa(v.T)} ${oque}${v.sujo ? ' Está todo sujo de lama.' : ''}${v.esmalteNome ? ` Saiu da pedicure com os cascos ${v.esmalteNome === 'lilás' ? 'lilás' : `pintados de ${v.esmalteNome}`}.` : ''}`, itens: [] };
 }
 // ----- o letreiro do arco
-function vestirSpa(m, ala = false){
-  const [ox, , oz] = ORIGEM_PREDIO.spa, s = 1 / 8, [a0, a1] = SPA.arco;
+function vestirSpa(m, n = 1){
+  if (n === true) n = 2; else if (n === false) n = 1;
+  const ala = n >= 2, [ox, , oz] = ORIGEM_PREDIO.spa, s = 1 / 8, [a0, a1] = SPA.arco;
+  // o letreiro do placar da piscina olímpica, dos dois lados
+  if (n >= 3){
+    const [g0, g1, gz, gy0, gy1] = OLIMPICA.placar, tp = texturaTexto([['PISCINA', 1, '#fdf8ef'], ['OLÍMPICA', 0.8, '#f2c335']], 256, 128, '#1d3a5f');
+    for (const lado of [1, -1]){
+      const tx = placaDeTexto(tp, (g1 - g0 - 1) / 8, (gy1 - gy0 - 6) / 8);
+      tx.position.set(((g0 + g1 + 1) / 2 - ox) * s, (gy1 - 2.5) * s, (gz + (lado > 0 ? 2 : 0) - oz) * s + lado * 0.008);
+      if (lado < 0) tx.rotation.y = Math.PI;
+      m.add(tx);
+    }
+  }
   // o letreiro do bar de sucos da ala, também dos dois lados da placa
   if (ala){
     const [b0, b1] = SPA.ala.bar, zq = SPA.ala.prateleiraBar + 1, tb = texturaTexto([['SUCOS', 1, '#e0761a']], 256, 96, '#fdf8ef');
@@ -17345,13 +17713,14 @@ function menuSpa(r){
   if (!spaAberto()){ r.estado = OBRAS.spa.desc; return; }
   const H2 = S.spaHoje && S.spaHoje.dia === diaAtual() ? S.spaHoje : { n: 0, reais: 0 }, aqui = visitantesSpa.filter(v => v.estado !== 'chegando' && v.estado !== 'saindo').length;
   const ala = alaSpaPronta(), fruta = ala && frutaDoBar();
-  r.estado = `Entrada de ${reais(entradaSpa())} por porquinho visitante; a família não paga.${ala ? ` Na ala nova tem tobogã, pedicure dos cascos e o bar de sucos, a ${reais(SPA.ala.sucoValor)} o copo, com laranja ou coco do celeiro${fruta ? '' : ' (agora o celeiro está sem nenhuma das duas)'}.` : ''} Hoje: ${contagem(H2.n, 'visitante', 'visitantes')} e ${reais(H2.reais)}.${aqui ? ` Agora ${aqui > 1 ? aqui + ' porquinhos estão' : 'um porquinho está'} relaxando.` : ''}${periodo().id === 'noite' ? ' De noite o spa fecha.' : ''}`;
+  r.estado = `Entrada de ${reais(entradaSpa())} por porquinho visitante; a família não paga.${ala ? ` Na ala nova tem tobogã, pedicure dos cascos e o bar de sucos, a ${reais(SPA.ala.sucoValor)} o copo, com laranja ou coco do celeiro${fruta ? '' : ' (agora o celeiro está sem nenhuma das duas)'}.` : ''}${piscinaPronta() ? ` Na piscina olímpica os visitantes nadam, pulam do trampolim e torcem da arquibancada; de vez em quando tem campeonato de natação, com bilheteria.` : ''} Hoje: ${contagem(H2.n, 'visitante', 'visitantes')} e ${reais(H2.reais)}.${aqui ? ` Agora ${aqui > 1 ? aqui + ' porquinhos estão' : 'um porquinho está'} relaxando.` : ''}${periodo().id === 'noite' ? ' De noite o spa fecha.' : ''}`;
   const nL = (S.spaLivro || []).length;
   r.itens.push({ rotulo: 'Livro de visitas', sub: nL ? `nota média ${mediaLivroSpa().toFixed(1).replace('.', ',')} de 5, ${contagem(nL, 'recado', 'recados')}` : 'os visitantes assinam na saída', icone: 'spa', fn: abrirLivroSpa });
   const ja = S.spaDia === diaAtual(), naFila = fila.find(t => t.tipo === 'spa');
   if (naFila){ r.itens.push({ rotulo: naFila.alvo.modo ? `Cancelar: ${naFila.alvo.rotulo.toLowerCase()}` : 'Cancelar o banho de lama', icone: 'ed', fn: () => cancelar(naFila) }); return; }
   r.itens.push({ rotulo: 'Banho de lama', sub: `o Ed rola na lama e passa na ducha; ${ja ? 'o XP de hoje já veio' : SPA.xp + ' XP, uma vez por dia'}`, icone: 'spa', fn: () => enfileirar('spa', { k: 'spa' }) });
   for (const [modo, [rotulo, sub]] of Object.entries(RELAXA_ED.modos)){
+    if (modo === 'nado' && !piscinaPronta()) continue;
     const feito = S.spaDias && S.spaDias[modo] === diaAtual();
     r.itens.push({ rotulo, sub: `${sub}; ${feito ? 'o XP de hoje já veio' : RELAXA_ED.xp + ' XP, uma vez por dia'}`, icone: 'ed', fn: () => enfileirar('spa', { k: 'spa', modo, rotulo }) });
   }
@@ -17366,7 +17735,9 @@ const BANHO_ED = { lama: 9, ducha: 3.2, sentado: 0.02 };
 // (S.spaDias[modo]). relaxa: segundos na espreguiçadeira e no ofurô; sauna: segundos lá dentro; corado: segundos com as
 // bochechas vermelhas depois da sauna
 const RELAXA_ED = { relaxa: 11, sauna: 8, corado: 14, xp: 150,
-  modos: { cadeira: ['Relaxar na espreguiçadeira', 'com rodelas de pepino nos olhos'], ofuro: ['Ofurô com patinho', 'água quentinha e um patinho de borracha boiando'], sauna: ['Sauna', 'sai vermelhinho, soltando vapor'] } };
+  modos: { cadeira: ['Relaxar na espreguiçadeira', 'com rodelas de pepino nos olhos'], ofuro: ['Ofurô com patinho', 'água quentinha e um patinho de borracha boiando'], sauna: ['Sauna', 'sai vermelhinho, soltando vapor'],
+    // com a piscina olímpica (o Lucas pediu): sobe no bloco de uma raia livre, mergulha, vai até a outra ponta e volta
+    nado: ['Nadar umas braçadas', 'uma ida e volta na piscina olímpica'] } };
 const FALAS_ED_CADEIRA = ['Pepino nos olhos e nada na cabeça. Perfeito.', 'Ahhh... ninguém me chama, tá?', 'Isso que é vida de fazendeiro!', 'Shhh... o Ed está relaxando.', 'Que fresquinho esse pepino!', 'Vou tirar só um cochilinho.', 'Daqui eu escuto até os bambus.',
   'Hmm, o pepino tá melhor que salada.', 'Um minutinho de paz, por favor.', 'Nem lembro mais o que é enxada.', 'Ai, que solzinho bom.', 'Spa da fazenda, cinco estrelas!', 'Ninguém conta pro Beto que eu tô de folga.', 'Acho que vou ficar aqui pra sempre.',
   'Pepino no olho, rabicó relaxado.', 'Que silêncio gostoso...', 'Ooooinc... (suspira)', 'Respira fundo, Ed. Respira.', 'Até o mato da horta pode esperar.', 'Tô vendo tudo verdinho, hihihi.'];
@@ -17391,6 +17762,17 @@ const portaSpaMundo = () => mundoSpa(SPA.porta[0] + 0.5, SPA.fundo + 3.6);
 function comecarBanhoEd(tarefa){
   if (!gradeSpa) montarGradeSpa();
   const modo = tarefa.alvo.modo || 'lama';
+  // a piscina: até o deck atrás do bloco de uma raia livre (as do meio primeiro), troca pela toalha e sobe no bloco
+  if (modo === 'nado'){
+    const ocupados = ocupadosSpa(), raias = lugaresSpa.filter(l => l.tipo === 'raia'), livres = raias.filter(l => !ocupados.has(l));
+    const q = (livres.length ? livres : raias).sort((a, b) => Math.abs(a.raia - 2.5) - Math.abs(b.raia - 2.5))[0];
+    banhoEd = { tarefa, modo, lugar: q, fase: 'entra', t: 0 };
+    ed.ir([mundoSpa(SPA.porta[0] + 0.5, SPA.fundo - 0.4), ...(caminhoSpa(SPA.porta, q.perto) || [])], () => {
+      if (!banhoEd) return;
+      banhoEd.fase = 'troca'; banhoEd.t = 0; trocaDeRoupaSpa(ed, 'ed', ed.pos.x, ed.pos.y);
+    });
+    return;
+  }
   // a sauna: vai até a porta, troca pela toalha e entra
   if (modo === 'sauna'){
     banhoEd = { tarefa, modo, lugar: null, fase: 'entra', t: 0 };
@@ -17414,6 +17796,7 @@ function comecarBanhoEd(tarefa){
 function atualizarBanhoEd(dt, t){
   const B = banhoEd; if (!B) return;
   B.t += dt;
+  if (B.modo === 'nado'){ passoNadoEd(B, dt, t); return; }
   if (B.fase === 'pula' || B.fase === 'sai'){
     const k = Math.min(1, B.t / 0.5), [x0, z0] = B.de, [x1, z1] = B.ate, h = B.modo === 'lama' ? 0.1 : SPA.sentado[B.modo], arco = B.modo === 'ofuro' ? 0.62 : 0.25;
     ed.pos.set(lerp(x0, x1, k), lerp(z0, z1, k)); ed.alt = Math.sin(k * Math.PI) * arco + (B.fase === 'pula' ? k * h : (1 - k) * h);
@@ -17500,6 +17883,65 @@ function atualizarBanhoEd(dt, t){
       if (S.spaDia !== diaAtual()){ S.spaDia = diaAtual(); ganharXP(SPA.xp, new THREE.Vector3(ed.pos.x, 1.3, ed.pos.y)); }
       ed.ir([...(caminhoSpa(celulaDe({ x: ed.pos.x, z: ed.pos.y }), SPA.porta) || []), mundoSpa(SPA.porta[0] + 0.5, SPA.fundo - 0.4), portaSpaMundo()], () => terminarBanhoEd(false));
     }
+  }
+}
+// as braçadas do Ed: pula no bloco, agacha, mergulha, nada até a outra ponta (de braçada, um braço de cada vez) e volta,
+// e sai pulando para o deck; então a saída de sempre (sairDoSpaEd), com o XP do dia
+const FALAS_ED_NADO = ['Aoooa! Água fresquinha!', 'Olha a braçada do fazendeiro!', 'Uma raia inteirinha só pra mim!', 'Oinc! Melhor que regar a horta!', 'Nado de porquinho, estilo livre!', 'Respira, braçada, respira...', 'Glub glub! Ops.',
+  'Virada olímpica! Mais ou menos.', 'Se o Beto visse, ia querer apostar corrida.', 'Ufa! Essa piscina é comprida!', 'Tô treinando pro campeonato!', 'Que delícia nadar no fim do dia.', 'O Maurinho caprichou nessa piscina!', 'Nem sinto o cansaço da colheita!',
+  'Aoooa! Mergulho de focinho!', 'Ninguém me alcança nessa raia!', 'Até as orelhas boiaram!', 'Uma ida e uma volta: missão cumprida!', 'Agora sim, músculo de nadador!', 'Que água azulzinha!', 'Pronto! Novinho em folha pra trabalhar.'];
+function passoNadoEd(B, dt, t){
+  const q = B.lugar, [a0, a1] = OLIMPICA.agua;
+  // depois do giro da toalha, pula para o bloco
+  if (B.fase === 'troca'){ if (B.t >= GIRO.dur + 0.15){ B.fase = 'bloco'; B.t = 0; B.de = [ed.pos.x, ed.pos.y]; B.ate = mundoSpa(q.x, q.z); } return; }
+  if (B.fase === 'bloco' || B.fase === 'mergulho' || B.fase === 'sai'){
+    const dur = B.fase === 'mergulho' ? 0.55 : 0.5, k = Math.min(1, B.t / dur), [x0, z0] = B.de, [x1, z1] = B.ate;
+    ed.pos.set(lerp(x0, x1, k), lerp(z0, z1, k));
+    if (Math.hypot(x1 - x0, z1 - z0) > 0.01) ed.angAlvo = Math.atan2(x1 - x0, z1 - z0);
+    if (B.fase === 'bloco') ed.alt = Math.sin(k * Math.PI) * 0.25 + k * q.y;
+    else if (B.fase === 'mergulho') ed.alt = (1 - k) * q.y + Math.sin(k * Math.PI) * 0.3;
+    else ed.alt = Math.sin(k * Math.PI) * 0.3;
+    if (k < 1) return;
+    if (B.fase === 'bloco'){ B.fase = 'prepara'; B.t = 0; ed.angAlvo = q.ang; return; }
+    if (B.fase === 'mergulho'){
+      ed.alt = 0; ed.sentado = ed.sentarEm(SPA.sentado.raia);
+      respingoSpa(ed.pos.x, ed.pos.y, 'agua', 16); somAguaSpa({ x: ed.pos.x, z: ed.pos.y });
+      B.fase = 'nada'; B.t = 0; B.pts = [mundoSpa(a0 + 1.5, q.z), mundoSpa(a1 - 1.5, q.z)]; B.fala = 0;
+      const f = variar(FALAS_ED_NADO); falar(ed, f, tempoDeLeitura(f));
+      return;
+    }
+    ed.alt = 0; sairDoSpaEd(B); return;
+  }
+  // agachado no bloco, e o mergulho
+  if (B.fase === 'prepara'){
+    ed.alt = q.y;
+    if (B.t >= 0.8){ B.fase = 'mergulho'; B.t = 0; B.de = [ed.pos.x, ed.pos.y]; B.ate = mundoSpa(a1 - 2.5, q.z); }
+    return;
+  }
+  if (B.fase === 'nada'){
+    const P = B.pts[0], dx = P[0] - ed.pos.x, dz = P[1] - ed.pos.y, d = Math.hypot(dx, dz), passo = OLIMPICA.velEd * dt;
+    ed.angAlvo = Math.atan2(dx, dz);
+    if (d > passo){ ed.pos.x += dx / d * passo; ed.pos.y += dz / d * passo; }
+    else { ed.pos.set(P[0], P[1]); B.pts.shift(); respingoSpa(ed.pos.x, ed.pos.y, 'agua', 6); }
+    if (Math.random() < dt * 6) particula(ed.pos.x - Math.sin(ed.ang) * 0.2 + rnd(-0.05, 0.05), 0.27, ed.pos.y - Math.cos(ed.ang) * 0.2 + rnd(-0.05, 0.05), 0xe8f8ff, 0.35);
+    if (!B.pts.length){
+      ed.sentado = 0;
+      const [cx, cz] = q.perto, f = variar(FALAS_ED_NADO); falar(ed, f, tempoDeLeitura(f));
+      B.fase = 'sai'; B.t = 0; B.de = [ed.pos.x, ed.pos.y]; B.ate = mundoSpa(cx + 0.5, cz + 0.5);
+    }
+  }
+}
+// a pose das braçadas, depois do ed.update (que endireita o corpo e os braços a cada quadro): agachado no bloco, de
+// focinho para baixo no mergulho e, nadando, de braçada, um braço de cada vez, com as pernas batendo
+function poseNadoEd(){
+  const B = banhoEd; if (!B || B.modo !== 'nado') return;
+  if (B.fase === 'prepara') ed.corpo.rotation.x = 0.3;
+  else if (B.fase === 'mergulho') ed.corpo.rotation.x = Math.min(1, B.t / 0.55) * 1.1;
+  else if (B.fase === 'nada'){
+    const ph = B.t * 7;
+    ed.corpo.rotation.x = 0.7; ed.bE.rotation.set(-(ph % (Math.PI * 2)), 0, -0.35); ed.bD.rotation.set(-((ph + Math.PI) % (Math.PI * 2)), 0, 0.35);
+    ed.pE.rotation.x = -1.3 + Math.sin(ph * 1.5) * 0.4; ed.pD.rotation.x = -1.3 - Math.sin(ph * 1.5) * 0.4;
+    ed.g.position.y = ed.sentado + Math.sin(ph * 0.5) * 0.012;
   }
 }
 // a saída sem ducha (espreguiçadeira, ofurô e sauna): volta para o macacão, ganha o XP do dia e sai pelo arco
@@ -19732,6 +20174,149 @@ const CENAS = {
     fim(){ limparSpaFamilia(); S.viuCineSpaFamilia = true; },
     restaurar(){ limparSpaFamilia(); },
   },
+  campeonato: {
+    flag: 'viuCineCampeonato', nivel: () => OBRAS.spa.etapas[2].nivel, musica: 'campeonato', icone: 'medalha', repete: true,
+    titulo: 'Campeonato de natação', desc: 'Apito, mergulho e torcida na piscina olímpica do spa. Os três mais rápidos sobem no pódio.', trancada: 'acontece de vez em quando, depois que a piscina olímpica do spa fica pronta',
+    pronta: () => piscinaPronta() && periodo().id !== 'noite' && !campeonato && !spaFamilia && !banhoEd && !!edParadoDesde && performance.now() - edParadoDesde >= CAMPEONATO.parado
+      && (!S.viuCineCampeonato || Date.now() >= (proxCampeonato || (proxCampeonato = sorteioCampeonato()))),
+    podeRever: () => (!piscinaPronta() ? 'Dá para rever quando a piscina olímpica estiver pronta.' : null),
+    get falas(){ return campeonato ? campeonato.falas : []; },
+    cameraLivre: true,
+    // no pódio a câmera vai até ele (cn-podio solta a câmera livre para ela andar de novo)
+    foco(c){ const [x, z] = c.focoPodio ? mundoSpa(OLIMPICA.podio.x[0] + 2, 31) : mundoSpa(-82, 20); return new THREE.Vector3(x, c.focoPodio ? 0.6 : 0.4, z); },
+    vista: c => (telaEstreita() ? 1.7 : 1) * (c.focoPodio ? 5 : 7.5),
+    iniciar(c){
+      if (!gradeSpa) montarGradeSpa();
+      esvaziarSpa(); limparExcursao();
+      const C = CAMPEONATO, P = OLIMPICA, n = Math.floor(rnd(C.nadadores[0], C.nadadores[1] + 0.99)), ini = Math.round((P.raias - n) / 2);
+      const fams = familiaLivreSpa().filter(k => k !== 'ed');
+      const fam = fams.length && (!S.viuCineCampeonato || Math.random() < C.chanceFamilia) ? (!S.viuCineCampeonato && fams.includes('dani') ? 'dani' : !S.viuCineCampeonato && fams.includes('hud') ? 'hud' : sorteia(fams)) : null;
+      const famRaia = fam ? ini + Math.floor(Math.random() * n) : -1, usadas = new Set(), nomes = new Set();
+      const novoPorco = () => {
+        let sd; do sd = Math.floor(Math.random() * PORCO_SPA.sementes); while (usadas.has(sd)); usadas.add(sd);
+        const v = criarPorcoSpa(sd); while (nomes.has(v.apelido)) v.apelido = sorteia(PORCO_SPA.nomes); nomes.add(v.apelido); return v;
+      };
+      const base = { estado: 'parado', t: 999, pts: [], pulo: 0, cena: true, vai: null, feitas: 0, quer: 9 };
+      // os nadadores atrás dos blocos, de frente para a água
+      const nadadores = [];
+      for (let i = ini; i < ini + n; i++){
+        const q = lugaresSpa.find(l => l.tipo === 'raia' && l.raia === i), v = i === famRaia ? criarFamiliaSpa(fam) : novoPorco(), [x, z] = mundoSpa(P.bloco + 4.5, q.z);
+        Object.assign(v, base, { x, z, y: 1 / 8, ang: q.ang, fase: rnd(0, 6), lugar: q, raia: i, ritmoFase: rnd(0, 6.28) });
+        if (v.tipo === 'familia') v.p.toalha(fam);
+        v.g.visible = true; nadadores.push(v);
+      }
+      // a torcida, espalhada pelos três degraus da arquibancada, de frente para a água
+      const assentos = [];
+      for (let k = 0; k < 3; k++) for (let x = P.arquibancada[0] + 2; x <= P.arquibancada[1] - 2; x += 4) assentos.push([x + 0.5, P.arquibancada[2] + 3 * k + 1.5, (degrauSpa(k) + 1) / 8]);
+      assentos.sort(() => Math.random() - 0.5);
+      const torcida = assentos.slice(0, Math.floor(rnd(C.torcida[0], C.torcida[1] + 0.99))).map(([lx, lz, h]) => {
+        const v = novoPorco(), [x, z] = mundoSpa(lx + rnd(-0.6, 0.6), lz);
+        Object.assign(v, base, { x, z, y: h, ang: Math.PI + SPA.giro, fase: rnd(0, 6), lugar: null }); v.g.visible = true; return v;
+      });
+      // o Ed é o juiz, no canto da frente, do lado dos blocos, olhando para a piscina
+      const arbitro = criarFamiliaSpa('ed'), [ax, az] = mundoSpa(P.bloco + 3.5, P.agua[2] - 3.5), [tx, tz] = mundoSpa(-66, 18);
+      Object.assign(arbitro, base, { x: ax, z: az, y: 1 / 8, ang: Math.atan2(tx - ax, tz - az), fase: 0 });
+      arbitro.g.visible = true; ed.g.visible = false;
+      // o placar: a parte de baixo vira o painel do campeonato
+      const [g0, g1, gz, gy0] = P.placar, [px, pz] = mundoSpa((g0 + g1 + 1) / 2, gz - 1.06);
+      const placar = placaDeTexto(texturaTexto([['CAMPEONATO', 1, '#f2c335'], [`${n} raias, ida e volta`, 0.62, '#fdf8ef']], 256, 96, '#1d3a5f'), (g1 - g0 - 1) / 8, 4.5 / 8);
+      placar.position.set(px, (gy0 + 3) / 8, pz); scene.add(placar);
+      const famV = nadadores.find(v => v.tipo === 'familia'), lista = l => `${l.slice(0, -1).join(', ')} e ${l[l.length - 1]}`;
+      const falas = [
+        ['ed', 'Ed', S.viuCineCampeonato ? variar(FALAS_CAMP_ABERTURA) : 'Bem-vindos ao primeiro Campeonato de Natação da Fazenda Joli Pig!'],
+        ['porcoSpa', 'Torcida', variar(FALAS_CAMP_TORCIDA_ABRE)],
+        ...(famV ? [[fam, famV.apelido, variar(FALAS_CAMP_FAMILIA_LARGADA)]] : []),
+        ['ed', 'Ed', `Hoje nadam ${lista(nadadores.map(v => v.apelido))}. Nadadores, subam nos blocos!`, 'cn-blocos'],
+        ['ed', 'Ed', 'Às suas marcas... preparar...', 'cn-prova'],
+      ];
+      campeonato = { nadadores, torcida, arbitro, famV, fam, falas, placar, podio: null, ordem: [], bilheteria: torcida.length * C.ingresso, pago: false };
+      return 'cn-entra';
+    },
+    trecho(c, dt){
+      const K = campeonato, t = performance.now() / 1000; if (!K) return;
+      if (c.passo === 'cn-entra' && c.t > 1.5){ c.passo = 'dialogo'; mostrarFalaCine(0); }
+      // um de cada vez, sobem no bloco e agacham
+      if (c.passo === 'cn-blocos'){
+        if (!c.ini){ c.ini = true; K.nadadores.forEach((v, i) => { v.espera = 0.2 + i * 0.25; }); }
+        for (const v of K.nadadores) if (v.espera != null && (v.espera -= dt) <= 0){
+          v.espera = null; const q = v.lugar, [x, z] = mundoSpa(q.x, q.z);
+          pularNoSpa(v, x, q.y, z, 0.22, () => { v.estado = 'bloco'; v.t = 999; v.ang = q.ang; v.noBloco = true; });
+        }
+        if (K.nadadores.every(v => v.noBloco) && c.t > 1.2){ c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
+      }
+      // o apito, o mergulho de todos juntos e a prova; quando o último bate na parede, o resultado
+      if (c.passo === 'cn-prova'){
+        if (!c.ini){ c.ini = true; c.apito = false; c.largou = false; }
+        if (!c.apito && c.t > 0.5){ c.apito = true; apitoSpa(K.arbitro); }
+        if (!c.largou && c.t > 0.9){
+          c.largou = true;
+          for (const v of K.nadadores){ v.t = 0; mergulharSpa(v, w => { const N = w.nado; N.vel = rnd(...CAMPEONATO.vel); N.ritmo = u => 1 + CAMPEONATO.ritmo * Math.sin(performance.now() / 1000 * 0.9 + u.ritmoFase); N.fim = chegouCampeonato; }); }
+        }
+        if (c.largou && (K.ordem.length >= K.nadadores.length || c.t > 45)){
+          for (const v of K.nadadores) if (!K.ordem.includes(v)){ v.nado = null; K.ordem.push(v); v.estado = 'boiando'; }
+          const [o1, o2, o3] = K.ordem, pos = K.famV ? K.ordem.indexOf(K.famV) + 1 : 0;
+          textoPlacar([[`1º ${o1.apelido}`, 1, '#f2c335'], [`2º ${o2.apelido}`, 0.8, '#e6ebef'], [`3º ${o3.apelido}`, 0.8, '#e0a060']]);
+          K.falas.push(
+            ['ed', 'Ed', `${variar(FALAS_CAMP_CHEGADA)} Primeiro lugar: ${o1.apelido}!`],
+            o1.tipo === 'familia' ? [o1.quem, o1.apelido, variar(FALAS_CAMP_FAMILIA_VENCE)] : ['porcoSpa', o1.apelido, variar(FALAS_CAMP_VENCE)],
+            ['ed', 'Ed', `Prata para ${o2.apelido} e bronze para ${o3.apelido}. Todo mundo pro pódio!`, 'cn-podio'],
+            ...(pos > 1 ? [[K.fam, K.famV.apelido, variar(FALAS_CAMP_FAMILIA_PERDE).replace('{pos}', pos + 'º')]] : []),
+            ['porcoSpa', 'Torcida', variar(FALAS_CAMP_TORCIDA_FIM)],
+            ['ed', 'Ed', variar(FALAS_CAMP_FIM).replace('{reais}', reais(K.bilheteria))]);
+          c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1);
+        }
+      }
+      // o pódio aparece num puf; os três primeiros saem da água e andam até o degrau deles, os outros saem para o deck
+      if (c.passo === 'cn-podio'){
+        const D = OLIMPICA.podio;
+        if (!c.ini){
+          c.ini = true; c.medalhas = 0; c.focoPodio = true; c.camLivre = false;
+          // o pódio é desenhado nas coordenadas do spa: vai com a mesma origem, no mesmo lugar e com o mesmo giro dele
+          const Ps = PREDIO.spa;
+          K.podio = colocar(malha(geo('podioSpa', () => vPodio().build(1 / 8, { origin: ORIGEM_PREDIO.spa }))), (Ps.x0 + Ps.x1 + 1) / 2, 0, (Ps.z0 + Ps.z1 + 1) / 2, Ps.ry);
+          const [mx, mz] = mundoSpa(D.x[0] + 2, (D.z[0] + D.z[1] + 1) / 2);
+          for (let i = 0; i < 24; i++) particula(mx + rnd(-0.8, 0.8), rnd(0.1, 0.6), mz + rnd(-0.3, 0.3), 0xfdf8ef, 0.9);
+          Som.pop();
+          K.ordem.forEach((v, i) => {
+            v.espera = 0.3 + i * 0.3;
+            const [cx, cz] = v.lugar.perto, [x, z] = mundoSpa(cx + 0.5, cz + 0.5);
+            v.sair = () => pularNoSpa(v, x, 1 / 8, z, 0.3, () => {
+              v.estado = 'parado'; v.t = 999;
+              if (i < 3){ v.vai = 'podio'; v.degrau = i; andarNoSpa(v, celulaSpa(D.x[i] + 2, D.z[0] - 1.5)); }
+              else { const [px, pz] = mundoSpa(D.x[0] + 2, D.z[0]); v.ang = Math.atan2(px - v.x, pz - v.z); }
+            });
+          });
+        }
+        for (const v of K.ordem){
+          if (v.espera != null && (v.espera -= dt) <= 0){ v.espera = null; v.sair(); }
+          // no pé do degrau: sobe e vira para a frente
+          if (v.vai === 'podio' && v.estado === 'chegou'){
+            const i = v.degrau, [x, z] = mundoSpa(D.x[i] + 2, (D.z[0] + D.z[1] + 1) / 2);
+            v.vai = null; pularNoSpa(v, x, (D.alto[i] + 1) / 8, z, 0.3, () => { v.estado = 'parado'; v.t = 999; v.ang = Math.PI + SPA.giro; v.noPodio = true; });
+          }
+        }
+        if (!c.medalhas && K.ordem.slice(0, 3).every(v => v.noPodio)){
+          c.medalhas = c.t;
+          K.ordem.slice(0, 3).forEach((v, i) => { medalhaNoPeito(v, i); v.pulo = 0.45; if (v.tipo === 'familia') v.p.aceno = 1.6; });
+          fanfarraSpa(); K.arbitro.p.aceno = 1.6;
+          const [mx, mz] = mundoSpa(D.x[0] + 2, (D.z[0] + D.z[1] + 1) / 2); confete(mx, 1.4, mz, 40, 1.1);
+        }
+        if ((c.medalhas && c.t - c.medalhas > 1.6) || c.t > 30){ c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
+      }
+      passoCampeonato(dt, t);
+    },
+    ambiente(dt){ if (!campeonato || !cine || cine.passo !== 'dialogo') return; passoCampeonato(dt, performance.now() / 1000); },
+    aoFalar(fl){
+      const K = campeonato; if (!K) return;
+      if (fl[0] === 'ed'){ K.arbitro.pulo = 0.3; K.arbitro.p.aceno = 1.2; }
+      else if (fl[0] === 'porcoSpa' && fl[1] === 'Torcida') for (const v of K.torcida) v.pulo = 0.45;
+      else { const v = K.nadadores.find(o => o.apelido === fl[1]); if (v){ v.pulo = 0.4; if (v.tipo === 'familia') v.p.aceno = 1.4; } }
+    },
+    fimDasFalas(c){ $('cineDialogo').hidden = true; c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; },
+    pular(){},
+    fim(){ if (campeonato) pagarCampeonato(campeonato); limparCampeonato(); S.viuCineCampeonato = true; proxCampeonato = sorteioCampeonato(); },
+    restaurar(){ limparCampeonato(); proxCampeonato = sorteioCampeonato(); },
+  },
   arraied: {
     flag: 'viuCineArraied', nivel: () => ARRAIA.nivel, musica: 'arraied', icone: 'festa', abducao: true,
     titulo: 'ArraiEd', desc: 'O Arraiá do Ed: a maior festa de todas, com a família, a mata, o espaço e o resort em volta da fogueira.',
@@ -20496,7 +21081,7 @@ const CENAS = {
   },
 };
 // a ordem da história; uma cena que ainda não existe em CENAS fica de fora
-const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'patrinho', 'lucia', 'pelucio', 'minhocas', 'picoca', 'mata', 'festa', 'curupira', 'jato', 'dani', 'maurinho', 'abducao', 'puxao', 'aposentadoria', 'nanar', 'cafezinho', 'foguete', 'resort', 'spaFamilia', 'arraied', 'chuva', 'volta', 'resgateSaida'];
+const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'patrinho', 'lucia', 'pelucio', 'minhocas', 'picoca', 'mata', 'festa', 'curupira', 'jato', 'dani', 'maurinho', 'abducao', 'puxao', 'aposentadoria', 'nanar', 'cafezinho', 'foguete', 'resort', 'spaFamilia', 'campeonato', 'arraied', 'chuva', 'volta', 'resgateSaida'];
 const ordemCenas = () => ORDEM_CENAS.filter(id => CENAS[id]);
 // uma cena começa sozinha quando ainda não foi vista e está pronta (pelo nível, ou pela regra própria dela)
 const cenaPronta = id => { const C = CENAS[id]; return (!S[C.flag] || C.repete) && (C.pronta ? C.pronta() : nivel() >= C.nivel()); };
@@ -20622,6 +21207,7 @@ function atualizarCine(dt){
     case 'pu-vem': case 'pu-raio': case 'pu-segura': case 'pu-solta': case 'pu-vai': cena.trecho(c, dt); break;
     // cena do dia de spa da família
     case 'sf-entra': case 'sf-brinca': case 'sf-ofuro': cena.trecho(c, dt); break;
+    case 'cn-entra': case 'cn-blocos': case 'cn-prova': case 'cn-podio': cena.trecho(c, dt); break;
     // Dia de Feira: o embarque e a volta
     case 'fs-embarque': case 'fv-desce': case 'fv-parte': case 'fv-brinca': cena.trecho(c, dt); break;
     // Resgate no PIG-MTP: a ida até o helicóptero e a volta
@@ -26585,7 +27171,7 @@ function quadro(agoraP){
   atualizarHospedes(dt, t);
   atualizarSpa(dt, t); atualizarBanhoEd(dt, t); atualizarVapor(dt);
   atualizarTrator(dt, t);
-  ed.update(dt, t);
+  ed.update(dt, t); poseNadoEd();
   // no trator, as duas mãos no volante
   if (trator){ ed.bE.rotation.set(-1.25, 0, -0.3); ed.bD.rotation.set(-1.25, 0, 0.3); }
   atualizarLuma(dt, t);
@@ -26862,7 +27448,12 @@ async function iniciar(){
     cartaoEspaco: { chegar: chegarCartaoEspaco, nomes: nomesNoEspaco, CARTAO_ESPACO },
     museu: { MUSEU, abrir: abrirMuseu, visitar: visitarMuseu, porta: portaMuseu, alvo: alvoMuseu, guardarCartao: guardarCartaoLido },
     chamine: () => CHAMINE_MUNDO, fumaca: (x, y, z) => fumaca(x, y, z), marcas: () => fila.filter(f => f.marca).map(f => ({ k: f.alvo.k, tipo: f.tipo, pos: f.marca.position.toArray().map(n => +n.toFixed(2)), ed: alvoMundo(f.alvo) })),
-    spa: { SPA, PORCO_SPA, GUERRA_LAMA, familiaCena: () => spaFamilia, EXCURSAO, excursao: () => chegarExcursao(), excursaoObj: () => excursao, LIVRO_SPA, abrirLivro: abrirLivroSpa, fatorLivro: fatorLivroSpa, guerra: () => { proxGuerraLama = 0; }, guerraObj: () => guerraLama, ala: { pronta: alaSpaPronta, abrir: abrirAlaSpa, fruta: frutaDoBar, max: maxSpa, entrada: entradaSpa, proxima: v => proximaNoSpa(v), montar: montarGradeSpa }, visitantes: () => visitantesSpa, chegar: chegarAoSpa, familia: chegarFamiliaSpa, livres: familiaLivreSpa, lugares: () => (lugaresSpa || montarGradeSpa(), lugaresSpa), grade: () => gradeSpa, caminho: caminhoSpa, livresGrade: livresGradeSpa, banho: () => banhoEd, mundo: mundoSpa, esvaziar: esvaziarSpa, tracos: tracosPorcoSpa, descricao: descricaoPorcoSpa, itens: v => itensVisitanteSpa(v), menu: r => menuSpa(r), aberto: spaAberto, relogio: () => ({ proxSpa, proxFamiliaSpa }), zerar: () => { proxSpa = 0.1; proxFamiliaSpa = 0.1; }, sujar: sujarSpa, abrirCenas, pedirCena,
+    spa: { SPA, PORCO_SPA, GUERRA_LAMA, familiaCena: () => spaFamilia,
+      piscina: { OLIMPICA, CAMPEONATO, pronta: piscinaPronta, abrir: abrirPiscinaSpa, raiaZ, campeonato: () => campeonato, prox: () => proxCampeonato, zerar: () => { proxCampeonato = 1; }, celula: celulaSpa, local: localSpa, pePrancha: pePranchaSpa,
+        // para os testes: adianta o spa (e a cena, e o Ed) sem desenhar, em passos de 0,05 s
+        avancar(seg){ const n = Math.round(seg / 0.05), t0 = performance.now() / 1000; for (let i = 0; i < n; i++){ const t = t0 + i * 0.05; if (cine) atualizarCine(0.05); atualizarSpa(0.05, t); atualizarBanhoEd(0.05, t); ed.update(0.05, t); poseNadoEd(); } },
+        medalha: (v, i) => medalhaNoPeito(v, i),
+        forcar(v, tipo){ const oc = ocupadosSpa(), q = lugaresSpa.find(l => l.tipo === tipo && !oc.has(l)); if (!q) return null; if (tipo === 'trampolim'){ v.lugar = q; v.vai = 'trampolim'; andarNoSpa(v, pePranchaSpa()); } else irAoLugarSpa(v, q); return q; } }, EXCURSAO, excursao: () => chegarExcursao(), excursaoObj: () => excursao, LIVRO_SPA, abrirLivro: abrirLivroSpa, fatorLivro: fatorLivroSpa, guerra: () => { proxGuerraLama = 0; }, guerraObj: () => guerraLama, ala: { pronta: alaSpaPronta, abrir: abrirAlaSpa, fruta: frutaDoBar, max: maxSpa, entrada: entradaSpa, proxima: v => proximaNoSpa(v), montar: montarGradeSpa }, visitantes: () => visitantesSpa, chegar: chegarAoSpa, familia: chegarFamiliaSpa, livres: familiaLivreSpa, lugares: () => (lugaresSpa || montarGradeSpa(), lugaresSpa), grade: () => gradeSpa, caminho: caminhoSpa, livresGrade: livresGradeSpa, banho: () => banhoEd, mundo: mundoSpa, esvaziar: esvaziarSpa, tracos: tracosPorcoSpa, descricao: descricaoPorcoSpa, itens: v => itensVisitanteSpa(v), menu: r => menuSpa(r), aberto: spaAberto, relogio: () => ({ proxSpa, proxFamiliaSpa }), zerar: () => { proxSpa = 0.1; proxFamiliaSpa = 0.1; }, sujar: sujarSpa, abrirCenas, pedirCena,
       noLugar: (v, tipo, i = 0, t = 999) => { if (!gradeSpa) montarGradeSpa(); const q = lugaresSpa.filter(l => l.tipo === tipo)[i], [x, z] = mundoSpa(q.x, q.z); Object.assign(v, { x, z, y: q.y, lugar: q, vai: 'lugar', estado: 'atividade', t, ang: q.ang, pagou: true, pts: [] }); v.g.visible = true; if (tipo === 'cadeira' && v.pep) v.pep.visible = true; } },
     vagalumes: () => vagalumes, VAGALUMES, prometidos: { itensPrometidos, separadoPedidos, opcoesFrete, faltaNoPedido, caderno: abrirCaderno },
     observatorio: { PLANETARIO, desvio: desvioPlanetario, ANTENA, novaEncomenda: novaEncomendaEt, antena: () => antenaVis, caixa: () => caixaEtVis, mensagem: abrirMensagemEt, tocarUltimaCadente: () => { const E = CADENTES[CADENTES.length - 1]; if (!E) return 'sem'; const s = tela(E.m.position); return tocarCadente(s.x, s.y); }, ceu: CEU, ceuDaNoite, pedir: pedirAEstrela, realizar: realizarPedido, tocarCadente, cadentes: () => CADENTES, chuvaCena: () => chuvaCena, cometa: () => cometaVis, caderno: abrirCaderno, obsEd: () => obsEd, ocular: () => ocular, abrirOcular, fecharOcular, tocar: tocarOcular, naOcular, ASTRO, luaDoDia, ceuHoje, descobrir: descobrirAstro, vis: () => observVis, OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
@@ -28975,7 +29566,7 @@ function catalogoModelos(){
       ...['moinho', 'terreiro', 'torrador', 'chocobarra', 'chocolateria', 'oficina'].map(id => varios('Ampliação: ' + FABRICAS[id].nome, [['Ampliado', () => vFabAmpliada(id, 0)], ['1ª reforma', () => vFabAmpliada(id, 1)], ['2ª reforma', () => vFabAmpliada(id, 2)], ['3ª reforma', () => vFabAmpliada(id, 3)]])),
       um('Prancheta', vPrancheta), um('Trena', vTrena), um('Martelo', vMartelo)] },
     { nome: 'Obras do Maurinho', itens: [
-      varios('Spa dos pigs', [['Pronto', () => vSpa()], ['Com a ala nova', () => vSpa(true)], ['Obra no começo', () => vObraSubindo('spa', 0, 1)], ['Obra na metade', () => vObraSubindo('spa', 0, 4)], ['Ala nova na metade', () => vObraSubindo('spa', 1, 4)]]),
+      varios('Spa dos pigs', [['Pronto', () => vSpa()], ['Com a ala nova', () => vSpa(true)], ['Com a piscina olímpica', () => vSpa(3)], ['Obra no começo', () => vObraSubindo('spa', 0, 1)], ['Obra na metade', () => vObraSubindo('spa', 0, 4)], ['Ala nova na metade', () => vObraSubindo('spa', 1, 4)], ['Piscina na metade', () => vObraSubindo('spa', 2, 4)]]),
       varios('Resort das Aposentadas', [['Pronto', vResort], ['Obra no começo', () => vObraSubindo('resort', 0, 1)], ['Obra na metade', () => vObraSubindo('resort', 0, 4)], ['Obra quase pronta', () => vObraSubindo('resort', 0, 7)]]),
       um('Fita da inauguração', vFitaResort), um('Estacas do lote', () => vEstacas(2, 2)),
       varios('Hangar do PIG-MTP', [['Pronto', vHangarNovo], ['Obra na metade', () => vObraSubindo('hangar', 0, 4)]]),
