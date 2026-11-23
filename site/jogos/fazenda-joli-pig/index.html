@@ -13306,8 +13306,8 @@ const chave = (x, z) => x + ',' + z;
 const campo = (x, z) => S.campo[chave(x, z)];
 
 // ================= som
-// No iPhone, sair do jogo (bloquear a tela, trocar de app, uma ligação, outro app tocando) deixa o som 'interrupted' ou
-// 'suspended', e ele só volta com resume() num toque. Antes o jogo só religava o 'suspended' e ficava mudo até recarregar
+// No celular, sair do jogo (bloquear a tela, trocar de app, uma ligação, outro app tocando) deixa o som 'interrupted' ou
+// 'suspended', e no iPhone ele só volta com resume() num toque (qualquer toque da página, veja eventos). Antes o jogo só religava o 'suspended' e ficava mudo até recarregar
 // (o Lucas notou num iPhone). Agora cada toque religa o que não estiver tocando; se um toque já pediu e o som não
 // voltou, o toque seguinte cria outro (novo, somRecriado). Com o jogo escondido o som fica pausado (pausar, voltar).
 // Com o som desligado nos Ajustes o áudio do aparelho nem é ligado (desligar): antes o primeiro toque ligava do mesmo
@@ -13343,7 +13343,9 @@ const Som = {
     somFechado(); this.sessao('auto');
   },
   pausar(){ const c = this.ctx; if (c && c.state === 'running') try { c.suspend().catch(() => {}); } catch (e){} },
-  voltar(){ const c = this.ctx; if (c && S && S.som && c.state !== 'running' && c.state !== 'closed') try { c.resume().catch(() => {}); } catch (e){} },
+  // ao voltar para o jogo: tenta religar sem toque (o Android deixa, o iPhone não) e marca a tentativa, para o próximo toque
+  // que ainda achar o som parado já criar outro (ligar)
+  voltar(){ const c = this.ctx; if (c && S && S.som && c.state !== 'running' && c.state !== 'closed'){ if (!this.religando) this.religando = performance.now(); try { c.resume().catch(() => {}); } catch (e){} } },
   tom(f, dur, tipoO = 'square', vol = 0.06, f2 = 0, atraso = 0){
     if (!this.ctx || !S || !S.som) return;
     const t = this.ctx.currentTime + atraso, o = this.ctx.createOscillator(), g = this.ctx.createGain();
@@ -26145,6 +26147,11 @@ function eventos(){
   canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') marcaHover.visible = false; });
   canvas.addEventListener('wheel', e => { e.preventDefault(); if ((cine && !camLivreNaCena()) || vistaEd) return; if (miranteFP){ zoomMirante(Math.exp(e.deltaY * 0.001)); return; } zoom(Math.exp(e.deltaY * 0.0012)); fecharMenu(); }, { passive: false });
   $('cineDialogo').addEventListener('click', avancarCine);
+  // qualquer toque religa o som, em qualquer lugar da página (o Lucas notou o jogo mudo no celular): antes só o toque no chão
+  // da fazenda e os botões de baixo religavam, e quem voltava ao jogo numa cena, numa janela, na feira ou no resgate ficava
+  // sem som. Na fase de captura, para valer mesmo onde o toque é parado (stopPropagation). O pointerdown de dedo não conta
+  // como toque para o navegador liberar o áudio; o pointerup, o touchend e o click contam
+  for (const ev of ['pointerup', 'touchend', 'click', 'keydown']) document.addEventListener(ev, () => Som.ligar(), { capture: true, passive: true });
   $('cineCartela').addEventListener('click', e => { e.stopPropagation(); avancarCine(); });
   $('cinePular').addEventListener('click', e => { e.stopPropagation(); pularCine(); });
   addEventListener('resize', () => { redimensionar(); fecharMenu(); ajustarCameraCtl(); });
