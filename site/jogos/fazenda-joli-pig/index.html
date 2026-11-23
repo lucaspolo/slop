@@ -1495,7 +1495,7 @@ function montarMapa(){
   // do caminho da porteira até a porteira do galinheiro e a do curral
   for (const [px, pz] of [PORTAO_GALINHEIRO, PORTAO_CURRAL]) for (let x = X_PORTEIRA + 1; x < px; x++) setT(x, pz, 'caminho');
   // o lugar da composteira (nível 16) fica reservado desde o começo, e a porta dela é um trecho de caminho
-  for (let x = COMPOSTEIRA.x0; x <= COMPOSTEIRA.x1; x++) for (let z = COMPOSTEIRA.z0; z <= COMPOSTEIRA.z1; z++) setT(x, z, 'predio');
+  for (const C of [COMPOSTEIRA, ...COMPOSTEIRA.lados]) for (let x = C.x0; x <= C.x1; x++) for (let z = C.z0; z <= C.z1; z++) setT(x, z, 'predio');
   setT(COMPOSTEIRA.porta[0], COMPOSTEIRA.porta[1], 'caminho');
   LOTES.forEach((l, i) => { if (!l.canto) for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) setT(x, z, 'campo'); });
   for (const [[x0, z0, x1, z1], pasto] of [[CERCA_GALINHEIRO, 'pastoG'], [CERCA_CURRAL, 'pastoV']])
@@ -20703,10 +20703,23 @@ const COMPOSTEIRA = {
     { nome: 'Mais minhocas', nivel: 18, preco: 4000, seg: 120, caixa: 20, minhocas: 5 },
     { nome: 'Mais minhocas', nivel: 20, preco: 8000, seg: 90, caixa: 30, minhocas: 7 },
   ],
+  // mais duas caixas, uma de cada lado da primeira (o Lucas pediu), compradas pelo menu da composteira, uma depois da outra.
+  // O lugar delas fica reservado desde o começo, como o da primeira. Todas são uma composteira só: os restos, a caixa de
+  // sacos e as Minhoquinhas se somam, e cada caixa a mais trabalha junto (S.composto.caixas, quantas a mais o Ed já fez)
+  lados: [naZona('fabricas', { x0: 43, z0: 2, x1: 44, z1: 3 }), naZona('fabricas', { x0: 49, z0: 2, x1: 50, z1: 3 })],
+  novas: [{ nivel: 22, preco: 12000 }, { nivel: 28, preco: 25000 }],
 };
-const centroComposteira = () => [(COMPOSTEIRA.x0 + COMPOSTEIRA.x1 + 1) / 2, (COMPOSTEIRA.z0 + COMPOSTEIRA.z1 + 1) / 2];
-const dentroComposteira = (x, z) => x >= COMPOSTEIRA.x0 && x <= COMPOSTEIRA.x1 && z >= COMPOSTEIRA.z0 && z <= COMPOSTEIRA.z1;
+const caixaComposteira = b => b ? COMPOSTEIRA.lados[b - 1] : COMPOSTEIRA;
+const centroCaixa = b => { const C = caixaComposteira(b); return [(C.x0 + C.x1 + 1) / 2, (C.z0 + C.z1 + 1) / 2]; };
+const centroComposteira = () => centroCaixa(0);
+const naCaixaComposteira = (C, x, z) => x >= C.x0 && x <= C.x1 && z >= C.z0 && z <= C.z1;
+const dentroComposteira = (x, z) => [COMPOSTEIRA, ...COMPOSTEIRA.lados].some(C => naCaixaComposteira(C, x, z));
 const cfgComposteira = () => (S.composto && S.composto.mel ? COMPOSTEIRA.melhorias[S.composto.mel - 1] : COMPOSTEIRA.base);
+// quantas caixas há; com mais caixas, cabem mais restos e sacos e os sacos saem mais rápido
+const caixasComposteira = () => 1 + ((S.composto && S.composto.caixas) || 0);
+const capComposteira = () => cfgComposteira().caixa * caixasComposteira();
+const maxRestosComposteira = () => COMPOSTEIRA.restoMax * caixasComposteira();
+const segComposteira = () => cfgComposteira().seg / caixasComposteira();
 const Y_TERRA = 6 / 8;
 
 // minhoca rosada em pé: corpo de 2×2, cabeça de 3×3 com olhinhos e boquinha
@@ -20754,30 +20767,37 @@ function vComposteira(icone){
 }
 
 // ---- o que aparece no mapa
-const COMP_VIS = { mesh: null, bolha: null, surgeT: null };
+const COMP_VIS = { mesh: null, bolha: null, surgeT: null, lados: [null, null], surgeLado: null };
 const MINHOCAS = [];
 // lugares das Minhoquinhas dentro da caixa (desvio do centro, em ladrilhos), na ordem em que aparecem
 const REPOUSO = [[-0.45, -0.35], [0.4, -0.1], [-0.05, 0.4], [0.5, 0.45], [-0.55, 0.3], [0.1, -0.55], [0.55, -0.55]];
 // de onde elas saem da terra na cena
-const SOLO = [[47.5, 3.2], [50.5, 3.2], [50.1, 4.6]];
+const SOLO = [[-0.5, 1.2], [2.5, 1.2], [2.1, 2.6]].map(([x, z]) => [COMPOSTEIRA.x0 + x, COMPOSTEIRA.z0 + z]);
 const easeOutBack = x => 1 + 2.7 * Math.pow(x - 1, 3) + 1.7 * Math.pow(x - 1, 2);
-function montarComposteira(animar){
-  if (COMP_VIS.mesh) return;
-  const [cx, cz] = centroComposteira();
+function malhaCaixaComposteira(b){
+  const [cx, cz] = centroCaixa(b);
   const m = malha(geo('composteira', () => vComposteira(false).build(1 / 8, { origin: [8, 0, 8] })));
   const tex = COMP_VIS.tex || (COMP_VIS.tex = texturaTexto([['MINHOCAS', 1, '#7a4a2a']], 256, 84, '#f3e3c3'));
   const pl = placaDeTexto(tex, 1.1, 0.36); pl.position.set(0, 0.36, 1.012); m.add(pl);
   colocar(m, cx, 0, cz);
   m.traverse(o => { o.userData.alvo = { k: 'composteira' }; }); pickaveis.push(m);
-  COMP_VIS.mesh = m;
-  if (animar){ m.scale.setScalar(0.01); COMP_VIS.surgeT = 0; }
+  return m;
+}
+// a primeira caixa (que surge na cena das Minhoquinhas) e as dos lados que o Ed já fez
+function montarComposteira(animar){
+  if (!COMP_VIS.mesh){
+    const m = COMP_VIS.mesh = malhaCaixaComposteira(0);
+    if (animar){ m.scale.setScalar(0.01); COMP_VIS.surgeT = 0; }
+  }
+  for (let i = 0; i < caixasComposteira() - 1; i++) if (!COMP_VIS.lados[i]) COMP_VIS.lados[i] = malhaCaixaComposteira(i + 1);
   atualizarBolhaComposteira();
 }
 function novaMinhoca(i, modo){
   const g = new THREE.Group();
   g.add(malha(geo('minhoca', () => vMinhoca().build(1 / 16))));
   g.traverse(o => { o.userData.alvo = { k: 'composteira' }; }); pickaveis.push(g); scene.add(g);
-  const [cx, cz] = centroComposteira(), [dx, dz] = REPOUSO[i % REPOUSO.length];
+  // as Minhoquinhas se dividem entre as caixas, uma em cada, por vez
+  const n = caixasComposteira(), [cx, cz] = centroCaixa(i % n), [dx, dz] = REPOUSO[Math.floor(i / n) % REPOUSO.length];
   const w = { g, modo, t: 0, fase: hash(i, 3, 7) * 6.28, pulo: 0, nasce: 1, rest: [cx + dx, Y_TERRA - 0.3, cz + dz], solo: SOLO[i % SOLO.length] };
   g.visible = false;
   MINHOCAS.push(w);
@@ -20786,10 +20806,16 @@ function novaMinhoca(i, modo){
 // as Minhoquinhas que moram na caixa; cada melhoria acrescenta algumas
 function garantirMinhocas(pop){
   if (!S.composto) return;
-  while (MINHOCAS.length < cfgComposteira().minhocas){
+  while (MINHOCAS.length < cfgComposteira().minhocas * caixasComposteira()){
     const w = novaMinhoca(MINHOCAS.length, 'casa');
     if (pop){ w.nasce = 0; for (let k = 0; k < 8; k++) particula(w.rest[0], Y_TERRA, w.rest[2], [0xf2a3b5, 0x7a4e2e, 0xf9cdd6][k % 3], 1); }
   }
+}
+// com uma caixa nova, as Minhoquinhas se espalham de novo entre todas
+function refazerMinhocas(){
+  for (const w of MINHOCAS){ scene.remove(w.g); const i = pickaveis.indexOf(w.g); if (i >= 0) pickaveis.splice(i, 1); }
+  MINHOCAS.length = 0;
+  garantirMinhocas(true);
 }
 function minhocasSaemDaTerra(){
   for (let i = 0; i < 3; i++){
@@ -20804,8 +20830,8 @@ function minhocasEntram(){
 }
 // na reprise da cena das Minhoquinhas: a composteira e a bolha somem e as Minhoquinhas ficam escondidas até a cena terminar
 function esconderComposteira(){
-  const m = COMP_VIS.mesh;
-  if (m){ scene.remove(m); const i = pickaveis.indexOf(m); if (i >= 0) pickaveis.splice(i, 1); COMP_VIS.mesh = null; COMP_VIS.surgeT = null; }
+  for (const m of [COMP_VIS.mesh, ...COMP_VIS.lados]) if (m){ scene.remove(m); const i = pickaveis.indexOf(m); if (i >= 0) pickaveis.splice(i, 1); }
+  COMP_VIS.mesh = null; COMP_VIS.surgeT = null; COMP_VIS.lados = [null, null]; COMP_VIS.surgeLado = null;
   // a bolha só volta quando a reprise termina (restaurar)
   COMP_VIS.semBolha = true;
   atualizarBolhaComposteira();
@@ -20856,6 +20882,8 @@ function atualizarComposteira(dt, t){
     COMP_VIS.mesh.scale.setScalar(Math.max(0.01, easeOutBack(p)));
     if (p >= 1) COMP_VIS.surgeT = null;
   }
+  const L = COMP_VIS.surgeLado;
+  if (L){ L.t += dt / 0.8; const p = Math.min(1, L.t); L.m.scale.setScalar(Math.max(0.01, easeOutBack(p))); if (p >= 1) COMP_VIS.surgeLado = null; }
   atualizarMinhocas(dt, t);
   atualizarBolhaComposteira();
 }
@@ -20875,7 +20903,7 @@ function liberarLugarComposteira(){
 function somarRestos(n){
   const c = S.composto;
   if (!c || !(n > 0)) return 0;
-  const dar = Math.min(n, COMPOSTEIRA.restoMax - c.restos);
+  const dar = Math.min(n, maxRestosComposteira() - c.restos);
   c.restos += dar;
   return dar;
 }
@@ -20885,8 +20913,8 @@ const restosDaSecagem = rid => (rid === 'secar' || rid === 'secarAntigo') ? Math
 function simularComposteira(){
   const c = S.composto;
   if (!c) return;
-  const cfg = cfgComposteira(), agora = Date.now(), passo = cfg.seg * 1000;
-  const pode = () => c.restos >= COMPOSTEIRA.restosPorSaco && c.sacos < cfg.caixa;
+  const agora = Date.now(), passo = segComposteira() * 1000, cap = capComposteira();
+  const pode = () => c.restos >= COMPOSTEIRA.restosPorSaco && c.sacos < cap;
   if (!pode()){ c.prox = 0; return; }
   if (!c.prox) c.prox = agora + passo;
   for (let guarda = 0; guarda < 200 && c.prox && c.prox <= agora; guarda++){
@@ -20904,7 +20932,7 @@ function checarComposteira(tipoA, param){
     if (!COMPOSTEIRA.comida.includes(param)) return { ok: false };
     if ((S.celeiro[param] || 0) < q) return { ok: false, motivo: `${PRODUTOS[param].plural.endsWith('s') ? 'Faltam' : 'Falta'} ${PRODUTOS[param].plural} no celeiro (precisa de ${q})` };
     const emFila = fila.filter(t => t.tipo === 'darComida').length * q;
-    if (c.restos + emFila + q > COMPOSTEIRA.restoMax) return { ok: false, motivo: 'A composteira não aguenta mais comida agora' };
+    if (c.restos + emFila + q > maxRestosComposteira()) return { ok: false, motivo: 'A composteira não aguenta mais comida agora' };
     return { ok: true, custo: { itens: { [param]: q } } };
   }
   return { ok: false };
@@ -20948,7 +20976,33 @@ function comprarMinhocas(){
   if (c.prox){ const agora = Date.now(); c.prox = agora + (c.prox - agora) * M.seg / antes; }
   garantirMinhocas(true);
   simularComposteira();
-  aviso(`Mais Minhoquinhas na composteira! Um saco a cada ${tempo(M.seg)} e caixa de ${M.caixa}.`, 'grande', 3.5);
+  aviso(`Mais Minhoquinhas na composteira! Um saco a cada ${tempo(segComposteira())} e caixa de ${capComposteira()}.`, 'grande', 3.5);
+  hud(); salvar();
+}
+// mais uma caixa, ao lado da primeira: a da esquerda e depois a da direita
+function motivoCaixaComposteira(){
+  const N = COMPOSTEIRA.novas[(S.composto && S.composto.caixas) || 0];
+  if (!N) return 'já tem todas';
+  if (nivel() < N.nivel) return `libera no nível ${N.nivel}`;
+  if (S.dinheiro < N.preco) return 'dinheiro insuficiente';
+  return null;
+}
+function comprarCaixaComposteira(){
+  const c = S.composto, k = (c && c.caixas) || 0, N = c && COMPOSTEIRA.novas[k], motivo = motivoCaixaComposteira();
+  if (!N) return;
+  if (motivo){ aviso(`Mais uma composteira: ${motivo}`, 'ruim'); Som.erro(); return; }
+  gastar(N.preco); chipPulsa('chipDinheiro'); Som.moeda();
+  const antes = segComposteira(); c.caixas = k + 1;
+  if (c.prox){ const agora = Date.now(); c.prox = agora + (c.prox - agora) * segComposteira() / antes; }
+  // o lugar é reservado desde o começo; o enfeite que estiver na porta dela volta para a loja
+  liberarLugarComposteira();
+  const m = COMP_VIS.lados[k] = malhaCaixaComposteira(k + 1);
+  m.scale.setScalar(0.01); COMP_VIS.surgeLado = { m, t: 0 };
+  const [cx, cz] = centroCaixa(k + 1);
+  for (let i = 0; i < 40; i++) particula(cx + rnd(-1.1, 1.1), rnd(0.2, 1), cz + rnd(-1.1, 1.1), [0xffffff, 0xffe066, 0xf27fa4, 0xc99a66][i % 4], 1.5);
+  refazerMinhocas();
+  simularComposteira();
+  aviso(`Composteira nova! Agora são ${caixasComposteira()} caixas: um saco a cada ${tempo(segComposteira())}, até ${capComposteira()} sacos e ${maxRestosComposteira()} restos.`, 'grande', 4.5);
   hud(); salvar();
 }
 function itensComposteira(){
@@ -20956,15 +21010,16 @@ function itensComposteira(){
   if (!c) return null;
   const cfg = cfgComposteira(), per = COMPOSTEIRA.restosPorSaco;
   const r = { titulo: 'Composteira', icone: 'composteira', itens: [] };
-  let e = `Restos: ${c.restos} de ${COMPOSTEIRA.restoMax}. Sacos na caixa: ${c.sacos} de ${cfg.caixa}.`;
-  if (c.sacos >= cfg.caixa){ e += ' Caixa cheia! As Minhoquinhas pararam até o Ed recolher.'; r.classe = 'alerta'; }
+  const cap = capComposteira(), seg = segComposteira(), maxR = maxRestosComposteira(), n = caixasComposteira();
+  let e = `${n > 1 ? `${n} caixas. ` : ''}Restos: ${c.restos} de ${maxR}. Sacos na caixa: ${c.sacos} de ${cap}.`;
+  if (c.sacos >= cap){ e += ' Caixa cheia! As Minhoquinhas pararam até o Ed recolher.'; r.classe = 'alerta'; }
   else if (c.restos < per){ e += ' As Minhoquinhas estão sem comida.'; r.classe = 'alerta'; }
   else {
-    const falta = c.prox ? Math.max(0, (c.prox - Date.now()) / 1000) : cfg.seg;
+    const falta = c.prox ? Math.max(0, (c.prox - Date.now()) / 1000) : seg;
     e += ` Próximo saco em ${tempo(falta)}.`; r.classe = 'bom';
-    r.prog = 1 - falta / cfg.seg;
+    r.prog = 1 - falta / seg;
   }
-  if (c.restos >= COMPOSTEIRA.restoMax) e += ' Os restos estão no máximo: o que passar disso se perde.';
+  if (c.restos >= maxR) e += ' Os restos estão no máximo: o que passar disso se perde.';
   if (!COMPOSTEIRA.comida.some(k => (S.celeiro[k] || 0) >= COMPOSTEIRA.lote)) e += ` Elas comem o mato tirado, a casca do café da secagem e sobras da horta (${COMPOSTEIRA.comida.map(k => PRODUTOS[k].nome.toLowerCase()).join(', ')}), de ${COMPOSTEIRA.lote} em ${COMPOSTEIRA.lote}.`;
   r.estado = e;
   const indo = fila.some(t => t.tipo === 'recolherAdubo');
@@ -20972,18 +21027,20 @@ function itensComposteira(){
   for (const k of COMPOSTEIRA.comida){
     const tem = S.celeiro[k] || 0, q = COMPOSTEIRA.lote;
     if (tem < q) continue;
-    const cheio = c.restos + fila.filter(t => t.tipo === 'darComida').length * q + q > COMPOSTEIRA.restoMax;
+    const cheio = c.restos + fila.filter(t => t.tipo === 'darComida').length * q + q > maxR;
     r.itens.push({ rotulo: `Dar ${q} ${PRODUTOS[k].plural}`, sub: `tem ${tem} · vira ${q} restos`, icone: k, leve: true, off: cheio, fn: () => enfileirar('darComida', { k: 'composteira' }, k) });
   }
   const M = COMPOSTEIRA.melhorias[c.mel];
-  if (M) r.itens.push({ rotulo: M.nome, sub: nivel() < M.nivel ? `nível ${M.nivel}` : `um saco a cada ${tempo(M.seg)} · caixa de ${M.caixa}`, icone: 'minhoquinha', preco: reais(M.preco), off: nivel() < M.nivel || S.dinheiro < M.preco, fn: comprarMinhocas });
+  if (M) r.itens.push({ rotulo: M.nome, sub: nivel() < M.nivel ? `nível ${M.nivel}` : `um saco a cada ${tempo(M.seg / n)} · caixa de ${M.caixa * n}`, icone: 'minhoquinha', preco: reais(M.preco), off: nivel() < M.nivel || S.dinheiro < M.preco, fn: comprarMinhocas });
+  const N = COMPOSTEIRA.novas[c.caixas || 0];
+  if (N){ const mot = motivoCaixaComposteira(); r.itens.push({ rotulo: 'Mais uma composteira', sub: nivel() < N.nivel ? `nível ${N.nivel}` : `${c.caixas ? 'do lado direito' : 'do lado esquerdo'} · um saco a cada ${tempo(cfg.seg / (n + 1))} · caixa de ${cfg.caixa * (n + 1)}`, icone: 'composteira', preco: reais(N.preco), off: !!mot, fn: comprarCaixaComposteira }); }
   return r;
 }
 function lembretesComposteira(){
   const c = S.composto, out = [];
   if (!c) return out;
   if (c.sacos > 0) out.push(['adubo', `recolher o adubo da composteira (${c.sacos})`]);
-  if (c.restos < COMPOSTEIRA.restosPorSaco && c.sacos < cfgComposteira().caixa) out.push(['minhoquinha', 'as Minhoquinhas estão sem comida']);
+  if (c.restos < COMPOSTEIRA.restosPorSaco && c.sacos < capComposteira()) out.push(['minhoquinha', 'as Minhoquinhas estão sem comida']);
   return out;
 }
 
@@ -24434,6 +24491,7 @@ function subiuNivel(n){
   for (const id in MELHORIAS) for (const d of MELHORIAS[id].degraus) if (d.nivel === n) libs.push(d.nome.toLowerCase());
   if (n === COMPOSTEIRA.nivel) libs.push('a composteira das Minhoquinhas');
   if (COMPOSTEIRA.melhorias.some(m => m.nivel === n)) libs.push('mais minhocas');
+  if (COMPOSTEIRA.novas.some(m => m.nivel === n)) libs.push('mais uma composteira');
   aviso(`Nível ${n}!` + (libs.length ? ` Liberou: ${libs.join(', ')}` : ''), 'grande', 4);
   if (ed) falar(ed, variar(FALAS_NIVEL), 2.2);
   if (Math.random() < FAIXA.chance) setTimeout(() => passarFaixa(n), FAIXA.espera * 1000);
@@ -25554,6 +25612,7 @@ function objetivosPorNivel(){
   add(COLMEIA.nivel, 'colmeia', 'Abelhinhas fazendo mel', COLMEIA.preco);
   add(COMPOSTEIRA.nivel, 'composteira', 'Composteira pra reciclar os restinhos', COMPOSTEIRA.preco);
   for (const m of COMPOSTEIRA.melhorias) add(m.nivel, 'composteira', 'Mais ajudantes na composteira', m.preco);
+  for (const m of COMPOSTEIRA.novas) add(m.nivel, 'composteira', 'Mais uma composteira', m.preco);
   for (const k in ENFEITES) if (!ENFEITES[k].encomenda) add(ENFEITES[k].nivel, k === 'canteiroFlor' ? 'flores' : k, apelido(k, ENFEITES[k].nome), ENFEITES[k].preco);
   add(VARAL.nivel, 'varal', 'Varal de luzes nos caminhos', VARAL.preco);
   add(ARRENDAMENTO.nivel, 'moeda', 'Arrendar o terreno do matagal', ARRENDAMENTO.preco);
@@ -26024,6 +26083,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Adubo</b>${nv(ADUBO.nivel)}: vendido na loja, na aba Ração e adubo, a ${reais(ADUBO.preco)} o saco ou ${ADUBO.pacote[0]} por ${reais(ADUBO.pacote[1])}. Toque num canteiro com uma cultura longa crescendo (${ORDEM_CULTURAS.filter(k => CULTURAS[k].tempo >= ADUBO.minTempo).map(k => CULTURAS[k].nome.toLowerCase()).join(', ')}) e escolha Adubar: o tempo que falta para a colheita cai pela metade, mesmo com o jogo fechado. Depois do primeiro, toque ou arraste o dedo sobre os outros canteiros para adubar sem abrir o menu; tocar fora deles ou em Pronto para. Cada saco aduba uma planta, e depois da colheita é preciso adubar de novo. O Hud não aduba.</li>
       <li><b>Composteira</b>${nv(COMPOSTEIRA.nivel)}: no nível ${COMPOSTEIRA.nivel} o Ed conhece as Minhoquinhas e constrói a casa delas, de graça, depois da cozinha de doces, na ponta da estradinha de terra. Elas comem restos: cada mato que o Ed ou o Hud tira vira 1 resto; cada secagem de café dá 1 resto a cada ${COMPOSTEIRA.cerejasPorResto} cerejas; as sobras da horta que você der pelo menu dão 1 resto por unidade, de ${COMPOSTEIRA.lote} em ${COMPOSTEIRA.lote} (${COMPOSTEIRA.comida.map(k => PRODUTOS[k].nome.toLowerCase()).join(', ')}). Guardam até ${COMPOSTEIRA.restoMax} restos. Cada ${COMPOSTEIRA.restosPorSaco} restos viram 1 saco de adubo a cada ${tempo(COMPOSTEIRA.base.seg)}, até a caixa encher (${COMPOSTEIRA.base.caixa} sacos), até com o jogo fechado. O Ed recolhe pelo menu e cada saco dá ${COMPOSTEIRA.xpSaco} xp.</li>
       <li><b>Mais minhocas</b>: melhorias da composteira, no menu dela. ${COMPOSTEIRA.melhorias.map((m, i) => `${i ? 'nível' : 'Nível'} ${m.nivel}, ${reais(m.preco)}: um saco a cada ${tempo(m.seg)} e caixa de ${m.caixa}`).join('; ')}. Cada melhoria põe mais Minhoquinhas na casa.</li>
+      <li><b>Mais composteiras</b>: também no menu dela, uma caixa nova de cada lado da primeira, nos níveis ${COMPOSTEIRA.novas.map(m => `${m.nivel} (${reais(m.preco)})`).join(' e ')}. As caixas trabalham juntas: cada uma a mais faz os sacos saírem mais rápido e aumenta o lugar para restos e sacos, com mais Minhoquinhas.</li>
       <li><b>Reformas</b>${nv(REFORMA.nivel[0])}: o Maurinho, irmão arquiteto do Ed, reforma as construções. Toque numa delas e escolha "Reformar com o Maurinho". As fábricas ganham mais uma vaga de produção, o galinheiro e o curral cabem mais bichos, e a casa, o celeiro e o poço ganham visual novo. A <b>2ª reforma</b>${nv(REFORMA.nivel[1])} (todas menos a casa, que vira o casarão) dá mais uma vaga às fábricas e visual novo a todas; nos galinheiros, currais e no galinheiro dos patos ela não aumenta quantos bichos cabem, mas dá conforto, e os bichos soltam coraçõezinhos de vez em quando. A <b>3ª reforma</b>${nv(REFORMA.nivel[2])} é só das fábricas e do terreiro de café: elas ficam com 6 vagas de produção e ganham placas solares e o selo de ouro do Maurinho. Uma obra por vez, e a construção continua funcionando enquanto o andaime está de pé.</li>
       <li><b>Obras novas</b>${nv(Math.min(...Object.values(OBRAS).map(O => O.nivel)))}: construções grandes que o Maurinho faz do zero. Um nível antes de cada uma liberar aparece o lote, demarcado com estacas e a placa da obra; toque nele e chame o Maurinho. A construção vai subindo enquanto ele trabalha, inclusive com o jogo fechado, e cada obra dá bastante XP. Uma obra por vez, junto com as reformas. ${Object.values(OBRAS).map(O => `${O.nome}: nível ${O.nivel}, ${reais(O.etapas.reduce((t, E) => t + E.preco, 0))}${O.etapas.length > 1 ? ` em ${O.etapas.length} etapas` : ''}`).join('; ')}.</li>
       <li><b>Spa dos pigs</b>${nv(OBRAS.spa.nivel)}: no canto de baixo do terreno novo, encostado na estrada. Tem piscina de lama, ofurô, sauna, duchas e espreguiçadeiras. Porcos da região toda, cada um de um jeito (malhados, pintados, peludos, de orelha caída...), vêm pela estrada, pagam ${reais(SPA.entrada)} de entrada no balcão e passam um tempo relaxando: rolam na lama, passam na ducha, entram na sauna e deitam com pepino nos olhos. A família também aparece de vez em quando, sem pagar. De noite o spa fecha. Toque no spa e escolha "Banho de lama" para o Ed relaxar (${SPA.xp} XP uma vez por dia); toque num visitante para saber quem é. No nível ${OBRAS.spa.etapas[1].nivel}, o Maurinho amplia o spa com a ala nova, ao lado: tobogã de lama, pedicure dos cascos (o porco sai de cascos coloridos), mais uma ducha e o bar de sucos, que gasta uma laranja ou um coco do celeiro e rende ${reais(SPA.ala.sucoValor)} por copo. Com ela, cabem mais visitantes e a entrada sobe para ${reais(SPA.ala.entrada)}.</li>

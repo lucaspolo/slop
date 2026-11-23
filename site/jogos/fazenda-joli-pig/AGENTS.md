@@ -459,6 +459,12 @@ O Lucas pediu otimizações sem mexer na imagem nem no jogo. O que foi medido e 
   - Bandeirinhas do ArraiEd (52): dois mastros e o cordão numa malha à parte (`vBandeirinhasCordao`), que balança com o vento; o balãozinho de papel tem halo, que acende de noite.
 - Para testar: `__fazenda.enfeitesNovos` (`aves`, `ave`, `AJUDA`, `vis`, `casinha`, `piquenique`, `montar`, `FOGUEIRA`, `LAGUINHO`, `DESEJO`, `aquecer`, `inverno`, `assento`, `frentePoco`, `fazerDesejo`, `itens`, `formas`, `grupoComForma`). Halos de enfeite saem de `HALOS` ao remontar ou remover (`tirarHalos`).
 
+## Composteira
+
+- A casa das Minhoquinhas (`COMPOSTEIRA`, nível 16, na ponta da rua das fábricas) surge na cena delas. Elas comem restos e fazem sacos de adubo, mesmo com o jogo fechado (`S.composto`: restos, sacos, prox, mel e caixas; `simularComposteira`).
+- Mais composteiras (o Lucas pediu): duas caixas a mais, uma de cada lado da primeira (`COMPOSTEIRA.lados`), compradas pelo menu dela, uma depois da outra: a da esquerda no nível 22 por R$ 12 mil e a da direita no nível 28 por R$ 25 mil (`COMPOSTEIRA.novas`, `comprarCaixaComposteira`; `S.composto.caixas` conta as que o Ed já fez). O lugar das três fica reservado desde o começo. Todas são uma composteira só: cada caixa a mais divide o tempo do saco (`segComposteira`) e soma o lugar para sacos e restos (`capComposteira`, `maxRestosComposteira`), e as Minhoquinhas de cada melhoria aparecem em todas as caixas, uma em cada por vez (`novaMinhoca`; com uma caixa nova, `refazerMinhocas` espalha todas de novo). O Ed recolhe e dá comida na primeira; tocar em qualquer uma abre o mesmo menu.
+- Na cena das Minhoquinhas elas saem da terra perto da primeira caixa (`SOLO`, a partir de `COMPOSTEIRA.x0`); na reprise as três caixas somem até o fim.
+
 ## Ampliação das fábricas
 
 - Depois o Lucas pediu a ampliação em todas as fábricas, com o mesmo efeito (vagas em dobro, até 12; preço fixo pela régua acima; reforma em dobro depois). Cada uma tem `modo` em `AMPLIACAO`: `largura` (queijaria, padaria e cozinha, abaixo), `andar` e `fundo`. As outras não têm espaço para alargar, então ele escolheu um andar a mais:
