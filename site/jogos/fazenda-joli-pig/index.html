@@ -1069,11 +1069,15 @@ const blocoComprado = b => b === 0 || !!(S.pomarBlocos || [])[b];
 const blocoAberto = b => !POMAR_BLOCOS[b].canto || (S && S.canto === 2);
 const blocoEm = (x, z) => POMAR_BLOCOS.findIndex((b, k) => k > 0 && blocoAberto(k) && x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1);
 // as três primeiras ficam na frente do pomar; as do canto Sul (a partir de COLMEIA_CANTO) numa fileira atrás do pomar de lá,
-// só depois que o Ed tira a cerca. Cada colmeia ajuda o pomar do mesmo lado da fazenda
-const COLMEIA_SLOTS = [...zps('pomar', [[8, 8], [10, 8], [12, 8]]), ...zps('plantio', [[6, 12], [8, 12], [10, 12], [12, 12]])];
+// só depois que o Ed tira a cerca. Cada colmeia ajuda o pomar do mesmo lado da fazenda. As quatro últimas (o Lucas pediu)
+// continuam a fileira do canto ao longo da rua de baixo, embaixo do pomar; ficam no fim da lista para não mudar o número das
+// que já existiam
+const COLMEIA_SLOTS = [...zps('pomar', [[8, 8], [10, 8], [12, 8]]), ...zps('plantio', [[6, 12], [8, 12], [10, 12], [12, 12], [14, 12], [16, 12], [18, 12], [20, 12]])];
 const COLMEIA_CANTO = 3;
 const colmeiaAberta = i => i < COLMEIA_CANTO || (S && S.canto === 2);
-const COLMEIA = { nivel: 10, preco: 800, tempo: 720, rend: 2, xp: 4, ajuda: 0.1 };
+// ajudaMax: com muitas colmeias de um lado, o pomar dele fica no máximo essa fração mais rápido (com oito no canto, sem o
+// teto, as frutas sairiam em um quinto do tempo)
+const COLMEIA = { nivel: 10, preco: 800, tempo: 720, rend: 2, xp: 4, ajuda: 0.1, ajudaMax: 0.5 };
 // Canteiro de flores perto da colmeia (o Lucas pediu): com um canteiro de flores a até FLOR_COLMEIA.raio ladrilhos (contados
 // como os do espantalho, em quadrado), a colmeia dá o dobro de mel por coleta. O canteiro que ajuda ganha abelhas voando em volta
 const FLOR_COLMEIA = { raio: 3, vezes: 2, abelhas: 3 };
@@ -16051,7 +16055,7 @@ function fumaca(x, y, z){
 const POMAR_VIS = [], COLMEIA_VIS = [], ABELHAS = [];
 // cada colmeia ajuda o pomar do mesmo lado da fazenda: as da frente do pomar, as covas de lá; as do canto Sul, as covas de lá
 const doCanto = i => blocoDoSlot(i) >= 3;
-const tempoFruta = (tipo, i) => FRUTIFERAS[tipo].tempo * (1 - COLMEIA.ajuda * S.colmeias.filter((d, k) => d && (k >= COLMEIA_CANTO) === doCanto(i)).length);
+const tempoFruta = (tipo, i) => FRUTIFERAS[tipo].tempo * (1 - Math.min(COLMEIA.ajudaMax, COLMEIA.ajuda * S.colmeias.filter((d, k) => d && (k >= COLMEIA_CANTO) === doCanto(i)).length));
 function montarSlot(lista, vis, slots, i, modelo, chaveGeo){
   const V = vis[i] || (vis[i] = {}), [x, z] = slots[i];
   if (V.mesh){ scene.remove(V.mesh); const k = pickaveis.indexOf(V.mesh); if (k >= 0) pickaveis.splice(k, 1); }
@@ -16218,7 +16222,7 @@ function itensColmeia(i){
   if (!d){
     const bloq = nivel() < COLMEIA.nivel;
     r.titulo = 'Lugar para colmeia'; r.icone = 'colmeia';
-    r.estado = `As abelhas fazem mel e cada colmeia deixa o pomar ${i >= COLMEIA_CANTO ? 'do canto Sul' : 'da frente'} ${Math.round(COLMEIA.ajuda * 100)}% mais rápido. Com um canteiro de flores a até ${FLOR_COLMEIA.raio} passos, ela dá o dobro de mel.`;
+    r.estado = `As abelhas fazem mel e cada colmeia deixa o pomar ${i >= COLMEIA_CANTO ? 'do canto Sul' : 'da frente'} ${Math.round(COLMEIA.ajuda * 100)}% mais rápido, até ${Math.round(COLMEIA.ajudaMax * 100)}% somando todas. Com um canteiro de flores a até ${FLOR_COLMEIA.raio} passos, ela dá o dobro de mel.`;
     r.itens.push({ rotulo: 'Comprar colmeia', sub: bloq ? `nível ${COLMEIA.nivel}` : `${COLMEIA.rend} potes de mel a cada ${tempo(COLMEIA.tempo)}`, icone: 'colmeia', preco: reais(COLMEIA.preco), off: bloq || S.dinheiro < COLMEIA.preco, fn: () => comprarColmeia(i) });
     return r;
   }
@@ -27458,7 +27462,7 @@ function mostrarAjuda(intro, aba){
       <li><b>Construções:</b> moinho${nv(FABRICAS.moinho.nivel)}, queijaria${nv(FABRICAS.queijaria.nivel)}, padaria${nv(FABRICAS.padaria.nivel)}, cozinha de doces${nv(FABRICAS.cozinha.nivel)} e torrador${nv(FABRICAS.torrador.nivel)} ficam na área à direita. Toque numa delas, escolha a receita e o Ed leva os ingredientes. Cada uma faz até ${VAGAS_FAB} receitas em fila e continua com o jogo fechado; depois o Ed recolhe o que ficou pronto. Os produtos valem mais que os ingredientes.</li>
       <li><b>Ampliação</b>${nv(Math.min(...Object.values(AMPLIACAO).map(A => A.nivel)))}: o Maurinho amplia cada fábrica, e ela passa a valer por duas: o dobro de vagas, até ${(VAGAS_FAB + REFORMA.max) * 2} com as três reformas. A queijaria, a padaria e a cozinha de doces ganham uma ala; o terreiro de café, mais um ladrilho de pátio; as outras, mais um andar. ${Object.keys(AMPLIACAO).map(id => `${FABRICAS[id].nome} no nível ${AMPLIACAO[id].nivel} (${reais(AMPLIACAO[id].preco)})`).join(', ')}. A ala ou o andar novo já vem com as reformas que a fábrica tem; depois da ampliação, cada reforma que falta custa o dobro.</li>
       <li><b>Pomar:</b> ${(l => l.slice(0, -1).join(', ') + ' e ' + l[l.length - 1])(Object.values(FRUTIFERAS).map(F => F.nome.toLowerCase() + nv(F.nivel)))} dão frutas de novo e de novo, sem replantar nem regar. Nos níveis ${POMAR_BLOCOS[1].nivel}, ${POMAR_BLOCOS[2].nivel} e ${POMAR_BLOCOS[5].nivel} dá para comprar terrenos de pomar com mais seis covas cada (o do ${POMAR_BLOCOS[5].nivel} é a fileira entre o pomar e a cerca), mais dois no terreno novo depois de arrendado, e uma árvore pode ser cortada para dar lugar a outra.</li>
-      <li><b>Colmeias</b>${nv(COLMEIA.nivel)}: dão mel, e cada colmeia deixa o pomar do mesmo lado da fazenda ${Math.round(COLMEIA.ajuda * 100)}% mais rápido.</li>
+      <li><b>Colmeias</b>${nv(COLMEIA.nivel)}: dão mel, e cada colmeia deixa o pomar do mesmo lado da fazenda ${Math.round(COLMEIA.ajuda * 100)}% mais rápido, até ${Math.round(COLMEIA.ajudaMax * 100)}% somando todas.</li>
       <li><b>Café</b>${nv(CULTURAS.cafe.nivel)}: sai do pé em cereja e seca no terreiro. Só o Pelúcio, da Joli Coffee, compra o café seco, e o torrado, feito no torrador, vale ${reais(PRODUTOS.torrado.venda)}.</li>
       <li><b>Adubo</b>${nv(ADUBO.nivel)}: vendido na loja, na aba Ração e adubo, a ${reais(ADUBO.preco)} o saco ou ${ADUBO.pacote[0]} por ${reais(ADUBO.pacote[1])}. Toque num canteiro com uma cultura longa crescendo (${ORDEM_CULTURAS.filter(k => CULTURAS[k].tempo >= ADUBO.minTempo).map(k => CULTURAS[k].nome.toLowerCase()).join(', ')}) e escolha Adubar: o tempo que falta para a colheita cai pela metade, mesmo com o jogo fechado. Depois do primeiro, toque ou arraste o dedo sobre os outros canteiros para adubar sem abrir o menu; tocar fora deles ou em Pronto para. Cada saco aduba uma planta, e depois da colheita é preciso adubar de novo. O Hud não aduba.</li>
       <li><b>Composteira</b>${nv(COMPOSTEIRA.nivel)}: no nível ${COMPOSTEIRA.nivel} o Ed conhece as Minhoquinhas e constrói a casa delas, de graça, depois da cozinha de doces, na ponta da estradinha de terra. Elas comem restos: cada mato que o Ed ou o Hud tira vira 1 resto; cada secagem de café dá 1 resto a cada ${COMPOSTEIRA.cerejasPorResto} cerejas; as sobras da horta que você der pelo menu dão 1 resto por unidade, de ${COMPOSTEIRA.lote} em ${COMPOSTEIRA.lote} (${COMPOSTEIRA.comida.map(k => PRODUTOS[k].nome.toLowerCase()).join(', ')}). Guardam até ${COMPOSTEIRA.restoMax} restos. Cada ${COMPOSTEIRA.restosPorSaco} restos viram 1 saco de adubo a cada ${tempo(COMPOSTEIRA.base.seg)}, até a caixa encher (${COMPOSTEIRA.base.caixa} sacos), até com o jogo fechado. O Ed recolhe pelo menu e cada saco dá ${COMPOSTEIRA.xpSaco} xp.</li>
