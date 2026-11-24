@@ -368,6 +368,7 @@ body.feira-proto #jogo > :not(canvas){display:none}
 .dialogo .quem.hud{color:#b58a12}
 .dialogo .quem.dani{color:#4f8f3a}
 .dialogo .quem.curupira{color:#d8542a}
+.dialogo .quem.agronoma{color:#3f7a3a}
 .dialogo .quem.maurinho{color:#8a5a36}
 .dialogo .quem.todos{color:#e0408a}
 .dialogo .quem.galinha{color:#c2477a}
@@ -6947,6 +6948,701 @@ function menuQuadras(r){
   const lista = l => l.length > 1 ? `${l.slice(0, -1).join(', ')} e ${l[l.length - 1]}` : l[0];
   r.estado = `Prontas: ${lista(prontas)}. Porquinhos, pessoas, nanos e, às vezes, alguém da família vêm jogar de dia.${agora.length ? ' Agora: ' + agora.map(id => { const Q = jogosQuadras[id]; return `${NOME_ESPORTE[id].toLowerCase()} ${Q.placar[0]} x ${Q.placar[1]}`; }).join(', ') + '.' : ''}${periodo().id === 'noite' ? ' De noite as quadras ficam vazias.' : chovendo() ? ' Com chuva, todo mundo foi se abrigar.' : ''}`;
 }
+// ================= o espaço de eventos (o Lucas pediu): o campo do ArraiEd, no canto de baixo do terreno novo, vira o espaço
+// de eventos da fazenda, onde acontecem o ArraiEd, a Feira Agronômica Sustentável e a rave da Luma. Existe com o terreno novo
+// limpo (S.canto 2): cerca baixa de madeira em volta, o portal com a placa na ponta da rua de baixo, um caminho de terra até a
+// praça e o gramado aparado em faixas. Não aceita enfeites. Fora dos eventos fica vazio. Coordenadas da zona festa
+const ESPACO = { x0: zx('festa', 1), z0: zz('festa', 1), x1: zx('festa', 19), z1: zz('festa', 22),
+  portal: zp('festa', 11, 1), praca: zp('festa', 11, 9.5), caminho: [zz('festa', 0), zz('festa', 8)] };
+const espacoAberto = () => !!S && S.canto === 2;
+const noEspacoEventos = (x, z) => espacoAberto() && x >= ESPACO.x0 && x <= ESPACO.x1 && z >= ESPACO.z0 && z <= ESPACO.z1;
+const ESPACO_VIS = { g: null, faixa: null };
+// a cerca baixa: mourões a cada ladrilho e duas travessas, na volta do espaço (o vão do portal fica aberto)
+function vCercaEventos(){
+  const v = new Vox(), X0 = ESPACO.x0 * 16, X1 = (ESPACO.x1 + 1) * 16, Z0 = ESPACO.z0 * 16, Z1 = (ESPACO.z1 + 1) * 16, [px] = ESPACO.portal;
+  const madeira = (a, b) => hash(a, 7, b) < 0.5 ? 0xa8784a : 0x9a6c40;
+  const lado = (x0, z0, x1, z1) => {
+    const n = Math.max(Math.abs(x1 - x0), Math.abs(z1 - z0));
+    for (let i = 0; i <= n; i++){
+      const x = x0 + Math.sign(x1 - x0) * i, z = z0 + Math.sign(z1 - z0) * i;
+      if (z === Z0 && x >= px * 16 - 8 && x < (px + 1) * 16 + 8) continue;
+      const mourao = i % 16 === 0;
+      if (mourao) for (let y = 0; y <= 7; y++) v.set(x, y, z, y === 7 ? 0x7a5232 : madeira(x, z));
+      for (const y of [3, 6]) v.set(x, y, z, madeira(x >> 2, z >> 2));
+    }
+  };
+  lado(X0, Z0, X1 - 1, Z0); lado(X0, Z0, X0, Z1 - 1); lado(X1 - 1, Z0, X1 - 1, Z1 - 1); lado(X0, Z1 - 1, X1 - 1, Z1 - 1);
+  return v;
+}
+// o portal: dois postes grossos com vasinhos de flor, a viga em cima e a placa
+function vPortalEventos(){
+  const v = new Vox(), madeira = (x, y, z) => hash(x, y >> 1, z) < 0.4 ? 0x8a5a36 : 0x9a6a42;
+  for (const x of [-17, 15]){
+    v.box(x, 0, -1, x + 2, 30, 1, madeira);
+    v.box(x - 2, 0, 2, x + 4, 3, 5, 0xc0703a); for (let k = 0; k < 6; k++) v.set(x - 1 + (k % 4) * 1.5 | 0, 4, 3 + (k >> 2), [0xf27fa4, 0xffd34d, 0xffffff][k % 3]);
+    v.box(x - 2, 4, 2, x + 4, 4, 5, 0x5a8a3a);
+  }
+  v.box(-20, 31, -2, 20, 33, 2, 0x7a4a2a); v.box(-22, 34, -1, 22, 34, 1, 0x6a3e22);
+  return v;
+}
+function montarEspacoEventos(){
+  if (ESPACO_VIS.g || !espacoAberto()) return;
+  const g = new THREE.Group(); scene.add(g); ESPACO_VIS.g = g;
+  g.add(malha(geo('cercaEventos', () => vCercaEventos().build(1 / 16, { origin: [0, 0, 0], jitter: 0.02 }))));
+  const [px, pz] = ESPACO.portal, portal = new THREE.Group();
+  portal.add(malha(geo('portalEventos', () => vPortalEventos().build(1 / 16, { origin: [0.5, 0, 0.5] }))));
+  // a placa dos dois lados da viga
+  for (const lado of [1, -1]){
+    const p = placaDeTexto(texturaTexto([['ESPAÇO DE EVENTOS', 1, '#fdf8ef'], ['Fazenda Joli Pig', 0.55, '#f2c335']], 512, 128, '#7a4a2a', '#f2c335'), 2.3, 0.56);
+    p.position.set(0, 32 / 16, lado * 0.15); p.rotation.y = lado > 0 ? 0 : Math.PI; portal.add(p);
+  }
+  portal.position.set(px + 0.5, 0, pz); g.add(portal);
+  portal.traverse(o => { o.userData.alvo = { k: 'eventos' }; }); pickaveis.push(portal);
+  ESPACO_VIS.portal = portal;
+  // o caminho de terra da rua de baixo até a praça
+  const v = new Vox(), [z0, z1] = ESPACO.caminho;
+  for (let z = z0 * 16; z < (z1 + 1) * 16; z++) for (let x = px * 16 - 2; x < (px + 1) * 16 + 2; x++){
+    const borda = x < px * 16 + 1 || x > (px + 1) * 16 - 2, r = hash(x, 43, z);
+    if (borda && r < 0.5) continue;
+    v.set(x, 0, z, r < 0.5 ? 0xd8b47a : 0xcaa56c);
+  }
+  const cam = new THREE.Mesh(v.build(1 / 16, { origin: [0, 0, 0], jitter: 0 }), MAT); cam.receiveShadow = true; g.add(cam);
+  // o gramado aparado: faixas claras e escuras por cima da grama, como de cortador
+  const c = document.createElement('canvas'); c.width = 64; c.height = 4; const x2 = c.getContext('2d');
+  for (let i = 0; i < 8; i++){ x2.fillStyle = i % 2 ? 'rgba(255,255,230,0.09)' : 'rgba(20,60,10,0.07)'; x2.fillRect(i * 8, 0, 8, 4); }
+  const tex = new THREE.CanvasTexture(c); tex.wrapS = THREE.RepeatWrapping; tex.repeat.set((ESPACO.x1 - ESPACO.x0 + 1) / 8, 1); tex.magFilter = THREE.NearestFilter;
+  const W2 = ESPACO.x1 - ESPACO.x0 + 1, H2 = ESPACO.z1 - ESPACO.z0 + 1;
+  const gram = new THREE.Mesh(new THREE.PlaneGeometry(W2, H2), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  gram.rotation.x = -Math.PI / 2; gram.position.set(ESPACO.x0 + W2 / 2, 0.004, ESPACO.z0 + H2 / 2); gram.renderOrder = 1; g.add(gram);
+}
+// a faixa do evento pendurada embaixo da viga do portal (a feira usa; sem texto, some)
+function faixaPortal(linhas, fundo){
+  if (ESPACO_VIS.faixa){ ESPACO_VIS.portal.remove(ESPACO_VIS.faixa); ESPACO_VIS.faixa = null; }
+  if (!linhas || !ESPACO_VIS.portal) return;
+  const f = new THREE.Group();
+  for (const lado of [1, -1]){ const p = placaDeTexto(texturaTexto(linhas, 512, 96, fundo, '#fdf8ef'), 2.2, 0.41); p.position.set(0, 2.62, lado * 0.06); p.rotation.y = lado > 0 ? 0 : Math.PI; f.add(p); }
+  ESPACO_VIS.portal.add(f); ESPACO_VIS.faixa = f;
+}
+// os enfeites que já estavam no campo voltam para a loja, uma vez
+function arrumarEspacoEventos(){
+  if (!espacoAberto() || S.espacoEventosArrumado) return;
+  S.espacoEventosArrumado = true;
+  const volta = S.enfeites.filter(e => noEspacoEventos(e.x, e.z));
+  for (const e of volta){ S.guardados[e.tipo] = (S.guardados[e.tipo] || 0) + 1; removerEnfeite(e); }
+  if (volta.length) setTimeout(() => aviso(`O campo do ArraiEd virou o espaço de eventos da fazenda. ${volta.length > 1 ? volta.length + ' enfeites que estavam lá voltaram' : 'Um enfeite que estava lá voltou'} para a loja, em Enfeites.`, 'grande', 7), 2500);
+  salvar();
+}
+function itensEspaco(){
+  const r = { titulo: 'Espaço de eventos', icone: 'festa', itens: [] }, F = feiraAgro();
+  const prox = F.marcada ? (feiraAgroAberta() ? 'acontecendo agora, até o fim da tarde' : feiraAgroHoje() ? (S.relogio < FEIRA_AGRO.abre ? 'hoje, daqui a pouco' : 'encerrada por hoje') : 'amanhã') : null;
+  r.estado = `Aqui acontecem o ArraiEd, a Feira Agronômica Sustentável (uma vez por nível, durante um dia) e, de dia, de vez em quando, a rave da DJ Summer Cachohits.${prox ? ` Feira: ${prox}.` : ' A próxima feira vem quando o Ed subir de nível.'}${rave ? ' A Summer Cachohits está tocando agora!' : ''}`;
+  if (F.marcada){
+    r.itens.push({ rotulo: Object.keys(F.banca || {}).length ? 'Trocar o que está na barraca do Ed' : 'Montar a barraca do Ed', sub: textoBancaAgro(), icone: 'cesta', fn: () => abrirBancaAgro() });
+    if (!F.inscrito && !F.resultado) r.itens.push({ rotulo: 'Inscrever um produto no concurso', sub: 'os jurados anunciam os vencedores à tarde', icone: 'trofeu', fn: () => abrirInscricaoAgro() });
+    else if (F.inscrito && !F.resultado) r.itens.push({ rotulo: 'Inscrito no concurso', sub: PRODUTOS[F.inscrito].nome, icone: F.inscrito, off: true, leve: true, fn: () => {} });
+  }
+  const tr = (F.trofeus || []).length;
+  if (tr) r.itens.push({ rotulo: 'Troféus do concurso', sub: textoTrofeusAgro(), icone: 'trofeu', off: true, leve: true, fn: () => {} });
+  return r;
+}
+// ----- os desenhos da feira agronômica (cubinhos de 1/16, a frente para +z)
+// a barraca: balcão de madeira, quatro esteios, o toldo listrado inclinado para a frente com a franja de bicos, e caixotes atrás
+function vBarracaAgro(cor, cor2){
+  const v = new Vox(), madeira = (x, y, z) => hash(x >> 1, y, z) < 0.4 ? 0xb07a48 : 0xc08a56;
+  v.box(-13, 0, -3, 12, 7, 3, madeira); v.box(-14, 8, -4, 13, 8, 4, 0xd6a46a);
+  for (let x = -12; x <= 11; x += 4) v.box(x, 1, 4, x, 6, 4, 0x9a6a3e);
+  for (const x of [-14, 13]){ v.box(x, 0, -6, x, 25, -6, 0x7a5232); v.box(x, 0, 5, x, 20, 5, 0x7a5232); }
+  for (let z = -7; z <= 7; z++){ const y = Math.round(25 - (z + 7) * 5 / 14); for (let x = -15; x <= 14; x++) v.set(x, y, z, Math.floor((x + 15) / 3) % 2 ? cor2 : cor); }
+  for (let x = -15; x <= 14; x++) if (Math.floor((x + 15) / 3) % 2 === 0 || x % 3 === 1) v.set(x, 19, 7, Math.floor((x + 15) / 3) % 2 ? cor2 : cor);
+  v.box(-12, 0, -8, -6, 4, -6, 0xa87a4a); v.box(5, 0, -8, 11, 4, -6, 0xa87a4a); v.box(-11, 5, -8, -7, 5, -6, 0x6cbf52); v.box(6, 5, -8, 10, 5, -6, 0xe8483a);
+  return v;
+}
+// o palco do concurso: o tablado com a escadinha na frente, os dois postes da faixa atrás e a mesa dos jurados de toalha verde
+function vPalcoAgro(){
+  const v = new Vox(), tabua = (x, y, z) => (z & 3) === 0 ? 0x9a6a3e : hash(x >> 2, y, z) < 0.5 ? 0xc08a56 : 0xb07a48;
+  v.box(-26, 0, -16, 25, 3, 15, tabua);
+  for (let k = 0; k < 3; k++) v.box(-6, 0, 16 + k, 5, 2 - k, 16 + k, 0xa87a4a);
+  for (const x of [-24, 23]) v.box(x, 4, -16, x + 1, 44, -15, 0x7a5232);
+  v.box(-9, 4, -9, 8, 10, -6, (x, y) => y >= 9 ? 0x3f7a3a : y === 8 ? 0x2f5a2a : 0x3f7a3a);
+  for (const x of [-6, 0, 6]) v.box(x, 11, -8, x, 12, -8, 0xfdf8ef);
+  for (let x = -26; x <= 25; x += 3) v.set(x, 3, 15, [0xf27fa4, 0xffd34d, 0x58b6f0, 0x8fd06a][((x + 26) / 3) % 4]);
+  return v;
+}
+// o troféu do concurso: ouro, prata ou bronze (lugar 0, 1, 2), na base de madeira com a plaquinha
+function vTrofeu(lugar){
+  const v = new Vox(), c = FEIRA_AGRO.premios[lugar].cor, escura = [0xc89a1a, 0xa8adb2, 0xa86a3a][lugar];
+  v.box(-5, 0, -5, 5, 3, 5, 0x6b4428); v.box(-3, 1, 6, 3, 2, 6, 0xf2e6c8);
+  v.box(-1, 4, -1, 1, 9, 1, escura); v.box(-3, 4, -3, 3, 4, 3, c);
+  for (let y = 10; y <= 20; y++){ const r = 3 + (y - 10) * 0.45; for (let x = -7; x <= 7; x++) for (let z = -7; z <= 7; z++){ const d = Math.hypot(x, z); if (d <= r && (y < 13 || d > r - 1.4)) v.set(x, y, z, (x + y) % 5 ? c : escura); } }
+  for (const lado of [-1, 1]) for (let k = 0; k < 6; k++) v.set(lado * Math.round(7 + Math.sin(k / 5 * Math.PI) * 2.5), 12 + k * 1.4 | 0, 0, c);
+  return v;
+}
+// os enfeites que só a feira vende (encomenda, tile de 16 com o meio em 8): o ipê-amarelo florido com flores caídas em volta,
+// a jabuticabeira de troncos manchados cheia de jabuticaba grudada, e o painel solar de jardim com a luzinha que acende
+function vIpeAmarelo(){
+  const v = new Vox(), flor = (x, y, z) => { const h = hash(x, y, z); return h < 0.3 ? 0xffd94a : h < 0.85 ? 0xf6c519 : 0xe8a814; };
+  v.box(7, 0, 7, 8, 16, 8, 0x6b4a2c);
+  for (const [dx, dz] of [[-3, -2], [3, -1], [-1, 3], [2, 3]]) for (let k = 0; k <= 5; k++) v.set(8 + Math.round(dx * k / 5), 13 + k, 8 + Math.round(dz * k / 5), 0x6b4a2c);
+  v.ell(8, 22, 8, 9, 5.5, 9, flor, (x, y, z) => hash(x, y + 3, z) > 0.12);
+  v.ell(5, 25, 6, 4, 3, 4, flor); v.ell(11, 24, 10, 4, 3, 4, flor);
+  for (let k = 0; k < 18; k++){ const a = k * 2.4, r = 3 + (k % 5) * 1.3; v.set(8 + Math.round(Math.cos(a) * r), 0, 8 + Math.round(Math.sin(a) * r), flor(k, 0, k)); }
+  return v;
+}
+function vJabuticabeira(){
+  const v = new Vox(), casca = (x, y, z) => { const h = hash(x, y >> 1, z); return h < 0.35 ? 0xc8c0a8 : h < 0.7 ? 0x9a8a6a : 0x7a6a4a; };
+  for (const [dx, dz, h] of [[-2, -1, 13], [2, -1, 12], [0, 2, 14], [-1, 1, 11]]) for (let y = 0; y <= h; y++) v.set(8 + dx + Math.round(Math.sin(y / 4) * 0.6 * dx), y, 8 + dz, casca(dx, y, dz));
+  v.ell(8, 17, 8, 7.5, 5, 7.5, (x, y, z) => hash(x, y, z) < 0.25 ? 0x2f6a2a : 0x3f7a3a, (x, y, z) => hash(x, y + 5, z) > 0.1);
+  const pts = [...v.m.values()].filter(e => e.y <= 14 && e.c !== 0x3f7a3a && e.c !== 0x2f6a2a);
+  for (const e of pts) if (hash(e.x, e.y, e.z + 9) < 0.45) for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (!v.has(e.x + a, e.y, e.z + b) && hash(e.x + a, e.y, e.z + b) < 0.5){ v.set(e.x + a, e.y, e.z + b, hash(e.x, e.y, a + b) < 0.2 ? 0x5a2a4a : 0x2a1028); break; }
+  return v;
+}
+function vPainelSolar(){
+  const v = new Vox();
+  v.box(7, 0, 7, 8, 9, 8, 0x8a8f96); v.box(5, 0, 5, 10, 0, 10, 0x6a6f76);
+  for (let i = 0; i <= 12; i++) for (let k = -6; k <= 6; k++){ const y = 10 + Math.round((12 - i) * 0.45), z = 8 - 6 + i, x = 8 + k; v.set(x, y, z, Math.abs(k) === 6 || i === 0 || i === 12 ? 0xc4c8cc : ((k + 6) % 3 === 0 || i % 4 === 0) ? 0x9ab0d0 : 0x1d3a6f); }
+  v.box(10, 1, 4, 12, 3, 5, 0x3a3a3a); v.set(11, 4, 4, 0x6cbf52);
+  v.box(7, 10, 15, 8, 10, 15, 0x8a8f96); v.box(7, 11, 15, 8, 12, 15, 0xfff1a8);
+  return v;
+}
+// ================= a Feira Agronômica Sustentável (o Lucas pediu): uma vez por nível, a partir do arrendamento do terreno
+// novo, ela fica marcada para o dia seguinte (agendarFeiraAgro, ao subir de nível e ao abrir o jogo) e acontece no espaço de
+// eventos de FEIRA_AGRO.abre até o fim da tarde (fecha). Produtores da região expõem nas barracas (PRODUTORES_AGRO) e vendem o
+// que fazem: o Ed tem a dele, com o Beto tomando conta, que vende sozinha a sobra que o jogador escolhe, com FEIRA_AGRO.bonus
+// no preço; os outros vendem enfeites que não tem na loja e coisas para a fazenda. À tarde (juri), os jurados anunciam o
+// concurso de produtos (cena concursoAgro) com o produto que o Ed inscreveu. Visitantes passeiam pelas barracas. No fim, o
+// que sobrou na barraca volta para o celeiro. Estado em S.feiraAgro; o resto (barracas, gente) só na memória
+const FEIRA_AGRO = { abre: 0.1, juri: 0.48, fecha: 0.66, bonus: 1.25, venda: [9, 15], xpItem: 0.0015, gente: 44, some: 4, rivais: 4,
+  premios: [{ nome: 'ouro', cor: 0xf2c335, din: 250, xp: 0.1 }, { nome: 'prata', cor: 0xd8dde2, din: 150, xp: 0.06 }, { nome: 'bronze', cor: 0xd08a4a, din: 80, xp: 0.03 }], mencao: 0.01,
+  palco: zp('festa', 11, 15.6), juiz: 49, edConcurso: zp('festa', 11, 13.3), compra: 0.85 };
+// as barracas (zona festa), em quarteirões dos dois lados do caminho do portal, com corredores entre as fileiras (o Lucas
+// pediu a feira bem cheia): ESPACO_SLOTS tem o meio e a frente de cada lugar (fileiras A e C abrem para o sul, B e D para o
+// norte); o caminho do meio, a praça e o palco ficam livres. Os produtores especiais têm lugar marcado (slot); os da região
+// (PRODUTORES_REGIAO) ocupam o resto. Quem atende, o que mostra no balcão, o que vende e o que inscreve no concurso
+const SLOTS_AGRO = (() => {
+  const l = [];
+  for (const [z, f] of [[3.6, 1], [6.8, -1], [10, 1], [13.2, -1]]) for (const x of [2.2, 4.4, 6.6, 8.8, 14.2, 16.4, 18.6]) l.push({ pos: [x, z], frente: [0, f] });
+  return l;
+})();
+const PRODUTORES_ESPECIAIS = [
+  { id: 'ed', slot: 4, nome: 'Fazenda Joli Pig', cor: ['#f27fa4', '#fdf8ef'], toldo: [0xf27fa4, 0xfdf8ef], quem: 'beto', dono: 'o Beto' },
+  { id: 'viveiro', slot: 3, nome: 'Viveiro Ipê-Amarelo', cor: ['#4f7f36', '#f2c335'], toldo: [0xf2c335, 0x4f7f36], quem: 'pessoa', k: 36, dono: 'Seu Tião', mostra: ['ipeAmarelo'],
+    vende: [{ enfeite: 'ipeAmarelo' }], concurso: 'muda de ipê-amarelo', desc: 'Mudas de árvores nativas criadas no viveiro da serra. O ipê-amarelo floresce no fim do inverno e enche a fazenda de amarelo.' },
+  { id: 'queijaria', slot: 5, nome: 'Queijaria da Serra', cor: ['#3a6fa8', '#fdf8ef'], toldo: [0x58b6f0, 0xfdf8ef], quem: 'pessoa', k: 40, dono: 'Dona Cida', mostra: ['queijo', 'leite'],
+    vende: [{ prod: 'queijo', q: 5 }, { prod: 'leite', q: 10 }], concurso: 'queijo canastra curado', desc: 'Queijo feito com o leite das vacas que pastam solto, curado devagar na prateleira de madeira.' },
+  { id: 'aposentadas', slot: 2, nome: 'Ovos Caipira do Resort', cor: ['#c0602a', '#fdf8ef'], toldo: [0xf08a24, 0xfdf8ef], quem: 'galinha', dono: 'as aposentadas', mostra: ['ovo'],
+    vende: [{ prod: 'ovo', q: 30 }], concurso: 'bolo de fubá com ovo caipira', desc: 'As galinhas aposentadas do resort vendem os ovos caipira das amigas e mandam um abraço para o Ed.' },
+  { id: 'minhocas', slot: 14, nome: 'Húmus das Minhoquinhas', cor: ['#6b4a2c', '#f6e7c8'], toldo: [0x8a5a34, 0xf6e7c8], quem: 'minhocas', dono: 'as Minhoquinhas', mostra: ['adubo'],
+    vende: [{ adubo: 10 }], concurso: 'húmus de minhoca peneirado', desc: 'Adubo de minhoca, o húmus, feito com resto de comida e casca de fruta. Volta tudo para a terra.' },
+  { id: 'nanos', slot: 13, nome: 'Energia Solar Nano', cor: ['#2a4f9a', '#ffd34d'], toldo: [0x3a6fd0, 0xfdf8ef], quem: 'lucia', dono: 'a Lúcia', mostra: ['painelSolar'],
+    vende: [{ enfeite: 'painelSolar' }], concurso: 'secador solar de frutas', desc: 'Os nanos do hostel montam painéis solares pequenininhos. De dia o sol carrega a bateria, de noite a luzinha acende sozinha.' },
+  { id: 'curupira', slot: 22, nome: 'Mudas Nativas do Curupira', cor: ['#3f7a3a', '#fdf8ef'], toldo: [0x6cbf52, 0xe8483a], quem: 'curupira', dono: 'o Curupira', mostra: ['jabuticabeira'],
+    vende: [{ enfeite: 'jabuticabeira' }], concurso: 'geleia de jabuticaba', desc: 'O guardião da floresta trouxe mudas das árvores da mata. A jabuticabeira dá as frutinhas grudadas no tronco.' },
+];
+// os produtores da região: [id, nome, dono, o que vende ({produto: quantidade}), o que inscreve no concurso, descrição]
+const PRODUTORES_REGIAO = [
+  ['mel', 'Sítio Mel do Cerrado', 'Seu Zé', { mel: 10 }, 'mel de flor de laranjeira', 'Mel das abelhas que vivem soltas no cerrado, tirado sem judiar da colmeia.'],
+  ['horta', 'Horta Orgânica da Lurdes', 'Dona Lurdes', { alface: 20, tomate: 20 }, 'salada de folhas orgânicas', 'Verdura sem veneno, colhida de manhã cedinho e regada com água da chuva.'],
+  ['cafe', 'Cafezal da Serra', 'Seu Bento', { torrado: 5 }, 'café torrado na lenha', 'Café de altitude, secado no terreiro e torrado devagar no tacho.'],
+  ['feijao', 'Cooperativa do Feijão Crioulo', 'Dona Neide', { feijao: 20 }, 'feijão crioulo', 'Sementes crioulas guardadas pelas famílias da cooperativa há três gerações.'],
+  ['morango', 'Morangos da Montanha', 'Dona Rosa', { morango: 20, geleia: 5 }, 'geleia de morango sem açúcar', 'Morango plantado em canteiro alto, sem agrotóxico, e geleia feita na panela de cobre.'],
+  ['banana', 'Bananal do Vale', 'Seu Juca', { banana: 20 }, 'banana-passa', 'Bananas do pé, secas ao sol na peneira de bambu.'],
+  ['pomar', 'Pomar das Laranjeiras', 'Dona Zica', { laranja: 20, limao: 20 }, 'suco de laranja natural', 'Laranja e limão de pomar antigo, com galinha ciscando embaixo das árvores.'],
+  ['mandioca', 'Casa de Farinha', 'Seu Chico', { mandioca: 15 }, 'farinha de mandioca torrada', 'A mandioca vira farinha no forno de barro da casa de farinha da comunidade.'],
+  ['doces', 'Doces da Vó Nena', 'Vó Nena', { goiabada: 5, doce: 5 }, 'goiabada cascão', 'Doce de tacho mexido com colher de pau, do jeito que a vó ensinou.'],
+  ['padaria', 'Padaria do Sítio', 'Seu Tonho', { paodequeijo: 10, bolo: 5 }, 'pão de queijo de polvilho azedo', 'Pão de queijo e bolo de fubá assados no forno a lenha, ainda quentinhos.'],
+  ['uva', 'Parreiral do Seu Bepe', 'Seu Bepe', { uva: 20 }, 'suco de uva integral', 'Uva colhida no parreiral da família, sem nada de química.'],
+  ['cacau', 'Cacau da Mata', 'Dona Iara', { chocolate: 5, bombom: 5 }, 'chocolate 70% de cacau', 'Cacau plantado na sombra da mata, sem derrubar árvore nenhuma.'],
+  ['acai', 'Açaí do Norte', 'Seu Raimundo', { polpa: 5 }, 'polpa de açaí', 'O açaí vem de barco das ilhas, batido no mesmo dia da colheita.'],
+  ['cogumelos', 'Cogumelos da Toca', 'Dona Mei', { cogumelo: 5 }, 'shiitake desidratado', 'Shiitake que cresce em tora de eucalipto, num galpão escurinho e úmido.'],
+  ['aboboras', 'Abóboras Gigantes', 'Seu Nelson', { abobora: 10, melancia: 5 }, 'abóbora de quarenta quilos', 'Abóbora e melancia de adubo de curral. A maior desta feira pesa quarenta quilos!'],
+  ['milho', 'Pamonharia do Milharal', 'Dona Dita', { milho: 20, fuba: 10 }, 'pamonha doce', 'Milho verde colhido de madrugada e fubá moído no moinho d’água.'],
+  ['castanhas', 'Castanhas da Floresta', 'Seu Benedito', { pacoca: 5 }, 'paçoca de castanha', 'Castanha coletada no chão da floresta, sem cortar nenhuma castanheira.'],
+  ['amendoim', 'Amendoim da Roça', 'Dona Cema', { amendoim: 20 }, 'amendoim torrado na panela', 'Amendoim plantado junto com o milho, um ajudando o outro a crescer.'],
+  ['coco', 'Coco Verde do Litoral', 'Seu Mané', { coco: 15, caju: 15 }, 'cocada de forno', 'Coco e caju do litoral, trazidos na caminhonete da cooperativa.'],
+  ['temperos', 'Ervas e Temperos da Bia', 'Dona Bia', { alho: 20, cebola: 20 }, 'tempero de alho e ervas', 'Alho, cebola e ervas plantados entre as flores, que espantam as pragas.'],
+  ['conservas', 'Conservas da Chácara', 'Seu Lino', { pimentao: 20, berinjela: 20 }, 'conserva de berinjela', 'Legumes em conserva no vidro, para nada da colheita ir para o lixo.'],
+];
+const TOLDOS_AGRO = [[0xe8483a, 0xfdf8ef], [0x3fb8b0, 0xfdf8ef], [0xf2c335, 0xe8483a], [0x8f5bbf, 0xfdf8ef], [0x5aa847, 0xf2c335], [0xf08a24, 0x6b4a2c], [0x4a8fd6, 0xf2c335], [0xe0408a, 0xfdf8ef]];
+const hexCor = c => '#' + c.toString(16).padStart(6, '0');
+const PRODUTORES_AGRO = (() => {
+  const livres = SLOTS_AGRO.map((_, i) => i).filter(i => !PRODUTORES_ESPECIAIS.some(P => P.slot === i));
+  const regiao = PRODUTORES_REGIAO.map(([id, nome, dono, vende, concurso, desc], n) => {
+    const toldo = TOLDOS_AGRO[n % TOLDOS_AGRO.length];
+    return { id, slot: livres[n], nome, dono, quem: 'pessoa', k: 52 + n * 3, toldo, cor: [hexCor(toldo[0] === 0xfdf8ef ? toldo[1] : toldo[0]), '#fdf8ef'],
+      mostra: Object.keys(vende).slice(0, 2), vende: Object.entries(vende).map(([prod, q]) => ({ prod, q })), concurso, desc, regiao: true };
+  }).filter(P => P.slot != null);
+  return [...PRODUTORES_ESPECIAIS, ...regiao].map(P => ({ ...P, pos: zp('festa', ...SLOTS_AGRO[P.slot].pos), frente: SLOTS_AGRO[P.slot].frente }));
+})();
+const feiraAgro = () => S.feiraAgro || (S.feiraAgro = { feitas: [], marcada: null, banca: {}, vendidos: 0, ganho: 0, inscrito: null, resultado: null, trofeus: [], vezes: 0 });
+const feiraAgroHoje = () => { const F = feiraAgro(); return !!F.marcada && diaAtual() === F.marcada.dia; };
+const feiraAgroAberta = () => feiraAgroHoje() && (S.relogio || 0) >= FEIRA_AGRO.abre && (S.relogio || 0) < FEIRA_AGRO.fecha;
+const xpDoNivel = () => XP_BASE_FEIRA() / FEIRA_DIA.xp;
+const FEIRA_AGRO_VIS = { montada: false, g: null, barracas: [], gente: [], fora: 0, venda: 0, conferir: 0, trofeu: null };
+// marca a feira do nível de agora para amanhã, se ainda não teve
+function agendarFeiraAgro(){
+  if (!espacoAberto() || nivel() < ARRENDAMENTO.nivel) return;
+  const F = feiraAgro();
+  if (F.marcada || F.feitas.includes(nivel())) return;
+  F.marcada = { nivel: nivel(), dia: diaAtual() + 1, montou: false };
+  salvar();
+  setTimeout(() => aviso(`Amanhã tem Feira Agronômica Sustentável no espaço de eventos! Produtores da região vão expor e vender. Toque no portal para montar a barraca do Ed e inscrever um produto no concurso.`, 'grande', 8), 3000);
+}
+// a cada segundo: abre, vende, chama o concurso e fecha; a feira perdida (o jogo fechado no dia) passa para o próximo dia
+function conferirFeiraAgro(dt){
+  const F = feiraAgro(), V = FEIRA_AGRO_VIS;
+  if (!F.marcada) return;
+  const rel = S.relogio || 0, passou = diaAtual() > F.marcada.dia || (feiraAgroHoje() && rel >= FEIRA_AGRO.fecha);
+  if (passou){
+    if (F.marcada.montou) encerrarFeiraAgro();
+    else { F.marcada.dia = diaAtual() + (rel >= FEIRA_AGRO.fecha ? 1 : 0); salvar(); }
+    return;
+  }
+  if (!feiraAgroAberta()) return;
+  if (!V.montada) montarFeiraAgro();
+  // a barraca do Ed vende sozinha, para quem passa
+  if ((V.venda -= dt) <= 0){ V.venda = rnd(...FEIRA_AGRO.venda); venderBancaAgro(); }
+  // o concurso: com produto inscrito, a cena; sem, o resultado chega num aviso
+  if (rel >= FEIRA_AGRO.juri && !F.resultado){
+    if (F.inscrito){ if (!cine && !cenaPedida && !V.concursoPedido){ V.concursoPedido = true; cenaPedida = 'concursoAgro'; } }
+    else { const R = rankingAgro(null); F.resultado = { lugar: -1 }; salvar(); aviso(`O concurso da feira acabou: ${R[0].nome} ganhou com ${R[0].prod}. Na próxima feira, inscreva um produto do Ed!`, 'grande', 6); }
+  }
+}
+function montarFeiraAgro(){
+  const F = feiraAgro(), V = FEIRA_AGRO_VIS;
+  montarEspacoEventos();
+  V.montada = true; V.concursoPedido = false; V.venda = rnd(...FEIRA_AGRO.venda);
+  const g = new THREE.Group(); scene.add(g); V.g = g;
+  V.barracas = PRODUTORES_AGRO.map((P, i) => montarBarracaAgro(P, i, g));
+  // o palco do concurso, com a agrônoma atrás da mesa dos jurados
+  const [px, pz] = FEIRA_AGRO.palco, palco = new THREE.Group();
+  palco.add(malha(geo('palcoAgro', () => vPalcoAgro().build(1 / 16, { origin: [0.5, 0, 0.5] }))));
+  const faixa = placaDeTexto(texturaTexto([['CONCURSO DE PRODUTOS', 1, '#fdf8ef'], ['Feira Agronômica Sustentável', 0.55, '#f2c335']], 512, 128, '#3f7a3a', '#f2c335'), 2.6, 0.64);
+  faixa.position.set(0, 2.35, -1.02); palco.add(faixa);
+  // a faixa tem os dois lados: quem olha de trás do palco também lê
+  const verso = faixa.clone(); verso.position.z = -1.04; verso.rotation.y = Math.PI; palco.add(verso);
+  const juiz = new THREE.Group(); juiz.add(malha(geo('visitante' + FEIRA_AGRO.juiz, () => vVisitante(FEIRA_AGRO.juiz).build(MIRANTE.sV, { origin: [0.5, 0, 0.5], jitter: 0.02 }))));
+  juiz.position.set(0, 4 / 16, -0.62); palco.add(juiz);
+  palco.position.set(px, 0, pz); palco.rotation.y = Math.PI; g.add(palco);
+  palco.traverse(o => { o.userData.alvo = { k: 'palcoAgro' }; }); pickaveis.push(palco);
+  V.palco = palco; V.juiz = { g: juiz, salto: 0, topo(){ const w = new THREE.Vector3(); juiz.getWorldPosition(w); return w.add(new THREE.Vector3(0, 1.4, 0)); } };
+  faixaPortal([['FEIRA AGRONÔMICA SUSTENTÁVEL', 1, '#fdf8ef']], '#3f7a3a');
+  mostrarTrofeuAgro();
+  if (!F.marcada.montou){
+    F.marcada.montou = true; F.vendidos = 0; F.ganho = 0; F.resultado = null; salvar();
+    aviso(`Abriu a Feira Agronômica Sustentável no espaço de eventos!${Object.keys(F.banca).length ? ' O Beto está na barraca do Ed.' : ' A barraca do Ed está vazia: toque no portal ou nela para escolher o que vender.'}`, 'grande', 6);
+  }
+}
+function desmontarFeiraAgro(){
+  const V = FEIRA_AGRO_VIS;
+  for (const j of V.gente) tirarJogadorQuadra(j);
+  V.gente = [];
+  if (V.g){ V.g.traverse(o => { const k = pickaveis.indexOf(o); if (k >= 0) pickaveis.splice(k, 1); }); scene.remove(V.g); }
+  for (const B of V.barracas) if (B.porco){ scene.remove(B.porco.g); const k = pickaveis.indexOf(B.porco.g); if (k >= 0) pickaveis.splice(k, 1); }
+  V.g = null; V.barracas = []; V.montada = false; V.trofeu = null;
+  faixaPortal(null);
+}
+// a barraca: o desenho com o toldo listrado nas cores do produtor, a placa, o que ele vende em cima do balcão e quem atende
+function montarBarracaAgro(P, i, pai){
+  const g = new THREE.Group(), [x, z] = P.pos, ang = Math.atan2(P.frente[0], P.frente[1]);
+  g.add(malha(geo('barracaAgro' + P.toldo.join('_'), () => vBarracaAgro(...P.toldo).build(1 / 16, { origin: [0.5, 0, 0.5] }))));
+  const placa = placaDeTexto(texturaTexto([[P.nome, 1, P.cor[1]]], 512, 96, P.cor[0], P.cor[1]), 1.7, 0.32);
+  placa.position.set(0, 27.5 / 16, 7.6 / 16); placa.rotation.x = -0.25; g.add(placa);
+  const B = { P, g, salto: 0, fase: rnd(0, 6) };
+  // o que está à mostra: os produtos (ou os enfeites) em miniatura no balcão
+  const mostra = P.id === 'ed' ? null : P.mostra;
+  if (mostra) mostra.forEach((k, n) => { const m = miniaturaAgro(k); m.position.set((n - (mostra.length - 1) / 2) * 0.5, 9 / 16, 0.05); g.add(m); });
+  B.balcao = new THREE.Group(); B.balcao.position.set(0, 9 / 16, 0.05); g.add(B.balcao);
+  // quem atende, um passo atrás do balcão
+  const atras = new THREE.Group(); atras.position.set(0, 0, -0.62); g.add(atras); B.atras = atras;
+  const mm = (k, f, s) => malha(geo(k, () => f().build(s, { origin: [0.5, 0, 0.5], jitter: 0.02 })));
+  if (P.quem === 'beto'){
+    const p = FAMILIA_SPA.beto.cria(); p.g.visible = true; scene.add(p.g); B.porco = p;
+    const w = new THREE.Vector3(x - Math.sin(ang) * 0.62, 0, z - Math.cos(ang) * 0.62); p.colocar(w.x, w.z); p.g.position.set(w.x, 0, w.z); p.g.rotation.y = ang; p.ang = p.angAlvo = ang;
+  } else if (P.quem === 'pessoa') atras.add(mm('visitante' + P.k, () => vVisitante(P.k), MIRANTE.sV));
+  else if (P.quem === 'galinha') [-0.3, 0.3].forEach((dx, n) => { const m = mm('hospede' + n, () => vGalinhaResort(FITAS_HOSPEDE[n % FITAS_HOSPEDE.length]), 1 / 19); m.position.x = dx; atras.add(m); });
+  else if (P.quem === 'minhocas') [-0.35, 0, 0.35].forEach(dx => { const m = mm('minhoca', vMinhoca, 1 / 16); m.position.set(dx, 6 / 16, 0.3); atras.add(m); });
+  else if (P.quem === 'lucia'){ const m = mm('lucia', vLucia, LUCIA.escala); m.position.x = -0.2; atras.add(m); const n = mm('nano0', () => vNano(0, false), NANO.sNano); n.position.x = 0.35; atras.add(n); }
+  else if (P.quem === 'curupira') atras.add(mm('curupira', vCurupira, CURUPIRA.escala));
+  B.topo = () => { const w = new THREE.Vector3(); (B.porco ? B.porco.g : atras).getWorldPosition(w); return w.add(new THREE.Vector3(0, P.quem === 'minhocas' ? 0.8 : 1.35, 0)); };
+  g.position.set(x, 0, z); g.rotation.y = ang; pai.add(g);
+  g.traverse(o => { o.userData.alvo = { k: 'feiraAgro', i }; }); pickaveis.push(g);
+  if (B.porco){ B.porco.g.traverse(o => { o.userData.alvo = { k: 'feiraAgro', i }; }); pickaveis.push(B.porco.g); }
+  if (P.id === 'ed') mostrarBancaEd(B);
+  return B;
+}
+function miniaturaAgro(k){
+  const m = malha(geo('miniAgro' + k, () => { const v = (VI[k] || VI.cesta)(); return v.build(1 / 44, { origin: [0.5, 0, 0.5] }); }));
+  return m;
+}
+// os produtos da barraca do Ed: até três miniaturas dos que têm mais
+function mostrarBancaEd(B){
+  B = B || FEIRA_AGRO_VIS.barracas[0]; if (!B) return;
+  B.balcao.clear();
+  const F = feiraAgro(), l = Object.keys(F.banca).filter(k => F.banca[k] > 0).sort((a, b) => F.banca[b] - F.banca[a]).slice(0, 3);
+  l.forEach((k, n) => { const m = miniaturaAgro(k); m.position.x = (n - (l.length - 1) / 2) * 0.5; B.balcao.add(m); });
+}
+// o troféu do concurso fica na barraca do Ed até o fim da feira
+function mostrarTrofeuAgro(){
+  const F = feiraAgro(), V = FEIRA_AGRO_VIS, B = V.barracas[0];
+  if (!B || !F.resultado || !(F.resultado.lugar >= 0 && F.resultado.lugar < 3) || V.trofeu) return;
+  const m = malha(geo('trofeu' + F.resultado.lugar, () => vTrofeu(F.resultado.lugar).build(1 / 40, { origin: [0.5, 0, 0.5] })));
+  m.position.set(0.62, 9 / 16, 0.1); B.g.add(m); V.trofeu = m;
+}
+// ----- a barraca do Ed: o jogador escolhe a sobra (a mesma janela da carga do Dia de Feira) e ela vende sozinha
+const textoBancaAgro = () => { const F = feiraAgro(), n = Object.values(F.banca || {}).reduce((a, b) => a + b, 0); return n ? `${contagem(n, 'item', 'itens')} na barraca${F.vendidos ? ` · ${F.vendidos} vendidos` : ''}` : 'escolha a sobra que o Beto vai vender'; };
+function devolverBancaAgro(){
+  const F = feiraAgro();
+  for (const k in F.banca) if (F.banca[k] > 0) S.celeiro[k] = (S.celeiro[k] || 0) + F.banca[k];
+  F.banca = {};
+}
+function abrirBancaAgro(){
+  fecharMenu();
+  abrirCargaFeira({ titulo: 'Barraca do Ed', sub: 'Feira Agronômica Sustentável', icone: 'cesta', botao: 'Montar a barraca', inicial: { ...feiraAgro().banca },
+    texto: `Escolha até ${FEIRA_DIA.produtos} produtos da sobra, até ${FEIRA_DIA.maxQtd} de cada. O Beto vende durante a feira, com ${Math.round((FEIRA_AGRO.bonus - 1) * 100)}% a mais no preço, e o que sobrar volta para o celeiro.`,
+    ao: carga => {
+      const F = feiraAgro();
+      devolverBancaAgro();
+      for (const k in carga){ const q = Math.min(carga[k] || 0, S.celeiro[k] || 0); if (q > 0){ S.celeiro[k] -= q; F.banca[k] = q; } }
+      fecharJanela(); mostrarBancaEd(); hud(); salvar();
+      aviso(feiraAgroAberta() ? 'Barraca montada! O Beto já está vendendo.' : 'Barraca pronta! O Beto vende no dia da feira.');
+    } });
+}
+function venderBancaAgro(){
+  const F = feiraAgro(), l = Object.keys(F.banca).filter(k => F.banca[k] > 0);
+  if (!l.length) return;
+  const tot = l.reduce((a, k) => a + F.banca[k], 0);
+  let r = Math.random() * tot, k = l[0];
+  for (const p of l){ r -= F.banca[p]; if (r <= 0){ k = p; break; } }
+  const q = Math.min(F.banca[k], 1 + Math.floor(Math.random() * 3)), valor = Math.round(preco(k) * FEIRA_AGRO.bonus) * q;
+  F.banca[k] -= q; if (!F.banca[k]) delete F.banca[k];
+  F.vendidos += q; F.ganho += valor; S.dinheiro += valor;
+  const B = FEIRA_AGRO_VIS.barracas[0], xp = Math.max(1, Math.round(xpDoNivel() * FEIRA_AGRO.xpItem * q));
+  if (B){
+    const pos = B.topo();
+    if (naTelaBicho(pos)){ flutuar(pos, '+' + reais(valor), '', k); B.salto = 0.45; Som.moeda(); if (B.porco && Math.random() < 0.3){ const f = variar(FALAS_BETO_FEIRA); falar(B.porco, f, tempoDeLeitura(f)); } }
+    ganharXP(xp, pos.clone().add(new THREE.Vector3(0, 0.3, 0)));
+    mostrarBancaEd(B);
+  }
+  chipPulsa('chipDinheiro'); hud(); salvar();
+}
+// ----- comprar dos produtores
+function precoAgro(it){
+  if (it.enfeite) return ENFEITES[it.enfeite].preco;
+  if (it.adubo) return Math.round(ADUBO.preco * it.adubo * FEIRA_AGRO.compra);
+  return Math.round(PRODUTOS[it.prod].venda * it.q * FEIRA_AGRO.compra);
+}
+function comprarAgro(i, n){
+  const P = PRODUTORES_AGRO[i], it = P.vende[n], v = precoAgro(it), B = FEIRA_AGRO_VIS.barracas[i];
+  if (S.dinheiro < v){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return; }
+  gastar(v); chipPulsa('chipDinheiro'); Som.moeda();
+  const pos = B ? B.topo() : ed.g.position.clone();
+  if (B) B.salto = 0.45;
+  if (it.enfeite){
+    const E = ENFEITES[it.enfeite];
+    S.guardados[it.enfeite] = (S.guardados[it.enfeite] || 0) + 1; ganharXP(E.xp, pos);
+    salvar(); fecharMenu(); aviso(`${E.nome} ${E.art === 'a' ? 'comprada' : 'comprado'}! Escolha onde plantar (fica guardado na loja, em Enfeites, se preferir depois).`, 'grande', 4);
+    ligarModoEnfeite(it.enfeite); return;
+  }
+  if (it.adubo){ S.adubo = (S.adubo || 0) + it.adubo; flutuar(pos, '+' + it.adubo, '', 'adubo'); }
+  else { S.celeiro[it.prod] = (S.celeiro[it.prod] || 0) + it.q; flutuar(pos, '+' + it.q, '', it.prod); }
+  hud(); salvar();
+}
+function itensBarracaAgro(i){
+  const P = PRODUTORES_AGRO[i], F = feiraAgro(), r = { titulo: P.nome, icone: P.id === 'ed' ? 'cesta' : (P.mostra && P.mostra[0]) || 'cesta', itens: [] };
+  if (P.id === 'ed'){
+    const l = Object.keys(F.banca).filter(k => F.banca[k] > 0);
+    r.estado = `${P.dono[0].toUpperCase() + P.dono.slice(1)} vende durante a feira, com ${Math.round((FEIRA_AGRO.bonus - 1) * 100)}% a mais no preço. ${l.length ? `Na barraca: ${l.map(k => `${F.banca[k]} ${F.banca[k] > 1 ? PRODUTOS[k].plural : PRODUTOS[k].nome.toLowerCase()}`).join(', ')}.` : 'A barraca está vazia.'}${F.vendidos ? ` Vendidos hoje: ${F.vendidos}, ${reais(F.ganho)}.` : ''}`;
+    r.itens.push({ rotulo: l.length ? 'Trocar o que está na barraca' : 'Escolher o que vender', sub: 'a sobra do celeiro', icone: 'cesta', fn: () => abrirBancaAgro() });
+    if (!F.inscrito && !F.resultado) r.itens.push({ rotulo: 'Inscrever um produto no concurso', sub: 'os jurados anunciam os vencedores à tarde', icone: 'trofeu', fn: () => abrirInscricaoAgro() });
+    return r;
+  }
+  r.estado = `${P.desc} Quem atende: ${P.dono}.`;
+  P.vende.forEach((it, n) => {
+    const v = precoAgro(it);
+    const rot = it.enfeite ? ENFEITES[it.enfeite].nome : it.adubo ? `${it.adubo} sacos de húmus` : `${it.q} ${PRODUTOS[it.prod].plural}`;
+    const sub = it.enfeite ? 'enfeite que não tem na loja' : it.adubo ? 'adubo, mais barato que na loja' : 'vai para o celeiro, mais barato que no mercado';
+    r.itens.push({ rotulo: rot, sub, icone: it.enfeite || (it.adubo ? 'adubo' : it.prod), preco: reais(v), off: S.dinheiro < v, fn: () => comprarAgro(i, n) });
+  });
+  return r;
+}
+function itensPalcoAgro(){
+  const F = feiraAgro(), r = { titulo: 'Concurso de produtos', icone: 'trofeu', itens: [] };
+  r.estado = F.resultado ? (F.resultado.lugar >= 0 && F.resultado.lugar < 3 ? `O Ed ficou em ${['primeiro', 'segundo', 'terceiro'][F.resultado.lugar]} lugar com ${PRODUTOS[F.resultado.prod].nome.toLowerCase()}!` : 'O concurso desta feira já acabou.')
+    : `A agrônoma Dra. Sálvia e os jurados provam um produto de cada barraca e anunciam os três melhores à tarde.${F.inscrito ? ` O Ed inscreveu ${PRODUTOS[F.inscrito].nome.toLowerCase()}.` : ''} Vale mais o que é feito na fazenda, o que é caro e o que vem da mata.`;
+  if (!F.inscrito && !F.resultado) r.itens.push({ rotulo: 'Inscrever um produto', sub: 'sai um do celeiro', icone: 'trofeu', fn: () => abrirInscricaoAgro() });
+  if ((F.trofeus || []).length) r.itens.push({ rotulo: 'Troféus do Ed', sub: textoTrofeusAgro(), icone: 'trofeu', off: true, leve: true, fn: () => {} });
+  return r;
+}
+// ----- o concurso: a nota é o preço (o mais caro vale mais), o que é feito numa construção e o que vem da mata, mais sorte
+const sustentavelAgro = p => !!(PRODUTOS[p].nativa || PRODUTOS[p].recanto || (PRODUTOS[p].requer || []).length || p === 'mel');
+const notaAgro = p => 35 + 8 * Math.log2(1 + PRODUTOS[p].venda / 20) + (PRODUTOS[p].fab ? 5 : 0) + (sustentavelAgro(p) ? 8 : 0) + rnd(0, 25);
+function rankingAgro(p){
+  // concorrem os produtores especiais e alguns da região, sorteados
+  const regiao = PRODUTORES_AGRO.filter(P => P.regiao).sort(() => Math.random() - 0.5).slice(0, FEIRA_AGRO.rivais);
+  const l = PRODUTORES_AGRO.filter(P => P.id !== 'ed' && !P.regiao).concat(regiao).map(P => ({ id: P.id, nome: P.nome, prod: P.concurso, nota: rnd(55, 92) }));
+  if (p) l.push({ id: 'ed', nome: 'Fazenda Joli Pig', prod: PRODUTOS[p].nome.toLowerCase(), nota: notaAgro(p) });
+  return l.sort((a, b) => b.nota - a.nota);
+}
+const textoTrofeusAgro = () => { const T = feiraAgro().trofeus || [], n = i => T.filter(t => t.lugar === i).length; return ['ouro', 'prata', 'bronze'].map((c, i) => n(i) ? `${n(i)} de ${c}` : '').filter(Boolean).join(', ') || 'nenhum ainda'; };
+function abrirInscricaoAgro(){
+  fecharMenu();
+  const F = feiraAgro(), l = ORDEM_PRODUTOS.filter(p => (S.celeiro[p] || 0) > 0 && PRODUTOS[p]).sort((a, b) => PRODUTOS[b].venda - PRODUTOS[a].venda);
+  const corpo = l.length ? `<p>Escolha um produto do celeiro para os jurados provarem (sai um). Vale mais o que é feito na fazenda, o que é caro e o que vem da mata (⭐).</p><div class="linhas">${l.map(p => `<div class="linha"><img src="${icone(p)}" alt=""><div class="nome">${esc(PRODUTOS[p].nome)}${sustentavelAgro(p) ? ' ⭐' : ''}<small>${S.celeiro[p]} no celeiro · vale ${reais(PRODUTOS[p].venda)}</small></div><button class="botao mini verde" data-insc="${p}" type="button">Inscrever</button></div>`).join('')}</div>`
+    : '<div class="vazio">O celeiro está vazio. Colha ou faça alguma coisa para inscrever.</div>';
+  abrirJanela(topo('trofeu', 'Concurso de produtos', 'Feira Agronômica Sustentável', 'verde') + `<div class="janela-corpo">${corpo}</div>`);
+  $('janela').querySelectorAll('[data-insc]').forEach(b => b.addEventListener('click', () => {
+    const p = b.dataset.insc; if (!(S.celeiro[p] > 0) || F.inscrito) return;
+    S.celeiro[p]--; F.inscrito = p; Som.pop(); fecharJanela(); hud(); salvar();
+    aviso(`${PRODUTOS[p].nome} inscrito no concurso! Os jurados anunciam os vencedores à tarde, no palco da feira.`, 'grande', 4);
+  }));
+}
+// o prêmio: dinheiro e XP pelo lugar (ou a menção honrosa), e o troféu guardado em S.feiraAgro.trofeus
+function premiarAgro(lugar){
+  const F = feiraAgro(), p = F.inscrito;
+  if (F.resultado || !p) return;
+  const pos = ed.g.position.clone().add(new THREE.Vector3(0, 1.4, 0));
+  if (lugar < 3){
+    const Pr = FEIRA_AGRO.premios[lugar], din = Pr.din * nivel();
+    S.dinheiro += din; chipPulsa('chipDinheiro'); Som.moeda(); flutuar(pos, '+' + reais(din), '', 'trofeu');
+    ganharXP(Math.round(xpDoNivel() * Pr.xp), pos);
+    F.trofeus.push({ nivel: F.marcada ? F.marcada.nivel : nivel(), prod: p, lugar });
+  } else ganharXP(Math.round(xpDoNivel() * FEIRA_AGRO.mencao), pos);
+  F.resultado = { lugar, prod: p };
+  mostrarTrofeuAgro(); hud(); salvar();
+}
+// ----- no fim da tarde: o que sobrou volta, o resultado do concurso perdido chega num aviso e a feira entra para a conta
+function encerrarFeiraAgro(){
+  const F = feiraAgro();
+  if (F.inscrito && !F.resultado){
+    const R = rankingAgro(F.inscrito), lugar = R.findIndex(e => e.id === 'ed');
+    premiarAgro(lugar);
+    aviso(lugar < 3 ? `Resultado do concurso: o ${PRODUTOS[F.inscrito].nome.toLowerCase()} do Ed ficou em ${['primeiro', 'segundo', 'terceiro'][lugar]} lugar!` : `Resultado do concurso: ${R[0].nome} ganhou; o Ed levou uma menção honrosa.`, 'grande', 6);
+  }
+  const sobra = Object.values(F.banca).reduce((a, b) => a + b, 0);
+  devolverBancaAgro();
+  if (F.marcada && F.marcada.montou){
+    F.feitas.push(F.marcada.nivel); F.vezes = (F.vezes || 0) + 1;
+    const txt = `A Feira Agronômica acabou! A barraca do Ed vendeu ${contagem(F.vendidos || 0, 'item', 'itens')} e rendeu ${reais(F.ganho || 0)}.${sobra ? ' O que sobrou voltou para o celeiro.' : ''}`;
+    setTimeout(() => aviso(txt, 'grande', 6), 800);
+  }
+  if (cenaPedida === 'concursoAgro') cenaPedida = null;
+  F.marcada = null; F.inscrito = null; F.resultado = null; F.vendidos = 0; F.ganho = 0;
+  desmontarFeiraAgro(); hud(); salvar();
+  agendarFeiraAgro();
+}
+// ----- a gente que passeia: chega pelo portal, desce o caminho do meio e entra pelos corredores de barraca em barraca, olha
+// um pouco e vai embora. Anda só pelo caminho do meio (x da praça) e pelos corredores, então não atravessa as barracas. Só
+// perto da câmera (como nas quadras); quando a câmera chega, metade já aparece espalhada pelas barracas. Não mexe no save
+const MEIO_AGRO = () => ESPACO.praca[0];
+function frenteBarraca(B){ const [x, z] = B.P.pos; return [x + B.P.frente[0] * 1.05 + rnd(-0.6, 0.6) * Math.abs(B.P.frente[1]), z + B.P.frente[1] * rnd(0.95, 1.25) + rnd(-0.4, 0.4) * Math.abs(B.P.frente[0])]; }
+function novoVisitanteAgro(espalhado){
+  const t = sorteia(['porco', 'porco', 'porco', 'nano', 'nano', 'pessoa', 'pessoa', 'pessoa', 'pessoa']), j = novoJogadorQuadra(t), [px, pz] = ESPACO.portal;
+  j.y = 0; j.vel *= 0.55; j.visitas = 2 + Math.floor(Math.random() * 4); j.olha = 0;
+  if (espalhado){
+    const B = sorteia(FEIRA_AGRO_VIS.barracas), [fx, fz] = frenteBarraca(B);
+    colocarJogador(j, fx, fz); j.rota = []; j.alvoB = B; j.ang = Math.atan2(-B.P.frente[0], -B.P.frente[1]); j.olha = rnd(0, 5);
+  } else { colocarJogador(j, px + 0.5 + rnd(-0.3, 0.3), pz - 0.6); j.rota = [[MEIO_AGRO() + rnd(-0.4, 0.4), pz + 1.5]]; }
+  return j;
+}
+// o caminho até um ponto de corredor: sai para o meio, anda pelo meio até a altura dele e entra
+const rotaCorredor = (j, [x, z]) => { const m = MEIO_AGRO() + rnd(-0.45, 0.45); return [[m, j.z], [m, z], [x, z]]; };
+function passoVisitanteAgro(j, dt){
+  const V = FEIRA_AGRO_VIS;
+  if (j.olha > 0){ j.olha -= dt; return; }
+  if (Math.hypot(j.alvo[0] - j.x, j.alvo[1] - j.z) > 0.06) return;
+  if (j.rota.length){ j.alvo = j.rota.shift(); return; }
+  if (j.alvoB){ j.ang = Math.atan2(-j.alvoB.P.frente[0], -j.alvoB.P.frente[1]); j.alvoB = null; j.olha = rnd(3, 8); j.visitas--; if (Math.random() < 0.15) j.salto = 0.55; return; }
+  if (j.saindo){ j.fim = true; return; }
+  if (j.visitas <= 0){ const [px, pz] = ESPACO.portal; j.saindo = true; j.rota = [...rotaCorredor(j, [px + 0.5, pz + 1.2]).slice(0, 2), [px + 0.5, pz - 0.6]]; j.alvo = j.rota.shift(); return; }
+  // às vezes passa pela praça antes da próxima barraca
+  const B = sorteia(V.barracas); j.alvoB = B;
+  const pr = Math.random() < 0.25 ? [[MEIO_AGRO() + rnd(-1.2, 1.2), ESPACO.praca[1] + rnd(-1, 1)]] : [];
+  j.rota = [...pr, ...rotaCorredor(pr.length ? { z: pr[0][1] } : j, frenteBarraca(B))]; j.alvo = j.rota.shift();
+}
+function atualizarFeiraAgro(dt, t){
+  const V = FEIRA_AGRO_VIS;
+  if ((V.conferir -= dt) <= 0){ V.conferir = 1; if (S && !cine) conferirFeiraAgro(1); }
+  if (!V.montada) return;
+  // quem atende balança e pula quando vende; a agrônoma também
+  for (const B of V.barracas){
+    B.fase += dt * 2;
+    if (B.salto > 0) B.salto = Math.max(0, B.salto - dt);
+    const y = (B.salto > 0 ? Math.sin((1 - B.salto / 0.45) * Math.PI) * 0.16 : 0) + Math.abs(Math.sin(B.fase)) * 0.015;
+    if (B.porco) B.porco.g.position.y = y; else B.atras.position.y = y;
+  }
+  if (V.juiz){ const J = V.juiz; if (J.salto > 0) J.salto = Math.max(0, J.salto - dt); J.g.position.y = 4 / 16 + (J.salto > 0 ? Math.sin((1 - J.salto / 0.45) * Math.PI) * 0.14 : 0); }
+  // a gente: aparece com a feira perto da câmera, some depois de some segundos longe
+  const [cx, cz] = ESPACO.praca, perto = !cine || cine.cena === CENAS.concursoAgro ? Math.hypot(cx - cam.alvo.x, cz - cam.alvo.z) < cam.vista * 1.1 + 4 : false;
+  if (!perto){ V.fora += dt; if (V.fora > FEIRA_AGRO.some && V.gente.length){ for (const j of V.gente) tirarJogadorQuadra(j); V.gente = []; } return; }
+  V.fora = 0;
+  if (!V.gente.length) for (let i = 0; i < FEIRA_AGRO.gente * 0.6; i++) V.gente.push(novoVisitanteAgro(true));
+  if (V.gente.length < FEIRA_AGRO.gente && Math.random() < dt * 2) V.gente.push(novoVisitanteAgro());
+  for (const j of V.gente){ passoVisitanteAgro(j, dt); moverJogador(j, dt, null); animarJogador(j, dt, t); }
+  // de vez em quando alguém comenta o que viu
+  if ((V.fala = (V.fala || 3) - dt) <= 0){
+    V.fala = rnd(2.5, 5); const j = sorteia(V.gente);
+    if (j && j.olha > 0 && naTelaBicho(new THREE.Vector3(j.x, 0.5, j.z))){ const f = variar(j.tipo === 'porco' ? FALAS_FEIRA_AGRO_PORCO : FALAS_FEIRA_AGRO); falar(j, f, Math.min(2.6, tempoDeLeitura(f))); }
+  }
+  for (const j of V.gente.filter(j => j.fim)) tirarJogadorQuadra(j);
+  V.gente = V.gente.filter(j => !j.fim);
+}
+const FALAS_FEIRA_AGRO = ['Que feira bonita!', 'Olha o tamanho dessa abóbora!', 'Vou levar mel pra casa.', 'Tudo sem veneno, que maravilha!', 'Esse queijo tá com um cheiro!', 'Me vê meio quilo, por favor!', 'Trouxe minha sacola retornável!',
+  'Quanto custa a muda de ipê?', 'O pão de queijo saiu agora do forno!', 'Que cheirinho de café!', 'Já provou a geleia da Dona Rosa?', 'Essa feira é a melhor da região!', 'Vou voltar na próxima, com certeza.', 'A barraca do Ed tá cheia de coisa boa!',
+  'Olha o Curupira vendendo muda!', 'Os nanos fazem painel solar? Que demais!', 'Comprei tanta coisa que nem cabe na sacola!', 'Que cor linda esse toldo!', 'Quem vai ganhar o concurso?', 'Direto do produtor é outra coisa!', 'Vamos dar mais uma volta?'];
+const FALAS_FEIRA_AGRO_PORCO = ['Oinc! (cheira o queijo)', 'Oinc oinc! (quer a abóbora inteira)', 'Óinc! (prova o pão de queijo)', 'Oinc! (olha as mudas)', 'Oinc-oinc! (gostou do mel)', 'Oinc! (pede um docinho)', 'Óóinc! (que feira cheia!)',
+  'Oinc oinc! (enche a sacola)', 'Oinc! (acena pro Beto)', 'Óinc! (quer voltar amanhã)', 'Oinc! (focinho no cesto de laranja)', 'Oinc-oinc! (achou uma bolota de goiabada)', 'Oinc! (pula de alegria)', 'Oinc oinc! (procura o Ed)',
+  'Óinc! (fareja o café)', 'Oinc! (namora o bolo de fubá)', 'Oinc-oinc! (leva duas melancias)', 'Oinc! (dá oi pras Minhoquinhas)', 'Óóinc! (torce pro Ed no concurso)', 'Oinc! (prova a jabuticaba)', 'Oinc oinc! (quer tudo!)'];
+const FALAS_BETO_FEIRA = ['Olha a verdura fresquinha da Fazenda Joli Pig!', 'Leva dois, que é do meu irmão!', 'Produto da fazenda, direto do celeiro!', 'Vendido! Obrigado, freguesia!', 'Na Joli Pig tudo é feito com carinho!',
+  'Quer provar? É de graça!', 'Esse aí o Ed colheu hoje cedo!', 'Mais barato que no Joli Market? Nem conta pro Jaca!', 'Freguês bom é freguês que volta!', 'Embrulha pra presente?', 'Aceita pix, moeda e sorriso!',
+  'Tá fresquinho, pode confiar!', 'Olha a promoção da feira!', 'Tem pra todo mundo, sem empurra-empurra!', 'Que dia bom de feira!', 'Meu irmão vai ficar orgulhoso!', 'Vendeu! Mais um pro caixinha do Ed!',
+  'Fazenda Joli Pig: sustentável e gostosa!', 'Volta sempre, viu?', 'Esse é o produto preferido da Luma!', 'Obrigado! Leva uma sacolinha retornável!'];
+// o fim da cena do concurso (vista ou pulada): o prêmio entra uma vez só (premiarAgro confere o resultado)
+function concluirConcursoAgro(){
+  const C = FEIRA_AGRO_VIS.concurso; FEIRA_AGRO_VIS.concurso = null;
+  S.viuCineConcursoAgro = true;
+  if (C) premiarAgro(C.lugar);
+}
+const FALAS_ED_CAMPEAO = ['Campeão?! A Fazenda Joli Pig é campeã!', 'Não acredito! Primeiro lugar!', 'Ouro! Vou pendurar esse troféu na sala!', 'Obrigado, jurados! Isso é trabalho da família inteira!', 'O Beto vai chorar quando souber!',
+  'Primeiro lugar! A Luma vai latir de alegria!', 'Esse troféu é das minhocas, das abelhas e de todo mundo da fazenda!', 'Eu sabia que esse produto era especial!', 'Campeão da feira! Aoooa!', 'Quero agradecer à minha enxada, ao meu regador e ao Hud!',
+  'Ouro! Hoje tem bolo de comemoração!', 'Tô tremendo! Primeiro lugar de verdade?', 'A Joli Pig no topo do pódio!', 'Mãe, olha eu no palco!', 'Vou ligar pro Milton contar agora mesmo!', 'Isso é o que dá cuidar da terra com carinho!',
+  'Campeões! Os nanos vão fazer uma festa!', 'Nem dormi direito pensando nesse concurso!', 'Primeiro lugar! O Jaca vai querer vender isso no Joli Market!', 'Obrigado, Dra. Sálvia! Ano que vem tem mais!', 'Que dia! Que feira! Que troféu!'];
+const FALAS_ED_PODIO = ['Pódio! A Joli Pig está entre as melhores!', 'Que honra! Ano que vem a gente busca o ouro!', 'Um troféu é um troféu! Obrigado!', 'Uhuu! Subimos no pódio!', 'Vou guardar esse troféu com muito carinho!',
+  'Bem pertinho do primeiro lugar!', 'A família vai ficar orgulhosa!', 'Valeu, jurados! Vou caprichar ainda mais!', 'Pódio na primeira tentativa? Que alegria!', 'Esse troféu vai brilhar na estante!', 'Parabéns aos campeões também!',
+  'Ficou bonito no palco, hein!', 'O Beto vai querer tirar foto com o troféu!', 'Na próxima feira eu volto mais forte!', 'Que bom ver tanta gente fazendo coisa boa!', 'Um pódio cheio de produto sustentável!', 'A Luma vai querer morder o troféu!',
+  'Obrigado! Isso anima a gente a plantar mais!', 'Tá vendo, Hud? Pódio!', 'Agora é treinar pra próxima!', 'Que orgulho da nossa fazenda!'];
+const FALAS_ED_MENCAO = ['Não deu dessa vez, mas foi divertido!', 'Parabéns aos campeões! Eles merecem!', 'Na próxima feira eu trago algo ainda melhor!', 'Uma menção honrosa já é uma honra!', 'Aprendi muito vendo os outros produtores!',
+  'Tá bom, tá bom, ano que vem é nosso!', 'O importante é participar e fazer amigos!', 'Vou perguntar pra Dona Cida o segredo do queijo dela!', 'A concorrência estava forte hoje!', 'Pelo menos a barraca vendeu bem!', 'Fica pra próxima, Joli Pig!',
+  'Que feira linda! Valeu a pena de qualquer jeito.', 'Vou caprichar mais na próxima colheita!', 'Os jurados sabem das coisas. Vou melhorar!', 'Ainda bem que o Beto não viu minha cara agora!', 'Bom ver tanta gente cuidando da terra!',
+  'Menção honrosa! Vai pra parede também!', 'O Curupira caprichou demais, né?', 'Ano que vem eu volto com tudo!', 'Perder pra amigos não é tão ruim assim.', 'Vou levar umas dicas pra fazenda!'];
+// ================= a rave da Luma (o Lucas pediu): a Luma também é DJ, com o nome artístico Summer Cachohits. De dia, de vez em
+// quando (RAVE.chance por dia, numa hora sorteada), ela toca no espaço de eventos de fone e óculos escuros, numa mesa de DJ com
+// caixas de som e luzes, e nanos, porquinhos, pessoas e outros dançam na pista. Dura RAVE.duracao segundos; a música toca com
+// a câmera perto. Precisa da Luma em casa (a de verdade fica lá enquanto a DJ toca) e não acontece no dia da feira. Não mexe
+// no save; também dá para chamar pela janela Cenas
+const RAVE = { chance: 0.4, hora: [0.12, 0.5], fim: 0.62, duracao: 150, gente: 24, bpm: 126, dj: zp('festa', 11, 10.6), pista: zp('festa', 11, 15.6), raio: [3.6, 2.6] };
+let rave = null, raveDia = { dia: -1, hora: 2 };
+const motivoRave = () => !espacoAberto() ? 'O espaço de eventos ainda não existe.' : feiraAgroHoje() ? 'Hoje o espaço é da Feira Agronômica.' : rave ? 'A rave já está rolando!'
+  : !((S.relogio || 0) >= FEIRA_AGRO.abre && (S.relogio || 0) < RAVE.fim) ? 'A rave da Luma é de dia.' : !luma || luma.estado !== 'dentro' ? 'A Luma está brincando lá fora. Espere ela voltar para casa.' : cine || cenaPedida ? 'Espere a cena acabar.' : null;
+// o fone (com as conchas rosa-neon) e os óculos escuros, no desenho da cabeça da Luma (vLumaCabeca)
+function vAcessoriosDJ(){
+  const v = new Vox(), preto = 0x18141c, neon = 0xff3ea5;
+  for (const lado of [-1, 1]){
+    for (let y = 6; y <= 14; y++) for (let z = 0; z <= 8; z++){ const d = Math.hypot(y - 10, z - 4); if (d <= 4.2) for (let k = 0; k <= 2; k++) v.set(lado * (12 + k), y, z, d > 3 ? neon : preto); }
+    for (let x = 2; x <= 8; x++) for (let y = 10; y <= 14; y++) if (!(y === 14 && (x === 2 || x === 8))) v.set(lado * x, y, 16, y === 14 ? 0x2a2a30 : preto);
+    v.set(lado * 3, 13, 17, 0x6a6a80);
+    for (let z = 6; z <= 15; z++) v.set(lado * 9, 13, z, preto);
+  }
+  v.set(-1, 13, 16, preto); v.set(0, 13, 16, preto); v.set(1, 13, 16, preto);
+  for (let a = 0; a <= 20; a++){ const t = a / 20 * Math.PI, x = Math.round(-Math.cos(t) * 12.5), y = Math.round(12 + Math.sin(t) * 11); v.set(x, y, -1, a % 4 ? preto : neon); v.set(x, y, 0, preto); }
+  return v;
+}
+function vMesaDJ(){
+  const v = new Vox(), preto = 0x1c1824;
+  v.box(-14, 0, -4, 13, 9, 4, (x, y) => y === 5 ? 0xff3ea5 : y === 6 ? 0x3ad0ff : preto); v.box(-15, 10, -5, 14, 10, 5, 0x2a2632);
+  for (const cx of [-8, 7]) for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++){ const d = Math.hypot(x, z); if (d <= 4.2) v.set(cx + x, 11, z, d < 1.3 ? (cx < 0 ? 0xff3ea5 : 0xffd34d) : (x + z) % 3 ? 0x101014 : 0x26262e); }
+  v.box(-2, 11, -3, 1, 12, 3, 0x3a3644); for (const [x, z, c] of [[-1, -2, 0x3ad0ff], [0, -2, 0xff3ea5], [-1, 0, 0x8fd06a], [0, 0, 0xffd34d], [-1, 2, 0xffffff], [0, 2, 0x3ad0ff]]) v.set(x, 13, z, c);
+  v.box(-4, 0, -13, 3, 8, -7, 0x6b4a2c);
+  return v;
+}
+function vCaixaSom(){
+  const v = new Vox();
+  v.box(-5, 0, -4, 5, 17, 4, 0x1c1824);
+  for (const [cy, r] of [[6, 3.6], [13, 2.4]]) for (let x = -4; x <= 4; x++) for (let y = cy - 4; y <= cy + 4; y++){ const d = Math.hypot(x, y - cy); if (d <= r) v.set(x, y, 5, d < 1 ? 0x6a6a80 : d > r - 0.8 ? 0x3a3a48 : 0x26262e); }
+  v.set(0, 16, 5, 0xff3ea5);
+  return v;
+}
+function comecarRave(){
+  if (motivoRave()) return false;
+  montarEspacoEventos();
+  const g = new THREE.Group(); scene.add(g);
+  const [dx, dz] = RAVE.dj, palco = new THREE.Group(); palco.position.set(dx, 0, dz); g.add(palco);
+  palco.add(malha(geo('mesaDJ', () => vMesaDJ().build(1 / 16, { origin: [0.5, 0, 0.5] }))));
+  for (const lado of [-1, 1]){ const c = malha(geo('caixaSom', () => vCaixaSom().build(1 / 16, { origin: [0.5, 0, 0.5] }))); c.position.set(lado * 1.6, 0, 0.1); c.rotation.y = lado * 0.25; palco.add(c); }
+  const placa = placaDeTexto(texturaTexto([['DJ SUMMER CACHOHITS', 1, '#ff3ea5'], ['ao vivo no espaço de eventos', 0.5, '#3ad0ff']], 512, 128, '#1c1824', '#ff3ea5'), 1.75, 0.44);
+  placa.position.set(0, 0.34, 0.3); palco.add(placa);
+  // as luzes: uma barra em cima, com quatro holofotes que trocam de cor na batida
+  const barra = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.06, 0.06), new THREE.MeshLambertMaterial({ color: 0x3a3a48 })); barra.position.set(0, 1.95, -0.5); palco.add(barra);
+  for (const x of [-1.6, 1.6]){ const p = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.95, 0.06), barra.material); p.position.set(x, 0.97, -0.5); palco.add(p); }
+  texturaHalo();
+  const luzes = [-1.2, -0.4, 0.4, 1.2].map(x => {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: texHalo, color: 0xff3ea5, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.85 }));
+    sp.position.set(x, 1.85, -0.45); sp.scale.setScalar(0.75); palco.add(sp); return sp;
+  });
+  // a DJ: uma Luma só dela, num banquinho atrás da mesa, de fone e óculos escuros
+  const L = montarLuma(false), dj = new THREE.Group(); dj.add(L.g);
+  L.cabeca.add(malha(geo('acessoriosDJ', () => vAcessoriosDJ().build(1 / 57, { origin: [0.5, 0, 0.5], jitter: 0.01 }))));
+  dj.position.set(0, 9 / 16, -0.6); dj.scale.setScalar(1.3); palco.add(dj);
+  palco.traverse(o => { o.userData.alvo = { k: 'rave' }; }); pickaveis.push(palco);
+  // a pista: porquinhos, nanos e pessoas (os mesmos das quadras), mais duas Minhoquinhas e a vaquinha espacial
+  const [cx, cz] = RAVE.pista, gente = [];
+  for (let i = 0; i < RAVE.gente; i++){
+    const j = novoJogadorQuadra(sorteia(['porco', 'porco', 'nano', 'nano', 'pessoa', 'pessoa'])), a = i / RAVE.gente * Math.PI * 2 + rnd(-0.2, 0.2), r = Math.sqrt(rnd(0.1, 1));
+    j.y = 0; colocarJogador(j, cx + Math.cos(a) * RAVE.raio[0] * r, cz + Math.sin(a) * RAVE.raio[1] * r);
+    j.ang = Math.atan2(dx - j.x, dz - j.z); j.off = Math.floor(Math.random() * 4); j.altoPulo = rnd(0.1, 0.2); j.gira = 0; gente.push(j);
+  }
+  const outros = [];
+  const outro = (k, f, s, x, z) => { const m = malha(geo(k, () => f().build(s, { origin: [0.5, 0, 0.5], jitter: 0.02 }))), o = new THREE.Group(); o.add(m); o.position.set(x, 0, z); o.rotation.y = Math.atan2(dx - x, dz - z); g.add(o); outros.push({ g: o, off: Math.floor(Math.random() * 4) }); };
+  outro('minhoca', vMinhoca, 1 / 16, cx - 2.6, cz + 0.4); outro('minhoca', vMinhoca, 1 / 16, cx + 2.4, cz - 0.6);
+  outro('vacaEspaco', () => vVaca(true), 1 / 22, cx + 0.2, cz - 2.2);
+  rave = { g, palco, L, dj, luzes, gente, outros, t: 0, batida: -1, confete: 3, fala: 4 };
+  if (luma) luma.prox = Math.max(luma.prox, RAVE.duracao + 20);
+  aviso('Rave no espaço de eventos! A DJ Summer Cachohits (é a Luma!) está tocando de fone e óculos escuros, no canto de baixo do terreno novo.', 'grande', 7);
+  return true;
+}
+function acabarRave(){
+  const R = rave; if (!R) return;
+  for (const j of R.gente) tirarJogadorQuadra(j);
+  R.g.traverse(o => { const k = pickaveis.indexOf(o); if (k >= 0) pickaveis.splice(k, 1); });
+  for (const s of R.luzes) s.material.dispose();
+  scene.remove(R.g); rave = null;
+  if (Musica.atual && Musica.atual.id === 'rave') Musica.parar();
+}
+function atualizarRave(dt, t){
+  if (!S) return;
+  // sorteio do dia: em RAVE.chance dos dias, uma hora de dia; começa quando der (a Luma em casa, sem cena, sem feira)
+  if (raveDia.dia !== diaAtual()) raveDia = { dia: diaAtual(), hora: Math.random() < RAVE.chance ? rnd(...RAVE.hora) : 2 };
+  if (!rave){ if ((S.relogio || 0) >= raveDia.hora && S.viuCineInicio && nivel() >= ARRENDAMENTO.nivel && !motivoRave() && comecarRave()) raveDia.hora = 2; return; }
+  const R = rave; R.t += dt;
+  if (R.t > RAVE.duracao || (S.relogio || 0) >= RAVE.fim + 0.05){ acabarRave(); aviso('A rave acabou! A DJ Summer Cachohits agradece a pista e volta para casa.'); return; }
+  if (luma && luma.prox < 20) luma.prox = 20;
+  const b = 60 / RAVE.bpm, n = Math.floor(R.t / b), nova = n !== R.batida; R.batida = n;
+  // a DJ: a cabeça balança na batida, o corpo quica e a patinha da frente arranha o disco
+  const L = R.L, f = (R.t % b) / b;
+  L.cabeca.rotation.x = -0.25 + Math.sin(f * Math.PI) * 0.35; L.g.position.y = Math.abs(Math.sin(f * Math.PI)) * 0.03;
+  L.pernas[0].rotation.x = -1.2 + Math.sin(R.t * 9) * 0.35; L.pernas[1].rotation.x = -0.9; L.rabo.rotation.z = Math.sin(R.t * 14) * 0.4;
+  if (nova){ const cores = [0xff3ea5, 0x3ad0ff, 0xffd34d, 0x8fd06a, 0xb06aff]; R.luzes.forEach((s, i) => s.material.color.setHex(cores[(n + i * 2) % cores.length])); }
+  for (const s of R.luzes) s.material.opacity = 0.55 + (1 - f) * 0.4;
+  // a pista: cada um pula na batida dele, de vez em quando dá uma girada; as nanos de braço para cima
+  for (const j of R.gente){
+    if (nova && (n + j.off) % 2 === 0) j.salto = 0.55;
+    if (nova && Math.random() < 0.04) j.gira = 1;
+    if (j.gira > 0){ j.gira -= dt * 1.2; j.ang += dt * Math.PI * 2.4; }
+    else j.ang = anguloPerto(j.ang, Math.atan2(RAVE.dj[0] - j.x, RAVE.dj[1] - j.z), 0.1);
+    j.correndo = false;
+    if (j.tipo === 'nano') j.pose = (n + j.off) % 4 < 2 ? 'acena' : 'pula';
+    animarJogador(j, dt, t);
+  }
+  for (const o of R.outros){ const k = ((R.t / b) + o.off * 0.5) % 1; o.g.position.y = Math.sin(k * Math.PI) * 0.12; }
+  // confete e falas de vez em quando, com a câmera perto
+  const [cx, cz] = RAVE.pista, perto = Math.hypot(cx - cam.alvo.x, cz - cam.alvo.z) < cam.vista * 1.1 + 3;
+  if (perto && !cine){ if (Musica.pode() && (!Musica.atual || Musica.atual.id !== 'rave')) Musica.trocar('rave'); }
+  else if (Musica.atual && Musica.atual.id === 'rave' && !cine) Musica.parar();
+  if (!perto) return;
+  if ((R.confete -= dt) <= 0){ R.confete = rnd(5, 9); confete(cx + rnd(-1.5, 1.5), 2.2, cz + rnd(-1, 1), 50, 1.6); }
+  if ((R.fala -= dt) <= 0){
+    R.fala = rnd(4, 8); const j = sorteia(R.gente);
+    if (j && naTelaBicho(new THREE.Vector3(j.x, 0.5, j.z))){ const fl = variar(j.tipo === 'porco' ? FALAS_RAVE_PORCO : FALAS_RAVE); falar(j, fl, Math.min(2.6, tempoDeLeitura(fl))); }
+  }
+}
+function itensRave(){
+  return { titulo: 'DJ Summer Cachohits', icone: 'luma', itens: [], estado: 'É a Luma! De dia, de vez em quando, ela toca no espaço de eventos com o nome artístico Summer Cachohits, de fone e óculos escuros, e a bicharada vem dançar.' };
+}
+const FALAS_RAVE = ['Solta o som, Summer!', 'Uhuu, Cachohits!', 'Que batida!', 'Essa é a minha música!', 'Mãos pro alto!', 'Ninguém para essa pista!', 'A DJ é uma chihuahua? Que demais!', 'Mais alto, Summer!',
+  'Dança, dança, dança!', 'Que óculos estilosos!', 'Melhor rave da região!', 'Toca aquela!', 'Pula, pula, pula!', 'Nunca dancei tanto de dia!', 'Summer Cachohits, eu te amo!', 'Essa vibe tá demais!',
+  'Olha a DJ balançando a cabeça!', 'Vem pra pista!', 'O fone dela é rosa-neon!', 'Mais uma, mais uma!', 'Que dia perfeito pra dançar!'];
+const FALAS_RAVE_PORCO = ['Oinc! (dança de rabinho)', 'Oinc oinc! (pula na batida)', 'Óinc! (passinho de porquinho)', 'Oinc! (gira, gira)', 'Oinc-oinc! (casco pra cima)', 'Oinc! (ama essa música)',
+  'Óóinc! (que batida!)', 'Oinc oinc! (chama os amigos)', 'Oinc! (rebola)', 'Oinc! (pede mais uma)', 'Óinc! (faz o passinho do Ed)', 'Oinc-oinc! (tá suando)', 'Oinc! (acena pra DJ)',
+  'Oinc oinc! (pulinho duplo)', 'Óinc! (dança com a nano)', 'Oinc! (não quer ir embora)', 'Oinc-oinc! (focinho pro alto)', 'Oinc! (coreografia ensaiada)', 'Óóinc! (Summer Cachohits!)', 'Oinc! (gira o rabinho)', 'Oinc oinc! (melhor dia!)'];
 // ================= o recanto do fundo da mata (o Lucas pediu): o fundo da primeira coluna da mata, atrás da cachoeira, não
 // tinha trilha. Agora uma trilha sai do fim da trilha do meio (a parcela do nível 44), passa atrás do lago da cachoeira e
 // desce pela beira do mapa até uma clareirinha. Lá ficam as câmeras da mata (armadilhas fotográficas que o Hud, que também é
@@ -13300,7 +13996,8 @@ function abrirMuseu(aba, comentar){
     const viajaram = vacasNoEspaco() + (S.animais || []).filter(d => d.espaco).length;
     const rec = [['cesta', 'Colhido na fazenda', soma('colhido')], ['moinho', 'Feito nas construções', soma('feitos')], ['caderno', 'Pedidos entregues', S.entregues || 0],
       ['mirante', 'Visitantes na trilha', S.visitasTrilha || 0], ['mata', 'Cuidados com a mata', soma('guardiao')], ['aposentada', 'Galinhas aposentadas', (S.aposentadas || []).length],
-      ['vacaEspaco', 'Vaquinhas que viajaram para o espaço', viajaram], ['lua', 'Noites na fazenda', S.dia || 0]];
+      ['vacaEspaco', 'Vaquinhas que viajaram para o espaço', viajaram], ['lua', 'Noites na fazenda', S.dia || 0],
+      ...(S.feiraAgro && S.feiraAgro.vezes ? [['cesta', 'Feiras Agronômicas', S.feiraAgro.vezes], ['trofeu', 'Troféus do concurso', (S.feiraAgro.trofeus || []).length]] : [])];
     h += `<ul class="museu-recordes">${rec.map(([ic, nome, n]) => `<li><img src="${icone(ic)}" alt=""><span>${esc(nome)}</span><b>${n.toLocaleString('pt-BR')}</b></li>`).join('')}</ul>`;
   }
   const a = acervoMuseu();
@@ -13992,6 +14689,8 @@ const VI = {
   casinhaLuma(){ return vCasinhaLuma(); }, carriola(){ return vCarriola(); }, mesaPiquenique(){ return vMesaPiquenique(); }, relogioSol(){ return vRelogioSol(); }, pergola(){ return vPergola(); },
   fogueira(){ return vFogueiraRoda(); }, laguinho(){ return vLaguinho(); }, pocoDesejos(){ return vPocoDesejos(); }, bandeirinhas(){ return vBandeirinhas(); },
   topiaria(){ return vTopiaria(); }, estatuaFamilia(){ return vEstatuaFamilia(); },
+  ipeAmarelo(){ return vIpeAmarelo(); }, jabuticabeira(){ return vJabuticabeira(); }, painelSolar(){ return vPainelSolar(); }, trofeu(){ return vTrofeu(0); },
+  agronoma(){ const v = new Vox(); for (const e of vVisitante(FEIRA_AGRO.juiz).m.values()) if (e.y >= 25) v.set(e.x, e.y, e.z, e.c); return v; },
   malasViagem(){ return vMalasViagem(); }, placaViagem(){ return vPlacaViagem(); }, globoViagem(){ return vGloboViagem(); }, discoJardim(){ return VI.disco(); }, presenteEt(){ return vCaixaPresente(); },
   cavalinho(){ return vParqueCompleto('cavalinho'); }, gangorra(){ return vParqueCompleto('gangorra'); }, giraGira(){ return vParqueCompleto('giraGira'); }, balancoParque(){ return vParqueCompleto('balancoParque'); }, escorregador(){ return vParqueCompleto('escorregador'); },
   balanco(){ const v = vBalanco(); const [px, py, pz] = BALANCO.pivo; for (const e of vPneuBalanco().m.values()) v.set(e.x + Math.floor(px), e.y + py, e.z + Math.floor(pz), e.c); return v; }, comedouro(){ return vComedouro(); },
@@ -14123,6 +14822,12 @@ const TEMAS = {
     { tipo: 'triangle', vol: 0.045, notas: 'C5:2 A4:1 F4:1 G4:2 A4:1 C5:1 D5:2 C5:1 A4:1 C5:4 Bb4:2 A4:1 G4:1 F4:2 G4:1 A4:1 G4:2 E4:1 C4:1 F4:4' },
     { tipo: 'sine', vol: 0.03, notas: 'F2+C3:4 C3+G3:4 Bb2+F3:4 F2+C3:4 Bb2+F3:4 F2+C3:4 C3+G3:4 F2+C3:4' } ] },
   // Amigos da mata, quando os bichos aparecem: batucada com flautinha
+  // a rave da DJ Summer Cachohits: bumbo em todo tempo, baixo no contratempo (lá menor, fá, dó, sol), arpejo e chimbal
+  rave: { bpm: 126, ganho: 0.9, loop: true, faixas: [
+    { tipo: 'sine', vol: 0.1, leg: 0.28, notas: 'A1:1 A1:1 A1:1 A1:1 A1:1 A1:1 A1:1 A1:1 A1:1 A1:1 A1:1 A1:1 A1:1 A1:1 A1:1 A1:1' },
+    { tipo: 'sawtooth', vol: 0.022, leg: 0.7, notas: 'r:.5 A2:.5 r:.5 A2:.5 r:.5 A2:.5 r:.5 A2:.5 r:.5 F2:.5 r:.5 F2:.5 r:.5 F2:.5 r:.5 F2:.5 r:.5 C3:.5 r:.5 C3:.5 r:.5 C3:.5 r:.5 C3:.5 r:.5 G2:.5 r:.5 G2:.5 r:.5 G2:.5 r:.5 G2:.5' },
+    { tipo: 'square', vol: 0.011, leg: 0.5, notas: 'A4:.5 C5:.5 E5:.5 A5:.5 E5:.5 C5:.5 A4:.5 C5:.5 F4:.5 A4:.5 C5:.5 F5:.5 C5:.5 A4:.5 F4:.5 A4:.5 C5:.5 E5:.5 G5:.5 C6:.5 G5:.5 E5:.5 C5:.5 E5:.5 G4:.5 B4:.5 D5:.5 G5:.5 D5:.5 B4:.5 G4:.5 B4:.5' },
+    { tipo: 'x', vol: 0.045, notas: 'r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5' } ] },
   mataFesta: { bpm: 128, ganho: 0.66, loop: true, faixas: [
     { tipo: 'sine', vol: 0.04, notas: 'F5:.5 A5:.5 C6:.5 A5:.5 G5:.5 Bb5:.5 A5:1 F5:.5 G5:.5 A5:.5 F5:.5 E5:.5 G5:.5 F5:1' },
     { tipo: 'square', vol: 0.016, leg: 0.5, notas: 'F2:.75 F2:.25 C3:.5 F2:.5 F2:.75 F2:.25 C3:.5 F2:.5 C3:.75 C3:.25 G2:.5 C3:.5 F2:.75 F2:.25 C3:.5 F2:.5' },
@@ -15430,6 +16135,7 @@ function executarTirarCerca(){
   setTimeout(() => aviso('O matagal foi embora e o terreno agora faz parte da fazenda!', 'grande', 3.5), tempoDeLeitura(fala) * 1000);
   // o terreno limpo já mostra o que dá para comprar nele
   montarPlacasPomar(); montarLotes(); montarPlacasCercados(); montarDestinos();
+  montarEspacoEventos(); arrumarEspacoEventos(); agendarFeiraAgro();
   COLMEIA_SLOTS.forEach((_, i) => { if (i >= COLMEIA_CANTO) montarColmeia(i); });
   S.avisoLotesCanto = true; setTimeout(avisoLotesCanto, tempoDeLeitura(fala) * 1000 + 4000);
   hud(); salvar();
@@ -21516,6 +22222,57 @@ const CENAS = {
     fim(){ limparSpaFamilia(); S.viuCineSpaFamilia = true; },
     restaurar(){ limparSpaFamilia(); },
   },
+  // o concurso da Feira Agronômica (o Lucas pediu): na tarde da feira, com um produto do Ed inscrito, a agrônoma anuncia do
+  // palco o terceiro, o segundo e o campeão; o Ed fica na frente do palco. Não está na ordem das cenas: começa pedida por
+  // conferirFeiraAgro, por isso o fim mora em restaurar também (cena pedida conta como reprise)
+  concursoAgro: {
+    flag: 'viuCineConcursoAgro', nivel: () => ARRENDAMENTO.nivel, icone: 'trofeu', repete: true,
+    titulo: 'Concurso da feira', desc: 'A agrônoma anuncia os melhores produtos da Feira Agronômica Sustentável.', trancada: 'acontece à tarde, no dia da Feira Agronômica',
+    pronta: () => false,
+    podeRever: () => (!FEIRA_AGRO_VIS.montada || !feiraAgro().inscrito || feiraAgro().resultado ? 'O concurso só acontece na tarde da Feira Agronômica.' : null),
+    get falas(){ return FEIRA_AGRO_VIS.concurso ? FEIRA_AGRO_VIS.concurso.falas : []; },
+    foco: () => { const [x, z] = FEIRA_AGRO.palco; return new THREE.Vector3(x, 0.6, z - 0.9); },
+    vista: () => (telaEstreita() ? 1.6 : 1) * 6.5,
+    iniciar(c){
+      const F = feiraAgro(), R = rankingAgro(F.inscrito), lugar = R.findIndex(e => e.id === 'ed'), prod = PRODUTOS[F.inscrito].nome.toLowerCase();
+      const ord = ['terceiro', 'segundo'], A = 'Dra. Sálvia';
+      const falas = [
+        ['agronoma', A, 'Boa tarde, Feira Agronômica Sustentável! Os jurados provaram um produto de cada barraca. Chegou a hora do resultado!'],
+        ['agronoma', A, `Em terceiro lugar, com ${R[2].prod}: ${R[2].nome}!`, null, 2],
+        ['agronoma', A, `Em segundo lugar, com ${R[1].prod}: ${R[1].nome}!`, null, 1],
+        ['agronoma', A, `E o grande campeão, com ${R[0].prod}, é... ${R[0].nome}!`, null, 0],
+        ['ed', 'Ed', lugar === 0 ? variar(FALAS_ED_CAMPEAO) : lugar < 3 ? variar(FALAS_ED_PODIO) : variar(FALAS_ED_MENCAO)],
+        lugar < 3 ? ['agronoma', A, `Parabéns, Fazenda Joli Pig! O ${prod} levou o troféu de ${FEIRA_AGRO.premios[lugar].nome} e ${reais(FEIRA_AGRO.premios[lugar].din * nivel())}!`]
+          : ['agronoma', A, `A Fazenda Joli Pig leva uma menção honrosa pelo ${prod}. Na próxima feira tem mais!`],
+      ];
+      FEIRA_AGRO_VIS.concurso = { R, lugar, falas };
+      // o palco abre para o norte: a câmera vem do lado de baixo, para a agrônoma aparecer de frente
+      cam.azAlvo = azPerto(3 * Math.PI / 4);
+      const [ex, ez] = FEIRA_AGRO.edConcurso;
+      ed.trab = null; ed.ferramenta(null);
+      if (Math.hypot(ed.pos.x - ex, ed.pos.y - ez) > 14){ ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; ed.colocar(ex - 1, ez - 3); }
+      andarAte(ed, ex, ez, () => { c.edOk = true; });
+      return 'ca-anda';
+    },
+    trecho(c){
+      if (c.passo !== 'ca-anda') return;
+      const [ex, ez] = FEIRA_AGRO.edConcurso;
+      if (!c.edOk && c.t > 25){ ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; ed.colocar(ex, ez); c.edOk = true; }
+      if (c.edOk && ed.estado === 'parado' && c.t > 1){ virarNaCena(ed, ...FEIRA_AGRO.palco); c.passo = 'dialogo'; mostrarFalaCine(0); }
+    },
+    // a agrônoma pula quando fala; o anunciado pula e solta confete (o Ed, ou quem atende a barraca dele)
+    aoFalar(f){
+      const V = FEIRA_AGRO_VIS; if (V.juiz && f[0] === 'agronoma') V.juiz.salto = 0.45;
+      if (f[4] == null || !V.concurso) return;
+      const e = V.concurso.R[f[4]], [px, pz] = FEIRA_AGRO.palco;
+      confete(px, 1.8, pz - 0.6, f[4] === 0 ? 60 : 30, 1.4); Som.tom(660 + (2 - f[4]) * 220, 0.15, 'square', 0.03, 1320);
+      if (e.id === 'ed'){ ed.pulo = 0.45; ed.aceno = 1.6; confete(ed.pos.x, 1.4, ed.pos.y, 40, 1); }
+      else { const B = V.barracas.find(b => b.P.id === e.id); if (B) B.salto = 0.45; }
+    },
+    fimDasFalas(c){ $('cineDialogo').hidden = true; c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; },
+    fim(){ concluirConcursoAgro(); },
+    restaurar(){ concluirConcursoAgro(); },
+  },
   campeonato: {
     flag: 'viuCineCampeonato', nivel: () => OBRAS.spa.etapas[2].nivel, musica: 'campeonato', icone: 'medalha', repete: true,
     titulo: 'Campeonato de natação', desc: 'Apito, mergulho e torcida na piscina olímpica do spa. Os três mais rápidos sobem no pódio.', trancada: 'acontece de vez em quando, depois que a piscina olímpica do spa fica pronta',
@@ -21666,7 +22423,7 @@ const CENAS = {
     // no fim da tarde ou de noite (antes da hora de nanar), com o terreno novo limpo, o Milton sem visita e o disco longe (o
     // ETzinho vem com ele para a festa)
     // o Hud e o Dani na rua largam o que fazem e vão para a festa (montarArraia)
-    pronta: () => nivel() >= ARRAIA.nivel && S.canto === 2 && (S.relogio || 0) >= ARRAIA.inicio && (S.relogio || 0) < ARRAIA.fim && aviaoLivre() && !(discoJogo && discoJogo.t >= 0),
+    pronta: () => nivel() >= ARRAIA.nivel && S.canto === 2 && (S.relogio || 0) >= ARRAIA.inicio && (S.relogio || 0) < ARRAIA.fim && aviaoLivre() && !(discoJogo && discoJogo.t >= 0) && !FEIRA_AGRO_VIS.montada && !rave,
     podeRever: () => (!aviaoLivre() ? 'Dá para rever quando o Milton decolar.' : discoJogo && discoJogo.t >= 0 ? 'Dá para rever quando o disco voador for embora.' : null),
     get falas(){ return arraia && arraia.falas ? arraia.falas : FALAS_ARRAIA(); },
     foco(c){
@@ -22550,6 +23307,8 @@ function atualizarCine(dt){
     // cena do dia de spa da família
     case 'sf-entra': case 'sf-brinca': case 'sf-ofuro': cena.trecho(c, dt); break;
     case 'cn-entra': case 'cn-blocos': case 'cn-prova': case 'cn-podio': cena.trecho(c, dt); break;
+    // o concurso da Feira Agronômica: o Ed vai até a frente do palco
+    case 'ca-anda': cena.trecho(c, dt); break;
     // Dia de Feira: o embarque e a volta
     case 'fs-embarque': case 'fv-desce': case 'fv-parte': case 'fv-brinca': cena.trecho(c, dt); break;
     // Resgate no PIG-MTP: a ida até o helicóptero e a volta
@@ -23089,6 +23848,10 @@ const ENFEITES = {
   placaViagem:  { nome: 'Poste de placas', art: 'o', encomenda: true, xp: 0, desc: 'As setas coloridas apontam para longe, para onde o Milton já voou. Só por encomenda ao Milton.' },
   globoViagem:  { nome: 'Globo terrestre', art: 'o', encomenda: true, xp: 0, desc: 'Um globo no pé de madeira, que gira devagar. Só por encomenda ao Milton.' },
   // também fora da loja: só na troca com o ETzinho, quando ele desce do disco (VISITA_ET)
+  // fora da loja também: só nas barracas da Feira Agronômica Sustentável (PRODUTORES_AGRO)
+  ipeAmarelo:   { nome: 'Ipê-amarelo', art: 'o', encomenda: true, preco: 18000, xp: 15, desc: 'Uma muda de ipê-amarelo do viveiro do Seu Tião, já florida, com as flores caídas em volta. Só na Feira Agronômica.' },
+  jabuticabeira: { nome: 'Jabuticabeira', art: 'a', encomenda: true, preco: 22000, xp: 18, desc: 'Muda nativa trazida pelo Curupira, com as jabuticabas grudadas no tronco. Só na Feira Agronômica.' },
+  painelSolar:  { nome: 'Luminária solar', art: 'a', encomenda: true, preco: 12000, xp: 10, desc: 'Um painelzinho solar dos nanos: carrega de dia e acende a luzinha sozinho de noite. Só na Feira Agronômica.' },
   discoJardim:  { nome: 'Disco voador de jardim', art: 'o', encomenda: true, xp: 0, desc: 'Um disquinho com o ETzinho no domo, girando com as luzes piscando. Só na troca com o ETzinho.' },
 };
 const RAIO_ESPANTALHO = 3;
@@ -23124,7 +23887,7 @@ function ladrilhoDeBeirada(x, z){
   }
   return beiradas.has(x + ',' + z);
 }
-const livreParaEnfeite = (x, z) => livreSemColetor(x, z) && !pertoDoColetor(x, z) && !ladrilhoDeBeirada(x, z);
+const livreParaEnfeite = (x, z) => livreSemColetor(x, z) && !pertoDoColetor(x, z) && !ladrilhoDeBeirada(x, z) && !noEspacoEventos(x, z);
 let brilhoPoste = null;
 const geoBrilhoPoste = () => { if (!brilhoPoste) brilhoPoste = brilhoDe(vPoste(), 1 / 16, { origin: [8, 0, 8] }, [0xfff1a8]); return brilhoPoste.clone(); };
 // a topiaria e a estátua da família: o vaso (ou a pedra) numa escala e a forma escolhida na escala do desenho dela
@@ -23147,7 +23910,8 @@ function montarEnfeite(e){
     casinhaLuma: vCasinhaLuma, carriola: vCarriola, mesaPiquenique: vMesaPiquenique, relogioSol: vRelogioSol, pergola: vPergola, balanco: vBalanco, comedouro: vComedouro,
     fogueira: vFogueiraRoda, laguinho: vLaguinho, pocoDesejos: vPocoDesejos, bandeirinhas: vBandeirinhasMastros,
     cavalinho: vCavalinhoBase, gangorra: vGangorraBase, giraGira: vGiraBase, balancoParque: vBalancoParqueBase, escorregador: vEscorregador,
-    malasViagem: () => noMeio(vMalasViagem()), placaViagem: () => noMeio(vPlacaViagem()), globoViagem: () => noMeio(vGloboBase()), discoJardim: () => noMeio(vDiscoJardimBase()) };
+    malasViagem: () => noMeio(vMalasViagem()), placaViagem: () => noMeio(vPlacaViagem()), globoViagem: () => noMeio(vGloboBase()), discoJardim: () => noMeio(vDiscoJardimBase()),
+    ipeAmarelo: vIpeAmarelo, jabuticabeira: vJabuticabeira, painelSolar: vPainelSolar };
   const escala = e.tipo === 'estatua' ? 1 / 40 : 1 / 16;
   let m;
   // a topiaria e a estátua da família: a base numa escala e a forma escolhida (e.forma) na escala do desenho dela
@@ -23155,6 +23919,8 @@ function montarEnfeite(e){
   else m = colocar(malha(geo('enf' + e.tipo, () => modelos[e.tipo]().build(escala, { origin: e.tipo === 'estatua' ? [0.5, 0, 0.5] : [8, 0, 8] }))), e.x + 0.5, 0, e.z + 0.5, (e.rot || 0) * Math.PI / 2);
   // o poste acende à noite: a lâmpada brilha e ganha um halo
   if (e.tipo === 'poste'){ m.add(geoBrilhoPoste()); const h = haloLuz(); h.position.set(0, 1.42, 0); m.add(h); m.userData.poste = true; m.castShadow = LUZ.noite < 0.5; }
+  // a luminária solar acende a luzinha de noite (o halo some de dia sozinho)
+  if (e.tipo === 'painelSolar'){ const h = haloLuz(0xfff1a8, 0.7); h.position.set(0, 12 / 16, 7.5 / 16); m.add(h); }
   // a sombra do ponteiro do relógio de sol, girando em volta do meio do mostrador (atualizarEnfeites)
   if (e.tipo === 'relogioSol'){
     const piv = new THREE.Object3D(), sombra = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.004, 0.36), new THREE.MeshBasicMaterial({ color: 0x2a1e16, transparent: true, opacity: 0.55, depthWrite: false }));
@@ -26509,6 +27275,7 @@ function ganharXP(n, pos){
 function subiuNivel(n){
   Som.nivel(); if (ed) ed.pulo = 0.45;
   if (abrirRecanto()) montarAbelhasJatai();
+  agendarFeiraAgro();
   const libs = [];
   for (const k of ORDEM_CULTURAS) if (CULTURAS[k].nivel === n) libs.push(CULTURAS[k].nome);
   for (const k in ANIMAIS) if (ANIMAIS[k].nivel === n) libs.push(ANIMAIS[k].nome);
@@ -27079,6 +27846,10 @@ function itensDoAlvoBase(alvo){
   if (alvo.k === 'spaVisitante') return itensVisitanteSpa(alvo.v);
   if (alvo.k === 'colmeia') return itensColmeia(alvo.i);
   if (alvo.k === 'recanto') return itensRecanto(alvo.i);
+  if (alvo.k === 'eventos') return itensEspaco();
+  if (alvo.k === 'feiraAgro') return itensBarracaAgro(alvo.i);
+  if (alvo.k === 'palcoAgro') return itensPalcoAgro();
+  if (alvo.k === 'rave') return itensRave();
   if (alvo.k === 'irrigador'){
     r.titulo = 'Irrigador automático'; r.icone = 'irrigador';
     r.estado = 'Rega sozinho os 16 canteiros deste terreno, e cada rega dá 1 xp. O mato continua por conta do Ed.';
@@ -27792,6 +28563,11 @@ function abrirCenas(){
   // o redemoinho também não é cena gravada: o botão manda um de verdade atrás do Ed
   const motivoR = rd ? 'O redemoinho já está na fazenda.' : null;
   h += `<div class="cartao"><div class="cab"><img src="${icone('saci')}" alt=""><div><h4>O redemoinho do Saci</h4></div></div><div class="info">Um redemoinho de vento sai da floresta, entra pela porteira, assusta o Ed e vira o Saci Pererê.${motivoR ? `<br><small>${esc(motivoR)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-redemoinho type="button"${motivoR ? ' disabled' : ''}>Chamar o redemoinho</button></div></div>`;
+  // a rave da Luma também não é cena: o botão começa uma agora no espaço de eventos (de dia, com a Luma em casa)
+  if (espacoAberto() && nivel() >= ARRENDAMENTO.nivel){
+    const motivoRv = motivoRave();
+    h += `<div class="cartao"><div class="cab"><img src="${icone('luma')}" alt=""><div><h4>A rave da Luma</h4></div></div><div class="info">De dia, a DJ Summer Cachohits (a Luma!) toca no espaço de eventos, de fone e óculos escuros, e a bicharada dança.${motivoRv ? `<br><small>${esc(motivoRv)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-rave type="button"${motivoRv ? ' disabled' : ''}>Chamar a rave</button></div></div>`;
+  }
   // o Curupira, depois da cena dele, passeia de vez em quando na beira da mata: o botão chama ele agora
   if (S.viuCineCurupira){
     const motivoC = curupira && curupira.g.visible ? 'Ele já está na beira da mata.' : null;
@@ -27823,6 +28599,8 @@ function abrirCenas(){
   if (bp) bp.addEventListener('click', () => { Som.clique(); fecharJanela(); chegarCartao(); });
   const be = $('janela').querySelector('[data-postal-espaco]');
   if (be) be.addEventListener('click', () => { Som.clique(); fecharJanela(); chegarCartaoEspaco(); });
+  const brv = $('janela').querySelector('[data-rave]');
+  if (brv) brv.addEventListener('click', () => { Som.clique(); fecharJanela(); if (comecarRave()) cam.alvo.set(RAVE.pista[0], 0, RAVE.pista[1]); else aviso(motivoRave() || 'Agora não dá.'); });
   const br = $('janela').querySelector('[data-redemoinho]');
   if (br) br.addEventListener('click', () => { Som.clique(); fecharJanela(); chamarRedemoinho(); });
   const bsp = $('janela').querySelector('[data-spa]');
@@ -28594,7 +29372,7 @@ function quadro(agoraP){
   atualizarBichosMata(dt, t);
   atualizarVisitaCachoeira(dt, t); atualizarCachoeira(dt, t);
   atualizarRelogioFoguete(dt);
-  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t); atualizarRecanto(dt, t); passoAcharEd(dt);
+  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t); atualizarRecanto(dt, t); passoAcharEd(dt); atualizarFeiraAgro(dt, t); atualizarRave(dt, t);
   atualizarBeijaFlor(dt, t);
   atualizarCurupira(dt, t);
   atualizarGuardiao(dt, t);
@@ -28778,6 +29556,7 @@ async function iniciar(){
   if (parcelaDevolvida) setTimeout(() => aviso(`A sexta parcela da mata virou uma cachoeira. Os ${reais(PARCELA_SEXTA.preco)} voltaram para você.`, 'grande', 6), 2500);
   montarMirante(); montarPlacaMirante();
   montarPlacaCanto();
+  montarEspacoEventos(); arrumarEspacoEventos(); agendarFeiraAgro();
   montarEnvelope(); montarCartao();
   if (!Array.isArray(S.trufas)) S.trufas = [];
   S.trufas.forEach(montarTrufa);
@@ -28870,6 +29649,9 @@ async function iniciar(){
     trator: () => trator, TRATOR, filaTipos: () => fila.map(t => t.tipo), checar: (t, a, q) => checar(t, a, q), enfileirarTrator: (lote, acao, semente) => enfileirar('trator', { k: 'trator', lote }, { acao, semente }), tratorVis: () => tratorVis,
     resort: { hospedes: () => hospedes, montar: montarHospedes, grade: () => gradeResort, lugares: () => lugaresResort, cena: () => inauguracao, aberto: resortAberto, HOSP },
     arraia: { ARRAIA, obj: () => arraia, rojao, falas: FALAS_ARRAIA },
+    eventos: { ESPACO, VIS: ESPACO_VIS, montar: montarEspacoEventos, arrumar: arrumarEspacoEventos, no: noEspacoEventos, itens: itensEspaco },
+    feiraAgro: { FEIRA_AGRO, PRODUTORES_AGRO, VIS: FEIRA_AGRO_VIS, estado: feiraAgro, agendar: agendarFeiraAgro, montar: montarFeiraAgro, encerrar: encerrarFeiraAgro, conferir: conferirFeiraAgro, vender: venderBancaAgro, ranking: rankingAgro, comprar: comprarAgro, itens: itensBarracaAgro, palco: itensPalcoAgro, abrirBanca: abrirBancaAgro, inscricao: abrirInscricaoAgro, premiar: premiarAgro, aberta: feiraAgroAberta, hoje: feiraAgroHoje },
+    rave: { RAVE, obj: () => rave, comecar: comecarRave, acabar: acabarRave, motivo: motivoRave, dia: () => raveDia },
     abrirMenu: (alvo, x = 300, y = 300) => abrirMenu(alvo, x, y),
     miranteVisao: { V: visaoMirante, cobre: () => miranteCobre(), topo: () => miranteTopo, MIRANTE_VISAO },
     otim: { OTIM, RITMO, SOMBRA_VISTA, MEDIDOR, pular: pularQuadro, luzes: () => luzesNaCena, lanternas: () => LANTERNAS.map(q => +q.luz.intensity.toFixed(2)), porLuzes, luzesPontuais, aquecer: aquecerLuzes, mata: v => { OTIM.mata = v; scene.traverse(o => { if (o.isInstancedMesh && o.userData.mata) o.frustumCulled = v; }); }, cercas: v => { OTIM.cercas = v; refazerCercas(); }, lotes: v => { OTIM.lotes = v; refazerCanteiros(); }, part: particulasJuntas, juntar: juntarParticulas, particula, jato: irrigadorJato, CERCA_VIS, CERCA_BLOCOS, LOTE_DES, PART_DES, PART, ABELHAS, VIS, pickaveis, render: () => ({ renderer, scene, camera, sol }), cineBusca },
@@ -29283,23 +30065,26 @@ function itemFeira(){
   const motivo = feiraPedida ? 'a família já vai sair' : falta ? `de novo em ${falta} ${falta > 1 ? 'dias' : 'dia'}` : (S.relogio || 0) >= FEIRA_DIA.ateHora ? 'só até o meio da tarde' : null;
   return { rotulo: 'Dia de Feira', sub: motivo || 'vender a sobra do celeiro na feira da cidade', icone: 'caminhao', off: !!motivo, fn: abrirCargaFeira };
 }
-// a janela da carga: até FEIRA_DIA.produtos produtos da sobra, até maxQtd de cada
-function abrirCargaFeira(){
-  const R = FEIRA_DIA, sep = separadoPedidos(), lista = ORDEM_PRODUTOS.filter(p => podeLevarNaFeira(p) && sobraDe(p, sep) > 0), carga = {};
-  const maxDe = p => Math.min(R.maxQtd, sobraDe(p, sep)), escolhidos = () => lista.filter(p => carga[p] > 0);
+// a janela da carga: até FEIRA_DIA.produtos produtos da sobra, até maxQtd de cada. A barraca do Ed na Feira Agronômica usa a
+// mesma janela (opc: titulo, sub, icone, botao, texto, ao(carga) e inicial, o que já está na barraca e conta como sobra)
+function abrirCargaFeira(opc){
+  const O = opc && opc.ao ? opc : {}, ini = O.inicial || {};
+  const R = FEIRA_DIA, sep = separadoPedidos(), sobra = p => sobraDe(p, sep) + (ini[p] || 0), lista = ORDEM_PRODUTOS.filter(p => podeLevarNaFeira(p) && sobra(p) > 0), carga = {};
+  const maxDe = p => Math.min(R.maxQtd, sobra(p)), escolhidos = () => lista.filter(p => carga[p] > 0);
+  for (const p of lista) if (ini[p] > 0 && escolhidos().length < R.produtos) carga[p] = Math.min(ini[p], maxDe(p));
   const corpo = () => {
     if (!lista.length) return `<div class="vazio">Não tem sobra no celeiro para levar. O que está separado para os pedidos fica na fazenda.</div>`;
     const n = escolhidos().length, tot = lista.reduce((s, p) => s + (carga[p] || 0), 0), valor = lista.reduce((s, p) => s + (carga[p] || 0) * preco(p), 0);
-    return `<p>Escolha até ${R.produtos} produtos da sobra, até ${R.maxQtd} de cada. O que não vender volta para o celeiro.</p>
+    return `<p>${O.texto || `Escolha até ${R.produtos} produtos da sobra, até ${R.maxQtd} de cada. O que não vender volta para o celeiro.`}</p>
       <div class="fc-atalhos"><button class="botao mini claro" data-fc="sugere" type="button">Sugestão do Ed</button><button class="botao mini claro" data-fc="limpa" type="button"${tot ? '' : ' disabled'}>Limpar</button></div>
       <div class="linhas">${lista.map(p => {
         const q = carga[p] || 0, cheio = !q && n >= R.produtos;
-        return `<div class="linha${q ? ' oferta' : ''}"><img src="${icone(p)}" alt=""><div class="nome">${PRODUTOS[p].nome}<small>${sobraDe(p, sep)} de sobra · ${reais(preco(p))} cada</small></div>
+        return `<div class="linha${q ? ' oferta' : ''}"><img src="${icone(p)}" alt=""><div class="nome">${PRODUTOS[p].nome}<small>${sobra(p)} de sobra · ${reais(preco(p))} cada</small></div>
           <div class="fc-passo"><button class="botao mini claro" data-fc="-" data-k="${p}" type="button"${q ? '' : ' disabled'} aria-label="Menos ${esc(PRODUTOS[p].nome)}">−</button><span class="qtd">${q}</span><button class="botao mini" data-fc="+" data-k="${p}" type="button"${q < maxDe(p) && !cheio ? '' : ' disabled'} aria-label="Mais ${esc(PRODUTOS[p].nome)}">+</button></div></div>`;
       }).join('')}</div>
-      <div class="rodape-janela fc-rodape"><div class="total">${n} de ${R.produtos} produtos · ${tot} itens · vale ${reais(valor)}</div><button class="botao verde" data-fc="vai" type="button"${tot ? '' : ' disabled'}><img src="${icone('caminhao')}" alt="">Partir para a feira</button></div>`;
+      <div class="rodape-janela fc-rodape"><div class="total">${n} de ${R.produtos} produtos · ${tot} itens · vale ${reais(valor)}</div><button class="botao verde" data-fc="vai" type="button"${tot ? '' : ' disabled'}><img src="${icone(O.icone || 'caminhao')}" alt="">${O.botao || 'Partir para a feira'}</button></div>`;
   };
-  abrirJanela(topo('caminhao', 'Dia de Feira', 'A carga do caminhãozinho') + `<div class="janela-corpo" id="fcCorpo">${corpo()}</div>`);
+  abrirJanela(topo(O.icone || 'caminhao', O.titulo || 'Dia de Feira', O.sub || 'A carga do caminhãozinho') + `<div class="janela-corpo" id="fcCorpo">${corpo()}</div>`);
   const el = $('fcCorpo');
   el.addEventListener('click', e => {
     const b = e.target.closest('[data-fc]'); if (!b || b.disabled) return;
@@ -29309,7 +30094,7 @@ function abrirCargaFeira(){
     else if (acao === 'limpa') for (const p in carga) carga[p] = 0;
     // a sugestão: os produtos que mais valem na sobra, cheios até o máximo
     else if (acao === 'sugere'){ for (const p in carga) carga[p] = 0; lista.slice().sort((a, b) => maxDe(b) * preco(b) - maxDe(a) * preco(a)).slice(0, R.produtos).forEach(p => { carga[p] = maxDe(p); }); }
-    else if (acao === 'vai'){ partirParaFeira(carga); return; }
+    else if (acao === 'vai'){ if (O.ao) O.ao(carga); else partirParaFeira(carga); return; }
     const rolagem = el.scrollTop; el.innerHTML = corpo(); el.scrollTop = rolagem; Som.clique();
   });
 }
