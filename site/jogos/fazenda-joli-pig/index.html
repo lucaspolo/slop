@@ -926,9 +926,10 @@ const ZONAS = {
   plantio:      { x: 38, z: 35, w: 18, h: 13 },  // os terrenos, o pomar e as colmeias do canto
   observatorio: { x: 32, z: 39, w: 6,  h: 9 },
   museu:        { x: 32, z: 48, w: 6,  h: 13 },  // entre o observatório e o spa, encostado na estrada (o Lucas pediu)
+  quadras:      { x: 39, z: 49, w: 16, h: 14 },  // as quadras esportivas, entre a descida, a rua de baixo e o spa (o Lucas pediu)
   resort:       { x: 56, z: 35, w: 18, h: 13 },
   spa:          { x: 31, z: 61, w: 23, h: 11 },  // encostado na estrada, a dois ladrilhos da borda de baixo (o Lucas pediu)
-  festa:        { x: 54, z: 49, w: 20, h: 23 },  // o museu e o campo do ArraiEd
+  festa:        { x: 54, z: 49, w: 20, h: 23 },  // o campo do ArraiEd, no canto de baixo
 };
 const zx = (id, x) => ZONAS[id].x + x, zz = (id, z) => ZONAS[id].z + z;
 const zp = (id, x, z) => [ZONAS[id].x + x, ZONAS[id].z + z];
@@ -1228,6 +1229,19 @@ const OBRAS = {
     vestir: m => vestirMuseu(m),
     menu(r){ menuMuseu(r); },
   },
+  // as quadras da fazenda (o Lucas pediu, nos níveis livres entre o museu e o resgate): o campo de futebol, depois o basquete e
+  // o vôlei, depois o tênis e o placar. Porquinhos, pessoas, nanos e a família vêm jogar de dia (QUADRAS)
+  quadras: { nome: 'Quadras da fazenda', de: 'das', artigo: 'as', nivel: 57, predio: 'quadras', canto: true, icone: 'bola', andaimeAlto: 8,
+    etapas: [{ preco: 200000, minutos: 20, xp: 8000, nome: 'o campo de futebol', aviso: 'O campo de futebol das quadras ficou pronto! Já tem gente batendo bola.' },
+      { preco: 250000, minutos: 22, xp: 9000, nivel: 58, nome: 'as quadras de basquete e de vôlei', rotulo: 'Ampliar: basquete e vôlei', aviso: 'As quadras de basquete e de vôlei ficaram prontas! Bola na cesta e bola na rede.' },
+      { preco: 300000, minutos: 25, xp: 10000, nivel: 59, nome: 'a quadra de tênis e o placar', rotulo: 'Ampliar: tênis e placar', aviso: 'A quadra de tênis e o placar ficaram prontos! Agora as quadras estão completas.' }],
+    desc: 'Um complexo esportivo no gramado entre o spa e o pomar do canto: campo de futebol, quadras de basquete, de vôlei e de tênis. Porquinhos, pessoas, nanos e a família vêm jogar de dia.',
+    pronto: 'Já tem gente batendo bola.',
+    modelo: n => vQuadras(n),
+    vestir: (m, n) => vestirQuadras(m, n),
+    aoTerminar: () => { encerrarJogosQuadras(); },
+    menu(r){ menuQuadras(r); },
+  },
   galpao: { nome: 'Galpão do trator', nivel: 42, predio: 'galpao', icone: 'trator',
     etapas: [{ preco: 400000, minutos: 15, xp: 5000 }],
     desc: 'Um galpão de zinco com um trator verde. O Ed sobe nele e ara, planta ou colhe um terreno de canteiros inteiro de uma passada só.',
@@ -1409,6 +1423,9 @@ const PREDIOS = [
   // o museu, de frente para a câmera, no gramado entre o observatório e o spa, encostado na estrada (o Lucas pediu; antes
   // ficava no campo da festa do ArraiEd e sumia durante a festa)
   naZona('museu', { id:'museu',      nome:'Museu da fazenda',    x0:1, z0:5, x1:4, z1:7, porta:[2, 8], obra: 'museu' }),
+  // as quadras da fazenda (o Lucas pediu): o gramado inteiro entre a descida, a rua de baixo e o spa; a entrada dá para a
+  // descida, no fim do caminho do museu
+  naZona('quadras', { id:'quadras',    nome:'Quadras da fazenda',  x0:0, z0:0, x1:15, z1:13, porta:[-1, 7], obra: 'quadras' }),
   // o spa dos pigs, no canto de baixo encostado na estrada (o Lucas pediu ali; o observatório subiu para trás dele), deitado
   // (9 × 6) para ficar mais longe do observatório e girado 180° (ry), com a entrada virada para dentro do mapa: virada para
   // o sul ela dava para fora (o Lucas pediu). A porta fica no norte, do lado direito, e o caminho vem da estrada até ela
@@ -6267,6 +6284,537 @@ function atualizarCapivaras(dt, t){
     }
   }
   if (!vivas) sumirCapivaras();
+}
+// ================= as quadras da fazenda (o Lucas pediu): o desenho, em cubinhos de 1/8 a partir do canto do lote (16 × 14
+// ladrilhos; no mapa, x 39 a 54, z 49 a 62). Tudo em QUADRAS_D, em cubinhos [x0, x1, z0, z1]: o passeio de pedra (uma
+// faixa de leste a oeste no meio, com a entrada no oeste, e duas de norte a sul entre as quadras), a cerca viva em volta,
+// o arco da entrada com a placa (o letreiro vem em vestirQuadras). 1ª etapa: o campo de futebol society, comprido de oeste
+// a leste, com as traves, a rede de trás, o alambrado no fundo, as plaquinhas baixas do lado da câmera e a arquibancada
+// atrás. 2ª: a quadra de basquete (comprida de norte a sul, uma tabela em cada ponta) e a de vôlei, na areia. 3ª: a de tênis
+// e o placar, atrás da arquibancada. O que ainda não foi construído fica gramado, com estacas nos cantos
+const QUADRAS_D = { larg: 128, fundo: 112, passeio: [[1, 126, 54, 61], [84, 91, 1, 53], [52, 59, 62, 110]], entrada: [54, 61],
+  futebol: { etapa: 1, area: [4, 83, 11, 53], campo: [8, 79, 14, 49], gol: [27, 36], golAlto: 6, arquibancada: [14, 74, 3, 10] },
+  basquete: { etapa: 2, area: [92, 123, 4, 53], campo: [95, 120, 8, 49], aros: [[107.5, 11.5], [107.5, 45.5]], aroAlto: 7 },
+  volei: { etapa: 2, area: [4, 51, 62, 109], campo: [10, 45, 72, 99], rede: 27 },
+  tenis: { etapa: 3, area: [60, 123, 62, 109], campo: [66, 117, 70, 101], simples: [74, 97], servico: [79, 104], rede: 91 },
+  placar: [30, 58, 1, 12, 21] };
+function vQuadras(n = 1){
+  const v = new Vox(), D = QUADRAS_D, X1 = D.larg - 1, Z1 = D.fundo - 1, branco = 0xf4f4f0, inox = 0xc8d0d8, cinza = 0x5a6068;
+  const grama = (x, y, z) => hash(x, 3, z) < 0.5 ? 0x6cbf47 : 0x62b440;
+  const pedra = (x, y, z) => ((x >> 1) + (z >> 1)) % 2 ? 0xcfc4ae : 0xc2b69e;
+  const madeira = (x, y) => y % 2 ? 0x8a5a36 : 0x6e4428;
+  const linha = (x0, x1, z0, z1, c = branco) => v.box(x0, 0, z0, x1, 0, z1, c);
+  const contorno = (x0, x1, z0, z1, c = branco) => { linha(x0, x1, z0, z0, c); linha(x0, x1, z1, z1, c); linha(x0, x0, z0, z1, c); linha(x1, x1, z0, z1, c); };
+  const circulo = (cx, cz, r, c = branco, limite) => { for (let x = Math.floor(cx - r - 1); x <= cx + r + 1; x++) for (let z = Math.floor(cz - r - 1); z <= cz + r + 1; z++) if (Math.abs(Math.hypot(x + 0.5 - cx, z + 0.5 - cz) - r) < 0.55 && (!limite || limite(x, z))) v.set(x, 0, z, c); };
+  const estacas = ([x0, x1, z0, z1]) => { for (const [x, z] of [[x0 + 1, z0 + 1], [x1 - 1, z0 + 1], [x0 + 1, z1 - 1], [x1 - 1, z1 - 1]]){ v.box(x, 1, z, x, 4, z, 0xc99a66); v.set(x, 5, z, 0xf08a24); } };
+  v.box(0, 0, 0, X1, 0, Z1, grama);
+  for (const [x0, x1, z0, z1] of D.passeio) v.box(x0, 0, z0, x1, 0, z1, pedra);
+  // a cerca viva em volta, aberta na entrada (oeste)
+  const cerca = (x, z) => v.box(x, 1, z, x, hash(x, 5, z) < 0.5 ? 3 : 2, z, hash(x, 6, z) < 0.5 ? 0x4f9a3d : 0x5aa847);
+  for (let x = 0; x <= X1; x++){ cerca(x, 0); cerca(x, Z1); }
+  for (let z = 1; z < Z1; z++){ if (z < D.entrada[0] - 1 || z > D.entrada[1] + 1) cerca(0, z); cerca(X1, z); }
+  // o arco da entrada: dois pilares, a viga e a placa
+  const [e0, e1] = D.entrada;
+  for (const z of [e0 - 2, e1 + 1]) v.box(1, 1, z, 2, 14, z + 1, 0xfdf8ef);
+  v.box(1, 15, e0 - 2, 2, 16, e1 + 2, 0x2f6fb3);
+  v.box(1, 11, e0, 2, 14, e1, (x, y, z) => y === 11 || y === 14 || z === e0 || z === e1 ? 0xf2c335 : 0x2f6fb3);
+  // ----- o futebol society
+  const F = D.futebol, [fa0, fa1, fz0, fz1] = F.area, [c0, c1, d0, d1] = F.campo, cz = (d0 + d1 + 1) / 2, cxm = (c0 + c1 + 1) / 2;
+  v.box(fa0, 0, fz0, fa1, 0, fz1, (x) => Math.floor((x - fa0) / 8) % 2 ? 0x4caf50 : 0x43a047);
+  contorno(c0, c1, d0, d1); linha(Math.floor(cxm) - 1, Math.floor(cxm), d0, d1); circulo(cxm, cz, 6);
+  for (const [x0, x1] of [[c0, c0 + 6], [c1 - 6, c1]]) contorno(x0, x1, F.gol[0] - 2, F.gol[1] + 2);
+  for (const x of [c0 + 4, c1 - 4]) v.set(x, 0, Math.floor(cz), branco);
+  // as traves (o travessão em golAlto) e a rede atrás, vazada
+  for (const [xt, xr, s] of [[c0 - 1, c0 - 3, -1], [c1 + 1, c1 + 3, 1]]){
+    for (const z of F.gol) v.box(xt, 1, z, xt, F.golAlto, z, branco);
+    v.box(xt, F.golAlto, F.gol[0], xt, F.golAlto, F.gol[1], branco);
+    for (let z = F.gol[0]; z <= F.gol[1]; z++) for (let y = 1; y < F.golAlto; y++) if ((y + z) % 2 === 0) v.set(xr, y, z, 0xdedede);
+    for (const x of [xt + s, xr]) for (let z = F.gol[0]; z <= F.gol[1]; z++) if (z % 2 === 0) v.set(x, F.golAlto, z, 0xdedede);
+    for (const z of F.gol) for (let y = 1; y < F.golAlto; y++) if (y % 2) v.set(xt + s, y, z, 0xdedede);
+  }
+  // o alambrado no fundo (norte), alto; dos lados e na frente, as plaquinhas baixas, para não tampar o jogo
+  for (let x = fa0; x <= fa1; x++){
+    if ((x - fa0) % 8 === 0) v.box(x, 1, fz0, x, 10, fz0, cinza);
+    v.set(x, 10, fz0, cinza);
+    for (let y = 3; y <= 9; y++) if ((x + y) % 3 === 0) v.set(x, y, fz0, 0x9aa3ab);
+    v.box(x, 1, fz1, x, 2, fz1, (xx, y) => y === 2 ? 0x2f6fb3 : branco);
+  }
+  for (let z = fz0 + 1; z < fz1; z++) for (const x of [fa0, fa1]) if (z < F.gol[0] - 1 || z > F.gol[1] + 1) v.box(x, 1, z, x, 2, z, (xx, y) => y === 2 ? 0x2f6fb3 : branco);
+  // a arquibancada atrás do alambrado: dois degraus de madeira com o assento colorido
+  const [ab0, ab1, az0, az1] = F.arquibancada, meio = Math.floor((az0 + az1) / 2);
+  v.box(ab0, 1, meio + 1, ab1, 2, az1, madeira); v.box(ab0, 1, az0, ab1, 4, meio, madeira);
+  for (let x = ab0; x <= ab1; x++){ v.set(x, 2, meio + 2, [0xe0404a, 0xf2c335, 0x3a8fd0][Math.floor(x / 6) % 3]); v.set(x, 4, az0 + 1, [0xf2c335, 0x3a8fd0, 0xe0404a][Math.floor(x / 6) % 3]); }
+  // ----- o basquete
+  const B = D.basquete, V = D.volei, T = D.tenis;
+  if (n >= 2){
+    const [ba0, ba1, bz0, bz1] = B.area, [b0, b1, e2, e3] = B.campo, bm = (b0 + b1 + 1) / 2;
+    v.box(ba0, 0, bz0, ba1, 0, bz1, 0x3a6fa8);
+    v.box(b0, 0, e2, b1, 0, e3, (x, y, z) => (z >> 1) % 2 ? 0xd9a066 : 0xcf955a);
+    for (const [k0, k1] of [[e2, e2 + 9], [e3 - 9, e3]]) v.box(Math.floor(bm) - 5, 0, k0, Math.floor(bm) + 4, 0, k1, 0x2f6fb3);
+    contorno(b0, b1, e2, e3); linha(b0, b1, Math.floor((e2 + e3) / 2), Math.floor((e2 + e3) / 2)); circulo(bm, (e2 + e3 + 1) / 2, 4);
+    for (const [ax, az] of B.aros) circulo(ax, az, 10, branco, (x, z) => x > b0 && x < b1 && (az < (e2 + e3) / 2 ? z > az - 1 : z < az + 1));
+    // as tabelas: o poste fora da quadra, o braço, a tabela branca com o quadrado vermelho, o aro e a redinha
+    B.aros.forEach(([ax, az], i) => {
+      const s = i ? 1 : -1, zp = Math.round(az + s * 7), zt = Math.round(az + s * 2), xa = Math.floor(ax);
+      v.box(xa - 1, 1, zp, xa, B.aroAlto + 3, zp, cinza);
+      v.box(xa - 1, B.aroAlto + 3, Math.min(zp, zt), xa, B.aroAlto + 3, Math.max(zp, zt), cinza);
+      v.box(xa - 4, B.aroAlto, zt, xa + 3, B.aroAlto + 4, zt, (x, y) => (y === B.aroAlto + 1 || y === B.aroAlto + 2) && (x === xa - 2 || x === xa + 1) || ((y === B.aroAlto + 1 || y === B.aroAlto + 3) && x >= xa - 2 && x <= xa + 1) ? 0xe0404a : 0xfdf8ef);
+      for (let x = xa - 3; x <= xa + 2; x++) for (let z = Math.round(az) - 3; z <= Math.round(az) + 3; z++){ const d = Math.hypot(x + 0.5 - ax, z + 0.5 - az); if (d > 1.2 && d < 2.2) v.set(x, B.aroAlto, z, 0xf08a24); if (d > 0.9 && d < 1.8 && (x + z) % 2) v.set(x, B.aroAlto - 1, z, 0xfdf8ef); }
+    });
+  } else estacas(B.area);
+  // ----- o vôlei, na areia, com a rede no meio
+  if (n >= 2){
+    const [va0, va1, vz0, vz1] = V.area, [w0, w1, y0, y1] = V.campo;
+    v.box(va0, 0, vz0, va1, 0, vz1, (x, y, z) => hash(x, 8, z) < 0.25 ? 0xdcc285 : 0xe9d29a);
+    contorno(w0, w1, y0, y1, 0x2f6fb3);
+    for (const z of [y0 - 2, y1 + 2]) v.box(V.rede, 1, z, V.rede, 9, z, inox);
+    for (let z = y0 - 1; z <= y1 + 1; z++){ v.set(V.rede, 8, z, branco); for (const y of [6, 7]) if ((y + z) % 2) v.set(V.rede, y, z, 0x2a2a2e); }
+  } else estacas(V.area);
+  // ----- o tênis e o placar
+  if (n >= 3){
+    const [ta0, ta1, tz0, tz1] = T.area, [t0, t1, u0, u1] = T.campo, [s0, s1] = T.simples, [r0, r1] = T.servico, uz = Math.floor((u0 + u1) / 2);
+    v.box(ta0, 0, tz0, ta1, 0, tz1, 0x3f8f5a);
+    v.box(t0, 0, u0, t1, 0, u1, 0x2f6fb3);
+    contorno(t0, t1, u0, u1); linha(t0, t1, s0, s0); linha(t0, t1, s1, s1); linha(r0, r0, s0, s1); linha(r1, r1, s0, s1); linha(r0, r1, uz, uz);
+    linha(t0, t0 + 1, uz, uz); linha(t1 - 1, t1, uz, uz);
+    for (const z of [u0 - 2, u1 + 2]) v.box(T.rede, 1, z, T.rede, 5, z, inox);
+    for (let z = u0 - 1; z <= u1 + 1; z++){ v.set(T.rede, 5, z, branco); for (const y of [2, 3, 4]) if ((y + z) % 2) v.set(T.rede, y, z, 0x2a2a2e); }
+    const [p0, p1, pz, py0, py1] = D.placar;
+    for (const x of [p0 + 2, p1 - 2]) v.box(x, 1, pz, x, py0 - 1, pz + 1, cinza);
+    v.box(p0, py0, pz, p1, py1, pz + 1, (x, y) => x === p0 || x === p1 || y === py0 || y === py1 ? 0x2a4a72 : 0x1d3a5f);
+  } else estacas(T.area);
+  return v;
+}
+// os letreiros: "QUADRAS" na placa do arco (dos dois lados) e, com a 3ª etapa, o nome no alto do placar; o painel de baixo do
+// placar (placarQuadras) mostra os jogos de agora, trocado por textoPlacarQuadras
+let placarQuadras = null;
+function vestirQuadras(m, n = 1){
+  const D = QUADRAS_D, [ox, , oz] = ORIGEM_PREDIO.quadras, s = 1 / 8, [e0, e1] = D.entrada;
+  const tq = texturaTexto([['QUADRAS', 1, '#f2c335'], ['DA FAZENDA', 0.6, '#fdf8ef']], 256, 128, '#2f6fb3');
+  for (const lado of [1, -1]){
+    const tx = placaDeTexto(tq, (e1 - e0 - 1) / 8, 2.6 / 8);
+    tx.position.set((lado > 0 ? 3 : 1) * s - ox * s + lado * 0.008, 12.5 * s, ((e0 + e1 + 1) / 2 - oz) * s);
+    tx.rotation.y = lado * Math.PI / 2;
+    m.add(tx);
+  }
+  placarQuadras = null;
+  if (n < 3) return;
+  const [p0, p1, pz, py0, py1] = D.placar, larg = (p1 - p0 - 1) * s;
+  const nome = placaDeTexto(texturaTexto([['QUADRAS DA FAZENDA', 1, '#f2c335']], 512, 72, '#1d3a5f'), larg, 2.6 * s);
+  nome.position.set(((p0 + p1 + 1) / 2 - ox) * s, (py1 - 1.8) * s, (pz + 2 - oz) * s + 0.008); m.add(nome);
+  placarQuadras = placaDeTexto(texturaTexto(linhasPlacarQuadras(), 512, 256, '#1d3a5f'), larg, (py1 - py0 - 4.5) * s);
+  placarQuadras.position.set(((p0 + p1 + 1) / 2 - ox) * s, (py0 + (py1 - py0 - 3.5) / 2 + 0.5) * s, (pz + 2 - oz) * s + 0.008); m.add(placarQuadras);
+}
+// ================= os jogos nas quadras (o Lucas pediu): com a quadra pronta, de dia e perto do meio da tela, uma partida
+// acontece nela, com jogadores sorteados entre porquinhos visitantes, nanos, pessoas (as da trilha) e, às vezes, alguém da
+// família que não está em outro lugar da fazenda (QUADRAS.pesos). Futebol três contra três (um goleiro de cada lado),
+// basquete e vôlei dois contra dois, tênis um contra um. A bola voa em arco (lancarBola) e cada esporte decide o lance no
+// fim do voo: gol ou defesa, cesta ou rebote, a bola que o outro alcança ou não. Quando a quadra sai da tela por uns
+// segundos (some), a partida acaba e os jogadores somem; de noite, com chuva e nas cenas as quadras ficam vazias. Não mexe no save
+const QUADRAS = { vel: { porco: 0.95, familia: 1.05, nano: 0.85, pessoa: 1 }, pesos: { porco: 4, nano: 3, pessoa: 2, familia: 1.2 }, some: 4,
+  raio: { futebol: 0.06, basquete: 0.065, volei: 0.065, tenis: 0.032 }, torcida: [2, 4], espaco: 0.34 };
+const ESPORTES = ['futebol', 'basquete', 'volei', 'tenis'];
+const NOME_ESPORTE = { futebol: 'Futebol', basquete: 'Basquete', volei: 'Vôlei', tenis: 'Tênis' };
+const PONTOS_TENIS = ['0', '15', '30', '40'];
+let jogosQuadras = {};
+const COPIA_QUADRA = {};
+const CHAO_QUADRA = 1 / 8;
+const mundoQuadra = (X, Z) => [PREDIO.quadras.x0 + X / 8, PREDIO.quadras.z0 + Z / 8];
+const quadraPronta = id => !!S && etapasObra('quadras') >= QUADRAS_D[id].etapa && !obraEmAndamento('quadras');
+// a área de jogo no mundo: das linhas de fora (xa a xb, za a zb), com o meio
+function geoQuadra(id){
+  const [x0, x1, z0, z1] = QUADRAS_D[id].campo, [a, b] = mundoQuadra(x0, z0), [c, d] = mundoQuadra(x1 + 1, z1 + 1);
+  return { xa: a, xb: c, za: b, zb: d, cx: (a + c) / 2, cz: (b + d) / 2 };
+}
+const FALAS_QUADRA_PORCO = ['Oinc! (comemora com o rabinho)', 'Oinc oinc! (que jogada!)', 'Óinc! (dá uma cambalhota)', 'Oinc! (abraça o colega de time)', 'Oinc-oinc! (dancinha da vitória)', 'Oinc! (aponta pra torcida)',
+  'Óóinc! (nem acredita)', 'Oinc oinc! (corre de braços abertos, digo, de patas abertas)', 'Oinc! (focinho de campeão)', 'Oinc! (pede música no placar)', 'Óinc! (faz coraçãozinho com as patas)', 'Oinc-oinc! (mais um!)',
+  'Oinc! (pula de alegria)', 'Oinc oinc! (bate casco com o colega)', 'Óinc! (manda beijo pra arquibancada)', 'Oinc! (treinou muito pra isso)', 'Oinc-oinc! (essa foi de placa!)', 'Oinc! (rola na grama de felicidade)',
+  'Óóóinc! (que golaço, digo, que ponto!)', 'Oinc! (faz pose de estátua)', 'Oinc oinc! (agradece o passe)'];
+const FALAS_QUADRA_GENTE = ['Uhuuu!', 'Que jogada!', 'É nosso!', 'Toca aqui!', 'Isso, time!', 'Ninguém segura!', 'Foi lindo!', 'Mais um pra conta!', 'Treino é treino, jogo é jogo!', 'Viu essa?',
+  'Placar mexendo!', 'Bora, bora!', 'Essa foi pra torcida!', 'Que passe!', 'Acertei!', 'Jogada ensaiada!', 'Agora vira!', 'Tô voando hoje!', 'Que dia de jogo!', 'Valeu, parceiro!', 'Comemora comigo!'];
+// ----- os jogadores: o porquinho do spa, uma cópia da família, uma nano articulada ou uma pessoa da trilha
+const familiaNasQuadras = k => Object.values(jogosQuadras).some(Q => Q.jog.some(j => j.quem === k));
+function familiaLivreQuadra(){
+  const usados = new Set(Object.values(jogosQuadras).flatMap(Q => Q.jog.filter(j => j.quem).map(j => j.quem)));
+  return Object.keys(FAMILIA_SPA).filter(k => k !== 'ed' && FAMILIA_SPA[k].pode() && !FAMILIA_SPA[k].orig().g.visible && !visitantesSpa.some(v => v.quem === k) && !usados.has(k));
+}
+function sortearJogador(){
+  const P = QUADRAS.pesos, livres = familiaLivreQuadra();
+  let r = Math.random() * (P.porco + P.nano + P.pessoa + (livres.length ? P.familia : 0));
+  for (const t of ['porco', 'nano', 'pessoa']){ r -= P[t]; if (r <= 0) return novoJogadorQuadra(t); }
+  return novoJogadorQuadra('familia', sorteia(livres));
+}
+function novoJogadorQuadra(tipo, quem){
+  let j;
+  if (tipo === 'porco'){
+    const v = criarPorcoSpa(Math.floor(Math.random() * PORCO_SPA.sementes)), k = pickaveis.indexOf(v.g); if (k >= 0) pickaveis.splice(k, 1);
+    Object.assign(v, { fase: rnd(0, 6), pulo: 0, estado: 'parado', lugar: null }); v.g.visible = true;
+    j = { tipo, v, g: v.g, alto: 0.62 * v.T.tam, apelido: v.apelido };
+  } else if (tipo === 'familia'){
+    const F = FAMILIA_SPA[quem], p = COPIA_QUADRA[quem] || (COPIA_QUADRA[quem] = F.cria());
+    if (F.escala) p.g.scale.setScalar(F.escala);
+    p.sentado = 0; p.alt = 0; p.aceno = 0; p.pulo = 0; p.giro = null; p.estado = 'parado'; p.toalha(null);
+    scene.add(p.g); p.g.visible = true;
+    j = { tipo, quem, v: { tipo: 'familia', quem, p, g: p.g, fase: rnd(0, 6), pulo: 0, estado: 'parado', lugar: null }, g: p.g, alto: p.altura || 1.3, apelido: F.nome };
+  } else if (tipo === 'nano'){
+    const g = nanoRig(Math.floor(Math.random() * 1000)); scene.add(g);
+    j = { tipo, g, alto: 0.4, apelido: 'nano' };
+  } else {
+    const tp = Math.floor(Math.random() * 12), g = new THREE.Group();
+    g.add(malha(geo('visitante' + tp, () => vVisitante(tp).build(MIRANTE.sV, { origin: [0.5, 0, 0.5], jitter: 0.02 }))));
+    scene.add(g); j = { tipo, g, alto: 1.2, apelido: 'visitante' };
+  }
+  return Object.assign(j, { x: 0, z: 0, y: CHAO_QUADRA, ang: 0, alvo: [0, 0], vel: QUADRAS.vel[tipo] * rnd(0.85, 1.12), correndo: false, fase: rnd(0, 6), salto: 0, pose: null,
+    topo(){ return new THREE.Vector3(this.x, this.y + this.alto + 0.1, this.z); } });
+}
+function tirarJogadorQuadra(j){
+  j.g.visible = false; scene.remove(j.g);
+  const k = pickaveis.indexOf(j.g); if (k >= 0) pickaveis.splice(k, 1);
+  if (j.tipo === 'familia'){ j.v.p.sentado = 0; j.v.p.aceno = 0; }
+}
+const colocarJogador = (j, x, z) => { j.x = x; j.z = z; j.alvo = [x, z]; };
+function moverJogador(j, dt, bola){
+  const dx = j.alvo[0] - j.x, dz = j.alvo[1] - j.z, d = Math.hypot(dx, dz), passo = j.vel * dt;
+  j.correndo = d > 0.05;
+  if (d > passo){ j.x += dx / d * passo; j.z += dz / d * passo; } else { j.x = j.alvo[0]; j.z = j.alvo[1]; }
+  if (j.correndo && d > 0.12) j.ang = Math.atan2(dx, dz);
+  else if (bola) j.ang = anguloPerto(j.ang, Math.atan2(bola.x - j.x, bola.z - j.z), 0.2);
+}
+function animarJogador(j, dt, t){
+  if (j.salto > 0) j.salto = Math.max(0, j.salto - dt);
+  const pulo = j.salto > 0 ? Math.sin((1 - j.salto / 0.55) * Math.PI) * (j.altoPulo || 0.22) : 0, y = j.y + pulo;
+  if (j.tipo === 'porco' || j.tipo === 'familia'){
+    const v = j.v; v.x = j.x; v.z = j.z; v.y = y; v.ang = j.ang; v.estado = j.correndo ? 'andando' : 'parado';
+    if (j.tipo === 'familia' && j.comemora > 0){ j.comemora -= dt; v.p.aceno = 0.3; }
+    animarSpa(v, dt * (j.correndo ? 1.4 : 1), t);
+  } else if (j.tipo === 'nano'){
+    poseNano(j.g, dt, j.pose || (pulo > 0 ? 'pula' : j.correndo ? 'corre' : 'parado'));
+    j.g.position.set(j.x, y, j.z); j.g.rotation.y = anguloPerto(j.g.rotation.y, j.ang, Math.min(1, dt * 10));
+  } else {
+    if (j.correndo) j.fase += dt * 13;
+    j.g.position.set(j.x, y + (j.correndo ? Math.abs(Math.sin(j.fase)) * 0.04 : 0), j.z);
+    j.g.rotation.y = anguloPerto(j.g.rotation.y, j.ang, Math.min(1, dt * 10));
+    j.g.rotation.z = j.correndo ? Math.sin(j.fase) * 0.06 : 0;
+  }
+}
+// quem fez o ponto comemora (pulinho e, às vezes, uma fala); o time pula junto
+function comemorar(Q, time, autor){
+  for (const j of Q.times[time]){ j.salto = 0.55; j.comemora = 1.2; }
+  if (Q.torcida) for (const j of Q.torcida){ j.pose = 'pula'; j.poseT = 1.2; }
+  if (autor && naTelaBicho(new THREE.Vector3(autor.x, 0, autor.z)) && Math.random() < 0.45){ const f = variar(autor.tipo === 'porco' ? FALAS_QUADRA_PORCO : FALAS_QUADRA_GENTE); falar(autor, f, Math.min(2.4, tempoDeLeitura(f))); }
+  if (naTelaBicho(new THREE.Vector3(Q.G.cx, 0, Q.G.cz))) Som.tom(880, 0.12, 'square', 0.02, 1100);
+  textoPlacarQuadras();
+}
+// ----- a bola: um voo em arco de um ponto a outro (altura h no meio, d segundos) e, no fim, o que vem depois
+function vBolaQuadra(id){
+  const v = new Vox();
+  if (id === 'tenis') v.ell(0, 0, 0, 1.3, 1.3, 1.3, 0xd4e84a);
+  else if (id === 'basquete') v.ell(0, 0, 0, 2.4, 2.4, 2.4, (x, y) => x === 0 || y === 0 ? 0x3a2010 : 0xf08a24);
+  else if (id === 'volei') v.ell(0, 0, 0, 2.3, 2.3, 2.3, (x, y) => y > 0 ? 0xf2c335 : x > 0 ? 0x3a8fd0 : 0xfdf8ef);
+  else v.ell(0, 0, 0, 2.2, 2.2, 2.2, (x, y, z) => hash(x + 9, y + 9, z + 9) < 0.22 ? 0x1a1a1a : 0xfdfdfd);
+  return v;
+}
+function novaBolaQuadra(id){
+  const m = malha(geo('bolaQuadra' + id, () => vBolaQuadra(id).build(1 / 40, { origin: [0, 0, 0] })));
+  scene.add(m);
+  return { m, x: 0, y: QUADRAS.raio[id], z: 0, voo: null, dono: null };
+}
+function lancarBola(b, ate, h, d, depois){ b.voo = { de: [b.x, b.y, b.z], ate, h, d: Math.max(0.2, d), t: 0, depois }; b.dono = null; }
+function passoBola(Q, dt, t){
+  const b = Q.bola, r = QUADRAS.raio[Q.id];
+  if (b.voo){
+    const V = b.voo; V.t = Math.min(1, V.t + dt / V.d);
+    b.x = lerp(V.de[0], V.ate[0], V.t); b.z = lerp(V.de[2], V.ate[2], V.t); b.y = lerp(V.de[1], V.ate[1], V.t) + Math.sin(V.t * Math.PI) * V.h;
+    b.m.rotation.x += dt * 9;
+    if (V.t >= 1){ b.voo = null; if (V.depois) V.depois(); }
+  } else if (b.dono){
+    const c = b.dono, sa = Math.sin(c.ang), ca = Math.cos(c.ang);
+    if (Q.id === 'futebol'){ b.x = c.x + sa * 0.17; b.z = c.z + ca * 0.17; b.y = CHAO_QUADRA + r; if (c.correndo) b.m.rotation.x += dt * 10; }
+    else if (Q.id === 'basquete'){ b.x = c.x + sa * 0.08 + ca * 0.12; b.z = c.z + ca * 0.08 - sa * 0.12; b.y = CHAO_QUADRA + r + Math.abs(Math.sin(t * 8.5)) * Math.min(0.32, c.alto * 0.45); }
+    else { b.x = c.x + sa * 0.1; b.z = c.z + ca * 0.1; b.y = c.y + c.alto * 0.85 + (Q.id === 'tenis' ? Math.abs(Math.sin(t * 2)) * 0.3 : 0.05); }
+  }
+  b.m.position.set(b.x, b.y, b.z);
+}
+const pertoDe = (j, x, z, r) => Math.hypot(j.x - x, j.z - z) < r;
+const dentroQuadra = (G, x, z, m = 0.12) => [clamp(x, G.xa + m, G.xb - m), clamp(z, G.za + m, G.zb - m)];
+// ----- futebol society: o time 0 defende o gol de oeste (xa) e ataca o de leste; o primeiro de cada time é o goleiro
+const LANCES = {};
+LANCES.futebol = {
+  n: 3,
+  iniciar(Q){
+    const D = QUADRAS_D.futebol, [ab0, ab1, az0, az1] = D.arquibancada, n = Math.round(rnd(...QUADRAS.torcida));
+    Q.torcida = [];
+    for (let i = 0; i < n; i++){
+      const degrau = i % 2, [x, z] = mundoQuadra(rnd(ab0 + 3, ab1 - 3), degrau ? az0 + 1.5 : az1 - 1.5), g = nanoRig(Math.floor(Math.random() * 1000)); scene.add(g);
+      const j = { tipo: 'nano', g, alto: 0.4, x, z, y: (degrau ? 5 : 3) / 8, ang: 0, alvo: [x, z], vel: 0, correndo: false, salto: 0, pose: 'senta', topo(){ return new THREE.Vector3(this.x, this.y + 0.5, this.z); } };
+      g.position.set(x, j.y, z); Q.torcida.push(j);
+    }
+    this.saida(Q, Math.random() < 0.5 ? 0 : 1, true);
+  },
+  // a saída do meio: o time com a bola de um lado, o outro do outro, os goleiros no gol
+  saida(Q, time, ja){
+    const G = Q.G, b = Q.bola;
+    for (let tm = 0; tm < 2; tm++){
+      const s = tm ? -1 : 1, T = Q.times[tm];
+      const pos = [[tm ? G.xb - 0.25 : G.xa + 0.25, G.cz], tm === time ? [G.cx - s * 0.14, G.cz] : [G.cx - s * 0.9, G.cz - 0.6], [G.cx - s * (tm === time ? 0.8 : 1), G.cz + 0.7]];
+      T.forEach((j, i) => { if (ja) colocarJogador(j, ...pos[i]); else j.alvo = pos[i]; });
+    }
+    b.voo = null; b.dono = null; b.x = G.cx; b.z = G.cz; b.y = CHAO_QUADRA + QUADRAS.raio.futebol;
+    Q.fase = 'saida'; Q.t = 0; Q.saiu = time;
+  },
+  passo(Q, dt){
+    const G = Q.G, b = Q.bola;
+    Q.t += dt;
+    // os goleiros acompanham a bola na boca do gol
+    const D = QUADRAS_D.futebol, [, za] = mundoQuadra(0, D.gol[0] + 1), [, zb] = mundoQuadra(0, D.gol[1]);
+    for (let tm = 0; tm < 2; tm++){ const gk = Q.times[tm][0]; if (b.dono !== gk && Q.fase !== 'chute') gk.alvo = [tm ? G.xb - 0.25 : G.xa + 0.25, clamp(b.z, za, zb)]; }
+    if (Q.fase === 'saida'){
+      const c = Q.times[Q.saiu][1];
+      if ((pertoDe(c, b.x, b.z, 0.25) && Q.t > 1) || Q.t > 4){ b.dono = c; Q.fase = 'posse'; Q.t = 0; Q.prox = rnd(1, 2.2); Q.desvio = rnd(-0.6, 0.6); }
+      return;
+    }
+    if (Q.fase === 'gol'){ if (Q.t > 2.6) this.saida(Q, 1 - Q.marcou); return; }
+    if (Q.fase === 'goleiro'){
+      if (Q.t > 1){ const gk = b.dono, tm = Q.times[gk.time].slice(1).sort((p, q) => Math.abs(q.x - gk.x) - Math.abs(p.x - gk.x))[0]; this.passar(Q, gk, tm, 0.45); }
+      return;
+    }
+    if (Q.fase !== 'posse') return;
+    const c = b.dono, tm = c.time, s = tm ? -1 : 1, gx = tm ? G.xa : G.xb, meus = Q.times[tm], deles = Q.times[1 - tm];
+    c.alvo = dentroQuadra(G, gx - s * 0.9, G.cz + Q.desvio);
+    const comp = meus.find(j => j !== c && j !== meus[0]) || meus[1];
+    if (comp !== c) comp.alvo = dentroQuadra(G, c.x + s * 1.1, G.cz + (c.z < G.cz ? 0.8 : -0.8));
+    const linha = deles.slice(1).sort((p, q) => Math.hypot(p.x - c.x, p.z - c.z) - Math.hypot(q.x - c.x, q.z - c.z));
+    linha[0].alvo = dentroQuadra(G, c.x + s * 0.25, c.z);
+    if (linha[1]) linha[1].alvo = dentroQuadra(G, (c.x + (tm ? G.xb : G.xa)) / 2 + s * 0.6, G.cz + (c.z > G.cz ? -0.5 : 0.5));
+    // o desarme, quando o marcador chega
+    if (pertoDe(linha[0], c.x, c.z, 0.22) && Math.random() < dt * 0.9){ b.dono = linha[0]; Q.t = 0; Q.prox = rnd(1, 2.2); Q.desvio = rnd(-0.6, 0.6); return; }
+    if (Q.t > Q.prox){
+      if (Math.abs(gx - c.x) < 2.3) this.chutar(Q, c);
+      else if (comp !== c && Math.random() < 0.6) this.passar(Q, c, comp, 0.05);
+      else { Q.t = 0; Q.prox = rnd(0.8, 1.6); Q.desvio = rnd(-0.6, 0.6); }
+    }
+  },
+  passar(Q, c, tm, h){
+    const s = tm.time ? -1 : 1, ate = [...dentroQuadra(Q.G, tm.x + s * 0.25, tm.z)], d = Math.hypot(ate[0] - c.x, ate[1] - c.z);
+    tm.alvo = ate.slice(); Q.fase = 'passe';
+    lancarBola(Q.bola, [ate[0], CHAO_QUADRA + QUADRAS.raio.futebol, ate[1]], h, d / 3.6, () => { Q.bola.dono = tm; Q.fase = 'posse'; Q.t = 0; Q.prox = rnd(0.8, 2); Q.desvio = rnd(-0.6, 0.6); });
+  },
+  chutar(Q, c){
+    const G = Q.G, tm = c.time, s = tm ? -1 : 1, gx = tm ? G.xa : G.xb, gk = Q.times[1 - tm][0], D = QUADRAS_D.futebol;
+    const [, za] = mundoQuadra(0, D.gol[0] + 1), [, zb] = mundoQuadra(0, D.gol[1]), z = rnd(za, zb), d = Math.hypot(gx - c.x, z - c.z), y = CHAO_QUADRA + QUADRAS.raio.futebol;
+    Q.fase = 'chute'; Q.t = 0;
+    if (Math.random() < 0.42){
+      gk.alvo = [gk.x, clamp(z + (Math.random() < 0.5 ? -0.45 : 0.45), za, zb)];
+      lancarBola(Q.bola, [gx + s * 0.2, y, z], rnd(0.05, 0.35), d / 4.2, () => { Q.placar[tm]++; Q.marcou = tm; Q.fase = 'gol'; Q.t = 0; comemorar(Q, tm, c); });
+    } else {
+      gk.alvo = [gk.x, z];
+      lancarBola(Q.bola, [gx - s * 0.22, y + 0.08, z], rnd(0.05, 0.3), d / 4.2, () => { Q.bola.dono = gk; Q.fase = 'goleiro'; Q.t = 0; });
+    }
+  },
+};
+// ----- basquete: comprido de norte a sul; o time 0 ataca a tabela de baixo (sul), o 1 a de cima
+LANCES.basquete = {
+  n: 2,
+  aros(){ return QUADRAS_D.basquete.aros.map(([x, z]) => mundoQuadra(x, z)); },
+  iniciar(Q){
+    const G = Q.G;
+    Q.times.forEach((T, tm) => T.forEach((j, i) => colocarJogador(j, G.cx + (i ? 0.5 : -0.5), G.cz + (tm ? 0.5 : -0.5))));
+    this.posse(Q, Q.times[Math.random() < 0.5 ? 0 : 1][0]);
+  },
+  posse(Q, c){
+    const [aro] = [this.aros()[c.time ? 0 : 1]], s = aro[1] > Q.G.cz ? 1 : -1;
+    Q.bola.dono = c; Q.fase = 'posse'; Q.t = 0; Q.prox = rnd(1.5, 3); Q.desvio = rnd(-0.7, 0.7);
+    Q.spot = dentroQuadra(Q.G, aro[0] + Q.desvio, aro[1] - s * rnd(1, 1.9));
+  },
+  passo(Q, dt){
+    const G = Q.G, b = Q.bola;
+    Q.t += dt;
+    if (Q.fase === 'solta'){
+      // a bola no chão: o mais perto de cada time corre (na reposição, só o time que repõe)
+      for (let tm = 0; tm < 2; tm++){
+        if (Q.so != null && Q.so !== tm){ for (const j of Q.times[tm]) j.alvo = dentroQuadra(G, G.cx + (j === Q.times[tm][0] ? -0.5 : 0.5), G.cz); continue; }
+        const T = Q.times[tm].slice().sort((p, q) => Math.hypot(p.x - b.x, p.z - b.z) - Math.hypot(q.x - b.x, q.z - b.z));
+        T[0].alvo = [b.x, b.z];
+        if (pertoDe(T[0], b.x, b.z, 0.16)){ Q.so = null; this.posse(Q, T[0]); return; }
+      }
+      return;
+    }
+    if (Q.fase !== 'posse') return;
+    const c = b.dono, aro = this.aros()[c.time ? 0 : 1], s = aro[1] > G.cz ? 1 : -1, meus = Q.times[c.time], deles = Q.times[1 - c.time];
+    c.alvo = Q.spot;
+    const comp = meus.find(j => j !== c);
+    comp.alvo = dentroQuadra(G, aro[0] + (Q.desvio > 0 ? -1.1 : 1.1), aro[1] - s * 1.2);
+    meus.forEach((at, i) => { const df = deles[i], dx = aro[0] - at.x, dz = aro[1] - at.z, d = Math.hypot(dx, dz) || 1; df.alvo = dentroQuadra(G, at.x + dx / d * 0.42, at.z + dz / d * 0.42); });
+    if (Q.t > Q.prox && (pertoDe(c, ...Q.spot, 0.15) || Q.t > 4)){
+      const acerta = Math.random() < 0.5, aroY = (QUADRAS_D.basquete.aroAlto + 0.5) / 8, r = QUADRAS.raio.basquete;
+      c.salto = 0.55; Q.fase = 'arremesso';
+      lancarBola(b, [aro[0], aroY + 0.04, aro[1]], 0.7, 0.9, () => {
+        if (acerta){
+          Q.placar[c.time] += 2; comemorar(Q, c.time, c);
+          lancarBola(b, [aro[0], CHAO_QUADRA + r, aro[1]], 0, 0.35, () => { Q.so = 1 - c.time; Q.fase = 'solta'; });
+        } else {
+          const [rx, rz] = dentroQuadra(G, aro[0] + rnd(-0.6, 0.6), aro[1] - s * rnd(0.3, 1));
+          lancarBola(b, [rx, CHAO_QUADRA + r, rz], 0.4, 0.7, () => { Q.so = null; Q.fase = 'solta'; });
+        }
+      });
+    } else if (Q.t > 0.8 && Math.random() < dt * 0.25){
+      Q.fase = 'passe';
+      lancarBola(b, [comp.x, CHAO_QUADRA + 0.3, comp.z], 0.12, Math.max(0.3, Math.hypot(comp.x - c.x, comp.z - c.z) / 3.5), () => this.posse(Q, comp));
+    }
+  },
+};
+// ----- os de rede (vôlei e tênis): o time 0 do lado oeste, o 1 do leste
+function redeQuadra(id){ return mundoQuadra(QUADRAS_D[id].rede + 0.5, 0)[0]; }
+function pontoRede(Q, time, autor){
+  if (Q.id === 'tenis'){
+    Q.pts[time]++;
+    if (Q.pts[time] >= 4 && Q.pts[time] - Q.pts[1 - time] >= 2){ Q.placar[time]++; Q.pts = [0, 0]; }
+  } else Q.placar[time]++;
+  comemorar(Q, time, autor);
+  Q.fase = 'ponto'; Q.t = 0; Q.saca = time;
+}
+LANCES.volei = {
+  n: 2,
+  base(Q, tm, i){ const G = Q.G, s = tm ? 1 : -1, rede = redeQuadra('volei'); return i ? [rede + s * 1.6, G.cz + (tm ? -0.4 : 0.4)] : [rede + s * 0.55, G.cz + (tm ? 0.45 : -0.45)]; },
+  iniciar(Q){ Q.times.forEach((T, tm) => T.forEach((j, i) => colocarJogador(j, ...this.base(Q, tm, i)))); this.saque(Q, Math.random() < 0.5 ? 0 : 1); },
+  saque(Q, tm){
+    const G = Q.G, s = tm ? 1 : -1, sv = Q.times[tm][1];
+    Q.times.forEach((T, k) => T.forEach((j, i) => { j.alvo = this.base(Q, k, i); }));
+    sv.alvo = [tm ? G.xb - 0.15 : G.xa + 0.15, G.cz + rnd(-0.5, 0.5)];
+    Q.bola.voo = null; Q.bola.dono = sv; Q.fase = 'saque'; Q.t = 0; Q.saca = tm;
+  },
+  // a bola vai para o lado do time alvo; quem está mais perto corre; no fim do voo, ou ele toca (passa para o
+  // companheiro levantar, e o companheiro ataca) ou é ponto do outro lado. A bola que sai (fora) é ponto de quem recebe
+  mandar(Q, de, alvo, tipo){
+    const G = Q.G, rede = redeQuadra('volei'), s = alvo ? 1 : -1, meio = (alvo ? G.xb - rede : rede - G.xa);
+    const fora = tipo !== 'levanta' && Math.random() < 0.12;
+    let x = rede + s * rnd(0.35, meio - 0.15), z = rnd(G.za + 0.15, G.zb - 0.15);
+    if (fora) x = rede + s * (meio + rnd(0.2, 0.45));
+    const T = Q.times[alvo], rec = tipo === 'levanta' ? T.find(j => j !== de) : T.slice().sort((p, q) => Math.hypot(p.x - x, p.z - z) - Math.hypot(q.x - x, q.z - z))[0];
+    if (tipo === 'levanta'){ x = rede + s * 0.45; z = clamp(rec.z, G.za + 0.3, G.zb - 0.3); }
+    if (!fora) rec.alvo = [x, z];
+    for (const j of T) if (j !== rec) j.alvo = this.base(Q, alvo, T.indexOf(j));
+    if (tipo === 'ataque') de.salto = 0.55;
+    const [h, d] = tipo === 'saque' ? [1.1, 1.4] : tipo === 'ataque' ? [0.45, 0.8] : tipo === 'levanta' ? [0.9, 1.2] : [0.8, 0.95];
+    Q.fase = 'voo';
+    lancarBola(Q.bola, [x, CHAO_QUADRA + 0.4, z], h, d, () => {
+      // o levantamento sempre sai; a recepção e a defesa dependem de quem corre chegar
+      if (!fora && (tipo === 'levanta' || pertoDe(rec, x, z, 0.38))){
+        if (tipo === 'levanta') this.mandar(Q, rec, 1 - alvo, 'ataque');
+        else this.mandar(Q, rec, alvo, 'levanta');
+      } else {
+        const r = QUADRAS.raio.volei;
+        lancarBola(Q.bola, [x + rnd(-0.3, 0.3), CHAO_QUADRA + r, z + rnd(-0.3, 0.3)], 0.15, 0.4, () => {});
+        pontoRede(Q, fora ? alvo : 1 - alvo, fora ? null : de);
+      }
+    });
+  },
+  passo(Q, dt){
+    Q.t += dt;
+    if (Q.fase === 'saque' && Q.t > 1.4){ const sv = Q.bola.dono; sv.salto = 0.4; this.mandar(Q, sv, 1 - Q.saca, 'saque'); }
+    if (Q.fase === 'ponto' && Q.t > 1.8) this.saque(Q, Q.saca);
+  },
+};
+LANCES.tenis = {
+  n: 1,
+  base(Q, tm){ const G = Q.G; return [tm ? G.xb - 0.2 : G.xa + 0.2, G.cz]; },
+  iniciar(Q){ Q.pts = [0, 0]; Q.times.forEach((T, tm) => colocarJogador(T[0], ...this.base(Q, tm))); this.saque(Q, Math.random() < 0.5 ? 0 : 1); },
+  saque(Q, tm){
+    const sv = Q.times[tm][0], G = Q.G;
+    for (let k = 0; k < 2; k++) Q.times[k][0].alvo = this.base(Q, k);
+    sv.alvo = [sv.alvo[0], G.cz + (Math.random() < 0.5 ? -0.3 : 0.3)];
+    Q.bola.voo = null; Q.bola.dono = sv; Q.fase = 'saque'; Q.t = 0; Q.saca = tm;
+  },
+  // a bola quica no lado de lá e segue até onde o outro rebate; se ele não chega, é ponto de quem bateu; a que cai fora é
+  // ponto de quem ia receber
+  golpe(Q, de, tipo){
+    const G = Q.G, alvo = 1 - de.time, s = alvo ? 1 : -1, rede = redeQuadra('tenis'), meio = alvo ? G.xb - rede : rede - G.xa, T = QUADRAS_D.tenis;
+    const [, s0] = mundoQuadra(0, T.simples[0]), [, s1] = mundoQuadra(0, T.simples[1] + 1), r = QUADRAS.raio.tenis;
+    const fora = Math.random() < 0.1;
+    let qx = rede + s * (tipo === 'saque' ? rnd(0.3, meio * 0.45) : rnd(0.5, meio * 0.85)), qz = rnd(s0 + 0.1, s1 - 0.1);
+    if (fora) qx = rede + s * (meio + rnd(0.15, 0.4));
+    const hx = clamp(qx + s * rnd(0.6, 1), Math.min(rede + s * 0.6, rede + s * (meio + 0.5)), Math.max(rede + s * 0.6, rede + s * (meio + 0.5))), hz = clamp(qz + rnd(-0.3, 0.3), G.za, G.zb);
+    const rec = Q.times[alvo][0];
+    if (!fora) rec.alvo = [hx, hz];
+    de.salto = 0.3; de.altoPulo = 0.08; Q.fase = 'voo';
+    if (naTelaBicho(new THREE.Vector3(de.x, 0, de.z))) Som.tom(420, 0.05, 'square', 0.015, 300);
+    lancarBola(Q.bola, [qx, CHAO_QUADRA + r, qz], tipo === 'saque' ? 0.45 : 0.35, tipo === 'saque' ? 0.6 : 0.65, () => {
+      if (fora){ lancarBola(Q.bola, [qx + s * 0.5, CHAO_QUADRA + r, qz], 0.12, 0.4, () => {}); pontoRede(Q, alvo, null); return; }
+      lancarBola(Q.bola, [hx, CHAO_QUADRA + 0.22, hz], 0.22, 0.45, () => {
+        if (pertoDe(rec, hx, hz, 0.36)) this.golpe(Q, rec, 'rali');
+        else { lancarBola(Q.bola, [hx + s * 0.4, CHAO_QUADRA + r, hz], 0.1, 0.35, () => {}); pontoRede(Q, de.time, de); }
+      });
+    });
+  },
+  passo(Q, dt){
+    Q.t += dt;
+    if (Q.fase === 'saque' && Q.t > 1.3) this.golpe(Q, Q.bola.dono, 'saque');
+    if (Q.fase === 'ponto' && Q.t > 1.6) this.saque(Q, Q.saca);
+  },
+};
+// ----- começar, rodar e acabar a partida de uma quadra
+function iniciarJogoQuadra(id){
+  const L = LANCES[id], Q = jogosQuadras[id] = { id, G: geoQuadra(id), jog: [], times: [[], []], bola: novaBolaQuadra(id), placar: [0, 0], fase: '', t: 0, fora: 0 };
+  for (let tm = 0; tm < 2; tm++) for (let i = 0; i < L.n; i++){ const j = sortearJogador(); j.time = tm; Q.times[tm].push(j); Q.jog.push(j); }
+  L.iniciar(Q);
+  for (const j of Q.jog) animarJogador(j, 0.016, 0);
+  textoPlacarQuadras();
+  return Q;
+}
+function encerrarJogoQuadra(id){
+  const Q = jogosQuadras[id]; if (!Q) return;
+  for (const j of [...Q.jog, ...(Q.torcida || [])]) tirarJogadorQuadra(j);
+  scene.remove(Q.bola.m);
+  delete jogosQuadras[id];
+  textoPlacarQuadras();
+}
+function encerrarJogosQuadras(){ for (const id of Object.keys(jogosQuadras)) encerrarJogoQuadra(id); }
+function passoJogoQuadra(Q, dt, t){
+  const L = LANCES[Q.id];
+  L.passo(Q, dt);
+  for (const j of Q.jog) moverJogador(j, dt, Q.bola);
+  // ninguém atravessa ninguém: dois jogadores perto demais se afastam um pouco
+  for (let a = 0; a < Q.jog.length; a++) for (let c = a + 1; c < Q.jog.length; c++){
+    const A = Q.jog[a], B = Q.jog[c], dx = B.x - A.x, dz = B.z - A.z, d = Math.hypot(dx, dz), m = QUADRAS.espaco;
+    if (d >= m) continue;
+    const ux = d > 1e-4 ? dx / d : 1, uz = d > 1e-4 ? dz / d : 0, k = (m - d) / 2 * Math.min(1, dt * 8);
+    A.x -= ux * k; A.z -= uz * k; B.x += ux * k; B.z += uz * k;
+  }
+  for (const j of Q.jog) animarJogador(j, dt, t);
+  if (Q.torcida) for (const j of Q.torcida){ if (j.poseT > 0){ j.poseT -= dt; if (j.poseT <= 0) j.pose = 'senta'; } poseNano(j.g, dt, j.pose); }
+  passoBola(Q, dt, t);
+}
+function atualizarQuadras(dt, t){
+  if (!S || !(etapasObra('quadras') >= 1)){ if (Object.keys(jogosQuadras).length) encerrarJogosQuadras(); return; }
+  const noite = periodo().id === 'noite' || chovendo();
+  for (const id of ESPORTES){
+    const Q = jogosQuadras[id], pode = quadraPronta(id) && !cine && !noite;
+    if (!pode){ if (Q) encerrarJogoQuadra(id); continue; }
+    const G = Q ? Q.G : geoQuadra(id), perto = Math.hypot(G.cx - cam.alvo.x, G.cz - cam.alvo.z) < cam.vista * 1.1 + 2;
+    if (!Q){ if (perto) iniciarJogoQuadra(id); continue; }
+    if (!perto){ Q.fora += dt; if (Q.fora > QUADRAS.some){ encerrarJogoQuadra(id); continue; } } else Q.fora = 0;
+    passoJogoQuadra(Q, dt, t);
+  }
+}
+// o painel do placar: os quatro jogos de agora (o que não está acontecendo fica com tracinhos)
+function linhasPlacarQuadras(){
+  return ESPORTES.filter(id => !S || etapasObra('quadras') >= QUADRAS_D[id].etapa).map((id, i) => {
+    const Q = jogosQuadras[id];
+    const txt = !Q ? `${NOME_ESPORTE[id].toUpperCase()}  -  x  -` : id === 'tenis' ? `TÊNIS  ${Q.placar[0]} x ${Q.placar[1]}  (${PONTOS_TENIS[Math.min(3, Q.pts[0])]}-${PONTOS_TENIS[Math.min(3, Q.pts[1])]})` : `${NOME_ESPORTE[id].toUpperCase()}  ${Q.placar[0]} x ${Q.placar[1]}`;
+    return [txt, 0.8, i % 2 ? '#fdf8ef' : '#f2c335'];
+  });
+}
+function textoPlacarQuadras(){
+  if (!placarQuadras) return;
+  if (placarQuadras.material.map) placarQuadras.material.map.dispose();
+  placarQuadras.material.map = texturaTexto(linhasPlacarQuadras(), 512, 256, '#1d3a5f'); placarQuadras.material.needsUpdate = true;
+}
+function menuQuadras(r){
+  const n = etapasObra('quadras');
+  if (n < 1){ r.estado = OBRAS.quadras.desc; return; }
+  const prontas = ESPORTES.filter(id => QUADRAS_D[id].etapa <= n).map(id => NOME_ESPORTE[id].toLowerCase()), agora = ESPORTES.filter(id => jogosQuadras[id]);
+  const lista = l => l.length > 1 ? `${l.slice(0, -1).join(', ')} e ${l[l.length - 1]}` : l[0];
+  r.estado = `Prontas: ${lista(prontas)}. Porquinhos, pessoas, nanos e, às vezes, alguém da família vêm jogar de dia.${agora.length ? ' Agora: ' + agora.map(id => { const Q = jogosQuadras[id]; return `${NOME_ESPORTE[id].toLowerCase()} ${Q.placar[0]} x ${Q.placar[1]}`; }).join(', ') + '.' : ''}${periodo().id === 'noite' ? ' De noite as quadras ficam vazias.' : chovendo() ? ' Com chuva, todo mundo foi se abrigar.' : ''}`;
 }
 // ================= os flamingos (o Lucas pediu): com o terreno do canto Sul aberto e de dia, de vez em quando um bando de
 // dois a quatro chega voando, um atrás do outro, e pousa no raso do lago, perto de uma beira que aparece na tela (pousoFlamingos).
@@ -12188,8 +12736,10 @@ function limparVolta(){
 // origem no meio da roda (ARRAIA.meio); os ângulos da roda contam a partir de +x, com 90° para o sul (a frente da câmera)
 // A roda (11 ladrilhos de largura, contando os postes) encosta na beira de baixo e na da direita do mapa; as duas barracas
 // ficam atrás dela
-const ARRAIA = { nivel: 50, meio: zp('festa', 11.7, 13.3), ed: 90, roda: 2.3, fora: 4.2, perto: 3.4, inicio: 0.66, fim: 0.82, noite: 0.78, mastro: [0.75, -1.3],
-  postes: [30, 90, 150, 210, 270, 330], raioPostes: 5.3, barracas: [[...zp('festa', 5.5, 10.4), 'milho'], [...zp('festa', 8.4, 7.6), 'pescaria']], disco: [3.3, 3.1, -2.6] };
+// no canto mais ao sul do mapa (o Lucas pediu, quando as quadras chegaram): a roda, com os postes, vai até perto da beira de
+// baixo e da direita
+const ARRAIA = { nivel: 50, meio: zp('festa', 13.5, 16.6), ed: 90, roda: 2.3, fora: 4.2, perto: 3.4, inicio: 0.66, fim: 0.82, noite: 0.78, mastro: [0.75, -1.3],
+  postes: [30, 90, 150, 210, 270, 330], raioPostes: 5.3, barracas: [[...zp('festa', 7.3, 13.7), 'milho'], [...zp('festa', 10.2, 10.9), 'pescaria']], disco: [3.3, 3.1, -2.6] };
 // a quadrilha: uma volta inteira da roda em tempo segundos; luma, o lugar da Luma na roda (o mesmo de lumaSaiPara)
 const ARRAIA_QUADRILHA = { tempo: 12, luma: 62 };
 // as cartelas do fim da festa: [frase, assinatura, texto corrido]; espera, os segundos antes de aceitar o toque. Depois da
@@ -12811,6 +13361,8 @@ const VI = {
   castanha(){ const v = new Vox(); v.ell(0, 4, 0, 4.2, 4.2, 4.2, (x, y, z) => hash(x, y, z) < 0.3 ? 0x5e3e28 : 0x7a5232); v.ell(0, 8, 0, 2.2, 0.8, 2.2, 0x3e2a1c); for (const [x, z] of [[-1, 1], [1, 0], [0, -1]]) v.set(x, 9, z, 0xe6d8b8); return v; },
   acaizeiro(){ return vNativa('acaizeiro', true); }, cupuacuzeiro(){ return vNativa('cupuacuzeiro', true); }, guaranazeiro(){ return vNativa('guaranazeiro', true); }, castanheira(){ return vNativa('castanheira', true); },
   trator(){ return vTrator(); },
+  bola(){ const v = new Vox(), F = 1.618, ico = [[0, 1, F], [0, -1, F], [0, 1, -F], [0, -1, -F], [1, F, 0], [-1, F, 0], [1, -F, 0], [-1, -F, 0], [F, 0, 1], [-F, 0, 1], [F, 0, -1], [-F, 0, -1]].map(a => a.map(c => c / Math.hypot(1, F)));
+    v.ell(0, 6, 0, 6, 6, 6, (x, y, z) => { const r = Math.hypot(x, y - 6, z) || 1; return ico.some(([a, b, c]) => (a * x + b * (y - 6) + c * z) / r > 0.93) ? 0x1a1a1a : 0xfdfdfd; }); return v; },
   museu(){ const v = new Vox(); for (const e of vMuseu().m.values()) if (e.y >= 1 && e.z <= 21 && e.x >= 2 && e.x <= 29) v.set(e.x, e.y, e.z, e.c); return v; },
   observatorio(){ const v = new Vox(), [cx, cz] = OBSERV.torre; for (const e of vObservatorioCompleto().m.values()) if (e.y >= 1 && Math.hypot(e.x - cx, e.z - cz) <= OBSERV.cupula + 1.5) v.set(e.x, e.y, e.z, e.c); return v; },
   vacaEspaco(){ return vVaca(true); },
@@ -16956,7 +17508,7 @@ function criarFamiliaSpa(quem){
   return v;
 }
 // quem da família pode vir agora: liberado, sem estar em outro lugar da fazenda e sem já estar no spa
-const familiaLivreSpa = () => Object.keys(FAMILIA_SPA).filter(k => FAMILIA_SPA[k].pode() && !FAMILIA_SPA[k].orig().g.visible && !visitantesSpa.some(v => v.quem === k));
+const familiaLivreSpa = () => Object.keys(FAMILIA_SPA).filter(k => FAMILIA_SPA[k].pode() && !FAMILIA_SPA[k].orig().g.visible && !visitantesSpa.some(v => v.quem === k) && !familiaNasQuadras(k));
 // ----- chegada: a estrada até o arco, pelo balcão
 function soltarNoSpa(v, espera){
   Object.assign(v, { x: X_CURVA, z: H + 0.6 + espera * 0.9, y: 0, ang: Math.PI, fase: rnd(0, 6), estado: 'chegando', t: 0, lugar: null, sujo: false, pulo: 0, feitas: 0,
@@ -27349,7 +27901,7 @@ function quadro(agoraP){
   atualizarBichosMata(dt, t);
   atualizarVisitaCachoeira(dt, t); atualizarCachoeira(dt, t);
   atualizarRelogioFoguete(dt);
-  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t);
+  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t);
   atualizarBeijaFlor(dt, t);
   atualizarCurupira(dt, t);
   atualizarGuardiao(dt, t);
@@ -27632,6 +28184,8 @@ async function iniciar(){
     parquinho: { BRINQ, PARQUINHO, ocupantes: ocupantesBrinq, livre: assentoLivre, lado: ladoBrinquedo, brinqEd: () => brinqEd, hud: () => irmaoHud, dani: () => irmaoDani, montar: montarEnfeite },
     enfeitesNovos: { aves, ave: () => { aves.prox = 0; }, AJUDA, vis: () => ENF_VIS, casinha: () => casinhaParaLuma(), piquenique: () => lugarPiquenique(), montar: e => montarEnfeite(e), FOGUEIRA, LAGUINHO, DESEJO, aquecer, inverno: invernoAgora, assento: assentoFogueira, frentePoco, fazerDesejo, itens: e => itensEnfeite(e), formas: formasLiberadas, grupoComForma },
     cartaoEspaco: { chegar: chegarCartaoEspaco, nomes: nomesNoEspaco, CARTAO_ESPACO },
+    quadras: { QUADRAS, QUADRAS_D, LANCES, jogos: () => jogosQuadras, iniciar: iniciarJogoQuadra, encerrar: encerrarJogosQuadras, placar: linhasPlacarQuadras, menu: () => { const r = {}; menuQuadras(r); return r.estado; },
+      avancar: seg => { const t0 = performance.now() / 1000; for (let i = 0; i < Math.round(seg / 0.05); i++) for (const Q of Object.values(jogosQuadras)) passoJogoQuadra(Q, 0.05, t0 + i * 0.05); } },
     museu: { MUSEU, abrir: abrirMuseu, visitar: visitarMuseu, porta: portaMuseu, alvo: alvoMuseu, guardarCartao: guardarCartaoLido },
     chamine: () => CHAMINE_MUNDO, fumaca: (x, y, z) => fumaca(x, y, z), marcas: () => fila.filter(f => f.marca).map(f => ({ k: f.alvo.k, tipo: f.tipo, pos: f.marca.position.toArray().map(n => +n.toFixed(2)), ed: alvoMundo(f.alvo) })),
     spa: { SPA, PORCO_SPA, GUERRA_LAMA, familiaCena: () => spaFamilia,
@@ -29756,6 +30310,7 @@ function catalogoModelos(){
       ...['moinho', 'terreiro', 'torrador', 'chocobarra', 'chocolateria', 'oficina'].map(id => varios('Ampliação: ' + FABRICAS[id].nome, [['Ampliado', () => vFabAmpliada(id, 0)], ['1ª reforma', () => vFabAmpliada(id, 1)], ['2ª reforma', () => vFabAmpliada(id, 2)], ['3ª reforma', () => vFabAmpliada(id, 3)]])),
       um('Prancheta', vPrancheta), um('Trena', vTrena), um('Martelo', vMartelo)] },
     { nome: 'Obras do Maurinho', itens: [
+      varios('Quadras da fazenda', [['Futebol', () => vQuadras(1)], ['Com basquete e vôlei', () => vQuadras(2)], ['Com tênis e placar', () => vQuadras(3)], ['Obra no começo', () => vObraSubindo('quadras', 0, 1)], ['Obra na metade', () => vObraSubindo('quadras', 0, 4)]]),
       varios('Spa dos pigs', [['Pronto', () => vSpa()], ['Com a ala nova', () => vSpa(true)], ['Com a piscina olímpica', () => vSpa(3)], ['Obra no começo', () => vObraSubindo('spa', 0, 1)], ['Obra na metade', () => vObraSubindo('spa', 0, 4)], ['Ala nova na metade', () => vObraSubindo('spa', 1, 4)], ['Piscina na metade', () => vObraSubindo('spa', 2, 4)]]),
       varios('Resort das Aposentadas', [['Pronto', vResort], ['Obra no começo', () => vObraSubindo('resort', 0, 1)], ['Obra na metade', () => vObraSubindo('resort', 0, 4)], ['Obra quase pronta', () => vObraSubindo('resort', 0, 7)]]),
       um('Fita da inauguração', vFitaResort), um('Estacas do lote', () => vEstacas(2, 2)),
