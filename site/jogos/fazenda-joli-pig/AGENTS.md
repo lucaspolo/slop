@@ -193,7 +193,7 @@ O Lucas pediu: cada tarefa com a roupa dela, para o Ed, o Hud e o Dani, trocada 
 
 ## Achar o Ed
 
-- O Lucas pediu um botãozinho para localizar o Ed no mapa: uma faixa baixa embaixo do girar e do zoom, no mesmo bloco (`#acharEd`, a mira), e a tecla F. A câmera desliza até o Ed em `ACHAR_ED.tempo` segundos, acompanhando os passos dele (`acharEd`, `passoAcharEd` no quadro); arrastar o mapa solta na hora. Se a câmera estiver afastada demais, volta para `ACHAR_ED.vistaMax`. Não faz nada em cena nem na vista do Ed. Chegando, o Ed dá um pulinho se estiver parado.
+- O Lucas pediu um botãozinho para localizar o Ed no mapa: um botão redondo com o rostinho dele (`#acharEd`, ícone `edRosto`, a cabeça do `vPorco`), solto embaixo do bloco de girar e zoom (`.cam-bloco`), e a tecla F. Antes era uma mira dentro do bloco; o Lucas pediu o rosto e fora da moldura. Some nas cenas, mesmo nas de câmera livre. A câmera desliza até o Ed em `ACHAR_ED.tempo` segundos, acompanhando os passos dele (`acharEd`, `passoAcharEd` no quadro); arrastar o mapa solta na hora. Se a câmera estiver afastada demais, volta para `ACHAR_ED.vistaMax`. Não faz nada em cena nem na vista do Ed. Chegando, o Ed dá um pulinho se estiver parado.
 
 ## Vista do Ed
 
