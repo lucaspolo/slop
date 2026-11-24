@@ -1,0 +1,2435 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Casa ao Sol · slop</title>
+<meta name="description" content="Desenhe a planta de uma casa com o mouse, com paredes, janelas, portas, beirais e árvores, e veja por onde o sol entra em cada hora do dia e em cada época do ano.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: cena em tela cheia; ferramentas no canto esquerdo, vista e painel à direita, relógio do sol embaixo */
+:root {
+  color-scheme: light;
+  --tinta: #1d2128;
+  --suave: #666b73;
+  --linha: #d9d5cc;
+  --painel: rgba(252, 251, 248, 0.94);
+  --campo: #fff;
+  --sol: #f29a1b;
+  --sol-claro: #fff1d6;
+  --sel: #2f7de1;
+  --sel-claro: #e4efff;
+  --mal: #d9482b;
+  --ui: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --num: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  /* alturas medidas pelo script, para os painéis não se sobreporem */
+  --topo-h: 290px;
+  --vista-h: 44px;
+  --tempo-h: 64px;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; overflow: hidden; background: #c9d6dc; color: var(--tinta); font: 500 13px/1.4 var(--ui); }
+[hidden] { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+#cena { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+#rotulos { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; }
+
+.rot { position: absolute; left: 0; top: 0; white-space: nowrap; will-change: transform; }
+.rot-comodo { text-align: center; font-weight: 700; font-size: 12px; line-height: 1.15; color: #3d3427; text-shadow: 0 0 3px #f6efe1, 0 0 6px #f6efe1; }
+.rot-comodo span { display: block; font: 400 11px var(--num); color: #6d604c; }
+.rot-hora { font: 600 10px var(--num); color: #8a4f00; background: rgba(255, 241, 214, 0.9); border: 1px solid #f2c27a; border-radius: 4px; padding: 0 3px; }
+.rot-card { font: 800 13px var(--ui); color: var(--tinta); background: rgba(255, 255, 255, 0.85); border-radius: 50%; width: 22px; height: 22px; display: grid; place-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+.rot-card.norte { background: var(--mal); color: #fff; }
+.rot-medida { font: 600 12px var(--num); color: #fff; background: rgba(29, 33, 40, 0.85); border-radius: 5px; padding: 2px 6px; }
+.rot-medida.sel { background: var(--sel); }
+
+.painel {
+  position: fixed; z-index: 2;
+  background: var(--painel);
+  border: 1px solid var(--linha); border-radius: 12px;
+  box-shadow: 0 6px 22px rgba(30, 35, 45, 0.10);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+
+.topo {
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  left: calc(12px + env(safe-area-inset-left, 0px));
+  width: 330px; padding: 12px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.crumbs { font: 400 11px var(--num); color: var(--suave); }
+.crumbs a { color: var(--suave); }
+.crumbs a:hover { color: var(--tinta); }
+h1 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
+h1 i { width: 14px; height: 14px; border-radius: 50%; background: var(--sol); box-shadow: 0 0 0 4px var(--sol-claro); flex: none; }
+.ferramentas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.ferr {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 7px 2px 6px; border: 1px solid var(--linha); border-radius: 8px; background: var(--campo);
+  font-size: 11px; font-weight: 700; cursor: pointer; line-height: 1.1;
+}
+.ferr svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.ferr:hover { border-color: #b9b3a6; }
+.ferr[aria-pressed="true"] { background: var(--tinta); color: #fff; border-color: var(--tinta); }
+.ferr kbd { font: 400 9px var(--num); opacity: 0.55; }
+.dica { margin: 0; font-size: 12px; color: var(--suave); min-height: 34px; }
+.dica b { color: var(--tinta); }
+
+.vista {
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  padding: 5px; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; justify-content: flex-end;
+  max-width: calc(100vw - 370px);
+}
+.seg { display: inline-flex; border: 1px solid var(--linha); border-radius: 8px; overflow: hidden; background: var(--campo); }
+.seg button { border: 0; background: transparent; padding: 6px 11px; font-weight: 700; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--linha); }
+.seg button[aria-pressed="true"] { background: var(--tinta); color: #fff; }
+.alterna { border: 1px solid var(--linha); background: var(--campo); border-radius: 8px; padding: 6px 10px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.alterna::before { content: ''; width: 9px; height: 9px; border-radius: 3px; border: 1.5px solid currentColor; }
+.alterna[aria-pressed="true"]::before { background: var(--sol); border-color: var(--sol); }
+.icone { border: 1px solid var(--linha); background: var(--campo); border-radius: 8px; width: 32px; height: 32px; display: grid; place-items: center; cursor: pointer; padding: 0; }
+.icone svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.icone:disabled { opacity: 0.35; cursor: default; }
+#btn-painel { display: none; }
+
+.lateral {
+  top: calc(66px + env(safe-area-inset-top, 0px));
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  width: 300px;
+  max-height: calc(100% - 66px - var(--tempo-h) - 34px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.abas { display: flex; border-bottom: 1px solid var(--linha); padding: 0 6px; flex: none; }
+.abas button { flex: 1; border: 0; background: transparent; padding: 10px 4px 8px; font-weight: 700; color: var(--suave); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.abas button[aria-selected="true"] { color: var(--tinta); border-bottom-color: var(--sol); }
+.conteudo { overflow-y: auto; padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+.grupo { display: flex; flex-direction: column; gap: 7px; }
+.grupo + .grupo { padding-top: 12px; border-top: 1px solid var(--linha); }
+.grupo h2 { margin: 0; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: var(--suave); }
+.campo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(128px, 1.25fr); align-items: center; gap: 8px; }
+.campo > span { color: var(--tinta); font-weight: 600; }
+.campo input[type="number"], .campo input[type="text"], .campo select {
+  width: 100%; padding: 5px 7px; border: 1px solid var(--linha); border-radius: 6px; background: var(--campo);
+}
+.campo input[type="number"] { font-family: var(--num); }
+.campo .un { display: flex; align-items: center; gap: 5px; }
+.campo .un em { font-style: normal; color: var(--suave); font-size: 11px; width: 18px; }
+.campo input[type="range"] { width: 100%; accent-color: var(--sol); }
+.check { display: flex; gap: 8px; align-items: center; font-weight: 600; cursor: pointer; }
+.check input { accent-color: var(--sol); width: 15px; height: 15px; }
+.leitura { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; margin: 0; }
+.leitura dt { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: var(--suave); }
+.leitura dd { margin: 1px 0 0; font: 400 13px var(--num); }
+.botoes { display: flex; flex-wrap: wrap; gap: 6px; }
+.botao { border: 1px solid var(--linha); background: var(--campo); border-radius: 7px; padding: 6px 10px; font-weight: 700; cursor: pointer; }
+.botao:hover { border-color: #b9b3a6; }
+.botao.perigo { color: var(--mal); }
+.nota { margin: 0; font-size: 12px; color: var(--suave); }
+.vazio { margin: 0; color: var(--suave); }
+
+.tempo {
+  left: calc(12px + env(safe-area-inset-left, 0px));
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  padding: 9px 12px; display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap;
+}
+.play { width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--sol); color: #fff; display: grid; place-items: center; cursor: pointer; flex: none; }
+.play svg { width: 16px; height: 16px; fill: currentColor; }
+.relogio { display: flex; align-items: center; gap: 10px; flex: 1 1 340px; min-width: 220px; }
+.relogio input[type="range"] { flex: 1; accent-color: var(--sol); }
+#hora-txt { font: 600 20px var(--num); min-width: 62px; text-align: right; }
+.dia { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dia input[type="date"] { padding: 5px 6px; border: 1px solid var(--linha); border-radius: 6px; background: var(--campo); font-family: var(--num); font-size: 12px; }
+.estacao { border: 1px solid var(--linha); background: var(--campo); border-radius: 99px; padding: 4px 9px; font-size: 11px; font-weight: 700; cursor: pointer; }
+.estacao[aria-pressed="true"] { background: var(--sol-claro); border-color: var(--sol); }
+.dia select { padding: 5px 6px; border: 1px solid var(--linha); border-radius: 6px; background: var(--campo); font-size: 12px; }
+.info-sol { display: flex; gap: 14px; font: 400 12px var(--num); color: var(--suave); flex-wrap: wrap; }
+.info-sol b { color: var(--tinta); font-weight: 600; }
+
+#erro { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; font-size: 15px; background: #eef1f3; z-index: 9; }
+
+@media (max-width: 860px) {
+  #btn-painel { display: grid; }
+  body:not(.painel-aberto) .lateral { display: none; }
+  .vista { max-width: calc(100vw - 24px); }
+  body.painel-aberto .topo { display: none; }
+}
+@media (max-width: 560px) {
+  .topo { width: auto; right: calc(12px + env(safe-area-inset-right, 0px)); padding: 10px; gap: 8px; }
+  .ferramentas { grid-template-columns: repeat(7, minmax(42px, 1fr)); }
+  .ferr { font-size: 10px; padding: 6px 0 5px; }
+  .ferr kbd, .crumbs { display: none; }
+  .dica { min-height: 0; font-size: 11px; }
+  .vista {
+    top: calc(var(--topo-h) + 20px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px));
+    background: transparent; border: 0; box-shadow: none; padding: 0; -webkit-backdrop-filter: none; backdrop-filter: none; gap: 5px;
+  }
+  .vista > * { box-shadow: 0 2px 8px rgba(30, 35, 45, 0.12); }
+  .seg button, .alterna { padding: 6px 8px; font-size: 12px; }
+  body.painel-aberto .vista { top: calc(12px + env(safe-area-inset-top, 0px)); }
+  .lateral {
+    top: calc(var(--vista-h) + 22px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); width: auto;
+    max-height: calc(100% - var(--vista-h) - var(--tempo-h) - 44px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  }
+  .tempo { padding: 8px 10px; gap: 6px 10px; }
+  .relogio { flex: 1 1 calc(100% - 52px); min-width: 0; }
+  #hora-txt { font-size: 17px; min-width: 52px; }
+  .dia { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+  .dia::-webkit-scrollbar { display: none; }
+  #vel { display: none; }
+  .estacao { white-space: nowrap; }
+  #estacoes { display: inline-flex; gap: 4px; }
+  .info-sol { gap: 2px 10px; font-size: 11px; }
+}
+</style>
+</head>
+<body>
+<canvas id="cena" tabindex="0" aria-label="Casa em 3D com a luz e as sombras do sol na hora escolhida"></canvas>
+<div id="rotulos" aria-hidden="true"></div>
+
+<header class="topo painel">
+  <nav class="crumbs" aria-label="Caminho"><a href="../../">slop</a> / <a href="../">simulações</a></nav>
+  <h1><i aria-hidden="true"></i>Casa ao Sol</h1>
+  <div class="ferramentas" role="toolbar" aria-label="Ferramentas de desenho">
+    <button type="button" class="ferr" data-ferr="selecionar" title="Selecionar e arrastar (V)"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.6L10 19z"/></svg>Selecionar<kbd>V</kbd></button>
+    <button type="button" class="ferr" data-ferr="parede" title="Parede (P)"><svg viewBox="0 0 24 24"><path d="M4 18V7h9v6h7"/><circle cx="4" cy="18" r="1.2"/><circle cx="20" cy="13" r="1.2"/></svg>Parede<kbd>P</kbd></button>
+    <button type="button" class="ferr" data-ferr="retangulo" title="Cômodo retangular (R)"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="1"/></svg>Cômodo<kbd>R</kbd></button>
+    <button type="button" class="ferr" data-ferr="janela" title="Janela (J)"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1"/><path d="M12 5v14M5 12h14"/></svg>Janela<kbd>J</kbd></button>
+    <button type="button" class="ferr" data-ferr="porta" title="Porta (O)"><svg viewBox="0 0 24 24"><path d="M6 20V4h12v16M4 20h16"/><circle cx="15" cy="12" r="0.8"/></svg>Porta<kbd>O</kbd></button>
+    <button type="button" class="ferr" data-ferr="porta-vidro" title="Porta de vidro (G)"><svg viewBox="0 0 24 24"><path d="M4 20V4h16v16M12 4v16M4 20h16M9 9l-2 2M17 9l-2 2"/></svg>Vidro<kbd>G</kbd></button>
+    <button type="button" class="ferr" data-ferr="arvore" title="Árvore (A)"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="6"/><path d="M12 15v6"/></svg>Árvore<kbd>A</kbd></button>
+  </div>
+  <p class="dica" id="dica"></p>
+</header>
+
+<div class="vista painel" role="toolbar" aria-label="Vista">
+  <div class="seg" role="group" aria-label="Câmera">
+    <button type="button" data-vista="planta" title="Planta vista de cima (T alterna)">Planta</button>
+    <button type="button" data-vista="3d" title="Vista 3D (T alterna)">3D</button>
+  </div>
+  <button type="button" class="alterna" id="ver-dentro" title="Deixa a cobertura invisível, mas ela continua fazendo sombra">Ver por dentro</button>
+  <button type="button" class="alterna" id="ver-traj" title="Mostra o caminho do sol no dia e a rosa dos ventos">Trajetória</button>
+  <button type="button" class="icone" id="desfazer" title="Desfazer (Ctrl+Z)" aria-label="Desfazer"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></svg></button>
+  <button type="button" class="icone" id="refazer" title="Refazer (Ctrl+Shift+Z)" aria-label="Refazer"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 000 10h3"/></svg></button>
+  <button type="button" class="icone" id="btn-painel" title="Painel" aria-label="Abrir o painel"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg></button>
+</div>
+
+<aside class="lateral painel" aria-label="Propriedades">
+  <div class="abas" role="tablist">
+    <button type="button" role="tab" data-aba="selecao" id="aba-selecao">Seleção</button>
+    <button type="button" role="tab" data-aba="casa">Casa</button>
+    <button type="button" role="tab" data-aba="local">Local</button>
+  </div>
+  <div class="conteudo" id="conteudo"></div>
+</aside>
+
+<footer class="tempo painel" aria-label="Data e hora">
+  <button type="button" class="play" id="play" aria-label="Animar o dia" title="Animar o dia (espaço)"><svg viewBox="0 0 16 16" id="play-ico"><path d="M4 2.5v11l9-5.5z"/></svg></button>
+  <div class="relogio">
+    <span id="hora-txt">10:00</span>
+    <input type="range" id="hora" min="0" max="1435" step="5" value="600" aria-label="Hora do dia">
+  </div>
+  <div class="dia">
+    <input type="date" id="data" aria-label="Data">
+    <span id="estacoes"></span>
+    <select id="vel" aria-label="Velocidade da animação" title="Velocidade da animação">
+      <option value="0.5">30 min/s</option>
+      <option value="1" selected>1 h/s</option>
+      <option value="3">3 h/s</option>
+    </select>
+  </div>
+  <div class="info-sol" id="info-sol"></div>
+</footer>
+
+<div id="erro" hidden>Não foi possível carregar o three.js. Verifique a conexão e recarregue a página.</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
+<script id="sim-src">
+/* Motor da Casa ao Sol. Sem three.js e sem DOM: roda igual no navegador e no Node.
+   Unidades: metros e horas; ângulos em graus na interface e em radianos nas contas.
+   A planta fica no plano (x, z): x cresce para a direita da tela e z para baixo,
+   então o "para cima" da planta é -z. A altura é y. */
+const CasaSim = (function () {
+  'use strict';
+
+  const RAD = Math.PI / 180;
+  const TOL_NO = 0.005;     // pontas mais próximas que isto são o mesmo nó
+  const MIN_PAREDE = 0.02;  // parede mais curta que isto some
+  const FOLGA = 0.02;       // folga entre uma abertura e o canto, além da meia espessura da parede
+  const MONTANTE = 0.05;    // parede mínima entre duas aberturas vizinhas
+
+  // ===== Sol =====
+  // Fórmulas de posição do sol do SunCalc (Vladimir Agafonkin), que seguem as do astronomy answers.
+  // Precisão de uma fração de grau, de sobra para sombra de casa.
+  const DIA_MS = 86400000, J1970 = 2440588, J2000 = 2451545;
+  const OBLIQUIDADE = RAD * 23.4397;
+
+  function diasDesdeJ2000(ms) { return ms / DIA_MS - 0.5 + J1970 - J2000; }
+
+  // instante UTC (ms) de uma data e hora locais num fuso fixo, em horas em relação ao UTC (São Paulo é -3)
+  function instanteLocal(data, hora, fuso) {
+    const [a, m, d] = data.split('-').map(Number);
+    return Date.UTC(a, m - 1, d) + (hora - fuso) * 3600000;
+  }
+
+  // altitude acima do horizonte e azimute a partir do norte, no sentido horário (leste = 90°), em radianos
+  function posicaoSol(ms, lat, lon) {
+    const lw = RAD * -lon, phi = RAD * lat, d = diasDesdeJ2000(ms);
+    const M = RAD * (357.5291 + 0.98560028 * d);
+    const C = RAD * (1.9148 * Math.sin(M) + 0.02 * Math.sin(2 * M) + 0.0003 * Math.sin(3 * M));
+    const L = M + C + RAD * 102.9372 + Math.PI;
+    const dec = Math.asin(Math.sin(OBLIQUIDADE) * Math.sin(L));
+    const ra = Math.atan2(Math.sin(L) * Math.cos(OBLIQUIDADE), Math.cos(L));
+    const H = RAD * (280.16 + 360.9856235 * d) - lw - ra;
+    const alt = Math.asin(Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(H));
+    // o SunCalc mede o azimute a partir do sul, crescendo para oeste; aqui passa a ser a partir do norte
+    const azSul = Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(phi) - Math.tan(dec) * Math.cos(phi));
+    const az = ((azSul + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+    return { altitude: alt, azimute: az, declinacao: dec };
+  }
+
+  // vetor unitário que aponta para o sol, no espaço da cena.
+  // norte: para onde aponta a seta do norte, em graus no sentido horário a partir do "para cima" da planta
+  function direcaoSol(altitude, azimute, norte) {
+    const b = azimute + (norte || 0) * RAD, c = Math.cos(altitude);
+    return [Math.sin(b) * c, Math.sin(altitude), -Math.cos(b) * c];
+  }
+
+  // nascer, pôr, meio-dia solar e a trajetória do dia (de 10 em 10 minutos)
+  function diaSolar(data, lat, lon, fuso) {
+    const altEm = (h) => posicaoSol(instanteLocal(data, h, fuso), lat, lon).altitude;
+    const HORIZONTE = -0.833 * RAD; // borda do disco com a refração
+    const passo = 1 / 6;
+    const trajetoria = [];
+    let nascer = null, por = null, meio = 0, altMax = -Infinity;
+    let hAnt = 0, aAnt = altEm(0);
+    for (let k = 0; k <= 144; k++) {
+      const h = k * passo, p = posicaoSol(instanteLocal(data, h, fuso), lat, lon);
+      trajetoria.push({ hora: h, altitude: p.altitude, azimute: p.azimute });
+      if (p.altitude > altMax) { altMax = p.altitude; meio = h; }
+      if (k > 0) {
+        const antes = aAnt - HORIZONTE, agora = p.altitude - HORIZONTE;
+        if (antes < 0 && agora >= 0 && nascer === null) nascer = bissecao(altEm, hAnt, h, HORIZONTE);
+        if (antes >= 0 && agora < 0) por = bissecao(altEm, hAnt, h, HORIZONTE);
+      }
+      hAnt = h; aAnt = p.altitude;
+    }
+    // refina o meio-dia solar entre os vizinhos da amostra mais alta
+    let lo = Math.max(0, meio - passo), hi = Math.min(24, meio + passo);
+    for (let i = 0; i < 40; i++) {
+      const m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3;
+      if (altEm(m1) < altEm(m2)) lo = m1; else hi = m2;
+    }
+    meio = (lo + hi) / 2;
+    return { nascer, por, meio, altitudeMaxima: altEm(meio), trajetoria };
+  }
+
+  function bissecao(f, a, b, alvo) {
+    let fa = f(a) - alvo;
+    for (let i = 0; i < 40; i++) {
+      const m = (a + b) / 2, fm = f(m) - alvo;
+      if ((fm < 0) === (fa < 0)) { a = m; fa = fm; } else b = m;
+    }
+    return (a + b) / 2;
+  }
+
+  const CARDEAIS = ['N', 'NNE', 'NE', 'ENE', 'L', 'ESE', 'SE', 'SSE', 'S', 'SSO', 'SO', 'OSO', 'O', 'ONO', 'NO', 'NNO'];
+  function cardeal(azGraus) {
+    return CARDEAIS[Math.round((((azGraus % 360) + 360) % 360) / 22.5) % 16];
+  }
+
+  // ===== Vetores 2D =====
+  function sub(a, b) { return [a[0] - b[0], a[1] - b[1]]; }
+  function add(a, b) { return [a[0] + b[0], a[1] + b[1]]; }
+  function mul(a, k) { return [a[0] * k, a[1] * k]; }
+  function dot(a, b) { return a[0] * b[0] + a[1] * b[1]; }
+  function cross(a, b) { return a[0] * b[1] - a[1] * b[0]; }
+  function comp(a) { return Math.hypot(a[0], a[1]); }
+  function dist(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
+  function iguais(a, b, tol) { return dist(a, b) <= (tol == null ? TOL_NO : tol); }
+  function arred(x, passo) { return Math.round(x / passo) * passo; }
+  function mm(x) { const r = Math.round(x * 1000) / 1000; return r === 0 ? 0 : r; }
+  function mmP(p) { return [mm(p[0]), mm(p[1])]; }
+
+  // projeção de p no segmento ab: t na reta, tc preso ao segmento
+  function projetar(p, a, b) {
+    const ab = sub(b, a), L2 = dot(ab, ab);
+    if (L2 < 1e-12) return { t: 0, tc: 0, ponto: a.slice(), dist: dist(p, a) };
+    const t = dot(sub(p, a), ab) / L2, tc = Math.max(0, Math.min(1, t));
+    const q = add(a, mul(ab, tc));
+    return { t, tc, ponto: q, dist: dist(p, q) };
+  }
+
+  // cruzamento de dois segmentos não paralelos; t no primeiro e u no segundo
+  function intersecao(a, b, c, d) {
+    const r = sub(b, a), s = sub(d, c), den = cross(r, s);
+    if (Math.abs(den) < 1e-12) return null;
+    const ca = sub(c, a), t = cross(ca, s) / den, u = cross(ca, r) / den;
+    if (t < -1e-9 || t > 1 + 1e-9 || u < -1e-9 || u > 1 + 1e-9) return null;
+    return { t, u, ponto: add(a, mul(r, t)) };
+  }
+
+  function areaAssinada(pts) {
+    let s = 0;
+    for (let i = 0, n = pts.length; i < n; i++) {
+      const p = pts[i], q = pts[(i + 1) % n];
+      s += p[0] * q[1] - q[0] * p[1];
+    }
+    return s / 2;
+  }
+
+  function dentro(p, pts) {
+    let d = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const a = pts[i], b = pts[j];
+      if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) d = !d;
+    }
+    return d;
+  }
+
+  function centroide(pts) {
+    let A = 0, cx = 0, cz = 0;
+    for (let i = 0, n = pts.length; i < n; i++) {
+      const p = pts[i], q = pts[(i + 1) % n], f = p[0] * q[1] - q[0] * p[1];
+      A += f; cx += (p[0] + q[0]) * f; cz += (p[1] + q[1]) * f;
+    }
+    if (Math.abs(A) < 1e-9) {
+      const s = pts.reduce((acc, p) => add(acc, p), [0, 0]);
+      return mul(s, 1 / pts.length);
+    }
+    return [cx / (3 * A), cz / (3 * A)];
+  }
+
+  // ponto dentro do polígono e fora dos furos
+  function dentroComFuros(p, pts, furos) {
+    return dentro(p, pts) && !(furos || []).some((f) => dentro(p, f));
+  }
+
+  // um ponto garantidamente dentro do polígono (e fora dos furos), de preferência longe das bordas
+  function pontoInterno(pts, furos) {
+    furos = furos || [];
+    const aneis = [pts].concat(furos);
+    const c = centroide(pts);
+    let melhor = null, larg = -Infinity;
+    const zs = pts.map((p) => p[1]), z0 = Math.min(...zs), z1 = Math.max(...zs);
+    for (let k = 1; k < 24; k++) {
+      const z = z0 + (z1 - z0) * k / 24, xs = [];
+      for (const anel of aneis) {
+        for (let i = 0, n = anel.length; i < n; i++) {
+          const p = anel[i], q = anel[(i + 1) % n];
+          if ((p[1] > z) !== (q[1] > z)) xs.push(p[0] + (z - p[1]) * (q[0] - p[0]) / (q[1] - p[1]));
+        }
+      }
+      xs.sort((a, b) => a - b);
+      for (let i = 0; i + 1 < xs.length; i += 2) {
+        const w = xs[i + 1] - xs[i] - Math.abs(z - c[1]) * 0.25; // prefere linhas perto do centro
+        if (w > larg) { larg = w; melhor = [(xs[i] + xs[i + 1]) / 2, z]; }
+      }
+    }
+    if (dentroComFuros(c, pts, furos)) {
+      // o centroide serve se não estiver encostado numa borda
+      let dmin = Infinity;
+      for (const anel of aneis) {
+        for (let i = 0, n = anel.length; i < n; i++) dmin = Math.min(dmin, projetar(c, anel[i], anel[(i + 1) % n]).dist);
+      }
+      if (dmin > 0.4 || !melhor) return c;
+    }
+    return melhor || c;
+  }
+
+  // ===== Catálogos =====
+  // U em W/(m²·K) e capacidade térmica (ct) em kJ/(m²·K): valores típicos e aproximados,
+  // guardados para as próximas etapas (calor). fs é o fator solar do vidro.
+  const MATERIAIS = {
+    'tijolo':         { nome: 'Tijolo cerâmico rebocado', tipo: 'parede', U: 2.4, ct: 160 },
+    'bloco-concreto': { nome: 'Bloco de concreto', tipo: 'parede', U: 2.8, ct: 200 },
+    'concreto':       { nome: 'Concreto maciço', tipo: 'parede', U: 4.4, ct: 240 },
+    'drywall':        { nome: 'Drywall com lã mineral', tipo: 'parede', U: 0.6, ct: 20 },
+    'madeira':        { nome: 'Tábuas de madeira', tipo: 'parede', U: 2.0, ct: 30 },
+    'laje-concreto':  { nome: 'Laje de concreto', tipo: 'cobertura', U: 3.7, ct: 220, cor: '#c4c1ba' },
+    'fibrocimento':   { nome: 'Telha de fibrocimento com forro', tipo: 'cobertura', U: 2.0, ct: 20, cor: '#a7abae' },
+    'telha-ceramica': { nome: 'Telha cerâmica com forro', tipo: 'cobertura', U: 2.0, ct: 30, cor: '#b86a4c' },
+    'vidro-simples':  { nome: 'Vidro simples', tipo: 'vidro', U: 5.7, fs: 0.87, cor: '#a8d8f0' },
+    'vidro-duplo':    { nome: 'Vidro duplo', tipo: 'vidro', U: 2.8, fs: 0.75, cor: '#a8d8f0' },
+    'vidro-controle': { nome: 'Vidro de controle solar', tipo: 'vidro', U: 5.5, fs: 0.40, cor: '#6f9fb3' },
+  };
+
+  // cor de acabamento e absortância solar (fração do sol que a superfície absorve)
+  const CORES = {
+    'branco':    { nome: 'Branco', hex: '#f1eee6', abs: 0.2 },
+    'areia':     { nome: 'Areia', hex: '#e2d2b2', abs: 0.4 },
+    'cinza':     { nome: 'Cinza', hex: '#a9abad', abs: 0.6 },
+    'terracota': { nome: 'Terracota', hex: '#c46f4a', abs: 0.7 },
+    'grafite':   { nome: 'Grafite', hex: '#55595f', abs: 0.9 },
+  };
+
+  const TIPOS_ABERTURA = {
+    'janela':      { nome: 'Janela', larg: 1.2, alt: 1.2, peitoril: 1.0, vidro: true },
+    'porta':       { nome: 'Porta', larg: 0.8, alt: 2.1, peitoril: 0, vidro: false },
+    'porta-vidro': { nome: 'Porta de vidro', larg: 1.6, alt: 2.1, peitoril: 0, vidro: true },
+  };
+
+  // ===== Modelo =====
+  function modeloVazio() {
+    return {
+      versao: 1,
+      seq: 1,
+      local: { cidade: 'São Paulo', lat: -23.55, lon: -46.63, fuso: -3, norte: 0 },
+      padrao: { esp: 0.15, alt: 2.8, mat: 'tijolo', cor: 'branco' },
+      cobertura: { tipo: 'laje', mat: 'laje-concreto', beiral: 0.6, esp: 0.15 },
+      paredes: [],
+      aberturas: [],
+      arvores: [],
+      comodos: [], // âncoras: { ponto, nome, coberto } dão nome aos cômodos detectados
+    };
+  }
+
+  function novoId(m, prefixo) { return prefixo + (m.seq++); }
+
+  function novaParede(m, a, b, props) {
+    const p = Object.assign({}, m.padrao, props || {});
+    return { id: novoId(m, 'p'), a: mmP(a), b: mmP(b), esp: p.esp, alt: p.alt, mat: p.mat, cor: p.cor };
+  }
+
+  function novaAbertura(m, parede, pos, tipo, props) {
+    const t = TIPOS_ABERTURA[tipo] || TIPOS_ABERTURA.janela;
+    return Object.assign({
+      id: novoId(m, 'a'), parede, pos: mm(pos), tipo,
+      larg: t.larg, alt: t.alt, peitoril: t.peitoril, aba: 0, vidro: 'vidro-simples',
+    }, props || {});
+  }
+
+  // casa de exemplo: dois quartos a oeste, cozinha a nordeste e sala em L, com a frente para o sul
+  function exemplo() {
+    const m = modeloVazio();
+    const P = (a, b) => { const w = novaParede(m, a, b); m.paredes.push(w); return w; };
+    const A = (w, pos, tipo, props) => m.aberturas.push(novaAbertura(m, w.id, pos, tipo, props));
+    const norte = P([0, 0], [10, 0]), leste = P([10, 0], [10, 8]), sul = P([10, 8], [0, 8]), oeste = P([0, 8], [0, 0]);
+    const meio = P([4, 0], [4, 8]); P([0, 4], [4, 4]);
+    P([7, 0], [7, 3.5]); const coz = P([7, 3.5], [10, 3.5]);
+    A(norte, 2, 'janela', { aba: 0.5 });
+    A(norte, 8.5, 'janela', { larg: 1.0, alt: 1.0, peitoril: 1.1 });
+    A(leste, 6, 'janela', { larg: 1.5 });
+    A(sul, 1.8, 'porta-vidro');
+    A(sul, 4.7, 'porta', { larg: 0.9 });
+    A(sul, 8, 'janela');
+    A(oeste, 2, 'janela', { larg: 1.0 });
+    A(meio, 3, 'porta');
+    A(meio, 5, 'porta');
+    A(coz, 1, 'porta');
+    m.arvores.push({ id: novoId(m, 't'), pos: [-2.5, -2.5], alt: 6, copa: 2.4 });
+    m.comodos.push(
+      { ponto: [2, 2], nome: 'Quarto 1', coberto: true },
+      { ponto: [2, 6], nome: 'Quarto 2', coberto: true },
+      { ponto: [8.5, 1.7], nome: 'Cozinha', coberto: true },
+      { ponto: [6, 5.5], nome: 'Sala', coberto: true },
+    );
+    return normalizar(m);
+  }
+
+  function copia(m) { return JSON.parse(JSON.stringify(m)); }
+
+  // parte a parede w em p; as aberturas depois de p vão para o pedaço novo
+  function dividir(m, w, p) {
+    const L1 = dist(w.a, p);
+    const nova = Object.assign({}, w, { id: novoId(m, 'p'), a: p.slice(), b: w.b.slice() });
+    w.b = p.slice();
+    m.paredes.push(nova);
+    for (const ab of m.aberturas) if (ab.parede === w.id && ab.pos > L1) { ab.parede = nova.id; ab.pos = mm(ab.pos - L1); }
+  }
+
+  function inverter(m, w) {
+    const L = dist(w.a, w.b);
+    [w.a, w.b] = [w.b, w.a];
+    for (const ab of m.aberturas) if (ab.parede === w.id) ab.pos = mm(L - ab.pos);
+  }
+
+  // deixa o modelo consistente: nós fundidos, paredes partidas nos cruzamentos e nos T,
+  // sem duplicadas, trechos alinhados emendados e aberturas cabendo nas suas paredes
+  function normalizar(entrada) {
+    const m = copia(entrada);
+    m.paredes = m.paredes || []; m.aberturas = m.aberturas || []; m.arvores = m.arvores || []; m.comodos = m.comodos || [];
+
+    // 1. coordenadas em milímetros e pontas próximas fundidas no mesmo nó
+    const nos = [];
+    const no = (p) => {
+      const q = mmP(p);
+      for (const n of nos) if (iguais(n, q)) return n.slice();
+      nos.push(q);
+      return q.slice();
+    };
+    for (const w of m.paredes) { w.a = no(w.a); w.b = no(w.b); }
+
+    // 2. paredes curtas demais somem
+    m.paredes = m.paredes.filter((w) => dist(w.a, w.b) >= MIN_PAREDE);
+
+    // 3. parte nos cruzamentos e onde a ponta de uma parede encosta no meio de outra
+    for (let guarda = 0, mudou = true; mudou && guarda < 5000; guarda++) {
+      mudou = false;
+      busca: for (let i = 0; i < m.paredes.length; i++) {
+        for (let j = 0; j < m.paredes.length; j++) {
+          if (i === j) continue;
+          const A = m.paredes[i], B = m.paredes[j];
+          for (const p of [B.a, B.b]) {
+            if (iguais(p, A.a) || iguais(p, A.b)) continue;
+            const pr = projetar(p, A.a, A.b);
+            if (pr.dist <= TOL_NO && pr.t > 0 && pr.t < 1) { dividir(m, A, p); mudou = true; break busca; }
+          }
+          if (j > i) {
+            const x = intersecao(A.a, A.b, B.a, B.b);
+            if (!x) continue;
+            const p = mmP(x.ponto);
+            const meioA = !iguais(p, A.a) && !iguais(p, A.b), meioB = !iguais(p, B.a) && !iguais(p, B.b);
+            if (meioA) dividir(m, A, p);
+            if (meioB) dividir(m, B, p);
+            if (meioA || meioB) { mudou = true; break busca; }
+          }
+        }
+      }
+    }
+
+    // 4. duplicadas (mesmas pontas, em qualquer sentido)
+    for (let i = 0; i < m.paredes.length; i++) {
+      for (let j = m.paredes.length - 1; j > i; j--) {
+        const A = m.paredes[i], B = m.paredes[j];
+        const mesma = iguais(A.a, B.a) && iguais(A.b, B.b), inversa = iguais(A.a, B.b) && iguais(A.b, B.a);
+        if (!mesma && !inversa) continue;
+        const L = dist(A.a, A.b);
+        for (const ab of m.aberturas) if (ab.parede === B.id) { ab.parede = A.id; if (inversa) ab.pos = mm(L - ab.pos); }
+        m.paredes.splice(j, 1);
+      }
+    }
+
+    // 5. emenda trechos alinhados que se encontram num nó só deles e têm as mesmas propriedades
+    for (let guarda = 0, fundiu = true; fundiu && guarda < 5000; guarda++) {
+      fundiu = false;
+      const porNo = new Map();
+      for (const w of m.paredes) for (const p of [w.a, w.b]) {
+        const k = chave(p);
+        if (!porNo.has(k)) porNo.set(k, []);
+        porNo.get(k).push(w);
+      }
+      for (const [k, lista] of porNo) {
+        if (lista.length !== 2) continue;
+        const [A, B] = lista;
+        if (A === B || A.esp !== B.esp || A.alt !== B.alt || A.mat !== B.mat || A.cor !== B.cor) continue;
+        const p = chave(A.a) === k ? A.a : A.b;
+        const outraA = chave(A.a) === k ? A.b : A.a, outraB = chave(B.a) === k ? B.b : B.a;
+        const d1 = sub(p, outraA), d2 = sub(outraB, p);
+        const l1 = comp(d1), l2 = comp(d2);
+        if (Math.abs(cross(d1, d2)) / (l1 * l2) > 1e-4 || dot(d1, d2) <= 0) continue;
+        if (chave(A.b) !== k) inverter(m, A);   // A termina em p
+        if (chave(B.a) !== k) inverter(m, B);   // B começa em p
+        const LA = dist(A.a, A.b);
+        for (const ab of m.aberturas) if (ab.parede === B.id) { ab.parede = A.id; ab.pos = mm(ab.pos + LA); }
+        A.b = B.b.slice();
+        m.paredes.splice(m.paredes.indexOf(B), 1);
+        fundiu = true;
+        break;
+      }
+    }
+
+    // 6. aberturas: só em paredes que existem, dentro delas e sem se sobrepor
+    const porId = new Map(m.paredes.map((w) => [w.id, w]));
+    m.aberturas = m.aberturas.filter((ab) => porId.has(ab.parede));
+    const remover = new Set();
+    for (const w of m.paredes) {
+      const L = dist(w.a, w.b), margem = w.esp / 2 + FOLGA;
+      const lista = m.aberturas.filter((ab) => ab.parede === w.id).sort((x, y) => x.pos - y.pos);
+      let fim = margem - MONTANTE;
+      for (const ab of lista) {
+        ab.peitoril = mm(Math.max(0, Math.min(ab.peitoril, w.alt - 0.3)));
+        ab.alt = mm(Math.min(ab.alt, w.alt - ab.peitoril - 0.05));
+        ab.larg = mm(Math.max(0.3, ab.larg));
+        const min = Math.max(margem, fim + MONTANTE) + ab.larg / 2, max = L - margem - ab.larg / 2;
+        if (ab.alt < 0.2 || max < min - 1e-9) { remover.add(ab); continue; }
+        ab.pos = mm(Math.max(min, Math.min(max, ab.pos)));
+        fim = ab.pos + ab.larg / 2;
+      }
+    }
+    m.aberturas = m.aberturas.filter((ab) => !remover.has(ab));
+    return m;
+  }
+
+  function chave(p) { return Math.round(p[0] * 1000) + ',' + Math.round(p[1] * 1000); }
+
+  // ===== Grafo das paredes e cômodos =====
+  function grafo(paredes) {
+    const nos = [], indice = new Map();
+    const idx = (p) => {
+      const k = chave(p);
+      let i = indice.get(k);
+      if (i === undefined) { i = nos.length; indice.set(k, i); nos.push({ p: p.slice(), saidas: [] }); }
+      return i;
+    };
+    for (const w of paredes) {
+      const i = idx(w.a), j = idx(w.b);
+      if (i === j) continue;
+      nos[i].saidas.push({ para: j, parede: w.id, ang: Math.atan2(w.b[1] - w.a[1], w.b[0] - w.a[0]) });
+      nos[j].saidas.push({ para: i, parede: w.id, ang: Math.atan2(w.a[1] - w.b[1], w.a[0] - w.b[0]) });
+    }
+    for (const n of nos) n.saidas.sort((x, y) => x.ang - y.ang);
+    return { nos, grau: (p) => { const i = indice.get(chave(p)); return i === undefined ? 0 : nos[i].saidas.length; } };
+  }
+
+  // percorre as faces do grafo plano; as faces limitadas (cômodos) saem com área positiva
+  function faces(g) {
+    const visto = new Set(), res = [];
+    g.nos.forEach((n, u0) => n.saidas.forEach((_, k0) => {
+      if (visto.has(u0 + ':' + k0)) return;
+      const ciclo = [];
+      let u = u0, k = k0;
+      for (let guarda = 0; !visto.has(u + ':' + k) && guarda < 100000; guarda++) {
+        visto.add(u + ':' + k);
+        const s = g.nos[u].saidas[k], lista = g.nos[s.para].saidas;
+        ciclo.push(u);
+        const volta = lista.findIndex((x) => x.para === u && x.parede === s.parede);
+        u = s.para;
+        k = (volta - 1 + lista.length) % lista.length;
+      }
+      res.push(ciclo);
+    }));
+    return res;
+  }
+
+  // tira os vaivéns de paredes soltas que entram num cômodo
+  function tirarEspinhos(ciclo) {
+    let c = ciclo.slice();
+    for (let mudou = true; mudou && c.length > 2;) {
+      mudou = false;
+      for (let i = 0; i < c.length; i++) {
+        const n = c.length, ant = c[(i - 1 + n) % n], seg = c[(i + 1) % n];
+        if (ant === seg) {
+          const i1 = (i + 1) % n;
+          c = c.filter((_, j) => j !== i && j !== i1);
+          mudou = true;
+          break;
+        }
+      }
+    }
+    return c;
+  }
+
+  // cômodos são as faces limitadas do grafo. Um grupo de paredes solto dentro de um cômodo
+  // (um pátio, um bloco de armários) vira furo nele.
+  function detectarComodos(m, g) {
+    g = g || grafo(m.paredes);
+    const limitadas = [], contornos = [];
+    for (const ciclo of faces(g)) {
+      const limpo = tirarEspinhos(ciclo);
+      if (limpo.length < 3) continue;
+      const pts = limpo.map((i) => g.nos[i].p);
+      const area = areaAssinada(pts);
+      if (area > 0.05) limitadas.push({ pontos: pts, nos: new Set(limpo), areaBruta: area, furos: [] });
+      else if (area < -0.05) contornos.push({ pontos: pts, nos: new Set(limpo), area: -area });
+    }
+    for (const o of contornos) {
+      let dono = null;
+      for (const f of limitadas) {
+        if ([...o.nos].some((i) => f.nos.has(i))) continue;
+        if (!dentro(o.pontos[0], f.pontos)) continue;
+        if (!dono || f.areaBruta < dono.areaBruta) dono = f;
+      }
+      if (dono) dono.furos.push(o);
+    }
+    const comodos = limitadas.map((f) => {
+      const furos = f.furos.map((o) => o.pontos);
+      return {
+        pontos: f.pontos, furos,
+        area: f.areaBruta - f.furos.reduce((s, o) => s + o.area, 0),
+        centro: pontoInterno(f.pontos, furos),
+      };
+    });
+    comodos.sort((x, y) => (x.centro[1] - y.centro[1]) || (x.centro[0] - y.centro[0]));
+    const usadas = new Set();
+    comodos.forEach((c, i) => {
+      const anc = (m.comodos || []).find((a) => !usadas.has(a) && dentroComFuros(a.ponto, c.pontos, c.furos));
+      if (anc) usadas.add(anc);
+      c.nome = anc ? anc.nome : 'Cômodo ' + (i + 1);
+      c.coberto = anc ? anc.coberto !== false : true;
+      c.ancora = anc ? (m.comodos || []).indexOf(anc) : -1;
+      c.indice = i;
+    });
+    return comodos;
+  }
+
+  function dentroDoComodo(p, c) { return dentroComFuros(p, c.pontos, c.furos); }
+
+  // lado de fora da parede em relação à normal à esquerda (-dz, dx): +1, -1, ou 0 se os dois lados forem iguais.
+  // Só cômodos cobertos contam como dentro: a parede de um pátio descoberto tem o lado de fora no pátio.
+  function ladoExterno(w, comodos) {
+    comodos = comodos.filter((c) => c.coberto);
+    const L = dist(w.a, w.b);
+    if (L < 1e-9) return 0;
+    const d = mul(sub(w.b, w.a), 1 / L), n = [-d[1], d[0]];
+    const meio = mul(add(w.a, w.b), 0.5), off = w.esp / 2 + 0.05;
+    const mais = add(meio, mul(n, off)), menos = add(meio, mul(n, -off));
+    const dm = comodos.some((c) => dentroDoComodo(mais, c)), dn = comodos.some((c) => dentroDoComodo(menos, c));
+    if (dm && !dn) return -1;
+    if (!dm && dn) return 1;
+    return 0;
+  }
+
+  // tudo o que sai do modelo e não é guardado: grafo, cômodos, graus dos nós e lado de fora das paredes
+  function derivar(m) {
+    const g = grafo(m.paredes);
+    const comodos = detectarComodos(m, g);
+    const lados = {}, extensoes = {};
+    for (const w of m.paredes) {
+      lados[w.id] = ladoExterno(w, comodos);
+      extensoes[w.id] = [g.grau(w.a) >= 2 ? w.esp / 2 : 0, g.grau(w.b) >= 2 ? w.esp / 2 : 0];
+    }
+    const nos = g.nos.map((n) => n.p);
+    return { grafo: g, comodos, lados, extensoes, nos };
+  }
+
+  // retângulos (u ao longo da parede, v na altura) que sobram da parede depois de tirar as aberturas
+  function pecasParede(L, alt, ext0, ext1, aberturas) {
+    const lista = aberturas.slice().sort((x, y) => x.pos - y.pos), pecas = [];
+    let cursor = -ext0;
+    const push = (u0, u1, v0, v1) => { if (u1 - u0 > 1e-4 && v1 - v0 > 1e-4) pecas.push({ u0, u1, v0, v1 }); };
+    for (const ab of lista) {
+      const o0 = ab.pos - ab.larg / 2, o1 = ab.pos + ab.larg / 2;
+      push(cursor, o0, 0, alt);
+      push(o0, o1, 0, ab.peitoril);
+      push(o0, o1, ab.peitoril + ab.alt, alt);
+      cursor = o1;
+    }
+    push(cursor, L + ext1, 0, alt);
+    return pecas;
+  }
+
+  // posição da abertura presa à parede; ok = false se não cabe ou bate em outra
+  function encaixarAbertura(m, paredeId, pos, larg, ignorarId) {
+    const w = m.paredes.find((x) => x.id === paredeId);
+    if (!w) return { ok: false, pos };
+    const L = dist(w.a, w.b), margem = w.esp / 2 + FOLGA;
+    const min = margem + larg / 2, max = L - margem - larg / 2;
+    if (max < min) return { ok: false, pos: L / 2 };
+    const p = mm(Math.max(min, Math.min(max, pos)));
+    const bate = m.aberturas.some((ab) => ab.parede === paredeId && ab.id !== ignorarId &&
+      Math.abs(ab.pos - p) < (ab.larg + larg) / 2 + MONTANTE - 1e-9);
+    return { ok: !bate, pos: p };
+  }
+
+  // encaixe do cursor ao desenhar: nó existente, parede (para fazer um T), ângulo redondo e grade
+  function encaixar(p, op) {
+    const paredes = op.paredes || [], raio = op.raio || 0.2, grade = op.grade || 0.1;
+    if (op.livre) return { ponto: mmP(p), tipo: 'livre' };
+    let melhor = null, dmin = raio;
+    for (const w of paredes) for (const q of [w.a, w.b]) {
+      const d = dist(p, q);
+      if (d < dmin) { dmin = d; melhor = { ponto: q.slice(), tipo: 'no' }; }
+    }
+    for (const q of op.extras || []) {
+      const d = dist(p, q);
+      if (d < dmin) { dmin = d; melhor = { ponto: q.slice(), tipo: 'no' }; }
+    }
+    if (melhor) return melhor;
+
+    let perto = null, dperto = raio;
+    for (const w of paredes) {
+      const pr = projetar(p, w.a, w.b);
+      if (pr.dist < dperto && pr.t > 0 && pr.t < 1) { dperto = pr.dist; perto = { w, pr }; }
+    }
+
+    if (op.de) {
+      const v = sub(p, op.de), L = comp(v);
+      if (L > 1e-6) {
+        const passo = (op.passoAngulo || 15) * RAD;
+        const ang = Math.round(Math.atan2(v[1], v[0]) / passo) * passo;
+        const dir = [Math.cos(ang), Math.sin(ang)];
+        if (perto) {
+          // a reta no ângulo redondo cruza a parede perto do cursor? então para nela
+          const longe = add(op.de, mul(dir, L * 4 + 10));
+          const x = intersecao(op.de, longe, perto.w.a, perto.w.b);
+          if (x && dist(x.ponto, p) < raio * 2.5) return { ponto: mmP(x.ponto), tipo: 'parede', parede: perto.w.id, angulo: ang };
+          return { ponto: mmP(perto.pr.ponto), tipo: 'parede', parede: perto.w.id };
+        }
+        const Lr = Math.max(grade, arred(dot(v, dir), grade));
+        return { ponto: mmP(add(op.de, mul(dir, Lr))), tipo: 'angulo', angulo: ang };
+      }
+    }
+    if (perto) {
+      // ao longo da parede, anda de grade em grade a partir da ponta a
+      const w = perto.w, L = dist(w.a, w.b), s = arred(perto.pr.t * L, grade);
+      if (s > 0 && s < L) return { ponto: mmP(add(w.a, mul(sub(w.b, w.a), s / L))), tipo: 'parede', parede: w.id };
+      return { ponto: mmP(perto.pr.ponto), tipo: 'parede', parede: w.id };
+    }
+    return { ponto: [mm(arred(p[0], grade)), mm(arred(p[1], grade))], tipo: 'grade' };
+  }
+
+  // move todas as pontas que estão em "de" para "para" (arrastar um canto leva as paredes junto)
+  function moverNo(m, de, para) {
+    const n = copia(m);
+    for (const w of n.paredes) {
+      if (iguais(w.a, de)) w.a = mmP(para);
+      if (iguais(w.b, de)) w.b = mmP(para);
+    }
+    return n;
+  }
+
+  // contorno da cobertura: união dos cômodos cobertos, alargada pelo beiral (precisa do clipper-lib)
+  function poligonosCobertura(comodos, folga, ClipperLib) {
+    const ESC = 1000;
+    const conv0 = (pts) => pts.map((p) => ({ X: Math.round(p[0] * ESC), Y: Math.round(p[1] * ESC) }));
+    // os furos vêm do contorno externo de outro grupo de paredes, no sentido contrário: com NonZero eles descontam
+    const caminhos = [];
+    for (const c of comodos) { caminhos.push(conv0(c.pontos)); for (const f of c.furos || []) caminhos.push(conv0(f)); }
+    if (!caminhos.length) return [];
+    const cpr = new ClipperLib.Clipper(), uniao = new ClipperLib.Paths();
+    cpr.AddPaths(caminhos, ClipperLib.PolyType.ptSubject, true);
+    cpr.Execute(ClipperLib.ClipType.ctUnion, uniao, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+    const off = new ClipperLib.ClipperOffset(2, 0.25 * ESC), arvore = new ClipperLib.PolyTree();
+    off.AddPaths(uniao, ClipperLib.JoinType.jtMiter, ClipperLib.EndType.etClosedPolygon);
+    off.Execute(arvore, folga * ESC);
+    const res = [];
+    const conv = (cam) => cam.map((q) => [q.X / ESC, q.Y / ESC]);
+    const visitar = (no) => {
+      for (const filho of no.Childs()) {
+        if (filho.IsHole()) continue;
+        res.push({ contorno: conv(filho.Contour()), furos: filho.Childs().map((f) => conv(f.Contour())) });
+        for (const furo of filho.Childs()) visitar(furo);
+      }
+    };
+    visitar(arvore);
+    return res;
+  }
+
+  return {
+    RAD, MATERIAIS, CORES, TIPOS_ABERTURA,
+    instanteLocal, posicaoSol, direcaoSol, diaSolar, cardeal,
+    dist, projetar, intersecao, areaAssinada, dentro, dentroComFuros, dentroDoComodo, centroide, pontoInterno, mm, mmP,
+    modeloVazio, exemplo, novoId, novaParede, novaAbertura, normalizar, copia,
+    grafo, faces, detectarComodos, ladoExterno, derivar, pecasParede, encaixarAbertura, encaixar, moverNo,
+    poligonosCobertura,
+  };
+})();
+if (typeof module !== 'undefined') module.exports = CasaSim;
+</script>
+<script>
+/* Interface: cena three.js, editor de planta, painel e relógio do sol. Usa o CasaSim para tudo que é conta. */
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  if (!window.THREE || !THREE.OrbitControls || !window.ClipperLib) { $('erro').hidden = false; return; }
+
+  const S = CasaSim;
+  const RAD = S.RAD;
+  const CHAVE = 'casa-ao-sol:v1';
+  const toque = matchMedia('(pointer: coarse)').matches;
+  THREE.ColorManagement.legacyMode = false;
+
+  const CIDADES = [
+    ['São Paulo', -23.55, -46.63, -3], ['Rio de Janeiro', -22.91, -43.17, -3], ['Belo Horizonte', -19.92, -43.94, -3],
+    ['Brasília', -15.79, -47.88, -3], ['Salvador', -12.97, -38.50, -3], ['Recife', -8.05, -34.88, -3],
+    ['Fortaleza', -3.73, -38.52, -3], ['Belém', -1.46, -48.49, -3], ['Manaus', -3.12, -60.02, -4],
+    ['Curitiba', -25.43, -49.27, -3], ['Florianópolis', -27.59, -48.55, -3], ['Porto Alegre', -30.03, -51.23, -3],
+    ['Goiânia', -16.68, -49.25, -3], ['Cuiabá', -15.60, -56.10, -4], ['Campo Grande', -20.47, -54.62, -4],
+    ['Vitória', -20.32, -40.34, -3], ['Natal', -5.79, -35.21, -3], ['João Pessoa', -7.12, -34.86, -3],
+    ['Maceió', -9.67, -35.74, -3], ['Aracaju', -10.91, -37.07, -3], ['São Luís', -2.53, -44.30, -3],
+    ['Teresina', -5.09, -42.80, -3], ['Palmas', -10.18, -48.33, -3], ['Porto Velho', -8.76, -63.90, -4],
+    ['Rio Branco', -9.97, -67.81, -5], ['Macapá', 0.03, -51.07, -3], ['Boa Vista', 2.82, -60.67, -4],
+    ['Lisboa', 38.72, -9.14, 0],
+  ];
+
+  const DICAS = {
+    selecionar: '<b>Clique</b> numa parede, abertura, árvore ou cômodo para editar. <b>Arraste</b> um canto para mover as paredes. Arrastar o fundo move a câmera.',
+    parede: '<b>Clique</b> para começar e a cada canto. Termina ao encostar noutra parede, com <b>Esc</b> ou duplo clique. Digite um número para o comprimento exato. <b>Shift</b> solta o encaixe.',
+    retangulo: '<b>Clique</b> em dois cantos opostos para criar um cômodo retangular.',
+    janela: '<b>Clique</b> numa parede para pôr uma janela. Vermelho quer dizer que não cabe ali.',
+    porta: '<b>Clique</b> numa parede para pôr uma porta.',
+    'porta-vidro': '<b>Clique</b> numa parede para pôr uma porta de vidro.',
+    arvore: '<b>Clique</b> no terreno para plantar uma árvore. Ela faz sombra como o resto.',
+  };
+
+  // ---------- Estado ----------
+  const est = {
+    modelo: null, der: null,
+    ferramenta: 'selecionar',
+    sel: null, hover: null,
+    vista: 'planta', verDentro: true, trajetoria: true,
+    data: hojeISO(), hora: 10, tocando: false, vel: 1,
+    grade: 0.1,
+    cadeia: null, retIni: null, cursor: null, digitado: '', fantasma: null,
+    arrasto: null,
+    aba: 'casa', abaAntes: 'casa',
+  };
+  const hist = { antes: [], depois: [] };
+
+  function hojeISO() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  const fmt = (x, c) => (c == null ? 2 : c) === 0 ? String(Math.round(x)) : x.toFixed(c == null ? 2 : c).replace('.', ',');
+  const fmtHora = (h) => {
+    let t = Math.round(h * 60);
+    t = ((t % 1440) + 1440) % 1440;
+    return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
+  };
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const passo = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+  // ---------- Persistência ----------
+  function completar(m) {
+    const v = S.modeloVazio();
+    return Object.assign(v, m, {
+      local: Object.assign(v.local, m.local), padrao: Object.assign(v.padrao, m.padrao),
+      cobertura: Object.assign(v.cobertura, m.cobertura),
+    });
+  }
+  function carregar() {
+    try {
+      const o = JSON.parse(localStorage.getItem(CHAVE) || 'null');
+      if (o && o.modelo && Array.isArray(o.modelo.paredes)) return o;
+    } catch (e) { /* sem armazenamento: começa do exemplo */ }
+    return null;
+  }
+  let timerSalvar = 0;
+  function salvar() {
+    clearTimeout(timerSalvar);
+    timerSalvar = setTimeout(() => {
+      try {
+        localStorage.setItem(CHAVE, JSON.stringify({ modelo: est.modelo, data: est.data, hora: est.hora, vista: est.vista, verDentro: est.verDentro, trajetoria: est.trajetoria }));
+      } catch (e) { /* armazenamento cheio ou bloqueado */ }
+    }, 300);
+  }
+
+  // ---------- Cena ----------
+  const canvas = $('cena');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  const cena = new THREE.Scene();
+
+  const camPlanta = new THREE.OrthographicCamera(-10, 10, 10, -10, 0.1, 600);
+  camPlanta.up.set(0, 0, -1);
+  camPlanta.position.set(0, 200, 0);
+  const cam3d = new THREE.PerspectiveCamera(40, 1, 0.1, 3000);
+  cam3d.position.set(-8, 14, 24);
+
+  const ctlPlanta = new THREE.OrbitControls(camPlanta, canvas);
+  ctlPlanta.enableRotate = false;
+  ctlPlanta.screenSpacePanning = true;
+  ctlPlanta.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+  ctlPlanta.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
+  ctlPlanta.minZoom = 0.08; ctlPlanta.maxZoom = 20;
+  const ctl3d = new THREE.OrbitControls(cam3d, canvas);
+  ctl3d.maxPolarAngle = Math.PI / 2 - 0.02;
+  ctl3d.minDistance = 2; ctl3d.maxDistance = 400;
+  ctl3d.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+  ctl3d.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+  const cam = () => (est.vista === 'planta' ? camPlanta : cam3d);
+  const ctl = () => (est.vista === 'planta' ? ctlPlanta : ctl3d);
+
+  // céu: degradê que acompanha a altura do sol
+  const ceuMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false,
+    uniforms: {
+      topo: { value: new THREE.Color('#3f86d8') }, horiz: { value: new THREE.Color('#cfe5f5') },
+      solDir: { value: new THREE.Vector3(0, 1, 0) }, solCor: { value: new THREE.Color('#fff2d0') },
+    },
+    vertexShader: 'varying vec3 vDir; void main() { vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: [
+      'uniform vec3 topo; uniform vec3 horiz; uniform vec3 solDir; uniform vec3 solCor; varying vec3 vDir;',
+      'void main() {',
+      '  vec3 d = normalize(vDir); float h = max(d.y, 0.0);',
+      '  vec3 c = mix(horiz, topo, pow(h, 0.55));',
+      '  if (d.y < 0.0) c = horiz * 0.8;',
+      '  float s = max(dot(d, normalize(solDir)), 0.0);',
+      '  c += solCor * (pow(s, 900.0) * 2.0 + pow(s, 14.0) * 0.22);',
+      '  gl_FragColor = vec4(c, 1.0);',
+      '  #include <tonemapping_fragment>',
+      '  #include <encodings_fragment>',
+      '}',
+    ].join('\n'),
+  });
+  const ceu = new THREE.Mesh(new THREE.SphereGeometry(1400, 32, 16), ceuMat);
+  ceu.renderOrder = -1;
+  cena.add(ceu);
+
+  const hemi = new THREE.HemisphereLight(0xdcebff, 0x8c8a6e, 0.55);
+  const sol = new THREE.DirectionalLight(0xfff3df, 1.8);
+  sol.castShadow = true;
+  const tamSombra = toque ? 2048 : 4096;
+  sol.shadow.mapSize.set(Math.min(tamSombra, renderer.capabilities.maxTextureSize), Math.min(tamSombra, renderer.capabilities.maxTextureSize));
+  sol.shadow.bias = -0.0003;
+  sol.shadow.normalBias = 0.03;
+  cena.add(hemi, sol, sol.target);
+
+  const chao = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600).rotateX(-Math.PI / 2),
+    new THREE.MeshStandardMaterial({ color: '#b7c69c', roughness: 1 }));
+  chao.receiveShadow = true;
+  cena.add(chao);
+
+  const grade = (() => {
+    const pos1 = [], pos5 = [], N = 60;
+    for (let i = -N; i <= N; i++) {
+      const alvo = i % 5 === 0 ? pos5 : pos1;
+      alvo.push(i, 0, -N, i, 0, N, -N, 0, i, N, 0, i);
+    }
+    const g = new THREE.Group();
+    const linhas = (pos, op) => {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: '#4d5a3f', transparent: true, opacity: op, depthWrite: false }));
+    };
+    g.add(linhas(pos1, 0.10), linhas(pos5, 0.22));
+    g.position.y = 0.004;
+    g.renderOrder = 1;
+    cena.add(g);
+    return g;
+  })();
+
+  const grpCasa = new THREE.Group(), grpPlanta = new THREE.Group(), grpSobre = new THREE.Group(), grpSol = new THREE.Group();
+  cena.add(grpCasa, grpPlanta, grpSobre, grpSol);
+
+  const MAT = {
+    piso: new THREE.MeshStandardMaterial({ color: '#e6d5b6', roughness: 0.85 }),
+    patio: new THREE.MeshStandardMaterial({ color: '#cbc5b8', roughness: 0.95 }),
+    caixilho: new THREE.MeshStandardMaterial({ color: '#3a3e44', roughness: 0.55 }),
+    folha: new THREE.MeshStandardMaterial({ color: '#9b6b45', roughness: 0.7 }),
+    brise: new THREE.MeshStandardMaterial({ color: '#d9d6cf', roughness: 0.9 }),
+    tronco: new THREE.MeshStandardMaterial({ color: '#7a5638', roughness: 0.9 }),
+    copa: new THREE.MeshStandardMaterial({ color: '#5d8e43', roughness: 0.9, flatShading: true }),
+    fantasma: new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }),
+    contorno: new THREE.LineBasicMaterial({ color: '#2b2f36', transparent: true, opacity: 0.6 }),
+    beiral: new THREE.LineDashedMaterial({ color: '#2b2f36', dashSize: 0.25, gapSize: 0.18, transparent: true, opacity: 0.55 }),
+    marcaVidro: new THREE.MeshBasicMaterial({ color: '#3d9be0' }),
+    marcaPorta: new THREE.MeshBasicMaterial({ color: '#9b6b45' }),
+  };
+  const cacheMat = new Map();
+  function matCor(hex, extra) {
+    const k = hex + JSON.stringify(extra || {});
+    if (!cacheMat.has(k)) cacheMat.set(k, new THREE.MeshStandardMaterial(Object.assign({ color: hex, roughness: 0.92 }, extra || {})));
+    return cacheMat.get(k);
+  }
+  function matVidro(id) {
+    const v = S.MATERIAIS[id] || S.MATERIAIS['vidro-simples'];
+    return matCor(v.cor, { transparent: true, opacity: 0.3, roughness: 0.08, metalness: 0.1, depthWrite: false, side: THREE.DoubleSide });
+  }
+
+  function limpar(grupo) {
+    grupo.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+    while (grupo.children.length) grupo.remove(grupo.children[0]);
+  }
+
+  // ---------- Construção da casa ----------
+  let telhados = [];
+  let limites = { cx: 0, cz: 0, r: 8, rc: 6 };
+
+  function quadro(w) {
+    const L = S.dist(w.a, w.b), dx = (w.b[0] - w.a[0]) / L, dz = (w.b[1] - w.a[1]) / L;
+    return { L, dx, dz, nx: -dz, nz: dx, ang: Math.atan2(dz, dx) };
+  }
+
+  function caixa(pai, sx, sy, sz, x, y, z, mat, dados, sombra) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.position.set(x, y, z);
+    m.castShadow = sombra !== false; m.receiveShadow = true;
+    if (dados) m.userData = dados;
+    pai.add(m);
+    return m;
+  }
+
+  function construir() {
+    limpar(grpCasa); limpar(grpPlanta);
+    telhados = [];
+    const m = est.modelo, d = est.der;
+    let xmin = Infinity, xmax = -Infinity, zmin = Infinity, zmax = -Infinity;
+    const cresce = (x, z, r) => { xmin = Math.min(xmin, x - r); xmax = Math.max(xmax, x + r); zmin = Math.min(zmin, z - r); zmax = Math.max(zmax, z + r); };
+    let casaR = null;
+
+    for (const w of m.paredes) {
+      const q = quadro(w), [e0, e1] = d.extensoes[w.id];
+      const dados = { tipo: 'parede', id: w.id };
+      const g = new THREE.Group();
+      g.position.set(w.a[0], 0, w.a[1]);
+      g.rotation.y = -q.ang;
+      const mat = matCor((S.CORES[w.cor] || S.CORES.branco).hex);
+      const abs = m.aberturas.filter((ab) => ab.parede === w.id);
+      for (const pc of S.pecasParede(q.L, w.alt, e0, e1, abs)) {
+        caixa(g, pc.u1 - pc.u0, pc.v1 - pc.v0, w.esp, (pc.u0 + pc.u1) / 2, (pc.v0 + pc.v1) / 2, 0, mat, dados);
+      }
+      // contorno do topo, que na planta desenha a parede
+      const y = w.alt + 0.003, h = w.esp / 2;
+      const geo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-e0, y, -h), new THREE.Vector3(q.L + e1, y, -h), new THREE.Vector3(q.L + e1, y, h), new THREE.Vector3(-e0, y, h),
+      ]);
+      g.add(new THREE.LineLoop(geo, MAT.contorno));
+      for (const ab of abs) construirAbertura(g, w, ab, d.lados[w.id]);
+      grpCasa.add(g);
+      cresce(w.a[0], w.a[1], 0); cresce(w.b[0], w.b[1], 0);
+    }
+
+    for (const c of d.comodos) {
+      const forma = new THREE.Shape(c.pontos.map((p) => new THREE.Vector2(p[0], -p[1])));
+      for (const f of c.furos) forma.holes.push(new THREE.Path(f.map((p) => new THREE.Vector2(p[0], -p[1]))));
+      const geo = new THREE.ShapeGeometry(forma).rotateX(-Math.PI / 2);
+      const piso = new THREE.Mesh(geo, c.coberto ? MAT.piso : MAT.patio);
+      piso.position.y = 0.01;
+      piso.receiveShadow = true;
+      piso.userData = { tipo: 'comodo', ponto: c.centro };
+      grpCasa.add(piso);
+    }
+
+    const cob = m.cobertura;
+    if (cob.tipo !== 'nenhuma') {
+      const cobertos = d.comodos.filter((c) => c.coberto);
+      const espMax = m.paredes.reduce((s, w) => Math.max(s, w.esp), 0.1);
+      const nosCobertos = new Set();
+      for (const c of cobertos) for (const p of c.pontos.concat(...c.furos)) nosCobertos.add(p[0] + ',' + p[1]);
+      const altas = m.paredes.filter((w) => nosCobertos.has(w.a[0] + ',' + w.a[1]) && nosCobertos.has(w.b[0] + ',' + w.b[1]));
+      const H = altas.length ? Math.max(...altas.map((w) => w.alt)) : m.padrao.alt;
+      const corTeto = (S.MATERIAIS[cob.mat] || S.MATERIAIS['laje-concreto']).cor;
+      for (const pg of S.poligonosCobertura(cobertos, cob.beiral + espMax / 2, ClipperLib)) {
+        const forma = new THREE.Shape(pg.contorno.map((p) => new THREE.Vector2(p[0], p[1])));
+        for (const f of pg.furos) forma.holes.push(new THREE.Path(f.map((p) => new THREE.Vector2(p[0], p[1]))));
+        const geo = new THREE.ExtrudeGeometry(forma, { depth: cob.esp, bevelEnabled: false }).rotateX(Math.PI / 2);
+        const teto = new THREE.Mesh(geo, matCor(corTeto));
+        teto.position.y = H + cob.esp;
+        teto.castShadow = true; teto.receiveShadow = true;
+        teto.userData = { tipo: 'teto', corReal: teto.material };
+        telhados.push(teto);
+        grpCasa.add(teto);
+        // contorno tracejado do beiral, para a planta
+        for (const anel of [pg.contorno].concat(pg.furos)) {
+          const pts = anel.concat([anel[0]]).map((p) => new THREE.Vector3(p[0], H + cob.esp + 0.004, p[1]));
+          const linha = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), MAT.beiral);
+          linha.computeLineDistances();
+          grpPlanta.add(linha);
+        }
+        for (const p of pg.contorno) cresce(p[0], p[1], 0);
+      }
+    }
+
+    if (xmin !== Infinity) casaR = { cx: (xmin + xmax) / 2, cz: (zmin + zmax) / 2, r: Math.hypot(xmax - xmin, zmax - zmin) / 2 };
+    for (const t of m.arvores) {
+      const g = new THREE.Group();
+      g.position.set(t.pos[0], 0, t.pos[1]);
+      const dados = { tipo: 'arvore', id: t.id };
+      const hTronco = Math.max(0.5, t.alt - t.copa * 1.2);
+      const tronco = new THREE.Mesh(new THREE.CylinderGeometry(0.1 + t.copa * 0.03, 0.14 + t.copa * 0.04, hTronco + t.copa * 0.5, 8), MAT.tronco);
+      tronco.position.y = (hTronco + t.copa * 0.5) / 2;
+      const copa = new THREE.Mesh(new THREE.IcosahedronGeometry(t.copa, 1), MAT.copa);
+      copa.scale.y = 0.85;
+      copa.position.y = t.alt - t.copa * 0.85;
+      for (const o of [tronco, copa]) { o.castShadow = true; o.receiveShadow = true; o.userData = dados; g.add(o); }
+      grpCasa.add(g);
+      cresce(t.pos[0], t.pos[1], t.copa);
+    }
+
+    if (xmin === Infinity) limites = { cx: 0, cz: 0, r: 8, rc: 6, ccx: 0, ccz: 0 };
+    else {
+      limites = { cx: (xmin + xmax) / 2, cz: (zmin + zmax) / 2, r: Math.max(6, Math.hypot(xmax - xmin, zmax - zmin) / 2) };
+      // a casa sem as árvores: centro e raio da rosa dos ventos e do enquadramento
+      const cr = casaR || { cx: limites.cx, cz: limites.cz, r: 5 };
+      limites.ccx = cr.cx; limites.ccz = cr.cz; limites.rc = Math.max(5, cr.r);
+    }
+    aplicarVisibilidade();
+    construirSol();
+    destacar();
+    pedir();
+  }
+
+  function construirAbertura(g, w, ab, lado) {
+    const tipo = S.TIPOS_ABERTURA[ab.tipo] || S.TIPOS_ABERTURA.janela;
+    const dados = { tipo: 'abertura', id: ab.id };
+    const u = ab.pos, v0 = ab.peitoril, v1 = ab.peitoril + ab.alt, f = 0.05;
+    const prof = Math.min(w.esp * 0.6, 0.09);
+    caixa(g, ab.larg, f, prof, u, v1 - f / 2, 0, MAT.caixilho, dados);
+    if (v0 > 0.001) caixa(g, ab.larg, f, prof, u, v0 + f / 2, 0, MAT.caixilho, dados);
+    caixa(g, f, ab.alt, prof, u - ab.larg / 2 + f / 2, v0 + ab.alt / 2, 0, MAT.caixilho, dados);
+    caixa(g, f, ab.alt, prof, u + ab.larg / 2 - f / 2, v0 + ab.alt / 2, 0, MAT.caixilho, dados);
+    const vaoAlt = ab.alt - f - (v0 > 0.001 ? f : 0), vaoY = (v0 > 0.001 ? v0 + f : v0) + vaoAlt / 2;
+    if (tipo.vidro) {
+      const vidro = new THREE.Mesh(new THREE.PlaneGeometry(ab.larg - 2 * f, vaoAlt), matVidro(ab.vidro));
+      vidro.position.set(u, vaoY, 0);
+      vidro.castShadow = false; vidro.receiveShadow = false;
+      vidro.userData = dados;
+      g.add(vidro);
+      if (ab.larg > 1.05) caixa(g, 0.04, vaoAlt, prof * 0.8, u, vaoY, 0, MAT.caixilho, dados);
+    } else {
+      caixa(g, ab.larg - 2 * f, vaoAlt, 0.04, u, vaoY, 0, MAT.folha, dados);
+    }
+    if (ab.aba > 0 && lado !== 0) {
+      caixa(g, ab.larg + 0.3, 0.06, ab.aba, u, v1 + 0.06, lado * (w.esp / 2 + ab.aba / 2), MAT.brise, dados);
+    }
+    // marca na planta: a abertura aparece como uma faixa colorida em cima da parede
+    const marca = new THREE.Mesh(new THREE.PlaneGeometry(ab.larg, w.esp * 0.55).rotateX(-Math.PI / 2), tipo.vidro ? MAT.marcaVidro : MAT.marcaPorta);
+    marca.position.set(u, w.alt + 0.006, 0);
+    marca.userData = dados;
+    const pl = new THREE.Group();
+    pl.position.copy(g.position); pl.rotation.copy(g.rotation);
+    pl.add(marca);
+    grpPlanta.add(pl);
+  }
+
+  function aplicarVisibilidade() {
+    const fantasma = est.verDentro;
+    for (const t of telhados) {
+      t.material = fantasma ? MAT.fantasma : t.userData.corReal;
+      t.receiveShadow = !fantasma;
+    }
+    grpPlanta.visible = est.vista === 'planta';
+    grade.visible = est.vista === 'planta';
+    pedir();
+  }
+
+  // ---------- Sol ----------
+  let diaInfo = null;
+  const discoSol = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 12), new THREE.MeshBasicMaterial({ color: '#ffd45a', toneMapped: false }));
+  cena.add(discoSol);
+
+  function raioTraj() { return Math.max(limites.rc * 1.2, 7); }
+
+  function construirSol() {
+    limpar(grpSol);
+    const loc = est.modelo.local, R = raioTraj(), c = new THREE.Vector3(limites.ccx, 0, limites.ccz);
+    diaInfo = S.diaSolar(est.data, loc.lat, loc.lon, loc.fuso);
+    // rosa dos ventos: círculo no chão com marcas a cada 15°
+    const pts = [];
+    for (let i = 0; i <= 96; i++) { const a = i / 96 * Math.PI * 2; pts.push(new THREE.Vector3(c.x + Math.cos(a) * R, 0.02, c.z + Math.sin(a) * R)); }
+    const circ = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: '#2b2f36', transparent: true, opacity: 0.35 }));
+    grpSol.add(circ);
+    const marcas = [];
+    for (let k = 0; k < 24; k++) {
+      const b = (k * 15 + loc.norte) * RAD, r0 = k % 6 === 0 ? R * 0.94 : R * 0.97;
+      marcas.push(new THREE.Vector3(c.x + Math.sin(b) * r0, 0.02, c.z - Math.cos(b) * r0), new THREE.Vector3(c.x + Math.sin(b) * R, 0.02, c.z - Math.cos(b) * R));
+    }
+    grpSol.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(marcas), new THREE.LineBasicMaterial({ color: '#2b2f36', transparent: true, opacity: 0.45 })));
+    // trajetória do sol no dia
+    const arco = [];
+    const tr = diaInfo.trajetoria;
+    for (let i = 0; i < tr.length; i++) {
+      const p = tr[i];
+      if (p.altitude < 0) {
+        const viz = tr[i + 1] && tr[i + 1].altitude >= 0 ? tr[i + 1] : (tr[i - 1] && tr[i - 1].altitude >= 0 ? tr[i - 1] : null);
+        if (!viz) continue;
+        const t = p.altitude / (p.altitude - viz.altitude);
+        const d = S.direcaoSol(0, p.azimute + (viz.azimute - p.azimute) * t, loc.norte);
+        arco.push(new THREE.Vector3(c.x + d[0] * R, 0.03, c.z + d[2] * R));
+        continue;
+      }
+      const d = S.direcaoSol(p.altitude, p.azimute, loc.norte);
+      arco.push(new THREE.Vector3(c.x + d[0] * R, d[1] * R, c.z + d[2] * R));
+    }
+    if (arco.length > 1) {
+      grpSol.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(arco), new THREE.LineBasicMaterial({ color: '#f29a1b' })));
+      const sombraArco = arco.map((v) => new THREE.Vector3(v.x, 0.025, v.z));
+      grpSol.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(sombraArco), new THREE.LineDashedMaterial({ color: '#f29a1b', dashSize: 0.3, gapSize: 0.25, transparent: true, opacity: 0.7 })).computeLineDistances());
+    }
+    horasTraj = [];
+    for (let h = 0; h < 24; h++) {
+      const p = S.posicaoSol(S.instanteLocal(est.data, h, loc.fuso), loc.lat, loc.lon);
+      if (p.altitude < 2 * RAD) continue;
+      const d = S.direcaoSol(p.altitude, p.azimute, loc.norte);
+      const pos = new THREE.Vector3(c.x + d[0] * R, d[1] * R, c.z + d[2] * R);
+      const bola = new THREE.Mesh(new THREE.SphereGeometry(R * 0.012, 10, 6), new THREE.MeshBasicMaterial({ color: '#f29a1b' }));
+      bola.position.copy(pos);
+      grpSol.add(bola);
+      horasTraj.push({ h, pos });
+    }
+    discoSol.scale.setScalar(R * 0.03);
+    grpSol.visible = est.trajetoria;
+    estacoes();
+    atualizarSol();
+    rotulosFixos();
+  }
+  let horasTraj = [];
+
+  const CORES_CEU = [
+    [-12, '#0c1730', '#18264a'], [-4, '#253a6e', '#8d6a6a'], [0, '#4a6fae', '#f0a273'],
+    [5, '#5389c9', '#f3c79d'], [15, '#3f86d8', '#cfe5f5'], [90, '#3478cf', '#d6eaf7'],
+  ];
+  const tmpA = new THREE.Color(), tmpB = new THREE.Color();
+  function corCeu(altG, idx) {
+    let i = 0;
+    while (i < CORES_CEU.length - 2 && altG > CORES_CEU[i + 1][0]) i++;
+    const a = CORES_CEU[i], b = CORES_CEU[i + 1];
+    const t = Math.max(0, Math.min(1, (altG - a[0]) / (b[0] - a[0])));
+    return tmpA.set(a[idx]).lerp(tmpB.set(b[idx]), t).clone();
+  }
+
+  let solAgora = null;
+  function atualizarSol() {
+    const loc = est.modelo.local;
+    const ms = S.instanteLocal(est.data, est.hora, loc.fuso);
+    const p = S.posicaoSol(ms, loc.lat, loc.lon);
+    solAgora = p;
+    const altG = p.altitude / RAD;
+    const d = S.direcaoSol(p.altitude, p.azimute, loc.norte);
+    const c = new THREE.Vector3(limites.cx, 0, limites.cz), Rs = limites.r + 2;
+    const dir = new THREE.Vector3(d[0], Math.max(d[1], 0.02), d[2]).normalize();
+    sol.position.copy(c).addScaledVector(dir, Rs * 3);
+    sol.target.position.copy(c);
+    const sc = sol.shadow.camera;
+    sc.left = -Rs; sc.right = Rs; sc.top = Rs; sc.bottom = -Rs; sc.near = 0.5; sc.far = Rs * 3 + Rs * 12;
+    sc.updateProjectionMatrix();
+    const dia = passo(-8, 6, altG), forte = passo(-0.8, 9, altG);
+    sol.intensity = 2.1 * forte;
+    sol.color.set('#ffab62').lerp(tmpB.set('#fff4e4'), passo(0, 28, altG));
+    hemi.intensity = 0.2 + 0.58 * dia;
+    hemi.color.set('#46598c').lerp(tmpB.set('#dcebff'), dia);
+    hemi.groundColor.set('#26281f').lerp(tmpB.set('#8c8a6e'), dia);
+    renderer.toneMappingExposure = 0.85 + 0.2 * dia;
+    ceuMat.uniforms.topo.value.copy(corCeu(altG, 1));
+    ceuMat.uniforms.horiz.value.copy(corCeu(altG, 2));
+    ceuMat.uniforms.solDir.value.set(d[0], d[1], d[2]);
+    ceuMat.uniforms.solCor.value.set('#ffe2ad').multiplyScalar(forte);
+    const R = raioTraj();
+    discoSol.position.set(limites.ccx + d[0] * R, d[1] * R, limites.ccz + d[2] * R);
+    discoSol.visible = altG > -1 && est.trajetoria;
+    atualizarInfoSol();
+    pedir();
+  }
+
+  function atualizarInfoSol() {
+    const p = solAgora, el = $('info-sol');
+    if (!p || !diaInfo) return;
+    const altG = p.altitude / RAD, azG = p.azimute / RAD;
+    const partes = [];
+    if (altG > -0.833) partes.push(`sol a <b>${fmt(altG, 0)}°</b> de altura, rumo <b>${fmt(azG, 0)}° ${S.cardeal(azG)}</b>`);
+    else partes.push('<b>sol abaixo do horizonte</b>');
+    if (diaInfo.nascer != null) partes.push(`nasce <b>${fmtHora(diaInfo.nascer)}</b>`);
+    if (diaInfo.por != null) partes.push(`põe <b>${fmtHora(diaInfo.por)}</b>`);
+    partes.push(`meio-dia solar <b>${fmtHora(diaInfo.meio)}</b> a ${fmt(diaInfo.altitudeMaxima / RAD, 0)}°`);
+    el.innerHTML = partes.map((x) => `<span>${x}</span>`).join('');
+  }
+
+  // ---------- Rótulos em HTML ----------
+  const caixaRot = $('rotulos');
+  const rotulos = new Map();
+  function rotulo(chave, html, pos, classe) {
+    let r = rotulos.get(chave);
+    if (!r) {
+      const el = document.createElement('div');
+      caixaRot.appendChild(el);
+      r = { el, pos: new THREE.Vector3(), html: null, classe: null };
+      rotulos.set(chave, r);
+    }
+    if (r.html !== html) { r.el.innerHTML = html; r.html = html; }
+    if (r.classe !== classe) { r.el.className = 'rot ' + classe; r.classe = classe; }
+    r.pos.copy(pos);
+    r.vivo = true;
+    return r;
+  }
+  function podar(prefixo) {
+    for (const [k, r] of rotulos) {
+      if (k.startsWith(prefixo) && !r.vivo) { r.el.remove(); rotulos.delete(k); }
+    }
+    for (const [k, r] of rotulos) if (k.startsWith(prefixo)) r.vivo = false;
+  }
+  const vtmp = new THREE.Vector3();
+  function posicionarRotulos() {
+    const c = cam(), w = canvas.clientWidth, h = canvas.clientHeight;
+    for (const [k, r] of rotulos) {
+      let vis = true;
+      if (k.startsWith('comodo:') && est.vista !== 'planta') vis = false;
+      if ((k.startsWith('hora:') || k.startsWith('card:')) && !est.trajetoria) vis = false;
+      if (vis) {
+        vtmp.copy(r.pos).project(c);
+        vis = vtmp.z < 1 && vtmp.z > -1 && Math.abs(vtmp.x) < 1.2 && Math.abs(vtmp.y) < 1.2;
+      }
+      if (!vis) { if (r.el.style.display !== 'none') r.el.style.display = 'none'; continue; }
+      if (r.el.style.display === 'none') r.el.style.display = '';
+      const x = (vtmp.x + 1) / 2 * w, y = (1 - vtmp.y) / 2 * h;
+      r.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%)`;
+    }
+  }
+
+  function rotulosFixos() {
+    for (const c of est.der.comodos) {
+      rotulo('comodo:' + c.centro.join(','), `${esc(c.nome)}<span>${fmt(c.area, 1)} m²</span>`, new THREE.Vector3(c.centro[0], 0.1, c.centro[1]), 'rot-comodo');
+    }
+    podar('comodo:');
+    const R = raioTraj(), cx = limites.ccx, cz = limites.ccz, norte = est.modelo.local.norte;
+    [['N', 0], ['L', 90], ['S', 180], ['O', 270]].forEach(([n, a]) => {
+      const b = (a + norte) * RAD;
+      rotulo('card:' + n, n, new THREE.Vector3(cx + Math.sin(b) * (R + 0.9), 0.05, cz - Math.cos(b) * (R + 0.9)), 'rot-card' + (n === 'N' ? ' norte' : ''));
+    });
+    podar('card:');
+    for (const t of horasTraj) rotulo('hora:' + t.h, t.h + 'h', t.pos.clone().add(new THREE.Vector3(0, R * 0.045, 0)), 'rot-hora');
+    podar('hora:');
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  // ---------- Modelo: aplicar mudanças e histórico ----------
+  function aplicar(novo, op) {
+    op = op || {};
+    if (op.historico !== false) {
+      hist.antes.push(JSON.stringify(est.modelo));
+      if (hist.antes.length > 200) hist.antes.shift();
+      hist.depois = [];
+    }
+    est.modelo = S.normalizar(novo);
+    est.der = S.derivar(est.modelo);
+    validarSelecao();
+    construir();
+    salvar();
+    if (op.painel !== false) montarPainel();
+    atualizarBotoesHist();
+  }
+  function desfazer() {
+    if (!hist.antes.length) return;
+    hist.depois.push(JSON.stringify(est.modelo));
+    est.modelo = JSON.parse(hist.antes.pop());
+    pos_historico();
+  }
+  function refazer() {
+    if (!hist.depois.length) return;
+    hist.antes.push(JSON.stringify(est.modelo));
+    est.modelo = JSON.parse(hist.depois.pop());
+    pos_historico();
+  }
+  function pos_historico() {
+    est.der = S.derivar(est.modelo);
+    validarSelecao();
+    construir(); salvar(); montarPainel(); atualizarBotoesHist();
+  }
+  function atualizarBotoesHist() {
+    $('desfazer').disabled = !hist.antes.length;
+    $('refazer').disabled = !hist.depois.length;
+  }
+
+  // ---------- Seleção ----------
+  function acharComodo(ponto) { return est.der.comodos.find((c) => S.dentroDoComodo(ponto, c)) || null; }
+  function objetoSel(sel) {
+    if (!sel) return null;
+    const m = est.modelo;
+    if (sel.tipo === 'parede') return m.paredes.find((w) => w.id === sel.id) || null;
+    if (sel.tipo === 'abertura') return m.aberturas.find((a) => a.id === sel.id) || null;
+    if (sel.tipo === 'arvore') return m.arvores.find((t) => t.id === sel.id) || null;
+    if (sel.tipo === 'comodo') return acharComodo(sel.ponto);
+    return null;
+  }
+  function validarSelecao() {
+    if (est.sel && !objetoSel(est.sel)) est.sel = null;
+    if (est.hover && !objetoSel(est.hover)) est.hover = null;
+  }
+  function selecionar(sel) {
+    const mudou = JSON.stringify(sel) !== JSON.stringify(est.sel);
+    est.sel = sel;
+    if (sel && est.aba !== 'selecao') { est.abaAntes = est.aba; est.aba = 'selecao'; }
+    if (!sel && est.aba === 'selecao') est.aba = est.abaAntes || 'casa';
+    if (mudou) montarPainel();
+    destacar();
+  }
+
+  const MAT_SEL = new THREE.MeshBasicMaterial({ color: '#2f7de1', transparent: true, opacity: 0.32, depthWrite: false });
+  const MAT_HOVER = new THREE.MeshBasicMaterial({ color: '#2f7de1', transparent: true, opacity: 0.14, depthWrite: false });
+  const MAT_OK = new THREE.MeshBasicMaterial({ color: '#2fa35a', transparent: true, opacity: 0.45, depthWrite: false });
+  const MAT_RUIM = new THREE.MeshBasicMaterial({ color: '#d9482b', transparent: true, opacity: 0.45, depthWrite: false });
+  const MAT_NOVA = new THREE.MeshBasicMaterial({ color: '#f29a1b', transparent: true, opacity: 0.45, depthWrite: false });
+  const MAT_PONTO = { no: '#f29a1b', parede: '#2f7de1', angulo: '#1d2128', grade: '#666b73', livre: '#666b73', digitado: '#1d2128' };
+  const cacheMarca = new Map();
+  function matMarca(cor) {
+    if (!cacheMarca.has(cor)) cacheMarca.set(cor, new THREE.MeshBasicMaterial({ color: cor, depthTest: false, transparent: true }));
+    return cacheMarca.get(cor);
+  }
+
+  function realce(sel, mat) {
+    const o = objetoSel(sel);
+    if (!o) return;
+    const m = est.modelo;
+    if (sel.tipo === 'parede') {
+      const q = quadro(o), [e0, e1] = est.der.extensoes[o.id];
+      const g = new THREE.Group();
+      g.position.set(o.a[0], 0, o.a[1]); g.rotation.y = -q.ang;
+      caixa(g, q.L + e0 + e1 + 0.04, o.alt + 0.04, o.esp + 0.06, (q.L + e1 - e0) / 2, o.alt / 2, 0, mat, null, false);
+      grpSobre.add(g);
+      if (mat === MAT_SEL) rotulo('medida:sel', fmt(q.L) + ' m', new THREE.Vector3((o.a[0] + o.b[0]) / 2, o.alt + 0.3, (o.a[1] + o.b[1]) / 2), 'rot-medida sel');
+    } else if (sel.tipo === 'abertura') {
+      const w = m.paredes.find((x) => x.id === o.parede);
+      if (!w) return;
+      const q = quadro(w), g = new THREE.Group();
+      g.position.set(w.a[0], 0, w.a[1]); g.rotation.y = -q.ang;
+      const lado = est.der.lados[w.id], aba = o.aba > 0 && lado ? o.aba : 0;
+      caixa(g, o.larg + 0.08, o.alt + 0.08, w.esp + 0.08 + aba, o.pos, o.peitoril + o.alt / 2, lado * aba / 2, mat, null, false);
+      grpSobre.add(g);
+    } else if (sel.tipo === 'arvore') {
+      const s = new THREE.Mesh(new THREE.CylinderGeometry(o.copa + 0.15, o.copa + 0.15, o.alt + 0.2, 24), mat);
+      s.position.set(o.pos[0], (o.alt + 0.2) / 2, o.pos[1]);
+      grpSobre.add(s);
+    } else if (sel.tipo === 'comodo') {
+      const forma = new THREE.Shape(o.pontos.map((p) => new THREE.Vector2(p[0], -p[1])));
+      for (const f of o.furos) forma.holes.push(new THREE.Path(f.map((p) => new THREE.Vector2(p[0], -p[1]))));
+      const piso = new THREE.Mesh(new THREE.ShapeGeometry(forma).rotateX(-Math.PI / 2), mat);
+      piso.position.y = 0.03;
+      grpSobre.add(piso);
+    }
+  }
+
+  function destacar() {
+    limpar(grpSobre);
+    if (est.hover && JSON.stringify(est.hover) !== JSON.stringify(est.sel)) realce(est.hover, MAT_HOVER);
+    if (est.sel) realce(est.sel, MAT_SEL);
+    desenharFantasma();
+    podar('medida:');
+    pedir();
+  }
+
+  // pré-visualização da ferramenta: parede elástica, retângulo, abertura, árvore e o ponto de encaixe
+  function desenharFantasma() {
+    const m = est.modelo, f = est.fantasma, c = est.cursor;
+    const upp = unidadesPorPixel();
+    if (c && est.ferramenta !== 'selecionar' && !['janela', 'porta', 'porta-vidro'].includes(est.ferramenta)) {
+      const marca = new THREE.Mesh(new THREE.CylinderGeometry(upp * 6, upp * 6, 0.02, 20), matMarca(MAT_PONTO[c.tipo] || '#1d2128'));
+      marca.position.set(c.ponto[0], 0.05, c.ponto[1]);
+      marca.renderOrder = 5;
+      grpSobre.add(marca);
+    }
+    if (est.ferramenta === 'selecionar' && est.noPerto) {
+      const marca = new THREE.Mesh(new THREE.CylinderGeometry(upp * 7, upp * 7, 0.02, 20), matMarca('#2f7de1'));
+      marca.position.set(est.noPerto[0], 0.05, est.noPerto[1]);
+      marca.renderOrder = 5;
+      grpSobre.add(marca);
+    }
+    const paredeFantasma = (a, b, chave) => {
+      const L = S.dist(a, b);
+      if (L < 0.01) return;
+      const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), g = new THREE.Group();
+      g.position.set(a[0], 0, a[1]); g.rotation.y = -ang;
+      caixa(g, L, m.padrao.alt, m.padrao.esp, L / 2, m.padrao.alt / 2, 0, MAT_NOVA, null, false);
+      grpSobre.add(g);
+      if (chave) {
+        let txt = fmt(L) + ' m';
+        if (est.digitado) txt = est.digitado.replace('.', ',') + ' m ↵';
+        rotulo('medida:' + chave, txt, new THREE.Vector3((a[0] + b[0]) / 2, m.padrao.alt + 0.35, (a[1] + b[1]) / 2), 'rot-medida');
+      }
+    };
+    if (est.ferramenta === 'parede' && est.cadeia && c) {
+      paredeFantasma(est.cadeia.pontos[est.cadeia.pontos.length - 1], c.ponto, 'elastico');
+    }
+    if (est.ferramenta === 'retangulo' && est.retIni && c) {
+      const a = est.retIni, b = c.ponto, q = [[a[0], a[1]], [b[0], a[1]], [b[0], b[1]], [a[0], b[1]]];
+      for (let i = 0; i < 4; i++) paredeFantasma(q[i], q[(i + 1) % 4], null);
+      rotulo('medida:ret', `${fmt(Math.abs(b[0] - a[0]))} × ${fmt(Math.abs(b[1] - a[1]))} m`, new THREE.Vector3((a[0] + b[0]) / 2, m.padrao.alt + 0.35, (a[1] + b[1]) / 2), 'rot-medida');
+    }
+    if (f && f.tipo === 'abertura') {
+      const w = m.paredes.find((x) => x.id === f.parede);
+      if (w) {
+        const q = quadro(w), g = new THREE.Group(), t = S.TIPOS_ABERTURA[f.tipoAb];
+        g.position.set(w.a[0], 0, w.a[1]); g.rotation.y = -q.ang;
+        caixa(g, t.larg, Math.min(t.alt, w.alt - t.peitoril - 0.05), w.esp + 0.08, f.pos, t.peitoril + Math.min(t.alt, w.alt - t.peitoril - 0.05) / 2, 0, f.ok ? MAT_OK : MAT_RUIM, null, false);
+        grpSobre.add(g);
+      }
+    }
+    if (f && f.tipo === 'arvore') {
+      const s = new THREE.Mesh(new THREE.IcosahedronGeometry(2.4, 1), MAT_NOVA);
+      s.scale.y = 0.85;
+      s.position.set(f.ponto[0], 6 - 2.4 * 0.85, f.ponto[1]);
+      grpSobre.add(s);
+    }
+  }
+
+  // ---------- Câmera ----------
+  function tamanho() {
+    const w = window.innerWidth, h = window.innerHeight;
+    renderer.setSize(w, h, false);
+    const asp = w / h, meia = 10;
+    camPlanta.left = -meia * asp; camPlanta.right = meia * asp; camPlanta.top = meia; camPlanta.bottom = -meia;
+    camPlanta.updateProjectionMatrix();
+    cam3d.aspect = asp; cam3d.updateProjectionMatrix();
+    pedir();
+  }
+  function unidadesPorPixel() {
+    const h = canvas.clientHeight || 600;
+    if (est.vista === 'planta') return (camPlanta.top - camPlanta.bottom) / camPlanta.zoom / h;
+    const d = cam3d.position.distanceTo(ctl3d.target);
+    return 2 * d * Math.tan(cam3d.fov * RAD / 2) / h;
+  }
+  function enquadrar() {
+    const c = new THREE.Vector3(limites.ccx, 0, limites.ccz), r = limites.rc, R = raioTraj() + 1.4;
+    const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1, asp = w / h;
+    // a rosa dos ventos inteira cabe no pedaço da tela que os painéis deixam livre
+    const L = livre();
+    camPlanta.zoom = Math.max(0.05, Math.min(L.w, L.h) * 0.96 / (2 * R) * 20 / h);
+    camPlanta.updateProjectionMatrix();
+    const upp = 20 / camPlanta.zoom / h;
+    ctlPlanta.target.set(c.x - (L.cx - w / 2) * upp, 0, c.z - (L.cy - h / 2) * upp);
+    camPlanta.position.set(ctlPlanta.target.x, 200, ctlPlanta.target.z);
+    ctlPlanta.update();
+    ctl3d.target.set(c.x, 0.8, c.z + r * 0.1);
+    // distância para a casa caber no campo de visão mais estreito (no celular em pé, o horizontal)
+    const meiaV = cam3d.fov * RAD / 2, meiaH = Math.atan(Math.tan(meiaV) * asp);
+    const dist = r * 1.15 / Math.sin(Math.min(meiaV, meiaH));
+    const dir = new THREE.Vector3(-0.38, 0.78, 0.5).normalize();
+    cam3d.position.copy(ctl3d.target).addScaledVector(dir, dist);
+    ctl3d.update();
+    pedir();
+  }
+  // retângulo da tela sem os painéis: no computador, entre as ferramentas e o painel lateral; no celular, entre a vista e o relógio
+  function livre() {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    const r = (sel) => { const n = document.querySelector(sel); return n && n.getClientRects().length ? n.getBoundingClientRect() : null; };
+    const topo = r('.topo'), vista = r('.vista'), lat = r('.lateral'), tempo = r('.tempo');
+    let x0 = 0, x1 = w, y0 = 0, y1 = tempo ? tempo.top - 8 : h;
+    if (w <= 560) { y0 = Math.max(topo ? topo.bottom : 0, vista ? vista.bottom : 0) + 8; }
+    else {
+      if (topo) x0 = topo.right + 8;
+      if (lat) x1 = lat.left - 8;
+      else if (vista && w > 860) y0 = vista.bottom;
+      if (x1 - x0 < w * 0.4) { x0 = 0; x1 = w; }
+    }
+    return { w: x1 - x0, h: y1 - y0, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
+  }
+
+  function mudarVista(v) {
+    est.vista = v;
+    // na planta, realces e fantasmas ficam por cima de tudo; no 3D respeitam a profundidade
+    for (const mt of [MAT_SEL, MAT_HOVER, MAT_OK, MAT_RUIM, MAT_NOVA]) mt.depthTest = v === '3d';
+    ctlPlanta.enabled = v === 'planta';
+    ctl3d.enabled = v === '3d';
+    document.querySelectorAll('[data-vista]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.vista === v)));
+    aplicarVisibilidade();
+    destacar();
+    salvar();
+  }
+
+  // ---------- Ponteiro ----------
+  const ray = new THREE.Raycaster();
+  ray.params.Line.threshold = 0.01;
+  ray.params.Points.threshold = 0.01;
+  const plano = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const ndc = new THREE.Vector2();
+  function raio(e) {
+    const r = canvas.getBoundingClientRect();
+    ndc.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, cam());
+    return ray;
+  }
+  function pontoChao(e) {
+    const p = new THREE.Vector3();
+    return raio(e).ray.intersectPlane(plano, p) ? [p.x, p.z] : null;
+  }
+  // ponto no plano vertical da parede (no 3D, o chão fica atrás da parede)
+  function pontoNaParede(e, w) {
+    if (est.vista === 'planta') return pontoChao(e);
+    const q = quadro(w), n = new THREE.Vector3(q.nx, 0, q.nz);
+    const pl = new THREE.Plane().setFromNormalAndCoplanarPoint(n, new THREE.Vector3(w.a[0], 0, w.a[1]));
+    const p = new THREE.Vector3();
+    return raio(e).ray.intersectPlane(pl, p) ? [p.x, p.z] : pontoChao(e);
+  }
+  function dadosDe(obj) {
+    for (let o = obj; o; o = o.parent) if (o.userData && o.userData.tipo) return o.userData;
+    return null;
+  }
+
+  // o que está sob o ponteiro
+  function escolher(e) {
+    const m = est.modelo;
+    if (est.vista === '3d') {
+      const hits = raio(e).intersectObjects([grpCasa], true);
+      for (const h of hits) {
+        const d = dadosDe(h.object);
+        if (!d || d.tipo === 'teto') continue;
+        if (d.tipo === 'comodo') return { tipo: 'comodo', ponto: d.ponto };
+        return { tipo: d.tipo, id: d.id };
+      }
+      return null;
+    }
+    const p = pontoChao(e);
+    if (!p) return null;
+    const upp = unidadesPorPixel();
+    let melhor = null, dmin = Infinity;
+    for (const w of m.paredes) {
+      const pr = S.projetar(p, w.a, w.b), tol = Math.max(w.esp / 2, upp * 7);
+      if (pr.dist <= tol && pr.dist < dmin) { dmin = pr.dist; melhor = { w, s: pr.tc * S.dist(w.a, w.b) }; }
+    }
+    if (melhor) {
+      const ab = m.aberturas.find((a) => a.parede === melhor.w.id && Math.abs(a.pos - melhor.s) <= a.larg / 2 + upp * 3);
+      return ab ? { tipo: 'abertura', id: ab.id } : { tipo: 'parede', id: melhor.w.id };
+    }
+    for (const t of m.arvores) if (S.dist(p, t.pos) <= t.copa) return { tipo: 'arvore', id: t.id };
+    const c = acharComodo(p);
+    return c ? { tipo: 'comodo', ponto: c.centro } : null;
+  }
+
+  // parede sob o ponteiro, para pôr ou arrastar uma abertura
+  function paredeSob(e) {
+    const m = est.modelo;
+    if (est.vista === '3d') {
+      const hits = raio(e).intersectObjects([grpCasa], true);
+      for (const h of hits) {
+        const d = dadosDe(h.object);
+        if (!d || d.tipo === 'teto' || d.tipo === 'arvore') continue;
+        let w = null;
+        if (d.tipo === 'parede') w = m.paredes.find((x) => x.id === d.id);
+        if (d.tipo === 'abertura') { const ab = m.aberturas.find((x) => x.id === d.id); w = ab && m.paredes.find((x) => x.id === ab.parede); }
+        if (!w) return null;
+        const pr = S.projetar([h.point.x, h.point.z], w.a, w.b);
+        return { w, s: pr.tc * S.dist(w.a, w.b) };
+      }
+      return null;
+    }
+    const p = pontoChao(e);
+    if (!p) return null;
+    const upp = unidadesPorPixel();
+    let melhor = null, dmin = Infinity;
+    for (const w of m.paredes) {
+      const pr = S.projetar(p, w.a, w.b), tol = Math.max(w.esp, upp * 14);
+      if (pr.dist <= tol && pr.dist < dmin) { dmin = pr.dist; melhor = { w, s: pr.tc * S.dist(w.a, w.b) }; }
+    }
+    return melhor;
+  }
+
+  function opcoesEncaixe(e, de) {
+    const upp = unidadesPorPixel();
+    const paredes = est.modelo.paredes;
+    const extras = est.cadeia ? est.cadeia.pontos.slice(0, -1) : [];
+    return { paredes, raio: Math.max(upp * 12, 0.05), grade: est.grade, de, passoAngulo: 15, livre: e.shiftKey, extras };
+  }
+
+  function noPerto(p) {
+    const tol = unidadesPorPixel() * 10;
+    let melhor = null, dmin = tol;
+    for (const n of est.der.nos) { const d = S.dist(n, p); if (d < dmin) { dmin = d; melhor = n; } }
+    return melhor;
+  }
+
+  const ptrs = new Map();
+  let inicio = null;
+
+  function aoApertar(e) {
+    if (e.target !== canvas) return;
+    ptrs.set(e.pointerId, true);
+    if (ptrs.size > 1) { inicio = null; cancelarArrasto(); return; }
+    inicio = { x: e.clientX, y: e.clientY, botao: e.button, tipo: e.pointerType };
+    if (e.button !== 0 || est.ferramenta !== 'selecionar') return;
+    const alvo = alvoArrasto(e);
+    if (alvo) {
+      est.arrasto = alvo;
+      ctl().enabled = false;
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* sem captura */ }
+    }
+  }
+
+  function alvoArrasto(e) {
+    const p = pontoChao(e);
+    const s = est.sel, o = objetoSel(s);
+    if (s && s.tipo === 'abertura' && o) {
+      const sob = paredeSob(e);
+      if (sob && sob.w.id === o.parede && Math.abs(sob.s - o.pos) <= o.larg / 2 + 0.1) return { tipo: 'abertura', id: o.id, base: S.copia(est.modelo), desloc: sob.s - o.pos };
+    }
+    if (s && s.tipo === 'arvore' && o && p && S.dist(p, o.pos) <= o.copa) return { tipo: 'arvore', id: o.id, base: S.copia(est.modelo), desloc: [p[0] - o.pos[0], p[1] - o.pos[1]] };
+    if (p) {
+      const n = noPerto(p);
+      if (n) return { tipo: 'no', de: n.slice(), base: S.copia(est.modelo) };
+    }
+    return null;
+  }
+
+  function aoMover(e) {
+    if (ptrs.size > 1) return;
+    if (est.arrasto) { arrastar(e); return; }
+    if (e.buttons && inicio) return; // a câmera está andando
+    if (e.pointerType === 'touch') return;
+    pairar(e);
+  }
+
+  function pairar(e) {
+    const f = est.ferramenta;
+    est.fantasma = null; est.noPerto = null;
+    if (f === 'selecionar') {
+      const p = pontoChao(e);
+      est.noPerto = p ? noPerto(p) : null;
+      const h = est.noPerto ? null : escolher(e);
+      if (JSON.stringify(h) !== JSON.stringify(est.hover)) est.hover = h;
+      canvas.style.cursor = est.noPerto ? 'move' : (h ? 'pointer' : 'grab');
+      destacar();
+      return;
+    }
+    est.hover = null;
+    canvas.style.cursor = 'crosshair';
+    if (f === 'parede' || f === 'retangulo') {
+      const p = pontoChao(e);
+      if (!p) return;
+      const de = f === 'parede' && est.cadeia ? est.cadeia.pontos[est.cadeia.pontos.length - 1] : null;
+      est.cursor = S.encaixar(p, opcoesEncaixe(e, de));
+      if (f === 'retangulo' && est.retIni && est.cursor.tipo !== 'no') {
+        est.cursor = { ponto: [S.mm(Math.round(p[0] / est.grade) * est.grade), S.mm(Math.round(p[1] / est.grade) * est.grade)], tipo: 'grade' };
+        if (e.shiftKey) est.cursor = { ponto: S.mmP(p), tipo: 'livre' };
+      }
+    } else if (f === 'janela' || f === 'porta' || f === 'porta-vidro') {
+      const sob = paredeSob(e);
+      if (sob) {
+        const t = S.TIPOS_ABERTURA[f];
+        const r = S.encaixarAbertura(est.modelo, sob.w.id, Math.round(sob.s / 0.05) * 0.05, t.larg, null);
+        est.fantasma = { tipo: 'abertura', tipoAb: f, parede: sob.w.id, pos: r.pos, ok: r.ok };
+      }
+    } else if (f === 'arvore') {
+      const p = pontoChao(e);
+      if (p) est.fantasma = { tipo: 'arvore', ponto: [S.mm(Math.round(p[0] / est.grade) * est.grade), S.mm(Math.round(p[1] / est.grade) * est.grade)] };
+    }
+    destacar();
+  }
+
+  function arrastar(e) {
+    const a = est.arrasto;
+    if (a.tipo === 'no') {
+      const p = pontoChao(e);
+      if (!p) return;
+      const op = opcoesEncaixe(e, null);
+      op.paredes = a.base.paredes.filter((w) => S.dist(w.a, a.de) > 1e-6 && S.dist(w.b, a.de) > 1e-6);
+      op.extras = [];
+      const alvo = S.encaixar(p, op).ponto;
+      est.modelo = S.moverNo(a.base, a.de, alvo);
+      a.ate = alvo;
+      est.noPerto = alvo;
+    } else if (a.tipo === 'abertura') {
+      const ab = a.base.aberturas.find((x) => x.id === a.id), w = a.base.paredes.find((x) => x.id === ab.parede);
+      const p = pontoNaParede(e, w);
+      if (!p) return;
+      const s = S.projetar(p, w.a, w.b).tc * S.dist(w.a, w.b) - a.desloc;
+      const r = S.encaixarAbertura(a.base, w.id, Math.round(s / 0.05) * 0.05, ab.larg, ab.id);
+      const m = S.copia(a.base);
+      m.aberturas.find((x) => x.id === a.id).pos = r.pos;
+      est.modelo = m;
+      a.ok = r.ok;
+    } else if (a.tipo === 'arvore') {
+      const p = pontoChao(e);
+      if (!p) return;
+      const m = S.copia(a.base);
+      const t = m.arvores.find((x) => x.id === a.id);
+      t.pos = [S.mm(Math.round((p[0] - a.desloc[0]) / est.grade) * est.grade), S.mm(Math.round((p[1] - a.desloc[1]) / est.grade) * est.grade)];
+      est.modelo = m;
+    }
+    a.mexeu = true;
+    est.der = S.derivar(est.modelo);
+    validarSelecao();
+    construir();
+  }
+
+  function terminarArrasto() {
+    const a = est.arrasto;
+    est.arrasto = null;
+    ctl().enabled = true;
+    if (!a || !a.mexeu) { est.modelo = a ? a.base : est.modelo; return false; }
+    const final = est.modelo;
+    est.modelo = a.base;
+    if (a.tipo === 'abertura' && a.ok === false) { est.der = S.derivar(est.modelo); construir(); return true; }
+    aplicar(final);
+    return true;
+  }
+  function cancelarArrasto() {
+    if (!est.arrasto) return;
+    est.modelo = est.arrasto.base;
+    est.arrasto = null;
+    ctlPlanta.enabled = est.vista === 'planta'; ctl3d.enabled = est.vista === '3d';
+    est.der = S.derivar(est.modelo);
+    construir();
+  }
+
+  function aoSoltar(e) {
+    ptrs.delete(e.pointerId);
+    if (est.arrasto) {
+      const mexeu = terminarArrasto();
+      if (!mexeu && inicio) clique(e, 0);
+      inicio = null;
+      return;
+    }
+    if (!inicio || e.target !== canvas) { inicio = null; return; }
+    const mov = Math.hypot(e.clientX - inicio.x, e.clientY - inicio.y);
+    const b = inicio.botao;
+    inicio = null;
+    if (mov > (e.pointerType === 'touch' ? 10 : 5)) return;
+    clique(e, b);
+  }
+
+  function clique(e, botao) {
+    const f = est.ferramenta;
+    if (botao === 2) { terminarCadeia(); est.retIni = null; destacar(); return; }
+    if (botao !== 0) return;
+    if (e.pointerType === 'touch') pairar(e);
+    if (f === 'selecionar') { selecionar(escolher(e)); return; }
+    if (f === 'parede') {
+      const p = pontoChao(e);
+      if (!p) return;
+      const de = est.cadeia ? est.cadeia.pontos[est.cadeia.pontos.length - 1] : null;
+      cliqueParede(S.encaixar(p, opcoesEncaixe(e, de)));
+      return;
+    }
+    if (f === 'retangulo') {
+      const c = est.cursor;
+      if (!c) return;
+      if (!est.retIni) { est.retIni = c.ponto; destacar(); return; }
+      const a = est.retIni, b = c.ponto;
+      est.retIni = null;
+      if (Math.abs(b[0] - a[0]) < 0.3 || Math.abs(b[1] - a[1]) < 0.3) { destacar(); return; }
+      const m = S.copia(est.modelo), q = [[a[0], a[1]], [b[0], a[1]], [b[0], b[1]], [a[0], b[1]]];
+      for (let i = 0; i < 4; i++) m.paredes.push(S.novaParede(m, q[i], q[(i + 1) % 4]));
+      aplicar(m);
+      return;
+    }
+    if (f === 'janela' || f === 'porta' || f === 'porta-vidro') {
+      const fa = est.fantasma;
+      if (!fa || fa.tipo !== 'abertura' || !fa.ok) return;
+      const m = S.copia(est.modelo), ab = S.novaAbertura(m, fa.parede, fa.pos, f);
+      m.aberturas.push(ab);
+      est.fantasma = null;
+      aplicar(m);
+      selecionar({ tipo: 'abertura', id: ab.id });
+      return;
+    }
+    if (f === 'arvore') {
+      const fa = est.fantasma;
+      if (!fa) return;
+      const m = S.copia(est.modelo), t = { id: S.novoId(m, 't'), pos: fa.ponto, alt: 6, copa: 2.4 };
+      m.arvores.push(t);
+      aplicar(m);
+      selecionar({ tipo: 'arvore', id: t.id });
+    }
+  }
+
+  function cliqueParede(enc) {
+    const p = enc.ponto;
+    if (!est.cadeia) { est.cadeia = { pontos: [p] }; est.digitado = ''; destacar(); return; }
+    const ult = est.cadeia.pontos[est.cadeia.pontos.length - 1];
+    if (S.dist(ult, p) < 0.05) return;
+    const m = S.copia(est.modelo);
+    m.paredes.push(S.novaParede(m, ult, p));
+    est.cadeia.pontos.push(p);
+    est.digitado = '';
+    aplicar(m);
+    const conectou = enc.tipo === 'no' || enc.tipo === 'parede';
+    if (conectou) terminarCadeia();
+    destacar();
+  }
+  function terminarCadeia() { est.cadeia = null; est.digitado = ''; podar('medida:'); destacar(); }
+
+  function mudarFerramenta(f) {
+    est.ferramenta = f;
+    est.cadeia = null; est.retIni = null; est.fantasma = null; est.cursor = null; est.digitado = ''; est.hover = null; est.noPerto = null;
+    document.querySelectorAll('[data-ferr]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ferr === f)));
+    $('dica').innerHTML = DICAS[f];
+    canvas.style.cursor = f === 'selecionar' ? 'grab' : 'crosshair';
+    destacar();
+  }
+
+  function apagarSelecao() {
+    const s = est.sel;
+    if (!s || s.tipo === 'comodo') return;
+    const m = S.copia(est.modelo);
+    if (s.tipo === 'parede') m.paredes = m.paredes.filter((w) => w.id !== s.id);
+    if (s.tipo === 'abertura') m.aberturas = m.aberturas.filter((a) => a.id !== s.id);
+    if (s.tipo === 'arvore') m.arvores = m.arvores.filter((t) => t.id !== s.id);
+    est.sel = null;
+    if (est.aba === 'selecao') est.aba = est.abaAntes || 'casa';
+    aplicar(m);
+  }
+
+  // ---------- Teclado ----------
+  const ATALHOS = { v: 'selecionar', p: 'parede', r: 'retangulo', j: 'janela', o: 'porta', g: 'porta-vidro', a: 'arvore' };
+  function aoTeclar(e) {
+    const alvo = e.target;
+    const digitando = alvo && (alvo.tagName === 'INPUT' || alvo.tagName === 'SELECT' || alvo.tagName === 'TEXTAREA');
+    if (digitando) { if (e.key === 'Escape') alvo.blur(); return; }
+    const k = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); if (e.shiftKey) refazer(); else desfazer(); return; }
+    if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); refazer(); return; }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (est.ferramenta === 'parede' && est.cadeia) {
+      if (/^[0-9]$/.test(e.key) || ((e.key === ',' || e.key === '.') && !/[.]/.test(est.digitado))) {
+        est.digitado += e.key === ',' ? '.' : e.key; destacar(); e.preventDefault(); return;
+      }
+      if (e.key === 'Backspace' && est.digitado) { est.digitado = est.digitado.slice(0, -1); destacar(); e.preventDefault(); return; }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const L = parseFloat(est.digitado);
+        if (L > 0.05 && est.cursor) {
+          const ult = est.cadeia.pontos[est.cadeia.pontos.length - 1];
+          const v = [est.cursor.ponto[0] - ult[0], est.cursor.ponto[1] - ult[1]], n = Math.hypot(v[0], v[1]) || 1;
+          cliqueParede({ ponto: S.mmP([ult[0] + v[0] / n * L, ult[1] + v[1] / n * L]), tipo: 'digitado' });
+          const p = est.cadeia ? est.cadeia.pontos[est.cadeia.pontos.length - 1] : null;
+          if (p) est.cursor = { ponto: p, tipo: 'no' };
+        } else terminarCadeia();
+        return;
+      }
+    }
+    if (e.key === 'Escape') {
+      if (est.cadeia || est.retIni) { terminarCadeia(); est.retIni = null; destacar(); }
+      else if (est.sel) selecionar(null);
+      else if (est.ferramenta !== 'selecionar') mudarFerramenta('selecionar');
+      return;
+    }
+    if (e.key === 'Enter' && est.cadeia) { terminarCadeia(); return; }
+    if (e.key === 'Delete' || e.key === 'Backspace') { if (est.sel) { e.preventDefault(); apagarSelecao(); } return; }
+    if (e.key === ' ') { e.preventDefault(); alternarPlay(); return; }
+    if (k === 't') { mudarVista(est.vista === 'planta' ? '3d' : 'planta'); return; }
+    if (ATALHOS[k]) mudarFerramenta(ATALHOS[k]);
+  }
+
+  // ---------- Painel ----------
+  const conteudo = $('conteudo');
+  function el(tag, props, filhos) {
+    const n = document.createElement(tag);
+    for (const k in props || {}) {
+      if (k === 'class') n.className = props[k];
+      else if (k === 'html') n.innerHTML = props[k];
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), props[k]);
+      else n.setAttribute(k, props[k]);
+    }
+    for (const f of [].concat(filhos || [])) if (f != null) n.append(f);
+    return n;
+  }
+  function grupo(titulo, filhos) { return el('section', { class: 'grupo' }, [titulo ? el('h2', {}, titulo) : null].concat(filhos)); }
+  function numero(rotulo, valor, op, aoMudar) {
+    const inp = el('input', { type: 'number', step: op.passo || 0.01, min: op.min, max: op.max, value: +(+valor).toFixed(op.casas == null ? 2 : op.casas) });
+    inp.addEventListener('change', () => {
+      let v = parseFloat(String(inp.value).replace(',', '.'));
+      if (!isFinite(v)) return;
+      if (op.min != null) v = Math.max(op.min, v);
+      if (op.max != null) v = Math.min(op.max, v);
+      aoMudar(v);
+    });
+    return el('label', { class: 'campo' }, [el('span', {}, rotulo), el('span', { class: 'un' }, [inp, el('em', {}, op.un || '')])]);
+  }
+  function escolha(rotulo, valor, opcoes, aoMudar) {
+    const sel = el('select', {}, opcoes.map(([v, t]) => el('option', { value: v }, t)));
+    sel.value = valor;
+    sel.addEventListener('change', () => aoMudar(sel.value));
+    return el('label', { class: 'campo' }, [el('span', {}, rotulo), sel]);
+  }
+  function texto(rotulo, valor, aoMudar) {
+    const inp = el('input', { type: 'text', value: valor, maxlength: 40 });
+    inp.addEventListener('change', () => aoMudar(inp.value.trim()));
+    return el('label', { class: 'campo' }, [el('span', {}, rotulo), inp]);
+  }
+  function caixinha(rotulo, valor, aoMudar) {
+    const inp = el('input', { type: 'checkbox' });
+    inp.checked = !!valor;
+    inp.addEventListener('change', () => aoMudar(inp.checked));
+    return el('label', { class: 'check' }, [inp, rotulo]);
+  }
+  function botao(rotulo, aoClicar, classe) { return el('button', { type: 'button', class: 'botao ' + (classe || ''), onclick: aoClicar }, rotulo); }
+  function leitura(pares) { return el('dl', { class: 'leitura' }, pares.map(([k, v]) => el('div', {}, [el('dt', {}, k), el('dd', {}, v)]))); }
+
+  const opcoesMat = (tipo) => Object.entries(S.MATERIAIS).filter(([, v]) => v.tipo === tipo).map(([k, v]) => [k, v.nome]);
+  const opcoesCor = () => Object.entries(S.CORES).map(([k, v]) => [k, `${v.nome} (absorve ${fmt(v.abs * 100, 0)}%)`]);
+
+  function mudarModelo(f) { const m = S.copia(est.modelo); f(m); aplicar(m); }
+
+  function montarPainel() {
+    document.querySelectorAll('[data-aba]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.aba === est.aba)));
+    $('aba-selecao').hidden = !est.sel;
+    conteudo.innerHTML = '';
+    if (est.aba === 'selecao' && est.sel) painelSelecao();
+    else if (est.aba === 'local') painelLocal();
+    else painelCasa();
+  }
+
+  function painelSelecao() {
+    const s = est.sel, o = objetoSel(s), m = est.modelo;
+    if (!o) { conteudo.append(el('p', { class: 'vazio' }, 'Nada selecionado.')); return; }
+    if (s.tipo === 'parede') {
+      const q = quadro(o);
+      conteudo.append(grupo('Parede', [
+        numero('Comprimento', q.L, { min: 0.1, max: 100, passo: 0.05, un: 'm' }, (L) => {
+          const b = [o.a[0] + q.dx * L, o.a[1] + q.dz * L];
+          aplicar(S.moverNo(est.modelo, o.b, b));
+        }),
+        numero('Espessura', o.esp * 100, { min: 5, max: 60, passo: 1, casas: 0, un: 'cm' }, (v) => mudarModelo((n) => { n.paredes.find((w) => w.id === o.id).esp = v / 100; })),
+        numero('Altura', o.alt, { min: 0.3, max: 8, passo: 0.05, un: 'm' }, (v) => mudarModelo((n) => { n.paredes.find((w) => w.id === o.id).alt = v; })),
+        escolha('Material', o.mat, opcoesMat('parede'), (v) => mudarModelo((n) => { n.paredes.find((w) => w.id === o.id).mat = v; })),
+        escolha('Cor', o.cor, opcoesCor(), (v) => mudarModelo((n) => { n.paredes.find((w) => w.id === o.id).cor = v; })),
+        el('div', { class: 'botoes' }, [botao('Apagar parede', apagarSelecao, 'perigo')]),
+      ]));
+      const mat = S.MATERIAIS[o.mat];
+      if (mat) conteudo.append(grupo('Valores térmicos', [leitura([['U', fmt(mat.U, 1) + ' W/m²K'], ['Capacidade', mat.ct + ' kJ/m²K']]), el('p', { class: 'nota' }, 'Típicos e aproximados. Serão usados na etapa de calor.')]));
+    } else if (s.tipo === 'abertura') {
+      const tipo = S.TIPOS_ABERTURA[o.tipo], w = m.paredes.find((x) => x.id === o.parede);
+      const muda = (f) => mudarModelo((n) => f(n.aberturas.find((a) => a.id === o.id)));
+      const campos = [
+        escolha('Tipo', o.tipo, Object.entries(S.TIPOS_ABERTURA).map(([k, v]) => [k, v.nome]), (v) => muda((a) => {
+          const t = S.TIPOS_ABERTURA[v];
+          a.tipo = v; a.peitoril = t.peitoril; a.alt = t.alt;
+        })),
+        numero('Largura', o.larg, { min: 0.3, max: 6, passo: 0.05, un: 'm' }, (v) => muda((a) => { a.larg = v; })),
+        numero('Altura', o.alt, { min: 0.2, max: w ? w.alt : 3, passo: 0.05, un: 'm' }, (v) => muda((a) => { a.alt = v; })),
+      ];
+      if (o.tipo === 'janela') campos.push(numero('Peitoril', o.peitoril, { min: 0, max: 2.5, passo: 0.05, un: 'm' }, (v) => muda((a) => { a.peitoril = v; })));
+      campos.push(numero('Aba (brise)', o.aba, { min: 0, max: 2, passo: 0.05, un: 'm' }, (v) => muda((a) => { a.aba = v; })));
+      if (tipo.vidro) campos.push(escolha('Vidro', o.vidro, opcoesMat('vidro'), (v) => muda((a) => { a.vidro = v; })));
+      campos.push(el('div', { class: 'botoes' }, [botao('Apagar ' + tipo.nome.toLowerCase(), apagarSelecao, 'perigo')]));
+      conteudo.append(grupo(tipo.nome, campos));
+      const notas = [];
+      if (o.aba > 0 && w && est.der.lados[w.id] === 0) notas.push('A aba só aparece em parede que tem um lado de fora (cômodo coberto de um lado só).');
+      notas.push('A aba é uma laje fina em cima da abertura, do lado de fora. Ela corta o sol alto e deixa passar o baixo.');
+      conteudo.append(grupo(null, notas.map((t) => el('p', { class: 'nota' }, t))));
+    } else if (s.tipo === 'arvore') {
+      const muda = (f) => mudarModelo((n) => f(n.arvores.find((t) => t.id === o.id)));
+      conteudo.append(grupo('Árvore', [
+        numero('Altura', o.alt, { min: 1.5, max: 30, passo: 0.5, un: 'm' }, (v) => muda((t) => { t.alt = v; t.copa = Math.min(t.copa, v * 0.45); })),
+        numero('Raio da copa', o.copa, { min: 0.5, max: 10, passo: 0.1, un: 'm' }, (v) => muda((t) => { t.copa = Math.min(v, t.alt * 0.45); })),
+        el('div', { class: 'botoes' }, [botao('Apagar árvore', apagarSelecao, 'perigo')]),
+      ]));
+    } else if (s.tipo === 'comodo') {
+      const c = o;
+      const ancorar = (props) => mudarModelo((n) => {
+        if (c.ancora >= 0 && n.comodos[c.ancora]) Object.assign(n.comodos[c.ancora], props, { ponto: c.centro });
+        else n.comodos.push(Object.assign({ ponto: c.centro, nome: c.nome, coberto: c.coberto }, props));
+      });
+      const perim = c.pontos.reduce((s2, p, i) => s2 + S.dist(p, c.pontos[(i + 1) % c.pontos.length]), 0);
+      conteudo.append(grupo('Cômodo', [
+        texto('Nome', c.nome, (v) => { if (v) ancorar({ nome: v }); }),
+        leitura([['Área', fmt(c.area, 1) + ' m²'], ['Perímetro', fmt(perim, 1) + ' m']]),
+        caixinha('Coberto', c.coberto, (v) => ancorar({ coberto: v })),
+        el('p', { class: 'nota' }, 'Medidas pelo eixo das paredes. Um cômodo descoberto vira pátio: fica sem laje, e o lado de fora das paredes em volta passa a ser ele.'),
+      ]));
+    }
+  }
+
+  function painelCasa() {
+    const m = est.modelo, d = est.der;
+    const area = d.comodos.filter((c) => c.coberto).reduce((s, c) => s + c.area, 0);
+    conteudo.append(grupo('Resumo', [leitura([
+      ['Cômodos', String(d.comodos.length)], ['Área coberta', fmt(area, 1) + ' m²'],
+      ['Paredes', String(m.paredes.length)], ['Aberturas', String(m.aberturas.length)],
+    ])]));
+    const padrao = (f) => mudarModelo((n) => f(n.padrao));
+    conteudo.append(grupo('Paredes novas', [
+      numero('Espessura', m.padrao.esp * 100, { min: 5, max: 60, passo: 1, casas: 0, un: 'cm' }, (v) => padrao((p) => { p.esp = v / 100; })),
+      numero('Altura', m.padrao.alt, { min: 0.3, max: 8, passo: 0.05, un: 'm' }, (v) => padrao((p) => { p.alt = v; })),
+      escolha('Material', m.padrao.mat, opcoesMat('parede'), (v) => padrao((p) => { p.mat = v; })),
+      escolha('Cor', m.padrao.cor, opcoesCor(), (v) => padrao((p) => { p.cor = v; })),
+      escolha('Encaixe na grade', String(est.grade), [['0.05', '5 cm'], ['0.1', '10 cm'], ['0.25', '25 cm'], ['0.5', '50 cm']], (v) => { est.grade = parseFloat(v); }),
+    ]));
+    const cob = (f) => mudarModelo((n) => f(n.cobertura));
+    const camposCob = [escolha('Cobertura', m.cobertura.tipo, [['laje', 'Laje plana'], ['nenhuma', 'Sem cobertura']], (v) => cob((c) => { c.tipo = v; }))];
+    if (m.cobertura.tipo !== 'nenhuma') {
+      camposCob.push(
+        escolha('Material', m.cobertura.mat, opcoesMat('cobertura'), (v) => cob((c) => { c.mat = v; })),
+        numero('Beiral', m.cobertura.beiral, { min: 0, max: 3, passo: 0.05, un: 'm' }, (v) => cob((c) => { c.beiral = v; })),
+        numero('Espessura', m.cobertura.esp * 100, { min: 5, max: 60, passo: 1, casas: 0, un: 'cm' }, (v) => cob((c) => { c.esp = v / 100; })),
+      );
+    }
+    camposCob.push(el('p', { class: 'nota' }, '"Ver por dentro" deixa a cobertura invisível, mas ela continua fazendo sombra.'));
+    conteudo.append(grupo('Cobertura', camposCob));
+    const arquivo = el('input', { type: 'file', accept: '.json,application/json', hidden: '' });
+    arquivo.addEventListener('change', () => importar(arquivo.files[0]));
+    conteudo.append(grupo('Arquivo', [
+      el('div', { class: 'botoes' }, [
+        botao('Exportar', exportar), botao('Importar', () => arquivo.click()),
+        botao('Casa de exemplo', () => { est.sel = null; aplicar(Object.assign(S.exemplo(), { local: est.modelo.local })); enquadrar(); }),
+        botao('Começar do zero', () => { est.sel = null; aplicar(Object.assign(S.modeloVazio(), { local: est.modelo.local, padrao: est.modelo.padrao })); mudarFerramenta('retangulo'); }),
+      ]),
+      arquivo,
+      el('p', { class: 'nota' }, 'A casa fica guardada neste navegador. Desfazer (Ctrl+Z) volta qualquer passo.'),
+    ]));
+    conteudo.append(grupo('O que vem depois', [el('p', { class: 'nota' }, 'Por enquanto a simulação mostra o sol e as sombras. As próximas etapas medem a luz natural em cada cômodo, o calor ao longo do dia e a ventilação pelas janelas abertas.')]));
+  }
+
+  function painelLocal() {
+    const loc = est.modelo.local;
+    const muda = (f) => { mudarModelo((n) => f(n.local)); };
+    const opcoes = CIDADES.map((c) => [c[0], c[0]]);
+    const conhecida = CIDADES.some((c) => c[0] === loc.cidade);
+    if (!conhecida) opcoes.unshift([loc.cidade || 'Personalizado', loc.cidade || 'Personalizado']);
+    conteudo.append(grupo('Onde fica a casa', [
+      escolha('Cidade', loc.cidade || 'Personalizado', opcoes, (v) => {
+        const c = CIDADES.find((x) => x[0] === v);
+        if (c) muda((l) => { l.cidade = c[0]; l.lat = c[1]; l.lon = c[2]; l.fuso = c[3]; });
+      }),
+      numero('Latitude', loc.lat, { min: -66, max: 66, passo: 0.01, un: '°' }, (v) => muda((l) => { l.lat = v; l.cidade = 'Personalizado'; })),
+      numero('Longitude', loc.lon, { min: -180, max: 180, passo: 0.01, un: '°' }, (v) => muda((l) => { l.lon = v; l.cidade = 'Personalizado'; })),
+      numero('Fuso (UTC)', loc.fuso, { min: -12, max: 14, passo: 0.5, casas: 1, un: 'h' }, (v) => muda((l) => { l.fuso = v; l.cidade = 'Personalizado'; })),
+      el('div', { class: 'botoes' }, [botao('Usar minha localização', usarLocalizacao)]),
+      el('p', { class: 'nota' }, 'Latitude negativa é hemisfério sul: lá o sol do meio-dia fica ao norte. O fuso não considera horário de verão.'),
+    ]));
+    const faixa = el('input', { type: 'range', min: 0, max: 359, step: 1, value: Math.round(loc.norte) });
+    const valor = el('em', {}, Math.round(loc.norte) + '°');
+    faixa.addEventListener('input', () => {
+      valor.textContent = faixa.value + '°';
+      est.modelo.local.norte = +faixa.value;
+      construirSol();
+    });
+    const norteOriginal = loc.norte;
+    faixa.addEventListener('change', () => {
+      const v = +faixa.value;
+      est.modelo.local.norte = norteOriginal;
+      muda((l) => { l.norte = v; });
+    });
+    conteudo.append(grupo('Orientação', [
+      el('label', { class: 'campo' }, [el('span', {}, 'Norte'), el('span', { class: 'un' }, [faixa, valor])]),
+      el('p', { class: 'nota' }, 'Gire para dizer para onde fica o norte no desenho. Com 0°, o norte é o alto da planta.'),
+    ]));
+  }
+
+  function usarLocalizacao() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition((pos) => {
+      mudarModelo((n) => {
+        n.local.lat = Math.round(pos.coords.latitude * 100) / 100;
+        n.local.lon = Math.round(pos.coords.longitude * 100) / 100;
+        n.local.fuso = -new Date().getTimezoneOffset() / 60;
+        n.local.cidade = 'Minha localização';
+      });
+    }, () => {}, { timeout: 10000 });
+  }
+
+  function exportar() {
+    const blob = new Blob([JSON.stringify(est.modelo, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'casa-ao-sol.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  function importar(arq) {
+    if (!arq) return;
+    arq.text().then((t) => {
+      const m = JSON.parse(t);
+      if (!m || !Array.isArray(m.paredes)) throw new Error('arquivo sem paredes');
+      est.sel = null;
+      aplicar(completar(m));
+      enquadrar();
+    }).catch(() => { $('dica').textContent = 'Não consegui ler esse arquivo. Ele precisa ser um JSON exportado daqui.'; });
+  }
+
+  // ---------- Tempo ----------
+  const inpHora = $('hora'), inpData = $('data');
+  function mostrarHora() {
+    inpHora.value = String(Math.round(est.hora * 60 / 5) * 5 % 1440);
+    $('hora-txt').textContent = fmtHora(est.hora);
+  }
+  function estacoes() {
+    const ano = est.data.slice(0, 4), sul = est.modelo.local.lat < 0;
+    const lista = [
+      [ano + '-03-20', sul ? 'outono' : 'primavera'], [ano + '-06-21', sul ? 'inverno' : 'verão'],
+      [ano + '-09-22', sul ? 'primavera' : 'outono'], [ano + '-12-21', sul ? 'verão' : 'inverno'],
+    ];
+    const box = $('estacoes');
+    box.innerHTML = '';
+    for (const [d, n] of lista) {
+      const b = el('button', { type: 'button', class: 'estacao', title: 'Início do ' + n + ' (' + d.slice(8) + '/' + d.slice(5, 7) + ')', 'aria-pressed': String(est.data === d) }, n);
+      b.addEventListener('click', () => mudarData(d));
+      box.append(b, ' ');
+    }
+  }
+  function mudarData(d) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+    est.data = d;
+    inpData.value = d;
+    estacoes();
+    construirSol();
+    salvar();
+  }
+  function alternarPlay() {
+    est.tocando = !est.tocando;
+    $('play-ico').innerHTML = est.tocando ? '<path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/>' : '<path d="M4 2.5v11l9-5.5z"/>';
+    $('play').setAttribute('aria-label', est.tocando ? 'Pausar' : 'Animar o dia');
+    if (est.tocando && diaInfo && diaInfo.nascer != null && (est.hora > diaInfo.por + 0.25 || est.hora < diaInfo.nascer - 0.5)) est.hora = diaInfo.nascer - 0.25;
+  }
+
+  // ---------- Laço de desenho ----------
+  let sujo = true, tAnt = performance.now(), ultimoTexto = 0;
+  function pedir() { sujo = true; }
+  function laco(t) {
+    requestAnimationFrame(laco);
+    const dt = Math.min(0.1, (t - tAnt) / 1000);
+    tAnt = t;
+    if (est.tocando) {
+      est.hora += dt * est.vel;
+      const fim = diaInfo && diaInfo.por != null ? diaInfo.por + 0.25 : 24;
+      const ini = diaInfo && diaInfo.nascer != null ? diaInfo.nascer - 0.25 : 0;
+      if (est.hora > fim) est.hora = ini;
+      atualizarSol();
+      if (t - ultimoTexto > 60) { mostrarHora(); ultimoTexto = t; }
+    }
+    if (!sujo) return;
+    sujo = false;
+    renderer.render(cena, cam());
+    posicionarRotulos();
+  }
+
+  // ---------- Ligações ----------
+  document.querySelectorAll('[data-ferr]').forEach((b) => b.addEventListener('click', () => mudarFerramenta(b.dataset.ferr)));
+  document.querySelectorAll('[data-vista]').forEach((b) => b.addEventListener('click', () => mudarVista(b.dataset.vista)));
+  document.querySelectorAll('[data-aba]').forEach((b) => b.addEventListener('click', () => { est.aba = b.dataset.aba; montarPainel(); }));
+  $('ver-dentro').addEventListener('click', () => {
+    est.verDentro = !est.verDentro;
+    $('ver-dentro').setAttribute('aria-pressed', String(est.verDentro));
+    aplicarVisibilidade(); salvar();
+  });
+  $('ver-traj').addEventListener('click', () => {
+    est.trajetoria = !est.trajetoria;
+    $('ver-traj').setAttribute('aria-pressed', String(est.trajetoria));
+    grpSol.visible = est.trajetoria;
+    discoSol.visible = est.trajetoria && solAgora && solAgora.altitude > -RAD;
+    pedir(); salvar();
+  });
+  $('desfazer').addEventListener('click', desfazer);
+  $('refazer').addEventListener('click', refazer);
+  $('btn-painel').addEventListener('click', () => { document.body.classList.toggle('painel-aberto'); });
+  $('play').addEventListener('click', alternarPlay);
+  $('vel').addEventListener('change', (e) => { est.vel = parseFloat(e.target.value); });
+  inpHora.addEventListener('input', () => { est.hora = +inpHora.value / 60; $('hora-txt').textContent = fmtHora(est.hora); atualizarSol(); salvar(); });
+  inpData.addEventListener('change', () => mudarData(inpData.value));
+  canvas.addEventListener('pointerdown', aoApertar, true);
+  canvas.addEventListener('pointermove', aoMover);
+  window.addEventListener('pointerup', aoSoltar);
+  window.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId); cancelarArrasto(); inicio = null; });
+  canvas.addEventListener('pointerleave', () => { if (!est.arrasto && (est.hover || est.fantasma || est.noPerto)) { est.hover = null; est.fantasma = null; est.noPerto = null; destacar(); } });
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  canvas.addEventListener('dblclick', () => { if (est.cadeia) terminarCadeia(); });
+  window.addEventListener('keydown', aoTeclar);
+  window.addEventListener('resize', tamanho);
+  ctlPlanta.addEventListener('change', () => { pedir(); if (est.cursor || est.noPerto) destacar(); });
+  ctl3d.addEventListener('change', pedir);
+
+  // alturas dos painéis em variáveis CSS, para o celular empilhar tudo sem sobrepor
+  const raiz = document.documentElement.style;
+  const medir = () => {
+    raiz.setProperty('--topo-h', document.querySelector('.topo').offsetHeight + 'px');
+    raiz.setProperty('--vista-h', document.querySelector('.vista').offsetHeight + 'px');
+    raiz.setProperty('--tempo-h', document.querySelector('.tempo').offsetHeight + 'px');
+  };
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(medir);
+    document.querySelectorAll('.topo, .vista, .tempo').forEach((n) => ro.observe(n));
+  }
+  medir();
+
+  // ---------- Início ----------
+  const salvo = carregar();
+  if (salvo) {
+    est.modelo = S.normalizar(completar(salvo.modelo));
+    if (/^\d{4}-\d{2}-\d{2}$/.test(salvo.data || '')) est.data = salvo.data;
+    if (typeof salvo.hora === 'number') est.hora = salvo.hora;
+    if (salvo.vista === '3d' || salvo.vista === 'planta') est.vista = salvo.vista;
+    if (typeof salvo.verDentro === 'boolean') est.verDentro = salvo.verDentro;
+    if (typeof salvo.trajetoria === 'boolean') est.trajetoria = salvo.trajetoria;
+  } else {
+    est.modelo = S.exemplo();
+  }
+  est.der = S.derivar(est.modelo);
+  $('ver-dentro').setAttribute('aria-pressed', String(est.verDentro));
+  $('ver-traj').setAttribute('aria-pressed', String(est.trajetoria));
+  inpData.value = est.data;
+  tamanho();
+  construir();
+  enquadrar();
+  mudarVista(est.vista);
+  mudarFerramenta('selecionar');
+  estacoes();
+  mostrarHora();
+  montarPainel();
+  atualizarBotoesHist();
+  requestAnimationFrame(laco);
+  window.casaAoSol = { est, S, aplicar, mudarVista, mudarFerramenta, selecionar, construirSol, atualizarSol, enquadrar, pedir, mudarData, mostrarHora, cam, canvas,
+    paraTela: (x, y, z) => { const v = new THREE.Vector3(x, y, z).project(cam()); return [(v.x + 1) / 2 * canvas.clientWidth, (1 - v.y) / 2 * canvas.clientHeight]; } };
+})();
+</script>
+</body>
+</html>

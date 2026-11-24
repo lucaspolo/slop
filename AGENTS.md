@@ -84,6 +84,24 @@ Os desenhos ficam dentro do script do jogo, então o visualizador é um modo da 
 
 O motor da simulação fica entre `// ===== MOTOR INÍCIO =====` e `// ===== MOTOR FIM =====` e não toca no DOM: dá para carregar esse trecho no node e rodar horas simuladas contra a teoria (M/M/1, M/M/c pelo Erlang C, M/D/1 e a lei de Little). Os números citados no texto dos capítulos saíram dessas contas; mudou o motor ou um cenário, confira de novo.
 
+### Casa ao Sol
+
+Editor de planta com sol e sombras. O motor fica no `<script id="sim-src">` (o objeto `CasaSim`) e não toca no DOM nem no three.js, então dá para carregar esse trecho no node e testar. Ele cuida de:
+
+- posição do sol, com as fórmulas do SunCalc (azimute convertido para a partir do norte), nascer, pôr e trajetória do dia;
+- normalização da planta: pontas fundidas num nó, paredes partidas nos cruzamentos e nos T, duplicadas removidas, trechos alinhados emendados e aberturas presas dentro das suas paredes;
+- cômodos como faces do grafo das paredes; um grupo de paredes solto dentro de um cômodo (um pátio) vira furo nele;
+- peças das paredes em volta das aberturas e contorno da cobertura, pelo clipper-lib, que entra como parâmetro.
+
+Regras da página:
+
+- O modelo salvo (no `localStorage` e no JSON exportado) guarda paredes, aberturas, árvores, cobertura, local e as âncoras dos cômodos (`comodos`: um ponto, o nome e se é coberto). Os cômodos são recalculados a cada mudança, e a âncora dá nome e cobertura ao cômodo que contém o ponto.
+- Toda mudança passa por `aplicar`, que normaliza, recalcula, reconstrói a cena e guarda o passo para desfazer.
+- A planta fica no plano (x, z), com z crescendo para baixo na tela. `local.norte` diz para onde aponta o norte, em graus no sentido horário a partir do alto da planta.
+- "Ver por dentro" troca o material da cobertura por um que não escreve cor nem profundidade: ela some da imagem, mas continua no mapa de sombras.
+- Só cômodo coberto conta como lado de dentro: a aba (brise) de uma janela vai para o lado que não é cômodo coberto.
+- Os valores térmicos dos materiais (U, capacidade térmica, fator solar do vidro e absortância das cores) são típicos e aproximados. Estão guardados para as próximas etapas: luz natural em cada cômodo, calor ao longo do dia e ventilação.
+
 ### Geradores de impressão 3D
 
 - Cada gerador é uma página inteira e independente, com visual próprio e modo escuro; não usa `style.css`.
