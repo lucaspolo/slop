@@ -7934,7 +7934,7 @@ function vCone(){
 // lugarEd e olharEd (aonde o Ed vai quando o jogador manda)
 const NOITES = { chance: 0.5, sorteio: 0.6, aviso: 0.64, inicio: 0.71, fim: 0.84, perto: 5 };
 let noite = null, noiteDia = { dia: -1 }, noiteUlt = null;
-const NOMES_NOITE = { cinema: 'o cinema na roça', causos: 'a noite de causos', ets: 'a noite dos ETs' };
+const NOMES_NOITE = { cinema: 'o cinema na roça', causos: 'a noite de causos', ets: 'a noite dos ETs', show: 'o show de talentos' };
 const NOITES_DEF = {};
 // o que impede uma noite hoje, sem contar o que muda na hora (cena, rave)
 function travaNoiteHoje(id){
@@ -8727,6 +8727,227 @@ NOITES_DEF.ets = {
     por(L[3], [N.raio.visible ? 1.2 : 0, 6, 1.4, 0xfff6a0], N.disco.x, 0.6, N.disco.z);
   },
 };
+// ----- o show de talentos (a quarta noite): o palco no fundo da praça, de frente para a câmera, com os dois holofotes e a
+// plateia sentada nas esteiras, de costas. A Lúcia apresenta (sem a cena dela, o Beto), com o megafone: anuncia cada número
+// com a cortina fechada, a cortina abre, o número acontece, a plateia aplaude e a cortina fecha. Os números (NUMEROS_SHOW)
+// são sorteados entre os de quem o jogador já conhece, de 4 a 5 por noite, com a mágica do Kevin sempre por último, e no
+// fim todo mundo volta para se curvar. Montado num eixo girado para a câmera, como o cinema (showEm)
+const SHOW = { centro: zp('festa', 11, 13.5), ang: Math.PI / 4, palco: [0, -4.4], numeros: [4, 5], abre: 1.1, palmas: 3.2, anuncio: 3.4,
+  esteiras: [-1.4, 0.2, 1.8].flatMap(v => [-3.4, -1.8, 1.8, 3.4].map(u => [u, v])), pessoas: [[-5.2, 1.4], [-5.4, 3], [5.2, 3.2], [-4.6, 4.2], [4.6, 4.4]], gente: 16,
+  holofotes: [[-3.9, -2.4], [3.9, -2.4]], apresentador: [-1.6, -3.65] };
+const showEm = (u, v) => { const a = SHOW.ang, [cx, cz] = SHOW.centro; return [cx + Math.cos(a) * u + Math.sin(a) * v, cz - Math.sin(a) * u + Math.cos(a) * v]; };
+// a altura do tablado e um ponto em cima dele (u para os lados, f para a frente, a partir do meio do palco)
+const PALCO_Y = (PALCO_SHOW.alto + 1) / 16;
+const noPalco = (u, f) => showEm(SHOW.palco[0] + u, SHOW.palco[1] + f);
+const FALAS_SHOW_PALMAS = ['Bravo!', 'Bis! Bis!', 'Uhuuu!', 'Que talento!', 'Demais!', 'Palmas!', 'Arrasou!', 'Mais um!', 'Que número!', 'Clap clap clap!',
+  'Aplausos!', 'Isso que é show!', 'Maravilhoso!', 'Viva!', 'Que lindo!', 'Não acredito!', 'Sensacional!', 'Encantador!', 'Muito bem!', 'Eu quero ver de novo!'];
+const FALAS_SHOW_PORCO = ['Oinc! (aplaude com as patinhas)', 'Oinc oinc! (pede bis)', 'Óinc! (encantado)', 'Oinc! (de boca aberta)', 'Oinc-oinc! (pula na esteira)', 'Oinc! (assobia)',
+  'Óóinc! (que talento!)', 'Oinc! (cochicha com o vizinho)', 'Oinc oinc! (balança o rabinho)', 'Oinc! (não pisca)', 'Óinc! (ri alto)', 'Oinc-oinc! (torce)', 'Oinc! (fã número um)',
+  'Oinc! (quer autógrafo)', 'Óinc! (de focinho para cima)', 'Oinc oinc! (dança sentado)', 'Oinc! (suspira)', 'Óóinc! (bravo!)', 'Oinc! (tira foto)', 'Oinc-oinc! (aplaude de pé)'];
+const FALAS_SHOW_ABRE = ['Boa noite, Fazenda Joli Pig! Bem-vindos ao Show de Talentos!', 'Senhoras, senhores, porquinhos e nanos: o show vai começar!', 'Silêncio na plateia! Hoje tem Show de Talentos!',
+  'Boa noite, boa noite! Acomodem-se nas esteiras, que o show já vai começar!', 'Respeitável público! Com vocês, o Show de Talentos da fazenda!'];
+const FALAS_SHOW_FIM = ['Obrigada, obrigada! Palmas para todos os artistas!', 'Esse foi o Show de Talentos! Boa noite e até a próxima!', 'Uma salva de palmas para os nossos artistas!',
+  'Fim do show! Cuidado na volta para casa, está escuro!', 'Que noite! Obrigada a todos e até o próximo show!'];
+// os números: pode (quem o jogador conhece), anuncio, dur (s), montar (põe os artistas no palco, em A.artistas), passo e limpar
+const NUMEROS_SHOW = {
+  picoca: { titulo: 'a Picoça e a flauta andina', pode: () => !!S.viuCinePicoca, dur: 15,
+    anuncio: ['Direto da Joli Coffee, com a flauta andina: a Picoça!', 'Ela é a mais velha e a mais afinada: palmas para a Picoça e a flauta andina!'],
+    montar(A){
+      const P = new Picoca(); P.alt = PALCO_Y; const [x, z] = noPalco(0, 0.1); P.colocar(x, z); P.ang = P.angAlvo = SHOW.ang; A.g.add(P.g);
+      const fl = malha(geo('flautaPa', () => vFlautaPa().build(1 / 34, { origin: [0.5, 0, 0.5] }))); fl.position.set(0, 12.5 * PICOCA.escala, 16.5 * PICOCA.escala); fl.rotation.x = -0.25; P.pesc.add(fl);
+      A.p = P; A.artistas = [P]; A.toque = 0.5;
+    },
+    passo(A, t, dt, tt){
+      const P = A.p; P.update(dt, tt);
+      if ((A.toque -= dt) <= 0 && t < 12){ A.toque = 3.6; Musica.vinheta('flautaPicoca'); falar(P, sorteia(['Fiu-fiu-fiuuu!', 'Fiuu, fiu-fiu!', 'Fiu fiu fiuuuu...']), 2.2); P.aceno = 2; }
+      if (t > 4 && t < 12 && Math.sin(t * 2.2) > 0.97 && P.pulo <= 0) P.pulo = 0.5;
+      P.olhando = t > 12 ? 0 : P.olhando; P.esticaAlvo = t > 12.5 ? 0.5 : 0;
+    } },
+  milton: { titulo: 'Milton, o mágico', pode: () => !!S.conheceuMilton, dur: 17,
+    anuncio: ['Ele pilota o PIG-MTP e também faz mágica: Milton, o mágico!', 'Diretamente do céu da fazenda: o grande Milton, o mágico!'],
+    montar(A){
+      const p = copiaShow(A, 'milton', 0.2, 0.2); const vara = malha(geo('varaMagica', () => vVaraMagica().build(1 / 40, { origin: [0.5, 0, 0.5] }))); vara.rotation.x = Math.PI / 2; p.mao.add(vara);
+      const ct = malha(geo('cartola', () => vCartola().build(1 / 40, { origin: [0.5, 0, 0.5] }))); const [cx, cz] = noPalco(-0.42, 0.5); ct.position.set(cx, PALCO_Y, cz); A.g.add(ct);
+      const gal = new THREE.Group(); gal.add(malha(geo('galinha', () => vGalinha().build(1 / 19, { origin: [0.5, 0, 0.5] })))); gal.visible = false; A.g.add(gal);
+      A.cartola = ct; A.gal = gal; A.galF = { g: gal, nome: 'galinha', topo(){ return gal.position.clone().add(new THREE.Vector3(0, 0.5, 0)); } };
+      A.de = new THREE.Vector3(cx, PALCO_Y + 0.15, cz); const [px, pz] = showEm(-0.6, SHOW.esteiras[0][1] - 0.9); A.para = new THREE.Vector3(px, 0, pz);
+    },
+    passo(A, t, dt, tt){
+      const p = A.p; p.update(dt, tt);
+      if (!A.f1 && t > 0.6){ A.f1 = true; falar(p, 'Senhoras e senhores... a cartola mágica!', 2.6); p.aceno = 2.6; }
+      if (!A.f2 && t > 4){ A.f2 = true; p.trabalhar(1.2, 'apontar', null); falar(p, 'Abracadabra, pé de cabra!', 2); }
+      // a galinha sai da cartola num puf, pula para a plateia e volta
+      if (!A.f3 && t > 5.6){ A.f3 = true; Som.pop(); Som.co(); A.gal.visible = true; for (let i = 0; i < 12; i++) particula(A.de.x + rnd(-0.2, 0.2), A.de.y + 0.2, A.de.z + rnd(-0.2, 0.2), [0xffffff, 0xf2c335][i % 2], 1); falar(A.galF, 'CÓ CÓ CÓ!', 1.8); }
+      const voo = (a, b, k, alto) => { A.gal.position.lerpVectors(a, b, k); A.gal.position.y += Math.sin(k * Math.PI) * alto; A.gal.rotation.y = Math.atan2(b.x - a.x, b.z - a.z); };
+      if (t > 5.6 && t < 7.4) voo(A.de, A.para, (t - 5.6) / 1.8, 1.1);
+      else if (t >= 7.4 && t < 10.5){ A.gal.position.copy(A.para); A.gal.position.y = Math.abs(Math.sin(t * 9)) * 0.08; if (!A.f4){ A.f4 = true; falaPlateia(noite, FALAS_CINEMA.ri, FALAS_CINEMA_PORCO); Som.co(); } }
+      else if (t >= 10.5 && t < 12.3) voo(A.para, A.de, (t - 10.5) / 1.8, 1.1);
+      else if (t >= 12.3 && A.gal.visible){ A.gal.visible = false; Som.pop(); falar(p, 'Tcharam!', 1.6); p.aceno = 2; }
+      if (t > 14.5) reverencia(p, t - 14.5);
+    } },
+  danca: { titulo: 'a dança do Hud e do Dani', pode: () => !!S.viuCineHud && !!S.viuCineDani, dur: 15,
+    anuncio: ['O menor e o maior da família, dançando juntinhos: Hud e Dani!', 'Uma coreografia ensaiada no celeiro: palmas para o Hud e o Dani!'],
+    montar(A){ A.h = copiaShow(A, 'hud', -0.5, 0.1); A.d = copiaShow(A, 'dani', 0.55, -0.05); },
+    passo(A, t, dt, tt){
+      const b = 60 / 132, n = Math.floor(t / b), nova = n !== A.batida; A.batida = n;
+      for (const p of [A.h, A.d]){
+        if (t < 10.5 && nova){ if (n % 4 === 0) p.pulo = 0.45; if (n % 4 === 2) p.aceno = 0.5; }
+        if (t > 6 && t < 7.5) p.ang += dt * Math.PI * 2 / 1.5; else if (t < 10.5) p.ang = anguloPerto(p.ang, SHOW.ang + Math.sin(n * 1.3) * 0.3, 0.2);
+        p.angAlvo = p.ang; p.update(dt, tt);
+      }
+      // o Dani tropeça no fim e cai sentado; os dois riem
+      if (t > 10.5 && !A.caiu){ A.caiu = true; Som.oinc(); falar(A.d, 'Opa! Tropecei no meu pé!', 2.2); }
+      if (A.caiu){ const k = Math.min(1, (t - 10.5) / 0.4); A.d.corpo.rotation.z = (t < 13 ? k : Math.max(0, 1 - (t - 13) * 2)) * 0.9; }
+      if (!A.ri && t > 12){ A.ri = true; falar(A.h, 'Hahaha! Foi de propósito, né?', 2.2); }
+      if (t > 13.6){ reverencia(A.h, t - 13.6); reverencia(A.d, t - 13.6); }
+    },
+    limpar(A){ if (A.d) A.d.corpo.rotation.z = 0; } },
+  nanos: { titulo: 'a pirâmide das nanos', pode: () => !!S.viuCineLucia, dur: 14,
+    anuncio: ['As acrobatas mais pequenininhas do mundo: a pirâmide das nanos!', 'Elas moram no hostel e sobem em qualquer coisa: a pirâmide das nanos!'],
+    montar(A){
+      A.nanos = [0, 1, 2].map(i => { const g = nanoRig(Math.floor(Math.random() * 40), false); const [x, z] = noPalco((i - 1) * 0.16, 0.15); g.position.set(x, PALCO_Y, z); g.rotation.y = SHOW.ang; A.g.add(g); return { g, fala: { g, nome: 'nano', topo: () => g.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.45, 0)) } }; });
+      A.base = A.nanos.map(n => n.g.position.clone());
+    },
+    passo(A, t, dt){
+      const [e, d, topo] = [A.nanos[0], A.nanos[2], A.nanos[1]], [ex, , ez] = A.base[0].toArray(), [dx, , dz] = A.base[2].toArray();
+      // as duas de baixo se aproximam; a do meio sobe nos ombros delas, abre os braços e a pirâmide balança até desabar
+      if (t < 1.5){ for (const n of A.nanos) poseNano(n.g, dt, 'parado'); }
+      else if (t < 3){ poseNano(topo.g, dt, 'sobe'); const k = (t - 1.5) / 1.5; topo.g.position.y = PALCO_Y + k * 0.24; poseNano(e.g, dt, 'segura'); poseNano(d.g, dt, 'segura'); }
+      else if (t < 9){ poseNano(topo.g, dt, 'acena'); poseNano(e.g, dt, 'segura'); poseNano(d.g, dt, 'segura'); const bal = Math.sin(t * 3) * 0.08 * (t - 3) / 6; for (const n of A.nanos) n.g.rotation.z = bal; if (!A.f1){ A.f1 = true; falar(topo.fala, 'Tcharaaam!', 1.6); } if (!A.f2 && t > 6){ A.f2 = true; falar(e.fala, 'Ai, ai, segura!', 1.6); } }
+      else if (t < 10){ const k = t - 9; topo.g.position.y = PALCO_Y + 0.24 * (1 - k) + Math.sin(k * Math.PI) * 0.1; topo.g.rotation.z = k * 1.4; e.g.rotation.z = k * 1.3; d.g.rotation.z = -k * 1.3; if (!A.caiu){ A.caiu = true; Som.pop(); } }
+      else { if (!A.ri){ A.ri = true; for (const n of A.nanos) falarNano(n); } if (t > 12){ for (const n of A.nanos){ n.g.rotation.z = 0; poseNano(n.g, dt, 'acena'); } topo.g.position.y = PALCO_Y; } }
+    } },
+  kevin: { titulo: 'a mágica do Kevin', pode: () => !!S.viuCineKevin, dur: 21, ultimo: true,
+    anuncio: ['E agora, o mágico mais arteiro da fazenda: o Kevin!', 'Segurem as pipocas: com vocês, o Kevin e a mágica do desaparecimento!'],
+    montar(A){
+      if (arteKevin) encerrarArteKevin();
+      const k = kevin; k.g.visible = true; k.estado = 'parado'; k.pontos = []; k.lencol.visible = false; k.pose = 'parado'; k.alt = PALCO_Y;
+      const [x, z] = noPalco(0, 0.2); k.colocar(x, z); k.ang = k.angAlvo = SHOW.ang; A.k = k;
+      // o fantasma aparece no corredor do meio da plateia, no fundo, e vem de mansinho na direção do palco
+      A.fundo = showEm(0, 2.6); A.frente = showEm(0, 0.2);
+    },
+    passo(A, t, dt, tt){
+      const k = A.k;
+      if (!A.f1 && t > 0.5){ A.f1 = true; falar(k, 'Para a minha mágica, vou fazer o Ed desaparecer!', 3); k.aceno = 2; }
+      if (!A.f2 && t > 3.8){ A.f2 = true; falar(k, 'Ué, cadê o Ed? Então quem vai desaparecer sou eu!', 3); k.abana = 2; }
+      if (!A.f3 && t > 7){ A.f3 = true; k.lencol.visible = true; Som.pop(); }
+      if (t > 7 && t < 8.2) k.ang += dt * 9;
+      // puf: some do palco e aparece de fantasma lá atrás da plateia, vindo de mansinho
+      if (!A.f4 && t > 8.2){ A.f4 = true; k.ang = k.angAlvo = SHOW.ang; for (let i = 0; i < 16; i++) particula(k.pos.x + rnd(-0.3, 0.3), PALCO_Y + rnd(0.2, 0.8), k.pos.y + rnd(-0.3, 0.3), 0xffffff, 1.2); Som.pop(); k.alt = 0; k.colocar(...A.fundo); k.ang = k.angAlvo = SHOW.ang + Math.PI; k.vel = 0.7; falaPlateia(noite, FALAS_CINEMA.oh, FALAS_CINEMA_PORCO); }
+      if (!A.f5 && t > 9.4){ A.f5 = true; k.ir([A.frente], null); falar(k, 'Uuuuuuh...', 2); }
+      if (!A.f6 && t > 13.4){ A.f6 = true; k.lencol.visible = false; k.pose = 'buu'; k.pontos = []; k.estado = 'parado'; k.ang = k.angAlvo = SHOW.ang; falar(k, 'BUUUUU!', 1.4); Som.tom(140, 0.35, 'sawtooth', 0.06, 70);
+        for (const j of noite.gente) j.salto = 0.55; setTimeout(() => { if (noite && noite.id === 'show') falaPlateia(noite, FALAS_CAUSO_SUSTO, FALAS_CAUSO_PORCO); }, 350); }
+      if (!A.f7 && t > 14.8){ A.f7 = true; k.pose = 'rindo'; Som.risada(); depoisDaFala(k, () => { if (noite && noite.id === 'show') falar(k, variar(FALAS_KEVIN_RI), 2); }); }
+      if (!A.f8 && t > 17.6){ A.f8 = true; k.pose = 'parado'; k.vel = 2.6; const [x, z] = noPalco(0, 0.9); k.ir([[x, z]], () => { k.alt = PALCO_Y; const [x2, z2] = noPalco(0, 0.2); k.colocar(x2, z2); k.ang = k.angAlvo = SHOW.ang; }); }
+      k.update(dt, tt);
+    },
+    limpar(A){ if (A.k && !A.final){ A.k.alt = 0; A.k.lencol.visible = false; A.k.pose = 'parado'; } } },
+};
+// uma cópia da família no palco (sem toque), em (u, f) do meio dele
+function copiaShow(A, q, u, f){
+  const F = FAMILIA_SPA[q], p = F.cria(); const k = pickaveis.indexOf(p.g); if (k >= 0) pickaveis.splice(k, 1);
+  if (F.escala) p.g.scale.setScalar(F.escala);
+  p.alt = PALCO_Y; const [x, z] = noPalco(u, f); p.colocar(x, z); p.ang = p.angAlvo = SHOW.ang; p.update(0, 0); A.g.add(p.g);
+  A.artistas = [...(A.artistas || []), p]; if (!A.p) A.p = p;
+  return p;
+}
+// a reverência: o corpo dobra para a frente e volta (k em segundos desde o começo)
+function reverencia(p, k){ const r = Math.sin(Math.min(1, k / 1.2) * Math.PI) * 0.55; (p.corpo || p.g).rotation.x = r; }
+// o programa da noite: os números sorteados (de quem o jogador conhece), com o do Kevin por último
+function programaShow(){
+  const ids = Object.keys(NUMEROS_SHOW).filter(id => NUMEROS_SHOW[id].pode()), comuns = ids.filter(id => !NUMEROS_SHOW[id].ultimo).sort(() => Math.random() - 0.5), fim = ids.filter(id => NUMEROS_SHOW[id].ultimo);
+  const n = Math.max(1, Math.min(comuns.length + fim.length, Math.round(rnd(...SHOW.numeros))));
+  return [...comuns.slice(0, n - fim.length), ...fim].slice(0, Math.max(n, fim.length));
+}
+NOITES_DEF.show = {
+  centro: showEm(0, -2.4), musica: 'show', icone: 'festa', titulo: 'Show de talentos', levar: 'Ir ao show',
+  cartao: 'De noite, a família sobe no palco do espaço de eventos: flauta, mágica, dança, acrobacia das nanos e o Kevin aprontando.',
+  faixa: [['SHOW DE TALENTOS', 1, '#ffd34d'], ['hoje à noite, no palco da fazenda', 0.55, '#fdf8ef']], corFaixa: '#5a1424',
+  anuncio: 'Show de talentos no espaço de eventos! O palco está montado e a família está ensaiando atrás da cortina.',
+  fimTexto: 'Acabou o show de talentos. Os artistas agradecem e a plateia volta para casa cantarolando.',
+  estado: N => { const S2 = N.show, id = S2 && S2.prog[S2.i]; return id ? `No palco: ${NUMEROS_SHOW[id].titulo}. ${S2.prog.length} números hoje.` : S2 && S2.fase === 'final' ? 'Os artistas estão agradecendo.' : 'O show vai começar.'; },
+  lugarEd: () => showEm(4.6, -1), olharEd: () => showEm(...SHOW.palco),
+  montar(N){
+    const s16 = 1 / 16, A = SHOW.ang, [px, pz] = showEm(...SHOW.palco), P = PALCO_SHOW;
+    const palco = new THREE.Group(); palco.position.set(px, 0, pz); palco.rotation.y = A; N.g.add(palco);
+    palco.add(malha(geo('palcoShow', () => vPalcoShow().build(s16, { origin: [0, 0, 0] }))));
+    const cortinas = [-1, 1].map(lado => { const c = malha(geo('cortinaShow', () => vCortinaShow().build(s16, { origin: [0, 0, 0] }))); c.position.set(lado * P.larg * s16, 0, (P.fundo - 5) * s16); c.scale.x = -lado; palco.add(c); return c; });
+    for (const [u, v] of SHOW.holofotes){ const [x, z] = showEm(u, v), h = malha(geo('holofote', () => vHolofote().build(s16, { origin: [0.5, 0, 0.5] }))); h.position.set(x, 0, z); h.rotation.y = Math.atan2(px - x, pz - z); N.g.add(h); }
+    // a apresentadora, na beira do palco, virada um pouco para a plateia
+    const [ax, az] = showEm(...SHOW.apresentador), apr = new THREE.Group(); apr.position.set(ax, PALCO_Y, az); apr.rotation.y = A + 0.5; N.g.add(apr);
+    let host;
+    if (S.viuCineLucia){
+      apr.add(malha(geo('lucia', () => vLucia().build(LUCIA.escala, { origin: [0.5, 0, 0.5], jitter: 0.02 }))));
+      const mega = malha(geo('fgMegafone', () => vMegafone().build(NANO.sNano / 2, { origin: [0.5, 0, 0.5], jitter: 0.02 }))); mega.position.set(LUCIA.megafone[0] * LUCIA.escala, LUCIA.megafone[1] * LUCIA.escala, LUCIA.megafone[2] * LUCIA.escala); apr.add(mega);
+      host = { g: apr, nome: 'lucia', pulo: 0, topo(){ return apr.position.clone().add(new THREE.Vector3(0, 0.62, 0)); } };
+    } else {
+      const p = FAMILIA_SPA.beto.cria(); const k = pickaveis.indexOf(p.g); if (k >= 0) pickaveis.splice(k, 1); p.alt = PALCO_Y; p.colocar(ax, az); p.ang = p.angAlvo = A + 0.5; p.update(0, 0); N.g.add(p.g); host = p;
+    }
+    // a plateia: as esteiras, a família na frente e o resto atrás, todos virados para o palco
+    const lugares = [];
+    for (const [eu, ev] of SHOW.esteiras){ const [x, z] = showEm(eu, ev), m = malha(geo('esteiraPalha', () => vEsteiraPalha().build(s16, { origin: [0.5, 0, 0.5] }))); m.position.set(x, 0.005, z); m.rotation.y = A; N.g.add(m); for (const du of [-0.25, 0.25]) lugares.push(showEm(eu + du, ev - 0.1)); }
+    const prog = programaShow(), nosShow = { milton: 'milton', danca: ['hud', 'dani'] }, sem = prog.flatMap(id => nosShow[id] || []).concat(S.viuCineLucia ? [] : ['beto']);
+    familiaNaNoite(sem).forEach(q => { const p = lugares.shift(); if (p) sentarPlateia(N, 'familia', p[0], p[1], px, pz, q); });
+    lugares.sort(() => Math.random() - 0.5);
+    for (let i = 0; i < SHOW.gente && lugares.length; i++){ const p = lugares.shift(); sentarPlateia(N, sorteia(['porco', 'porco', 'porco', 'nano', 'nano']), p[0], p[1], px, pz); }
+    for (const [eu, ev] of SHOW.pessoas){ const [x, z] = showEm(eu + rnd(-0.2, 0.2), ev + rnd(-0.2, 0.2)); sentarPlateia(N, 'pessoa', x, z, px, pz, null, false); }
+    N.show = { prog, i: -1, fase: 'abre', t: -2, cortinas, host, num: null, feitos: [] };
+  },
+  atualizar(N, dt, t){
+    const S2 = N.show; S2.t += dt;
+    // a cortina abre e fecha devagar
+    const alvo = S2.fase === 'numero' || S2.fase === 'final' ? 0.16 : 1;
+    for (const [i, c] of S2.cortinas.entries()){ const k = Math.abs(c.scale.x) + (alvo - Math.abs(c.scale.x)) * Math.min(1, dt * 2.2); c.scale.x = (i ? -1 : 1) * k; }
+    const host = S2.host, fala = (txt, d) => { if (N.perto){ falar(host, txt, d || tempoDeLeitura(txt)); if (host.aceno != null) host.aceno = 1.5; Som.tom(520, 0.08, 'square', 0.02, 760); } };
+    if (S2.fase === 'abre' && S2.t >= 0){
+      if (S2.i < 0){ if (!S2.ola){ S2.ola = true; fala(variar(FALAS_SHOW_ABRE)); S2.t = -3.4; return; } }
+      S2.i++;
+      if (S2.i >= S2.prog.length){ S2.fase = 'final'; S2.t = 0; montarFinalShow(N); fala(variar(FALAS_SHOW_FIM)); }
+      else { const id = S2.prog[S2.i], D = NUMEROS_SHOW[id]; fala(variar(D.anuncio)); S2.fase = 'anuncio'; S2.t = 0; S2.num = { id, D, g: new THREE.Group() }; N.g.add(S2.num.g); D.montar(S2.num); }
+    } else if (S2.fase === 'anuncio' && S2.t >= SHOW.anuncio){ S2.fase = 'numero'; S2.t = 0; }
+    else if (S2.fase === 'numero'){
+      const A = S2.num;
+      try { A.D.passo(A, S2.t, dt, t); } catch (e){ console.error(e); S2.t = 1e9; }
+      if (S2.t >= A.D.dur){ S2.fase = 'palmas'; S2.t = 0; for (const j of N.gente) { j.salto = 0.55; j.aplaude = 1.6; } if (N.perto){ falaPlateia(N, FALAS_SHOW_PALMAS, FALAS_SHOW_PORCO); Som.moeda(); } }
+    } else if (S2.fase === 'palmas'){
+      if (S2.t >= SHOW.palmas){ const A = S2.num; if (A.D.limpar) A.D.limpar(A); N.g.remove(A.g); S2.feitos.push(A.id); S2.num = null; S2.fase = 'abre'; S2.t = -0.4; }
+    } else if (S2.fase === 'final'){
+      const F = S2.final;
+      for (const p of F.artistas){ if (p.update) p.update(dt, t); if (S2.t > 1.4 && S2.t < 4) reverencia(p, S2.t - 1.4); }
+      if (!F.confete && S2.t > 1.6){ F.confete = true; const [px, pz] = showEm(...SHOW.palco); if (N.perto){ confete(px, 2.4, pz + 0.6, 80, 2); Som.moeda(); } for (const j of N.gente){ j.salto = 0.55; j.aplaude = 2.5; } }
+      if (S2.t > 7){ acabarNoite(NOITES_DEF.show.fimTexto); return; }
+    }
+    if (!N.perto) return;
+    for (const j of N.gente) animarPlateia(j, dt, t);
+    if (host.update) host.update(dt, t);
+    else if (host.pulo > 0){ host.pulo = Math.max(0, host.pulo - dt); }
+  },
+  limpar(N){
+    const S2 = N.show;
+    if (S2 && S2.num && S2.num.D.limpar) S2.num.D.limpar(S2.num);
+    if (!cine && S2){ const k = kevin; if (k.g.visible && S2.prog.includes('kevin')){ k.g.visible = false; k.alt = 0; k.pose = 'parado'; k.lencol.visible = false; k.pontos = []; k.estado = 'parado'; } }
+  },
+  // as luzes: os dois holofotes no meio do palco (quentes), uma luz de frente mais fraca e o resto apagado
+  luzes(N, L, por, t){
+    const [px, pz] = showEm(SHOW.palco[0], SHOW.palco[1] + 1.4), aberta = N.show.fase === 'numero' || N.show.fase === 'final';
+    por(L[0], [aberta ? 1.6 : 0.6, 6, 1.4, 0xfff0d0], px - 0.6, 2.4, pz);
+    por(L[1], [aberta ? 1.6 : 0.6, 6, 1.4, 0xffe0f0], px + 0.6, 2.4, pz);
+    por(L[2], [0.4, 8, 1.5, 0xffc080], ...(() => { const [x, z] = showEm(0, 1.2); return [x, 1.6, z]; })());
+    por(L[3], [0, 1, 2, 0xffffff], px, 2, pz);
+  },
+};
+// o final: todos os artistas que se apresentaram voltam juntos para a frente do palco e se curvam
+function montarFinalShow(N){
+  const S2 = N.show, g = new THREE.Group(); N.g.add(g);
+  const F = { g, artistas: [] }; S2.final = F;
+  const quem = S2.feitos.flatMap(id => id === 'danca' ? ['hud', 'dani'] : id === 'milton' ? ['milton'] : id === 'picoca' ? ['picoca'] : id === 'kevin' ? ['kevin'] : []);
+  quem.forEach((q, i) => {
+    const u = (i - (quem.length - 1) / 2) * 0.62;
+    if (q === 'picoca'){ const P = new Picoca(); P.alt = PALCO_Y; const [x, z] = noPalco(u, 0.5); P.colocar(x, z); P.ang = P.angAlvo = SHOW.ang; g.add(P.g); P.update(0, 0); F.artistas.push(P); return; }
+    if (q === 'kevin'){ const k = kevin; k.g.visible = true; k.alt = PALCO_Y; k.lencol.visible = false; k.pose = 'parado'; const [x, z] = noPalco(u, 0.5); k.colocar(x, z); k.ang = k.angAlvo = SHOW.ang; F.artistas.push(k); return; }
+    const A = { g, artistas: [] }; const p = copiaShow(A, q, u, 0.5); F.artistas.push(p);
+  });
+}
 // ================= o recanto do fundo da mata (o Lucas pediu): o fundo da primeira coluna da mata, atrás da cachoeira, não
 // tinha trilha. Agora uma trilha sai do fim da trilha do meio (a parcela do nível 44), passa atrás do lago da cachoeira e
 // desce pela beira do mapa até uma clareirinha. Lá ficam as câmeras da mata (armadilhas fotográficas que o Hud, que também é
@@ -16014,6 +16235,11 @@ const TEMAS = {
     { tipo: 'sine', vol: 0.035, leg: 0.95, notas: 'C5:2 B4:1 A4:1 G4:3 r:1 A4:2 B4:1 C5:1 E5:3 r:1' },
     { tipo: 'square', vol: 0.012, leg: 0.5, notas: 'F4:.25 A4:.25 C5:.25 E5:.25 F4:.25 A4:.25 C5:.25 E5:.25 F4:.25 A4:.25 C5:.25 E5:.25 F4:.25 A4:.25 C5:.25 E5:.25 G4:.25 B4:.25 D5:.25 G5:.25 G4:.25 B4:.25 D5:.25 G5:.25 G4:.25 B4:.25 D5:.25 G5:.25 G4:.25 B4:.25 D5:.25 G5:.25 E4:.25 G4:.25 B4:.25 E5:.25 E4:.25 G4:.25 B4:.25 E5:.25 E4:.25 G4:.25 B4:.25 E5:.25 E4:.25 G4:.25 B4:.25 E5:.25 F4:.25 A4:.25 C5:.25 E5:.25 F4:.25 A4:.25 C5:.25 E5:.25 F4:.25 A4:.25 C5:.25 E5:.25 F4:.25 A4:.25 C5:.25 E5:.25' },
     { tipo: 'triangle', vol: 0.05, leg: 0.9, notas: 'F2:4 G2:4 E2:4 F2:4' } ] },
+  // Show de talentos: fanfarra de circo e vaudeville em dó maior (a melodia na onda quadrada, o baixo de oom-pah e o tarol)
+  show: { bpm: 124, ganho: 1.2, loop: true, faixas: [
+    { tipo: 'square', vol: 0.024, leg: 0.55, notas: 'G4:.5 C5:.5 E5:.5 G5:.5 F5:.5 E5:.5 D5:1 E5:.5 D5:.5 C5:.5 B4:.5 A4:1 G4:1 A4:.5 B4:.5 C5:.5 D5:.5 E5:1 C5:1 D5:.5 C5:.5 B4:.5 D5:.5 C5:2' },
+    { tipo: 'triangle', vol: 0.05, leg: 0.5, notas: 'C3:.5 G3:.5 C3:.5 G3:.5 C3:.5 G3:.5 C3:.5 G3:.5 G2:.5 D3:.5 G2:.5 D3:.5 G2:.5 D3:.5 G2:.5 D3:.5 C3:.5 G3:.5 C3:.5 G3:.5 F2:.5 C3:.5 F2:.5 C3:.5 G2:.5 D3:.5 G2:.5 D3:.5 C3:.5 G3:.5 C3:.5 G3:.5' },
+    { tipo: 'x', vol: 0.03, notas: 'r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5' } ] },
   // O irmão arteiro: marchinha travessa em mi menor, na ponta dos pés: o fagote em staccato subindo de meio em meio tom
   // (quem chega de mansinho) e o baixo em pizzicato
   kevin: { bpm: 118, ganho: 1.1, loop: true, faixas: [
@@ -16150,6 +16376,8 @@ const VINHETAS = {
   tchan: { bpm: 140, ganho: 2.3, faixas: [{ tipo: 'square', vol: 0.03, notas: 'G4:.25 r:.25 C5+E5+G5:1.5' }, { tipo: 'triangle', vol: 0.05, notas: 'G2:.25 r:.25 C3:1.5' }] },
   // o "Viva a Fazenda Joli Pig!": arpejo subindo e acorde final
   viva: { bpm: 150, ganho: 0.9, faixas: [{ tipo: 'square', vol: 0.028, notas: 'G4:.25 B4:.25 D5:.25 G5:.25 B5:.25 D6:.25 G4+B4+D5+G5:2' }, { tipo: 'triangle', vol: 0.05, notas: 'G2:1.5 G2+D3:2' }, { tipo: 'x', vol: 0.06, notas: 'x:.25 x:.25 x:.25 x:.25 x:.25 x:.25 x:.5 x:.5' }] },
+  // a flauta andina da Picoça no show de talentos: uma frase curta e original em lá menor pentatônico
+  flautaPicoca: { bpm: 112, ganho: 2.6, faixas: [{ tipo: 'sine', vol: 0.035, leg: 0.9, notas: 'A5:.5 C6:.5 E6:1 D6:.5 C6:.5 A5:1.5' }] },
   // a Luma saindo pela portinha: três notinhas fofas
   luma: { bpm: 200, ganho: 3.7, faixas: [{ tipo: 'sine', vol: 0.035, notas: 'C6:.5 E6:.5 G6:1' }] },
   // o Saci aparecendo: assobio que gira e uma risadinha
@@ -31260,7 +31488,7 @@ async function iniciar(){
     vagalumes: () => vagalumes, VAGALUMES, prometidos: { itensPrometidos, separadoPedidos, opcoesFrete, faltaNoPedido, caderno: abrirCaderno },
     observatorio: { PLANETARIO, desvio: desvioPlanetario, ANTENA, novaEncomenda: novaEncomendaEt, antena: () => antenaVis, caixa: () => caixaEtVis, mensagem: abrirMensagemEt, tocarUltimaCadente: () => { const E = CADENTES[CADENTES.length - 1]; if (!E) return 'sem'; const s = tela(E.m.position); return tocarCadente(s.x, s.y); }, ceu: CEU, ceuDaNoite, pedir: pedirAEstrela, realizar: realizarPedido, tocarCadente, cadentes: () => CADENTES, chuvaCena: () => chuvaCena, cometa: () => cometaVis, caderno: abrirCaderno, obsEd: () => obsEd, ocular: () => ocular, abrirOcular, fecharOcular, tocar: tocarOcular, naOcular, ASTRO, luaDoDia, ceuHoje, descobrir: descobrirAstro, vis: () => observVis, OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
-    luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, noites: { NOITES, NOITES_DEF, CINEMA, FILMES, FD, CAUSOS, CAUSOS_NOITE, ETS_NOITE, barraca: itensBarracaEt, comprar: comprarEt, obj: () => noite, dia: () => noiteDia, comecar: (id, chamada = true) => comecarNoite(id, chamada), acabar: () => acabarNoite(), motivo: motivoNoite, trava: travaNoiteHoje, programa: programaCinema, quadro: quadroFilme }, kevin: { obj: () => kevin, KEVIN, POSES_KEVIN, cena: () => kevinCena, posicoes: posicoesKevinCena, ARTE_KEVIN, ARTES_KEVIN, arte: () => arteKevin, prox: () => arteKevinProx, chamar: chamarKevin, encerrar: encerrarArteKevin, forcar: id => { if (arteKevin) encerrarArteKevin(); const l = ARTES_KEVIN[id].pode(); return l ? !!iniciarArteKevin(id, l) : false; }, tocar: tocarKevin }, foguete: { FOGUETE, prox: () => S.fogueteEspera, zerar: () => { S.fogueteEspera = 0; }, obj: () => foguete, falas: falasFoguete }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { passeio: { obj: () => passeio, pode: podePasseio, caminho: caminhoPasseio, VOO_PASSEIO }, frete: { opcoes: opcoesFrete, mandar: mandarFrete, pagar: pagarFrete, itens: () => { const r = { estado: '', itens: [] }; itensFrete(r); return r; } }, rega: comecarRegaAerea, faixa: passarFaixa, FAIXA, voo: () => voo, JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, encomenda: { ENCOMENDAS, encomendar, cancelar: cancelarEncomenda, itens: () => { const r = { estado: '', itens: [] }; itensEncomenda(r); return r; } }, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, dormir: pedirDormir, item: itemDormir, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
+    luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, noites: { NOITES, NOITES_DEF, CINEMA, FILMES, FD, CAUSOS, CAUSOS_NOITE, ETS_NOITE, SHOW, NUMEROS_SHOW, programaShow, barraca: itensBarracaEt, comprar: comprarEt, obj: () => noite, dia: () => noiteDia, comecar: (id, chamada = true) => comecarNoite(id, chamada), acabar: () => acabarNoite(), motivo: motivoNoite, trava: travaNoiteHoje, programa: programaCinema, quadro: quadroFilme }, kevin: { obj: () => kevin, KEVIN, POSES_KEVIN, cena: () => kevinCena, posicoes: posicoesKevinCena, ARTE_KEVIN, ARTES_KEVIN, arte: () => arteKevin, prox: () => arteKevinProx, chamar: chamarKevin, encerrar: encerrarArteKevin, forcar: id => { if (arteKevin) encerrarArteKevin(); const l = ARTES_KEVIN[id].pode(); return l ? !!iniciarArteKevin(id, l) : false; }, tocar: tocarKevin }, foguete: { FOGUETE, prox: () => S.fogueteEspera, zerar: () => { S.fogueteEspera = 0; }, obj: () => foguete, falas: falasFoguete }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { passeio: { obj: () => passeio, pode: podePasseio, caminho: caminhoPasseio, VOO_PASSEIO }, frete: { opcoes: opcoesFrete, mandar: mandarFrete, pagar: pagarFrete, itens: () => { const r = { estado: '', itens: [] }; itensFrete(r); return r; } }, rega: comecarRegaAerea, faixa: passarFaixa, FAIXA, voo: () => voo, JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, encomenda: { ENCOMENDAS, encomendar, cancelar: cancelarEncomenda, itens: () => { const r = { estado: '', itens: [] }; itensEncomenda(r); return r; } }, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, dormir: pedirDormir, item: itemDormir, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
     // auditoria de colisões: o que o desenho de uma construção (n = nível da reforma, ou 'andaime') põe fora do terreno dela
     fora(id, n){
       const p = PREDIO[id], fab = !!FABRICAS[id], v = n === 'andaime' ? vAndaime(id) : vReforma(id, n), s = 1 / 8, h = s / 2;
