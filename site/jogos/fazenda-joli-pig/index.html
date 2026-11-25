@@ -7037,7 +7037,8 @@ function arrumarEspacoEventos(){
 function itensEspaco(){
   const r = { titulo: 'Espaço de eventos', icone: 'festa', itens: [] }, F = feiraAgro();
   const prox = F.marcada ? (feiraAgroAberta() ? 'acontecendo agora, até o fim da tarde' : feiraAgroHoje() ? (S.relogio < FEIRA_AGRO.abre ? 'hoje, daqui a pouco' : 'encerrada por hoje') : 'amanhã') : null;
-  r.estado = `Aqui acontecem o ArraiEd, a Feira Agronômica Sustentável (uma vez por nível, durante um dia) e, de dia, de vez em quando, a rave da DJ Summer Cachohits.${prox ? ` Feira: ${prox}.` : ' A próxima feira vem quando o Ed subir de nível.'}${rave ? ' A Summer Cachohits está tocando agora!' : ''}`;
+  r.estado = `Aqui acontecem o ArraiEd, a Feira Agronômica Sustentável (uma vez por nível, durante um dia) e, de dia, de vez em quando, a rave da DJ Summer Cachohits.${prox ? ` Feira: ${prox}.` : ' A próxima feira vem quando o Ed subir de nível.'}${rave ? ' A Summer Cachohits está tocando agora!' : ''}${textoNoitesPortal()}`;
+  if (noite) noiteItens(noite, r);
   if (F.marcada){
     r.itens.push({ rotulo: Object.keys(F.banca || {}).length ? 'Trocar o que está na barraca do Ed' : 'Montar a barraca do Ed', sub: textoBancaAgro(), icone: 'cesta', fn: () => abrirBancaAgro() });
     if (!F.inscrito && !F.resultado) r.itens.push({ rotulo: 'Inscrever um produto no concurso', sub: 'os jurados anunciam os vencedores à tarde', icone: 'trofeu', fn: () => abrirInscricaoAgro() });
@@ -7534,7 +7535,7 @@ const FALAS_ED_MENCAO = ['Não deu dessa vez, mas foi divertido!', 'Parabéns ao
 const RAVE = { chance: 0.4, hora: [0.12, 0.5], fim: 0.62, duracao: 150, gente: 60, bpm: 126, dj: zp('festa', 11, 10.6), pista: zp('festa', 11, 15.7), raio: [5.8, 4.1], longe: 1.25, folga: 0.42,
   outros: { minhoca: 6, galinha: 6, vaca: 2 } };
 let rave = null, raveDia = { dia: -1, hora: 2 };
-const motivoRave = () => !espacoAberto() ? 'O espaço de eventos ainda não existe.' : feiraAgroHoje() ? 'Hoje o espaço é da Feira Agronômica.' : rave ? 'A rave já está rolando!'
+const motivoRave = () => !espacoAberto() ? 'O espaço de eventos ainda não existe.' : feiraAgroHoje() ? 'Hoje o espaço é da Feira Agronômica.' : rave ? 'A rave já está rolando!' : noite ? 'Agora o espaço é das noites.'
   : !((S.relogio || 0) >= FEIRA_AGRO.abre && (S.relogio || 0) < RAVE.fim) ? 'A rave da Luma é de dia.' : !luma || luma.estado !== 'dentro' ? 'A Luma está brincando lá fora. Espere ela voltar para casa.' : cine || cenaPedida ? 'Espere a cena acabar.' : null;
 // o fone (com as conchas rosa-neon) e os óculos escuros, no desenho da cabeça da Luma (vLumaCabeca)
 function vAcessoriosDJ(){
@@ -7796,6 +7797,429 @@ function vFoguetinhoJardim(){
   for (let x = -1; x <= 1; x++) for (let y = 10; y <= 12; y++) v.set(x, y, 3, Math.abs(x) + Math.abs(y - 11) < 2 ? 0x8fe0ff : 0x7c8fa3);
   return v;
 }
+// ================= Noites no espaço de eventos (o Lucas pediu): o cinema na roça, a noite de causos e a noite dos ETs. No
+// fim da tarde (NOITES.sorteio) o jogo sorteia se hoje tem noite e qual, entre as que dá para ter (nunca a mesma de ontem
+// quando há outra); avisa no entardecer e monta no começo da noite, até um pouco antes da hora de nanar. Só uma por noite,
+// nunca no dia da Feira Agronômica, com o ArraiEd pendente nem com chuva. Fica na memória, como a rave: nada vai para o
+// save, fora o que o Ed compra na noite dos ETs. Acaba no fim, quando a cena de nanar (ou outra cena) começa ou quando o
+// relógio vira. Enquanto ela está montada, o cafezinho e as passagens do disco esperam. A animação, as falas, as luzes e a
+// música só rodam com a câmera perto (noite.perto). Cada noite mora em NOITES_DEF: centro, musica, faixa, anuncio,
+// fimTexto, trava (o motivo próprio de não poder), montar, atualizar, limpar, luzes (as quatro LUZES_NOITE, como no ArraiEd),
+// lugarEd e olharEd (aonde o Ed vai quando o jogador manda)
+const NOITES = { chance: 0.5, sorteio: 0.6, aviso: 0.64, inicio: 0.71, fim: 0.84, perto: 5 };
+let noite = null, noiteDia = { dia: -1 }, noiteUlt = null;
+const NOMES_NOITE = { cinema: 'o cinema na roça', causos: 'a noite de causos', ets: 'a noite dos ETs' };
+const NOITES_DEF = {};
+// o que impede uma noite hoje, sem contar o que muda na hora (cena, rave)
+function travaNoiteHoje(id){
+  const D = NOITES_DEF[id];
+  if (!espacoAberto()) return 'O espaço de eventos ainda não existe.';
+  const t = D && D.trava && D.trava(); if (t) return t;
+  if (feiraAgroHoje()) return 'Hoje o espaço é da Feira Agronômica.';
+  if (nivel() >= ARRAIA.nivel && !S.viuCineArraied) return 'Primeiro o ArraiEd!';
+  if (chovendo()) return 'Com chuva, a noite no espaço de eventos fica para outro dia.';
+  return null;
+}
+function motivoNoite(id){
+  const t = travaNoiteHoje(id); if (t) return t;
+  if (arraia) return 'O ArraiEd está acontecendo!';
+  if (rave) return 'A rave da Luma está tocando no espaço.';
+  if (noite) return noite.id === id ? `${NOMES_NOITE[id][0].toUpperCase()}${NOMES_NOITE[id].slice(1)} já está acontecendo!` : `Agora o espaço é d${NOMES_NOITE[noite.id].slice(0, 1) === 'o' ? 'o' : 'a'}${NOMES_NOITE[noite.id].slice(1)}.`;
+  if (cine || cenaPedida) return 'Espere a cena acabar.';
+  return null;
+}
+// chamada pela janela Cenas fora da noite: o relógio vai para o começo da noite durante ela e volta no fim, como na reprise
+// do ArraiEd (o save guarda a hora de verdade, reprisaNoite)
+function comecarNoite(id, chamada){
+  if (motivoNoite(id)) return false;
+  const r = S.relogio || 0, forca = !!chamada && !(r >= NOITES.inicio - 0.02 && r < NOITES.fim - 0.03);
+  if (forca && !reprisaNoite){ reprisaNoite = { relogio: S.relogio }; S.relogio = NOITES.inicio; }
+  montarEspacoEventos();
+  const N = { id, def: NOITES_DEF[id], g: new THREE.Group(), gente: [], t: 0, perto: false, fala: 3, forca };
+  scene.add(N.g); noite = N; noiteUlt = id;
+  try { N.def.montar(N); }
+  catch (e){ console.error(e); acabarNoite(); return false; }
+  N.g.traverse(o => { if (!o.userData.alvo) o.userData.alvo = { k: 'noite' }; }); pickaveis.push(N.g);
+  faixaPortal(N.def.faixa, N.def.corFaixa);
+  aviso(N.def.anuncio, 'grande', 7);
+  return true;
+}
+function acabarNoite(msg){
+  const N = noite; if (!N) return;
+  noite = null;
+  try { if (N.def.limpar) N.def.limpar(N); } catch (e){ console.error(e); }
+  for (const j of N.gente) tirarJogadorQuadra(j);
+  const k = pickaveis.indexOf(N.g); if (k >= 0) pickaveis.splice(k, 1);
+  scene.remove(N.g);
+  faixaPortal(null);
+  if (Musica.atual && Musica.atual.id === N.def.musica && !cine) Musica.parar();
+  if (N.forca) fimDaNoiteDaReprise();
+  if (msg) aviso(msg);
+}
+function atualizarNoites(dt, t){
+  if (!S) return;
+  const r = S.relogio || 0, dia = diaAtual();
+  if (noiteDia.dia !== dia) noiteDia = { dia, id: null, sorteado: false, avisou: false };
+  if (!noiteDia.sorteado && r >= NOITES.sorteio && r < NOITES.fim && S.viuCineInicio && !noite){
+    noiteDia.sorteado = true;
+    const ids = Object.keys(NOITES_DEF).filter(id => !travaNoiteHoje(id)), sem = ids.length > 1 ? ids.filter(id => id !== noiteUlt) : ids;
+    if (sem.length && Math.random() < NOITES.chance) noiteDia.id = sorteia(sem);
+  }
+  if (noiteDia.id && !noiteDia.avisou && r >= NOITES.aviso && r < NOITES.inicio){ noiteDia.avisou = true; aviso(`Hoje à noite tem ${NOMES_NOITE[noiteDia.id]} no espaço de eventos!`, 'grande', 6); }
+  if (!noite){
+    if (noiteDia.id && r >= NOITES.inicio && r < NOITES.fim - 0.01 && !motivoNoite(noiteDia.id) && comecarNoite(noiteDia.id)) noiteDia.id = null;
+    return;
+  }
+  const N = noite; N.t += dt;
+  if (cine || r >= NOITES.fim || r < 0.5){ acabarNoite(cine ? null : N.def.fimTexto); return; }
+  proxCafezinho = Math.max(proxCafezinho, Date.now() + 30000);
+  if (discoJogo && discoJogo.t < 0 && N.id !== 'ets') discoJogo.prox = Math.max(discoJogo.prox, 30);
+  const [cx, cz] = N.def.centro;
+  N.perto = !vistaEd && Math.hypot(cx - cam.alvo.x, cz - cam.alvo.z) < cam.vista * 1.1 + NOITES.perto;
+  if (N.perto){ if (Musica.pode() && (!Musica.atual || Musica.atual.id !== N.def.musica)) Musica.trocar(N.def.musica); }
+  else if (Musica.atual && Musica.atual.id === N.def.musica) Musica.parar();
+  try { N.def.atualizar(N, dt, t); } catch (e){ console.error(e); acabarNoite(); }
+}
+// um da plateia fala, se está na tela (porquinhos com a lista deles)
+function falaPlateia(N, lista, listaPorco, filtro){
+  const l = N.gente.filter(j => (!filtro || filtro(j)) && naTelaBicho(new THREE.Vector3(j.x, 0.5, j.z)));
+  const j = sorteia(l); if (!j) return null;
+  const f = variar(j.tipo === 'porco' && listaPorco ? listaPorco : lista); falar(j, f, Math.min(2.8, tempoDeLeitura(f)));
+  return j;
+}
+// a plateia sentada: os porquinhos deitados, a família sentada no chão (na esteira), as nanos sentadas e as pessoas em pé
+function animarPlateia(j, dt, t){
+  if (j.salto > 0) j.salto = Math.max(0, j.salto - dt);
+  const pulo = j.salto > 0 ? Math.sin((1 - j.salto / 0.55) * Math.PI) * (j.altoPulo || 0.18) : 0;
+  if (j.tipo === 'porco' || j.tipo === 'familia'){
+    const v = j.v; v.x = j.x; v.z = j.z; v.y = j.y + pulo; v.ang = j.ang; v.estado = j.sentado ? 'atividade' : 'parado';
+    v.lugar = j.sentado ? (j.tipo === 'porco' ? { tipo: 'cadeira' } : { tipo: 'esteira', sentado: 0.03 }) : null;
+    if (j.tipo === 'familia' && j.aplaude > 0){ j.aplaude -= dt; v.p.aceno = 0.3; }
+    animarSpa(v, dt, t);
+  } else if (j.tipo === 'nano'){
+    poseNano(j.g, dt, j.pose || (j.sentado ? 'senta' : 'parado'));
+    j.g.position.set(j.x, j.y + pulo, j.z); j.g.rotation.y = anguloPerto(j.g.rotation.y, j.ang, Math.min(1, dt * 10));
+  } else {
+    j.g.position.set(j.x, j.y + pulo, j.z); j.g.rotation.y = anguloPerto(j.g.rotation.y, j.ang, Math.min(1, dt * 10));
+  }
+}
+// um da plateia: o tipo (porco, nano, pessoa ou familia, com quem), sentado em (x, z), olhando para (ox, oz)
+function sentarPlateia(N, tipo, x, z, ox, oz, quem, sentado = true){
+  const j = novoJogadorQuadra(tipo, quem);
+  j.y = 0; colocarJogador(j, x, z); j.ang = Math.atan2(ox - x, oz - z); j.sentado = sentado; j.altoPulo = rnd(0.1, 0.18);
+  if (tipo === 'familia') j.v.p.colocar(x, z);
+  N.gente.push(j); animarPlateia(j, 0.016, 0);
+  return j;
+}
+// a família que pode vir (a mesma regra do spa: quem não está em outro lugar da fazenda)
+const familiaNaNoite = (sem = []) => ['beto', 'pelucio', 'patrinho', 'maurinho', 'milton', 'hud', 'dani'].filter(q => !sem.includes(q) && FAMILIA_SPA[q].pode());
+// o menu de quem toca numa noite (ou no portal, com uma noite montada): chegar perto com a câmera ou levar o Ed
+function itensNoite(){
+  const N = noite;
+  if (!N) return itensEspaco();
+  const r = { titulo: N.def.titulo, icone: N.def.icone, itens: [], estado: N.def.estado ? N.def.estado(N) : '' };
+  noiteItens(N, r);
+  return r;
+}
+function noiteItens(N, r){
+  const livre = ed.estado === 'parado' && !tarefaAtual && ed.g.visible && !ed.sentado;
+  r.itens.push({ rotulo: N.def.levar, sub: livre ? 'o Ed vai até lá' : 'quando o Ed estiver livre', icone: 'ed', off: !livre, fn: () => {
+    const [x, z] = N.def.lugarEd(N); andarAte(ed, x, z, () => { if (noite === N) ed.olhar(...N.def.olharEd(N)); });
+    cam.alvo.set(N.def.centro[0], 0, N.def.centro[1]);
+  } });
+  r.itens.push({ rotulo: 'Chegar perto', sub: 'a câmera vai até lá', icone: N.def.icone, leve: true, fn: () => { cam.alvo.set(N.def.centro[0], 0, N.def.centro[1]); cam.vista = Math.min(cam.vista, 7); } });
+}
+// o texto do portal sobre as noites
+function textoNoitesPortal(){
+  if (noite) return ` Agora: ${NOMES_NOITE[noite.id]}!`;
+  if (noiteDia.id && noiteDia.dia === diaAtual()) return ` Hoje à noite tem ${NOMES_NOITE[noiteDia.id]}.`;
+  return ' De noite, de vez em quando, tem cinema na roça' + (S.viuCineKevin ? ', noite de causos com o Kevin' : '') + (obraConcluida('observatorio') ? ' ou a noite dos ETs' : '') + '.';
+}
+
+// ----- o cinema na roça: o telão no fundo da praça, de frente para o sul (a câmera de sempre vê o filme), a plateia
+// sentada nas esteiras de costas para a câmera, o projetor atrás com o feixe de luz até o telão e o carrinho de pipoca do
+// Patrinho do lado. Passam três filminhos (FILMES) com o letreiro, um intervalo entre eles e o FIM, desenhados num canvas
+// (CINEMA.qps quadros por segundo, só com a câmera perto) numa placa que brilha no escuro. A plateia comenta nos momentos de
+// cada filme (falas)
+// O cinema todo é montado num eixo próprio, girado de CINEMA.ang (o da câmera de sempre), para o telão ficar de frente para
+// ela: u vai para a direita de quem olha a tela e v vem do telão para a câmera (cinemaEm converte para o mundo)
+const CINEMA = { centro: zp('festa', 11, 14), ang: Math.PI / 4, tela: [0, -4.6], projetor: [0, 5.2], pipoca: [5.8, 0.2], escala: 1 / 12, w: 256, h: 152, qps: 12,
+  esteiras: [-2.1, -0.5, 1.1, 2.7].flatMap(v => [-3.4, -1.8, 1.8, 3.4].map(u => [u, v])),
+  pessoas: [[-5.2, 1.4], [-5.4, 3], [5.2, 3.2], [-4.6, 4.4], [4.6, 4.6], [5.6, 1.8]], gente: 22, filmes: 3, letreiro: 4, intervalo: 7, fimFilme: 3 };
+const cinemaEm = (u, v) => { const a = CINEMA.ang, [cx, cz] = CINEMA.centro; return [cx + Math.cos(a) * u + Math.sin(a) * v, cz - Math.sin(a) * u + Math.cos(a) * v]; };
+// o filme pronto para passar: os quadros-chave de cada filme, o letreiro, o intervalo e o FIM
+const FILME = { fonte: '"Bagel Fat One", "Arial Black", sans-serif' };
+function quadroFilme(x, N, t){
+  const W = CINEMA.w, H = CINEMA.h, P = N.prog;
+  x.save();
+  // o que está passando agora: em P.itens, cada um com o começo (ini), a duração (dur) e o desenho
+  let it = null; for (const q of P.itens) if (t >= q.ini && t < q.ini + q.dur) it = q;
+  if (!it){ x.fillStyle = '#0c0b10'; x.fillRect(0, 0, W, H); }
+  else it.desenha(x, (t - it.ini) / it.dur, t - it.ini);
+  // o grão do filme velho: pontinhos, um risco de vez em quando e as bordas mais escuras
+  for (let i = 0; i < 14; i++){ x.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.3)'; x.fillRect(Math.random() * W, Math.random() * H, 1, 1); }
+  if (Math.random() < 0.08){ x.fillStyle = 'rgba(255,255,255,0.18)'; x.fillRect(Math.random() * W, 0, 1, H); }
+  const g = x.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, W * 0.62); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.45)'); x.fillStyle = g; x.fillRect(0, 0, W, H);
+  x.restore();
+  return it;
+}
+// ----- os desenhos dos filmes (canvas 256 × 152, chão em 118)
+const FD = {
+  ceu(x, a, b){ const g = x.createLinearGradient(0, 0, 0, CINEMA.h); g.addColorStop(0, a); g.addColorStop(1, b); x.fillStyle = g; x.fillRect(0, 0, CINEMA.w, CINEMA.h); },
+  chao(x, cor, y = 118){ x.fillStyle = cor; x.fillRect(0, y, CINEMA.w, CINEMA.h - y); x.fillStyle = 'rgba(0,0,0,0.12)'; x.fillRect(0, y, CINEMA.w, 3); },
+  el(x, cx, cy, rx, ry, cor, rot = 0){ x.fillStyle = cor; x.beginPath(); x.ellipse(cx, cy, Math.max(0.1, rx), Math.max(0.1, ry), rot, 0, Math.PI * 2); x.fill(); },
+  tri(x, a, b, c, cor){ x.fillStyle = cor; x.beginPath(); x.moveTo(...a); x.lineTo(...b); x.lineTo(...c); x.closePath(); x.fill(); },
+  texto(x, txt, cx, cy, tam, cor, contorno){ x.font = `${tam}px ${FILME.fonte}`; x.textAlign = 'center'; x.textBaseline = 'middle'; if (contorno){ x.lineWidth = 3; x.strokeStyle = contorno; x.strokeText(txt, cx, cy); } x.fillStyle = cor; x.fillText(txt, cx, cy); },
+  balao(x, txt, cx, cy){ x.font = `11px ${FILME.fonte}`; const w = x.measureText(txt).width + 12; x.fillStyle = '#fff'; x.strokeStyle = '#111'; x.lineWidth = 2; x.beginPath(); x.roundRect ? x.roundRect(cx - w / 2, cy - 10, w, 20, 8) : x.rect(cx - w / 2, cy - 10, w, 20); x.fill(); x.stroke(); FD.texto(x, txt, cx, cy + 1, 11, '#111'); },
+  sol(x, cx, cy, t){ x.fillStyle = 'rgba(255,220,90,0.35)'; for (let i = 0; i < 8; i++){ const a = i / 8 * Math.PI * 2 + t * 0.4; FD.tri(x, [cx + Math.cos(a) * 14, cy + Math.sin(a) * 14], [cx + Math.cos(a + 0.2) * 24, cy + Math.sin(a + 0.2) * 24], [cx + Math.cos(a - 0.2) * 24, cy + Math.sin(a - 0.2) * 24], 'rgba(255,214,80,0.7)'); } FD.el(x, cx, cy, 13, 13, '#ffd84d'); },
+  lua(x, cx, cy){ FD.el(x, cx, cy, 13, 13, '#fff6d0'); FD.el(x, cx + 6, cy - 3, 11, 11, 'rgba(20,24,60,0.95)'); },
+  estrelas(x, t, n = 30){ for (let i = 0; i < n; i++){ const a = hash(i, 3, 7), b = hash(i, 5, 9), pis = Math.sin(t * 3 + i) > 0.6; x.fillStyle = pis ? '#fff' : '#cfd6ff'; x.fillRect(a * CINEMA.w, b * 100, pis ? 2 : 1, pis ? 2 : 1); } },
+  nuvem(x, cx, cy, s, cor = '#fff'){ for (const [dx, dy, r] of [[-12, 2, 9], [0, -4, 12], [12, 2, 9], [4, 5, 9], [-5, 5, 8]]) FD.el(x, cx + dx * s, cy + dy * s, r * s, r * s * 0.85, cor); },
+  // o Ed (ou outro porquinho de pelúcia) de pé: s é o tamanho, roupa e bolso as cores do macacão, aceno levanta o braço
+  porquinho(x, cx, cy, s, roupa = '#f6e27c', bolso = '#fbed9f', aceno = 0, olho = 0){
+    const pele = '#f3e0c6';
+    FD.el(x, cx - 6 * s, cy + 14 * s, 4 * s, 6 * s, pele); FD.el(x, cx + 6 * s, cy + 14 * s, 4 * s, 6 * s, pele);
+    FD.el(x, cx, cy + 4 * s, 12 * s, 11 * s, roupa);
+    x.fillStyle = bolso; x.fillRect(cx - 4 * s, cy + 1 * s, 8 * s, 6 * s); FD.texto(x, 'P', cx, cy + 4.5 * s, 7 * s, '#e0408a');
+    FD.el(x, cx - 13 * s, cy + 2 * s - aceno * 10 * s, 3.5 * s, 6 * s, pele, aceno * 0.6);
+    FD.el(x, cx + 13 * s, cy + 2 * s, 3.5 * s, 6 * s, pele);
+    FD.tri(x, [cx - 11 * s, cy - 18 * s], [cx - 3 * s, cy - 22 * s], [cx - 10 * s, cy - 30 * s], '#efc4ab');
+    FD.tri(x, [cx + 11 * s, cy - 18 * s], [cx + 3 * s, cy - 22 * s], [cx + 10 * s, cy - 30 * s], '#efc4ab');
+    FD.el(x, cx, cy - 12 * s, 13 * s, 12 * s, pele);
+    FD.el(x, cx, cy - 10 * s, 5.5 * s, 4 * s, '#f2cbb3'); FD.el(x, cx - 2 * s, cy - 10 * s, 1.2 * s, 1.6 * s, '#e2558f'); FD.el(x, cx + 2 * s, cy - 10 * s, 1.2 * s, 1.6 * s, '#e2558f');
+    FD.el(x, cx - 6 * s + olho * s, cy - 15 * s, 1.6 * s, 2 * s, '#1a1414'); FD.el(x, cx + 6 * s + olho * s, cy - 15 * s, 1.6 * s, 2 * s, '#1a1414');
+    x.strokeStyle = '#6b3a22'; x.lineWidth = Math.max(1, s); x.beginPath(); x.arc(cx, cy - 7 * s, 4 * s, 0.2, Math.PI - 0.2); x.stroke();
+  },
+  // o teco-teco PIG-MTP, laranja, virado para a direita (ou para a esquerda com vira = -1)
+  aviao(x, cx, cy, s, t, vira = 1, inclina = 0){
+    x.save(); x.translate(cx, cy); x.rotate(inclina); x.scale(vira * s, s);
+    FD.el(x, 0, 0, 24, 8, '#ff5500'); FD.el(x, -2, -7, 7, 5, '#9fe3ff');
+    FD.tri(x, [-18, -2], [-30, -14], [-24, 2], '#e04800');
+    x.fillStyle = '#fbf6ea'; x.fillRect(-10, -1, 22, 5); FD.el(x, -2, 3, 16, 3, '#e04800');
+    FD.texto(x, 'PIG-MTP', -2, 0, 6, '#fff');
+    x.fillStyle = 'rgba(60,60,70,0.6)'; x.fillRect(23, -12 + Math.sin(t * 40) * 2, 3, 24);
+    FD.el(x, 0, -9, 4, 4, '#f3e0c6');
+    x.restore();
+  },
+  // a Luma, chihuahua caramelo de orelhão, virada para a direita; bola: a bolinha roxa na boca
+  luma(x, cx, cy, s, t, pula = 0, bola = false){
+    const c = '#d9a066'; cy -= pula;
+    FD.el(x, cx, cy, 11 * s, 7 * s, c);
+    for (const [dx, f] of [[-7, 0], [7, 1]]) { x.fillStyle = c; x.fillRect(cx + (dx - 1.5) * s, cy + 3 * s, 3 * s, (8 + (pula ? -3 : Math.sin(t * 12 + f * 3) * 1.5)) * s); }
+    FD.el(x, cx - 12 * s, cy - 3 * s, 3 * s, 1.6 * s, c, -0.8 + Math.sin(t * 14) * 0.4);
+    FD.el(x, cx + 12 * s, cy - 7 * s, 7 * s, 6.5 * s, c);
+    FD.tri(x, [cx + 7 * s, cy - 10 * s], [cx + 9 * s, cy - 22 * s], [cx + 13 * s, cy - 11 * s], c);
+    FD.tri(x, [cx + 13 * s, cy - 11 * s], [cx + 19 * s, cy - 21 * s], [cx + 18 * s, cy - 9 * s], c);
+    FD.el(x, cx + 15 * s, cy - 8 * s, 1.6 * s, 2 * s, '#1a1414'); FD.el(x, cx + 19 * s, cy - 5 * s, 1.5 * s, 1.2 * s, '#1a1414');
+    if (bola) FD.el(x, cx + 19 * s, cy - 2 * s, 3.4 * s, 3.4 * s, '#8a4fd0');
+  },
+  disco(x, cx, cy, s, t){
+    FD.el(x, cx, cy - 6 * s, 9 * s, 8 * s, '#9fe3ff'); FD.el(x, cx, cy - 7 * s, 3.5 * s, 3.5 * s, '#7ed957'); FD.el(x, cx - 1.2 * s, cy - 8 * s, 0.9 * s, 1.2 * s, '#1a1414'); FD.el(x, cx + 1.2 * s, cy - 8 * s, 0.9 * s, 1.2 * s, '#1a1414');
+    FD.el(x, cx, cy, 22 * s, 6 * s, '#d6dde4'); FD.el(x, cx, cy + 2 * s, 20 * s, 3 * s, '#b4bfca');
+    const L = ['#ffd84d', '#ff7ac8', '#6fe3ff']; for (let i = 0; i < 7; i++) FD.el(x, cx + (i - 3) * 6 * s, cy + 1 * s, 1.6 * s, 1.6 * s, L[(i + Math.floor(t * 6)) % 3]);
+  },
+  raio(x, cx, topo, base, s){ x.fillStyle = 'rgba(255,246,160,0.45)'; x.beginPath(); x.moveTo(cx - 8 * s, topo); x.lineTo(cx + 8 * s, topo); x.lineTo(cx + 26 * s, base); x.lineTo(cx - 26 * s, base); x.closePath(); x.fill(); },
+  celeiro(x, cx, base, s, porta = 0){
+    x.fillStyle = '#b8322a'; x.fillRect(cx - 30 * s, base - 40 * s, 60 * s, 40 * s);
+    FD.tri(x, [cx - 34 * s, base - 40 * s], [cx, base - 64 * s], [cx + 34 * s, base - 40 * s], '#8a2a22');
+    x.fillStyle = '#2a1410'; x.fillRect(cx - 12 * s, base - 30 * s, 24 * s, 30 * s);
+    x.fillStyle = '#fbf6ea'; const ab = porta * 10 * s;
+    x.fillRect(cx - 12 * s - ab, base - 30 * s, 12 * s, 30 * s); x.fillRect(cx + ab, base - 30 * s, 12 * s, 30 * s);
+    x.strokeStyle = '#b8322a'; x.lineWidth = 2 * s; x.beginPath(); x.moveTo(cx - 12 * s - ab, base - 30 * s); x.lineTo(cx - ab, base); x.moveTo(cx + ab, base - 30 * s); x.lineTo(cx + 12 * s + ab, base); x.stroke();
+  },
+  milho(x, cx, base, h, s = 1){
+    x.fillStyle = '#4c9636'; x.fillRect(cx - 2 * s, base - h, 4 * s, h);
+    for (let y = base - 14 * s; y > base - h + 10; y -= 18 * s){ FD.el(x, cx - 9 * s, y, 10 * s, 3 * s, '#6cbf47', -0.5); FD.el(x, cx + 9 * s, y - 8 * s, 10 * s, 3 * s, '#6cbf47', 0.5); }
+  },
+  espiga(x, cx, cy, s){ FD.el(x, cx, cy, 6 * s, 15 * s, '#f5d142'); x.fillStyle = '#e8b524'; for (let i = -12; i <= 12; i += 4) for (let j = -4; j <= 4; j += 4) x.fillRect(cx + j * s - s, cy + i * s - s, 2 * s, 2 * s); FD.el(x, cx - 6 * s, cy + 6 * s, 3 * s, 12 * s, '#6cbf47', 0.3); FD.el(x, cx + 6 * s, cy + 6 * s, 3 * s, 12 * s, '#6cbf47', -0.3); },
+  pipoca(x, cx, cy, r){ for (const [dx, dy, k] of [[0, 0, 1], [-0.7, 0.3, 0.7], [0.7, 0.3, 0.7], [0, -0.7, 0.7]]) FD.el(x, cx + dx * r, cy + dy * r, r * k, r * k, hash(Math.round(cx), Math.round(cy), 3) < 0.3 ? '#fbe8a4' : '#fff6d8'); },
+  // o fantasma de lençol, com as duas orelhinhas furando o pano
+  fantasma(x, cx, cy, s, t){
+    FD.tri(x, [cx - 9 * s, cy - 15 * s], [cx - 4 * s, cy - 17 * s], [cx - 7 * s, cy - 24 * s], '#f5a3b3'); FD.tri(x, [cx + 9 * s, cy - 15 * s], [cx + 4 * s, cy - 17 * s], [cx + 7 * s, cy - 24 * s], '#f5a3b3');
+    x.fillStyle = '#f7f6f0'; x.beginPath(); x.arc(cx, cy - 4 * s, 14 * s, Math.PI, 0);
+    for (let i = 0; i <= 6; i++){ const px = cx + 14 * s - i * (28 * s / 6), py = cy + 16 * s + (i % 2 ? -4 * s : 2 * s) + Math.sin(t * 6 + i) * 1.5 * s; x.lineTo(px, py); }
+    x.closePath(); x.fill();
+    FD.el(x, cx - 5 * s, cy - 6 * s, 2.5 * s, 3.5 * s, '#1a1414'); FD.el(x, cx + 5 * s, cy - 6 * s, 2.5 * s, 3.5 * s, '#1a1414'); FD.el(x, cx, cy + 3 * s, 3 * s, 4 * s, '#1a1414');
+  },
+  // o Kevin, porco rosa de quatro patas, virado para a esquerda, de sobrancelha arqueada
+  kevin(x, cx, cy, s, t, ri = 0){
+    const p = '#f5a3b3';
+    for (const dx of [-9, -3, 5, 11]) { x.fillStyle = p; x.fillRect(cx + dx * s, cy + 4 * s, 3 * s, (9 + (ri ? Math.sin(t * 18 + dx) * 3 : 0)) * s); }
+    FD.el(x, cx + 2 * s, cy, 14 * s, 9 * s, p);
+    FD.el(x, cx - 12 * s, cy - 4 * s, 9 * s, 8.5 * s, p);
+    FD.tri(x, [cx - 18 * s, cy - 10 * s], [cx - 16 * s, cy - 20 * s], [cx - 12 * s, cy - 11 * s], p); FD.tri(x, [cx - 10 * s, cy - 11 * s], [cx - 6 * s, cy - 20 * s], [cx - 5 * s, cy - 9 * s], p);
+    FD.el(x, cx - 20 * s, cy - 2 * s, 4 * s, 4.5 * s, '#f7889f'); FD.el(x, cx - 21 * s, cy - 3 * s, 0.8 * s, 1.2 * s, '#9c3450'); FD.el(x, cx - 19 * s, cy - 1 * s, 0.8 * s, 1.2 * s, '#9c3450');
+    FD.el(x, cx - 13 * s, cy - 6 * s, 1.6 * s, 1.4 * s, '#1a1414');
+    x.strokeStyle = '#4a2622'; x.lineWidth = 1.6 * s; x.beginPath(); x.moveTo(cx - 16 * s, cy - 9 * s); x.quadraticCurveTo(cx - 13 * s, cy - 12 * s, cx - 10 * s, cy - 10 * s); x.stroke();
+    x.strokeStyle = '#7a2236'; x.beginPath(); x.moveTo(cx - 16 * s, cy + 2 * s); x.quadraticCurveTo(cx - 12 * s, cy + 4 * s, cx - 8 * s, cy - 1 * s); x.stroke();
+    x.strokeStyle = p; x.lineWidth = 1.6 * s; x.beginPath(); x.arc(cx + 17 * s, cy - 4 * s, 2.5 * s, 0, Math.PI * 1.6); x.stroke();
+  },
+  // o letreiro: fundo escuro de cinema antigo, moldura dourada, o título e a marca do estúdio
+  letreiro(x, k, titulo, cor){
+    FD.ceu(x, '#1c1420', '#0c0a10'); x.strokeStyle = '#d9b23c'; x.lineWidth = 3; x.strokeRect(10, 10, CINEMA.w - 20, CINEMA.h - 20);
+    FD.texto(x, 'JOLI FILMES apresenta', CINEMA.w / 2, 36, 10, '#d9b23c');
+    const lin = titulo.split('\n'); lin.forEach((l, i) => FD.texto(x, l, CINEMA.w / 2, 72 + i * 22 - (lin.length - 1) * 11, 19, cor, '#000'));
+    FD.texto(x, '★ ★ ★', CINEMA.w / 2, 122, 10, '#d9b23c');
+  },
+  fim(x, k){ FD.ceu(x, '#1c1420', '#0c0a10'); FD.texto(x, 'FIM', CINEMA.w / 2, CINEMA.h / 2, 34 + k * 4, '#fdf8ef', '#000'); },
+  contagem(x, k, t){ FD.ceu(x, '#3a3a40', '#26262c'); const n = 3 - Math.min(2, Math.floor(k * 3)); x.strokeStyle = '#ddd'; x.lineWidth = 2; x.beginPath(); x.arc(CINEMA.w / 2, CINEMA.h / 2, 40, 0, Math.PI * 2); x.stroke(); x.beginPath(); x.moveTo(CINEMA.w / 2, CINEMA.h / 2); x.arc(CINEMA.w / 2, CINEMA.h / 2, 40, -Math.PI / 2, -Math.PI / 2 + ((k * 3) % 1) * Math.PI * 2); x.fillStyle = 'rgba(255,255,255,0.18)'; x.fill(); FD.texto(x, String(n), CINEMA.w / 2, CINEMA.h / 2 + 2, 40, '#fff', '#000'); },
+  intervalo(x, k, t){ FD.ceu(x, '#3a1a20', '#1c0c10'); FD.texto(x, 'INTERVALO', CINEMA.w / 2, 52, 22, '#ffd34d', '#000'); FD.texto(x, 'Pipoca no carrinho do Patrinho!', CINEMA.w / 2, 84, 11, '#fdf8ef'); for (let i = 0; i < 9; i++) FD.pipoca(x, 40 + i * 22, 118 + Math.sin(t * 5 + i) * 4, 6); },
+};
+// os filmes: cada cena tem a duração (s), a cor da luz que o telão joga na plateia e o desenho (k vai de 0 a 1 na cena, s
+// é o tempo dentro dela); falas: [segundo do filme, tipo de comentário da plateia]
+const FILMES = {
+  tempestade: { titulo: 'PIG-MTP e a\ntempestade', cor: '#ff8a3a', falas: [[8, 'oh'], [19, 'medo'], [24, 'medo'], [33, 'oh'], [45, 'torce']], cenas: [
+    { dur: 13, luz: 0x9fd8ff, desenha(x, k, s){ FD.ceu(x, '#7cc8ff', '#d8f0ff'); FD.sol(x, 210, 30, s); FD.nuvem(x, 60 - k * 30, 40, 1); FD.nuvem(x, 170 - k * 20, 62, 0.8); FD.chao(x, '#6cbf47'); FD.aviao(x, -40 + k * 330, 64 + Math.sin(s * 2) * 6, 0.9, s); } },
+    { dur: 14, luz: 0x6a7a9a, desenha(x, k, s){ const flash = (s > 5 && s < 5.25) || (s > 10 && s < 10.3); FD.ceu(x, flash ? '#e8eeff' : '#3a4258', flash ? '#ffffff' : '#6a7490'); for (let i = 0; i < 5; i++) FD.nuvem(x, (i * 60 + s * 8) % 300 - 20, 26 + (i % 2) * 14, 1.1, '#56607a'); x.strokeStyle = 'rgba(200,220,255,0.6)'; x.lineWidth = 1; for (let i = 0; i < 40; i++){ const rx = (hash(i, 1, 2) * 300 + s * 30) % 256, ry = (hash(i, 3, 4) * 152 + s * 160) % 152; x.beginPath(); x.moveTo(rx, ry); x.lineTo(rx - 3, ry + 9); x.stroke(); } if (flash){ x.strokeStyle = '#ffe14d'; x.lineWidth = 3; x.beginPath(); x.moveTo(150, 20); x.lineTo(138, 52); x.lineTo(152, 52); x.lineTo(136, 92); x.stroke(); } FD.chao(x, '#3e6a32'); FD.aviao(x, 128 + Math.sin(s * 5) * 10, 70 + Math.sin(s * 7) * 8, 0.9, s, 1, Math.sin(s * 6) * 0.25); } },
+    { dur: 12, luz: 0xffc6e0, desenha(x, k, s){ FD.ceu(x, '#8fd0ff', '#fff0d8'); const cores = ['#e2442f', '#f08a2c', '#f5d142', '#6cbf47', '#3a8fd0', '#7a48b8']; x.lineWidth = 5; cores.forEach((c, i) => { x.strokeStyle = c; x.beginPath(); x.arc(128, 150, 110 - i * 5, Math.PI, Math.PI + Math.PI * Math.min(1, k * 1.6)); x.stroke(); }); FD.chao(x, '#6cbf47'); const a = s * 1.4; FD.aviao(x, 128 + Math.cos(a) * 60, 64 + Math.sin(a) * 26, 0.85, s, 1, a + Math.PI / 2); } },
+    { dur: 13, luz: 0xfff0b0, desenha(x, k, s){ FD.ceu(x, '#7cc8ff', '#e0f4ff'); FD.sol(x, 40, 28, s); FD.chao(x, '#6cbf47'); FD.celeiro(x, 200, 118, 0.8); FD.porquinho(x, 150, 98, 0.75, '#f6e27c', '#fbed9f', Math.sin(s * 8) > 0 ? 1 : 0.4); const px = Math.max(60, 300 - s * 45); FD.aviao(x, px, 108 - Math.max(0, (px - 60) * 0.2), 0.8, s, -1); if (s > 7) FD.balao(x, 'Milton na área!', px, 76); } },
+  ] },
+  disco: { titulo: 'Luma contra o\ndisco voador', cor: '#8fe0ff', falas: [[6, 'oh'], [17, 'medo'], [22, 'ri'], [31, 'torce'], [44, 'ri']], cenas: [
+    { dur: 11, luz: 0x4a5aa0, desenha(x, k, s){ FD.ceu(x, '#141a44', '#3a3a80'); FD.estrelas(x, s); FD.lua(x, 210, 30); FD.chao(x, '#2f5a2a'); FD.luma(x, 100, 108, 0.9, s, 0, false); FD.el(x, 130, 112, 4, 4, '#8a4fd0'); } },
+    { dur: 14, luz: 0xb0f0ff, desenha(x, k, s){ FD.ceu(x, '#141a44', '#3a3a80'); FD.estrelas(x, s); FD.chao(x, '#2f5a2a'); const dy = Math.min(1, k * 2.5); FD.raio(x, 150, 34 * dy + 10, 118, dy > 0.9 ? 1 : 0); FD.disco(x, 150, -20 + dy * 54, 1, s); const sobe = Math.max(0, k - 0.4) * 80; FD.el(x, 150, 112 - sobe, 4, 4, '#8a4fd0'); const p = Math.abs(Math.sin(s * 8)) * 8; FD.luma(x, 92, 108, 0.9, s, p); if (s > 6) FD.balao(x, 'AU AU AU!', 80, 72); } },
+    { dur: 12, luz: 0xffe08a, desenha(x, k, s){ FD.ceu(x, '#141a44', '#3a3a80'); FD.estrelas(x, s); FD.chao(x, '#2f5a2a'); const foge = Math.max(0, k - 0.45); FD.disco(x, 150 + foge * 260, 34 - foge * 70, 1, s); if (k < 0.45) FD.raio(x, 150, 44, 118, 1); const salto = k < 0.45 ? Math.sin(k / 0.45 * Math.PI) * 70 : 0; FD.luma(x, 120 + k * 30, 108, 0.9, s, salto, k > 0.3); if (k > 0.5) FD.balao(x, 'Bip bip, foge!', 210 + foge * 100, 60 - foge * 60); } },
+    { dur: 11, luz: 0xffc6e0, desenha(x, k, s){ FD.ceu(x, '#141a44', '#3a3a80'); FD.estrelas(x, s); FD.lua(x, 50, 30); FD.chao(x, '#2f5a2a'); FD.luma(x, 120, 108, 1.1, s, Math.abs(Math.sin(s * 4)) * 4, true); for (let i = 0; i < 3; i++){ const hy = 70 - ((s * 18 + i * 14) % 40); FD.el(x, 150 + i * 10, hy, 3, 3, '#ff7ac8'); FD.el(x, 154 + i * 10, hy, 3, 3, '#ff7ac8'); FD.tri(x, [147 + i * 10, hy + 1], [157 + i * 10, hy + 1], [152 + i * 10, hy + 7], '#ff7ac8'); } } },
+  ] },
+  milho: { titulo: 'O milho gigante\ndo Ed', cor: '#f5d142', falas: [[7, 'oh'], [18, 'oh'], [30, 'ri'], [42, 'torce']], cenas: [
+    { dur: 12, luz: 0xfff0b0, desenha(x, k, s){ FD.ceu(x, '#7cc8ff', '#e0f4ff'); FD.sol(x, 220, 26, s); FD.chao(x, '#7a4e2e', 112); FD.chao(x, '#6cbf47', 124); FD.porquinho(x, 100, 92, 0.75, '#f6e27c', '#fbed9f'); x.fillStyle = '#8fd6ff'; for (let i = 0; i < 5; i++) if (k > 0.4) x.fillRect(128 + i * 3, 70 + ((s * 60 + i * 9) % 40), 1.5, 4); x.fillStyle = '#6a8090'; x.fillRect(118, 66, 16, 8); FD.el(x, 134, 112, 3, 2, '#6cbf47'); } },
+    { dur: 13, luz: 0xc8ffb0, desenha(x, k, s){ FD.ceu(x, '#7cc8ff', '#e0f4ff'); FD.chao(x, '#6cbf47'); const h = 10 + Math.pow(k, 1.6) * 170; FD.milho(x, 150, 118, h, 1.6); if (h > 120) FD.espiga(x, 158, 118 - h + 40, 1.4); FD.porquinho(x, 90, 98, 0.75, '#f6e27c', '#fbed9f', 0, 1.5); if (s > 8) FD.balao(x, 'Uau!', 90, 56); } },
+    { dur: 12, luz: 0xffffff, desenha(x, k, s){ FD.ceu(x, '#ffb060', '#fff0c0'); FD.sol(x, 40, 30, s * 3); FD.chao(x, '#6cbf47'); FD.milho(x, 150, 118, 180, 1.6); if (k < 0.35) FD.espiga(x, 158 + Math.sin(s * 30) * 2, 60, 1.4); const n = Math.floor(Math.max(0, k - 0.3) * 160); for (let i = 0; i < n; i++) FD.pipoca(x, hash(i, 2, 1) * 256, hash(i, 4, 3) * 152, 4 + hash(i, 6, 5) * 5); if (k > 0.3 && k < 0.4){ x.fillStyle = 'rgba(255,255,255,0.7)'; x.fillRect(0, 0, 256, 152); } } },
+    { dur: 12, luz: 0xfff6d8, desenha(x, k, s){ x.fillStyle = '#fff6d8'; x.fillRect(0, 0, 256, 152); for (let i = 0; i < 120; i++) FD.pipoca(x, hash(i, 2, 1) * 256, hash(i, 4, 3) * 152, 5 + hash(i, 6, 5) * 5); x.save(); x.beginPath(); x.rect(0, 0, 256, 112); x.clip(); FD.porquinho(x, 128, 118 - Math.min(1, k * 3) * 36, 0.8, '#f6e27c', '#fbed9f', 1); x.restore(); for (let i = 0; i < 30; i++) FD.pipoca(x, 60 + hash(i, 9, 1) * 140, 112 + hash(i, 8, 3) * 30, 6); if (s > 4) FD.balao(x, 'Pipoca para todo mundo!', 128, 24); } },
+  ] },
+  fantasma: { titulo: 'O fantasma\ndo celeiro', cor: '#c8b0ff', kevin: true, falas: [[6, 'medo'], [15, 'medo'], [26, 'medo'], [38, 'ri'], [44, 'ri']], cenas: [
+    { dur: 11, luz: 0x3a3a6a, desenha(x, k, s){ FD.ceu(x, '#0c0e24', '#2a2450'); FD.estrelas(x, s, 20); FD.lua(x, 60, 30); FD.chao(x, '#1e3a1c'); FD.celeiro(x, 160, 118, 1.1, 0); const pis = Math.sin(s * 2) > 0.9; FD.el(x, 230, 70, 4, pis ? 0.5 : 4, '#ffd84d'); FD.el(x, 240, 70, 4, pis ? 0.5 : 4, '#ffd84d'); } },
+    { dur: 13, luz: 0xe8e8ff, desenha(x, k, s){ FD.ceu(x, '#0c0e24', '#2a2450'); FD.estrelas(x, s, 20); FD.lua(x, 60, 30); FD.chao(x, '#1e3a1c'); FD.celeiro(x, 160, 118, 1.1, Math.min(1, k * 3)); FD.fantasma(x, 160 - k * 70, 86 + Math.sin(s * 3) * 6, 1.1, s); if (s > 4) FD.balao(x, 'Uuuuuuh...', 160 - k * 70, 50); } },
+    { dur: 12, luz: 0xffe08a, desenha(x, k, s){ FD.ceu(x, '#0c0e24', '#2a2450'); FD.chao(x, '#1e3a1c'); FD.celeiro(x, 210, 118, 1.1, 1); const g = x.createRadialGradient(70, 96, 4, 70, 96, 60); g.addColorStop(0, 'rgba(255,224,120,0.55)'); g.addColorStop(1, 'rgba(255,224,120,0)'); x.fillStyle = g; x.fillRect(0, 30, 160, 122); FD.porquinho(x, 60 + Math.sin(s * 30) * 1.5, 96, 0.75, '#f6e27c', '#fbed9f', 0.5); FD.el(x, 74, 92, 4, 5, '#ffd84d'); FD.fantasma(x, 140, 84 + Math.sin(s * 3) * 5, 1.1, s); if (s > 5) FD.balao(x, 'Q-quem está aí?', 60, 50); } },
+    { dur: 13, luz: 0xffc6e0, desenha(x, k, s){ FD.ceu(x, '#0c0e24', '#2a2450'); FD.estrelas(x, s, 20); FD.chao(x, '#1e3a1c'); FD.porquinho(x, 60, 96, 0.75, '#f6e27c', '#fbed9f', 0); if (k < 0.3) FD.fantasma(x, 140, 84 - k * 40, 1.1, s); else { x.fillStyle = '#f7f6f0'; x.fillRect(118, 112, 44, 6); FD.kevin(x, 140, 104, 1.1, s, 1); FD.balao(x, 'BUUU! Hehehe!', 140, 62); } if (k > 0.6) FD.texto(x, 'Era o Kevin!', 128, 24, 16, '#ffd34d', '#000'); } },
+  ] },
+};
+// o programa da noite: a contagem, os filmes sorteados (cada um com o letreiro, as cenas e o FIM) e o intervalo entre eles
+function programaCinema(){
+  const ids = Object.keys(FILMES).filter(id => !FILMES[id].kevin || S.viuCineKevin).sort(() => Math.random() - 0.5).slice(0, CINEMA.filmes);
+  const itens = [], falas = []; let t = 0;
+  const por = (dur, desenha, extra) => { itens.push(Object.assign({ ini: t, dur, desenha }, extra)); t += dur; };
+  por(3, (x, k, s) => FD.contagem(x, k, s), { luz: 0xc0c0c8 });
+  ids.forEach((id, n) => {
+    const F = FILMES[id], ini = t + CINEMA.letreiro;
+    por(CINEMA.letreiro, (x, k) => FD.letreiro(x, k, F.titulo, F.cor), { luz: 0xc8a050, filme: id, titulo: true });
+    for (const c of F.cenas) por(c.dur, (x, k, s) => c.desenha(x, k, s), { luz: c.luz, filme: id });
+    for (const [s, tipo] of F.falas) falas.push({ t: ini + s, tipo });
+    por(CINEMA.fimFilme, (x, k) => FD.fim(x, k), { luz: 0x9a9aa4, filme: id, fim: true });
+    falas.push({ t: t - CINEMA.fimFilme + 0.4, tipo: 'aplaude', filme: id });
+    if (n < ids.length - 1) por(CINEMA.intervalo, (x, k, s) => FD.intervalo(x, k, s), { luz: 0xffa070, intervalo: true });
+  });
+  return { ids, itens, falas, dur: t };
+}
+const FALAS_CINEMA = {
+  oh: ['Ooooh!', 'Que lindo!', 'Olha isso!', 'Uau!', 'Que desenho bonito!', 'Ahhh, que fofo!', 'Nossa!', 'Que cores!', 'Eu quero ver de novo!', 'Psiu, olha ali!', 'Que demais!',
+    'Isso é a nossa fazenda?', 'Parece de verdade!', 'Eu amo esse filme!', 'Que telão enorme!', 'Pssst, vai começar a melhor parte!', 'Olha o tamanho disso!', 'Caprichado, hein!', 'Que lugar bonito!', 'Ai, que gracinha!'],
+  medo: ['Aaai!', 'Que medo!', 'Não olha, não olha!', 'Tapa os olhos!', 'Uiii!', 'Eu não vou dormir hoje!', 'Socorro!', 'Segura a minha mão!', 'Corre!', 'Cuidado!', 'Eu sabia!',
+    'Que susto!', 'Não entra aí!', 'Ai, ai, ai...', 'Me avisa quando acabar!', 'Atrás de você!', 'Ui, arrepiei!', 'Eu não estou com medo... tá, estou.', 'Gelei!', 'Vai, vai, vai!'],
+  ri: ['Hahaha!', 'Hehehe!', 'Kkkkk!', 'Que engraçado!', 'Rárárá!', 'Hihihi!', 'Essa foi boa!', 'Ai, minha barriga!', 'Hahaha, de novo!', 'Não aguento!', 'Que palhaçada!',
+    'Hahaha, que cara!', 'Ri até chorar!', 'Kkkk, olha isso!', 'Hihi, que fofura!', 'Rolei de rir!', 'Hahaha, típico!', 'Esse é o melhor!', 'Pipoca voou de tanto rir!', 'Hahaha, sabia!'],
+  torce: ['Vai, vai!', 'Isso!', 'Uhuu!', 'Viva!', 'Ganhou!', 'Muito bem!', 'Bravo!', 'Aêêê!', 'É isso aí!', 'Arrasou!', 'Que herói!', 'Eu sabia que ia dar certo!',
+    'Bis! Bis!', 'Palmas!', 'Uhuuu, que final!', 'Mandou bem!', 'Show!', 'Demais!', 'Que alegria!', 'Mais um, mais um!'],
+};
+const FALAS_CINEMA_PORCO = ['Oinc! (come pipoca)', 'Oinc oinc! (adorando)', 'Óinc! (de focinho no telão)', 'Oinc! (tapa os olhos)', 'Oinc-oinc! (rindo)', 'Oinc! (quer mais pipoca)',
+  'Óóinc! (assustado)', 'Oinc oinc! (aplaude com as patinhas)', 'Oinc! (cochicha com o vizinho)', 'Oinc! (balança o rabinho)', 'Óinc! (suspira)', 'Oinc-oinc! (torce)',
+  'Oinc! (pede silêncio)', 'Oinc oinc! (não pisca)', 'Oinc! (pula de susto)', 'Óinc! (ama o Milton)', 'Oinc! (ri alto)', 'Oinc-oinc! (dividindo a pipoca)', 'Oinc! (cochila e acorda)', 'Óóóinc! (que filme!)'];
+NOITES_DEF.cinema = {
+  centro: cinemaEm(0, -4.4), musica: 'cinema', icone: 'festa', titulo: 'Cinema na roça', levar: 'Ir ao cinema',
+  cartao: 'De noite, um telão no espaço de eventos passa três desenhos animados da Joli Filmes, com pipoca e a plateia comentando.',
+  faixa: [['CINEMA NA ROÇA', 1, '#fdf8ef'], ['hoje à noite, de graça', 0.55, '#ffd34d']], corFaixa: '#3a1a40',
+  anuncio: 'Cinema na roça no espaço de eventos! O telão já está montado e a pipoca do Patrinho está estourando.',
+  fimTexto: 'Acabou o cinema na roça. A plateia dobra as esteiras e vai dormir.',
+  estado: N => { const it = N.filme && N.filme.it; return `Está passando: ${it && it.filme ? FILMES[it.filme].titulo.replace('\n', ' ') : it && it.intervalo ? 'o intervalo' : 'a contagem'}. ${N.prog.ids.length} filminhos hoje, de graça, com pipoca.`; },
+  lugarEd: () => cinemaEm(4.6, -0.6), olharEd: () => cinemaEm(0, CINEMA.tela[1]),
+  montar(N){
+    const s16 = 1 / 16, E = CINEMA.escala, T = TELAO.tela, A = CINEMA.ang, [tx, tz] = cinemaEm(...CINEMA.tela);
+    // o telão e o filme: a placa em cima da lona, um pouco à frente, que brilha no escuro
+    const telao = new THREE.Group(); telao.position.set(tx, 0, tz); telao.rotation.y = A; N.g.add(telao);
+    telao.add(malha(geo('telao', () => vTelao().build(E, { origin: [0.5, 0, 0.5] }))));
+    const c = document.createElement('canvas'); c.width = CINEMA.w; c.height = CINEMA.h;
+    const tex = new THREE.CanvasTexture(c); tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearFilter;
+    const tela = new THREE.Mesh(new THREE.PlaneGeometry((T.x1 - T.x0 + 1) * E, (T.y1 - T.y0 + 1) * E), new THREE.MeshBasicMaterial({ map: tex }));
+    tela.position.set((T.x0 + T.x1) / 2 * E, (T.y0 + T.y1 + 1) / 2 * E, 0.5 * E + 0.01); telao.add(tela);
+    // o projetor atrás da plateia, virado para o telão, com os rolos girando e o feixe de luz (uma pirâmide aditiva até a tela)
+    const [px, pz] = cinemaEm(...CINEMA.projetor), proj = new THREE.Group(); proj.position.set(px, 0, pz); proj.rotation.y = A + Math.PI; N.g.add(proj);
+    proj.add(malha(geo('projetor', () => vProjetor().build(s16, { origin: [0.5, 0, 0.5] }))));
+    const rolos = PROJETOR.rolos.map(([x, y, z]) => { const r = malha(geo('roloFilme', () => vRoloFilme().build(s16, { origin: [0, 0, 0] }))); r.position.set(x * s16, y * s16, z * s16); proj.add(r); return r; });
+    N.g.updateMatrixWorld(true);
+    const lente = proj.localToWorld(new THREE.Vector3(-0.5 * s16, 14 * s16, 7.5 * s16)), w = (T.x1 - T.x0 + 1) * E / 2, cxT = (T.x0 + T.x1) / 2 * E, zt = 0.5 * E + 0.02;
+    const cantos = [[-w, T.y0 * E], [w, T.y0 * E], [w, (T.y1 + 1) * E], [-w, (T.y1 + 1) * E]].map(([u, y]) => telao.localToWorld(new THREE.Vector3(cxT + u, y, zt)));
+    const pg = new THREE.BufferGeometry(), V = [lente.x, lente.y, lente.z]; for (const q of cantos) V.push(q.x, q.y, q.z);
+    pg.setAttribute('position', new THREE.Float32BufferAttribute(V, 3)); pg.setIndex([0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 1]);
+    const feixe = new THREE.Mesh(pg, new THREE.MeshBasicMaterial({ color: 0xfff2c0, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    feixe.renderOrder = 2; N.g.add(feixe);
+    // o carrinho de pipoca, com o Patrinho atendendo (se ele já veio à fazenda)
+    const [qx, qz] = cinemaEm(...CINEMA.pipoca), carro = malha(geo('pipoqueira', () => vPipoqueira().build(s16, { origin: [0.5, 0, 0.5] })));
+    carro.position.set(qx, 0, qz); carro.rotation.y = A - Math.PI / 2; N.g.add(carro);
+    const sem = [];
+    if (FAMILIA_SPA.patrinho.pode()){ sem.push('patrinho'); const [jx, jz] = cinemaEm(CINEMA.pipoca[0] + 0.62, CINEMA.pipoca[1]), [ox2, oz2] = cinemaEm(CINEMA.pipoca[0] - 2, CINEMA.pipoca[1] + 1); const j = sentarPlateia(N, 'familia', jx, jz, ox2, oz2, 'patrinho', false); j.pipoqueiro = true; }
+    // as esteiras e a plateia: a família na frente, o Kevin no meio dela, e o resto atrás
+    const lugares = [];
+    for (const [eu, ev] of CINEMA.esteiras){
+      const [x, z] = cinemaEm(eu, ev), m = malha(geo('esteiraPalha', () => vEsteiraPalha().build(s16, { origin: [0.5, 0, 0.5] }))); m.position.set(x, 0.005, z); m.rotation.y = A; N.g.add(m);
+      for (const du of [-0.25, 0.25]) lugares.push(cinemaEm(eu + du, ev - 0.1));
+    }
+    const [ox, oz] = cinemaEm(0, CINEMA.tela[1]);
+    familiaNaNoite(sem).forEach(q => { const p = lugares.shift(); if (p) sentarPlateia(N, 'familia', p[0], p[1], ox, oz, q); });
+    if (S.viuCineKevin){
+      if (arteKevin) encerrarArteKevin();
+      const p = lugares.shift(), k = kevin;
+      if (p){ k.g.visible = true; k.estado = 'parado'; k.pontos = []; k.lencol.visible = false; k.colocar(p[0], p[1]); k.olhar(ox, oz); k.ang = k.angAlvo; k.pose = 'sentado'; N.kevin = true; }
+    }
+    lugares.sort(() => Math.random() - 0.5);
+    for (let i = 0; i < CINEMA.gente && lugares.length; i++){ const p = lugares.shift(); sentarPlateia(N, sorteia(['porco', 'porco', 'porco', 'nano', 'nano']), p[0], p[1], ox, oz); }
+    for (const [eu, ev] of CINEMA.pessoas){ const [x, z] = cinemaEm(eu + rnd(-0.2, 0.2), ev + rnd(-0.2, 0.2)); sentarPlateia(N, 'pessoa', x, z, ox, oz, null, false); }
+    N.filme = { c, x: c.getContext('2d'), tex, tela, feixe, rolos, t: 0, quadro: 0, it: null, fala: 0, luz: new THREE.Color(0xffffff) };
+    N.prog = programaCinema();
+    quadroFilme(N.filme.x, N, 0); tex.needsUpdate = true;
+  },
+  atualizar(N, dt, t){
+    const F = N.filme, P = N.prog;
+    F.t += dt;
+    for (const r of F.rolos) r.rotation.x -= dt * 2.2;
+    // as falas e os aplausos seguem o filme mesmo com a câmera longe (para não acumular)
+    while (F.fala < P.falas.length && P.falas[F.fala].t <= F.t){
+      const q = P.falas[F.fala++];
+      if (!N.perto) continue;
+      if (q.tipo === 'aplaude'){
+        for (const j of N.gente) if (!j.pipoqueiro){ j.salto = 0.55; j.aplaude = 1.6; }
+        if (N.kevin){ kevin.pulo = 0.4; kevin.abana = 2; }
+        falaPlateia(N, FALAS_CINEMA.torce, FALAS_CINEMA_PORCO);
+        // o susto de verdade: no fim do filme do fantasma, o Kevin empina com um BUUU e a plateia toda pula
+        if (q.filme === 'fantasma' && N.kevin){ kevin.pose = 'buu'; Som.tom(140, 0.35, 'sawtooth', 0.06, 70); falar(kevin, 'BUUUUU!', 1.4); for (const j of N.gente) j.salto = 0.55; N.buu = F.t; }
+      } else falaPlateia(N, FALAS_CINEMA[q.tipo], FALAS_CINEMA_PORCO, j => !j.pipoqueiro);
+    }
+    if (N.buu && F.t - N.buu > 1.3){ N.buu = 0; kevin.pose = 'rindo'; Som.risada(); depoisDaFala(kevin, () => { if (noite === N) falar(kevin, variar(FALAS_KEVIN_RI), 2.2); }); N.riKevin = F.t; }
+    if (N.riKevin && F.t - N.riKevin > 3.5){ N.riKevin = 0; kevin.pose = 'sentado'; }
+    // o programa acabou: as luzes do telão apagam e a plateia vai embora (a noite termina)
+    if (F.t > P.dur + 2){ acabarNoite(NOITES_DEF.cinema.fimTexto); return; }
+    if (!N.perto) return;
+    if ((F.quadro -= dt) <= 0){
+      F.quadro = 1 / CINEMA.qps;
+      F.it = quadroFilme(F.x, N, F.t); F.tex.needsUpdate = true;
+      const alvo = new THREE.Color(F.it ? F.it.luz : 0x202020).lerp(new THREE.Color(0xfff0d8), 0.45); F.luz.lerp(alvo, 0.25);
+      F.feixe.material.opacity = 0.05 + Math.random() * 0.025;
+    }
+    for (const j of N.gente) animarPlateia(j, dt, t);
+    if (N.kevin) kevin.update(dt, t);
+  },
+  limpar(N){
+    const F = N.filme;
+    if (F){ F.tex.dispose(); F.tela.material.dispose(); F.feixe.geometry.dispose(); F.feixe.material.dispose(); }
+    if (N.kevin && !cine){ const k = kevin; k.g.visible = false; k.pose = 'parado'; k.pontos = []; k.estado = 'parado'; }
+  },
+  // as luzes: a do telão, da cor do quadro, joga na plateia; a do projetor, quente e fraquinha; a do carrinho de pipoca
+  luzes(N, L, por, t){
+    const [tx, tz] = cinemaEm(CINEMA.tela[0], CINEMA.tela[1] + 2.2), [px, pz] = cinemaEm(CINEMA.projetor[0], CINEMA.projetor[1] - 0.4), [qx, qz] = cinemaEm(...CINEMA.pipoca), F = N.filme;
+    por(L[0], [1.3, 8, 1.4, null], tx, 1.6, tz); L[0].color.copy(F.luz);
+    por(L[1], [0.45, 4, 1.6, 0xfff0c0], px, 1.2, pz);
+    por(L[2], [0.7, 3.5, 1.6, 0xffb060], qx, 1.6, qz);
+    por(L[3], [0, 1, 2, 0xffffff], tx, 3, tz);
+  },
+};
 // ================= o recanto do fundo da mata (o Lucas pediu): o fundo da primeira coluna da mata, atrás da cachoeira, não
 // tinha trilha. Agora uma trilha sai do fim da trilha do meio (a parcela do nível 44), passa atrás do lago da cachoeira e
 // desce pela beira do mapa até uma clareirinha. Lá ficam as câmeras da mata (armadilhas fotográficas que o Hud, que também é
@@ -14560,10 +14984,10 @@ function limparArraia(){
 // São as mesmas quatro luzes, então o three.js não monta programa novo
 const LUZ_FESTA = { fogo: [2.6, 11, 1.4, 0xffa246], alto: [1.05, 15, 1.2, 0xffd9a0], fogos: [6, 16, 1.4], padrao: null };
 function luzesDaFesta(){
-  const L = LUZES_NOITE, A = arraia;
+  const L = LUZES_NOITE, A = arraia, N = !A && noite && noite.perto && noite.def.luzes ? noite : null;
   if (!L.length) return;
   if (!LUZ_FESTA.padrao) LUZ_FESTA.padrao = L.map(l => [l.distance, l.decay, l.color.getHex()]);
-  if (!A){
+  if (!A && !N){
     // fora da festa, as luzes voltam a ser as dos postes
     if (LUZ_FESTA.mexeu){ LUZ_FESTA.mexeu = false; L.forEach((l, j) => { const [d, k, c] = LUZ_FESTA.padrao[j]; l.distance = d; l.decay = k; l.color.setHex(c); }); }
     return;
@@ -14571,6 +14995,8 @@ function luzesDaFesta(){
   LUZ_FESTA.mexeu = true;
   const [mx, mz] = ARRAIA.meio, t = performance.now() / 1000, F = LUZ_FESTA;
   const por = (l, [forca, dist, decai, cor], x, y, z) => { l.intensity = forca; l.distance = dist; l.decay = decai; if (cor != null) l.color.setHex(cor); l.position.set(x, y, z); };
+  // as noites no espaço de eventos usam as mesmas quatro luzes, com a câmera perto (cada noite diz onde põe cada uma)
+  if (N){ N.def.luzes(N, L, por, t); return; }
   por(L[0], F.fogo, mx, 1.1, mz); L[0].intensity *= 0.85 + Math.sin(t * 11) * 0.08 + Math.sin(t * 17.3) * 0.07;
   por(L[1], F.alto, mx - 0.3, 3.4, mz + 0.4);
   const ult = A.claroes.slice(-2);
@@ -15064,6 +15490,10 @@ const TEMAS = {
     { tipo: 'triangle', vol: 0.05, notas: 'F4:1 A4:.5 C5:.5 F5:1 E5:.5 D5:.5 C5:1 A4:1 Bb4:1 D5:1 C5:1 A4:1 G4:1 A4:.5 Bb4:.5 C5:4 F4:1 A4:.5 C5:.5 F5:1 G5:.5 F5:.5 E5:1 C5:1 D5:1 Bb4:.5 G4:.5 C5:1 E4:1 G4:1 E4:1 F4:4' },
     { tipo: 'square', vol: 0.016, leg: 0.5, notas: 'F2:1 C3:1 F2:1 C3:1 Bb2:1 F3:1 Bb2:1 F3:1 C3:1 G3:1 C3:1 G3:1 F2:1 C3:1 F2:1 C3:1 F2:1 C3:1 F2:1 C3:1 Bb2:1 F3:1 Bb2:1 F3:1 C3:1 G3:1 C3:1 E3:1 F2:2 F2:2' },
     { tipo: 'x', vol: 0.04, notas: 'x:1 r:.5 x:.5 x:1 r:.5 x:.5 x:1 r:.5 x:.5 x:1 r:.5 x:.5 x:1 r:.5 x:.5 x:1 r:.5 x:.5 x:1 r:.5 x:.5 x:1 r:.5 x:.5 x:1 r:.5 x:.5 x:1 r:.5 x:.5 x:1 r:.5 x:.5 x:1 r:.5 x:.5 x:1 r:.5 x:.5 x:1 r:.5 x:.5 x:1 r:.5 x:.5 x:2' } ] },
+  // Cinema na roça: piano de cinema mudo, um ragtime em dó maior (a melodia na onda quadrada e o baixo de oom-pah)
+  cinema: { bpm: 132, ganho: 1.1, loop: true, faixas: [
+    { tipo: 'square', vol: 0.026, leg: 0.6, notas: 'E5:.5 C5:.5 G4:.5 E4:.5 F4:.5 G4:.5 A4:1 G4:.5 A4:.5 C5:.5 E5:.5 D5:1 r:1 D5:.5 B4:.5 G4:.5 F4:.5 E4:.5 F4:.5 G4:1 F4:.5 E4:.5 D4:.5 E4:.5 C4:1 r:1' },
+    { tipo: 'triangle', vol: 0.05, leg: 0.4, notas: 'C3:.5 E3+G3:.5 G2:.5 E3+G3:.5 C3:.5 E3+G3:.5 G2:.5 E3+G3:.5 F2:.5 A3+C4:.5 C3:.5 A3+C4:.5 G2:.5 B3+D4:.5 D3:.5 B3+F4:.5 G2:.5 B3+D4:.5 D3:.5 B3+F4:.5 G2:.5 B3+D4:.5 D3:.5 B3+F4:.5 C3:.5 E3+G3:.5 G2:.5 E3+G3:.5 C3:.5 E3+G3:.5 r:1' } ] },
   // O irmão arteiro: marchinha travessa em mi menor, na ponta dos pés: o fagote em staccato subindo de meio em meio tom
   // (quem chega de mansinho) e o baixo em pizzicato
   kevin: { bpm: 118, ganho: 1.1, loop: true, faixas: [
@@ -28460,6 +28890,7 @@ function itensDoAlvoBase(alvo){
   if (alvo.k === 'feiraAgro') return itensBarracaAgro(alvo.i);
   if (alvo.k === 'palcoAgro') return itensPalcoAgro();
   if (alvo.k === 'rave') return itensRave();
+  if (alvo.k === 'noite') return itensNoite();
   if (alvo.k === 'irrigador'){
     r.titulo = 'Irrigador automático'; r.icone = 'irrigador';
     r.estado = 'Rega sozinho os 16 canteiros deste terreno, e cada rega dá 1 xp. O mato continua por conta do Ed.';
@@ -29178,6 +29609,12 @@ function abrirCenas(){
     const motivoRv = motivoRave();
     h += `<div class="cartao"><div class="cab"><img src="${icone('luma')}" alt=""><div><h4>A rave da Luma</h4></div></div><div class="info">De dia, a DJ Summer Cachohits (a Luma!) toca no espaço de eventos, de fone e óculos escuros, e a bicharada dança.${motivoRv ? `<br><small>${esc(motivoRv)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-rave type="button"${motivoRv ? ' disabled' : ''}>Chamar a rave</button></div></div>`;
   }
+  // as noites no espaço de eventos também não são cenas: o botão monta uma agora (fora da noite, o relógio vai para o começo
+  // dela enquanto durar e volta no fim)
+  if (espacoAberto() && nivel() >= ARRENDAMENTO.nivel) for (const id of Object.keys(NOITES_DEF)){
+    const D = NOITES_DEF[id], m = motivoNoite(id);
+    h += `<div class="cartao"><div class="cab"><img src="${icone(D.iconeCartao || D.icone)}" alt=""><div><h4>${esc(D.titulo)}</h4></div></div><div class="info">${esc(D.cartao)}${m ? `<br><small>${esc(m)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-noite="${id}" type="button"${m ? ' disabled' : ''}>Chamar</button></div></div>`;
+  }
   // o Kevin, depois da cena dele, apronta de vez em quando perto da câmera: o botão manda ele aprontar agora
   if (S.viuCineKevin){
     const motivoK = kevin.g.visible ? 'Ele já está aprontando por aí.' : null;
@@ -29214,6 +29651,7 @@ function abrirCenas(){
   if (bp) bp.addEventListener('click', () => { Som.clique(); fecharJanela(); chegarCartao(); });
   const be = $('janela').querySelector('[data-postal-espaco]');
   if (be) be.addEventListener('click', () => { Som.clique(); fecharJanela(); chegarCartaoEspaco(); });
+  $('janela').querySelectorAll('[data-noite]').forEach(b => b.addEventListener('click', () => { Som.clique(); fecharJanela(); const id = b.dataset.noite; if (comecarNoite(id, true)) cam.alvo.set(NOITES_DEF[id].centro[0], 0, NOITES_DEF[id].centro[1]); else aviso(motivoNoite(id) || 'Agora não dá.'); }));
   const brv = $('janela').querySelector('[data-rave]');
   if (brv) brv.addEventListener('click', () => { Som.clique(); fecharJanela(); if (comecarRave()) cam.alvo.set(RAVE.pista[0], 0, RAVE.pista[1]); else aviso(motivoRave() || 'Agora não dá.'); });
   const br = $('janela').querySelector('[data-redemoinho]');
@@ -29989,7 +30427,7 @@ function quadro(agoraP){
   atualizarBichosMata(dt, t);
   atualizarVisitaCachoeira(dt, t); atualizarCachoeira(dt, t);
   atualizarRelogioFoguete(dt);
-  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t); atualizarRecanto(dt, t); passoAcharEd(dt); atualizarFeiraAgro(dt, t); atualizarRave(dt, t);
+  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t); atualizarRecanto(dt, t); passoAcharEd(dt); atualizarFeiraAgro(dt, t); atualizarRave(dt, t); atualizarNoites(dt, t);
   atualizarBeijaFlor(dt, t);
   atualizarCurupira(dt, t);
   atualizarArteKevin(dt, t);
@@ -30295,7 +30733,7 @@ async function iniciar(){
     vagalumes: () => vagalumes, VAGALUMES, prometidos: { itensPrometidos, separadoPedidos, opcoesFrete, faltaNoPedido, caderno: abrirCaderno },
     observatorio: { PLANETARIO, desvio: desvioPlanetario, ANTENA, novaEncomenda: novaEncomendaEt, antena: () => antenaVis, caixa: () => caixaEtVis, mensagem: abrirMensagemEt, tocarUltimaCadente: () => { const E = CADENTES[CADENTES.length - 1]; if (!E) return 'sem'; const s = tela(E.m.position); return tocarCadente(s.x, s.y); }, ceu: CEU, ceuDaNoite, pedir: pedirAEstrela, realizar: realizarPedido, tocarCadente, cadentes: () => CADENTES, chuvaCena: () => chuvaCena, cometa: () => cometaVis, caderno: abrirCaderno, obsEd: () => obsEd, ocular: () => ocular, abrirOcular, fecharOcular, tocar: tocarOcular, naOcular, ASTRO, luaDoDia, ceuHoje, descobrir: descobrirAstro, vis: () => observVis, OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
-    luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, kevin: { obj: () => kevin, KEVIN, POSES_KEVIN, cena: () => kevinCena, posicoes: posicoesKevinCena, ARTE_KEVIN, ARTES_KEVIN, arte: () => arteKevin, prox: () => arteKevinProx, chamar: chamarKevin, encerrar: encerrarArteKevin, forcar: id => { if (arteKevin) encerrarArteKevin(); const l = ARTES_KEVIN[id].pode(); return l ? !!iniciarArteKevin(id, l) : false; }, tocar: tocarKevin }, foguete: { FOGUETE, prox: () => S.fogueteEspera, zerar: () => { S.fogueteEspera = 0; }, obj: () => foguete, falas: falasFoguete }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { passeio: { obj: () => passeio, pode: podePasseio, caminho: caminhoPasseio, VOO_PASSEIO }, frete: { opcoes: opcoesFrete, mandar: mandarFrete, pagar: pagarFrete, itens: () => { const r = { estado: '', itens: [] }; itensFrete(r); return r; } }, rega: comecarRegaAerea, faixa: passarFaixa, FAIXA, voo: () => voo, JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, encomenda: { ENCOMENDAS, encomendar, cancelar: cancelarEncomenda, itens: () => { const r = { estado: '', itens: [] }; itensEncomenda(r); return r; } }, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, dormir: pedirDormir, item: itemDormir, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
+    luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, noites: { NOITES, NOITES_DEF, CINEMA, FILMES, FD, obj: () => noite, dia: () => noiteDia, comecar: (id, chamada = true) => comecarNoite(id, chamada), acabar: () => acabarNoite(), motivo: motivoNoite, trava: travaNoiteHoje, programa: programaCinema, quadro: quadroFilme }, kevin: { obj: () => kevin, KEVIN, POSES_KEVIN, cena: () => kevinCena, posicoes: posicoesKevinCena, ARTE_KEVIN, ARTES_KEVIN, arte: () => arteKevin, prox: () => arteKevinProx, chamar: chamarKevin, encerrar: encerrarArteKevin, forcar: id => { if (arteKevin) encerrarArteKevin(); const l = ARTES_KEVIN[id].pode(); return l ? !!iniciarArteKevin(id, l) : false; }, tocar: tocarKevin }, foguete: { FOGUETE, prox: () => S.fogueteEspera, zerar: () => { S.fogueteEspera = 0; }, obj: () => foguete, falas: falasFoguete }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { passeio: { obj: () => passeio, pode: podePasseio, caminho: caminhoPasseio, VOO_PASSEIO }, frete: { opcoes: opcoesFrete, mandar: mandarFrete, pagar: pagarFrete, itens: () => { const r = { estado: '', itens: [] }; itensFrete(r); return r; } }, rega: comecarRegaAerea, faixa: passarFaixa, FAIXA, voo: () => voo, JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, encomenda: { ENCOMENDAS, encomendar, cancelar: cancelarEncomenda, itens: () => { const r = { estado: '', itens: [] }; itensEncomenda(r); return r; } }, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, dormir: pedirDormir, item: itemDormir, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
     // auditoria de colisões: o que o desenho de uma construção (n = nível da reforma, ou 'andaime') põe fora do terreno dela
     fora(id, n){
       const p = PREDIO[id], fab = !!FABRICAS[id], v = n === 'andaime' ? vAndaime(id) : vReforma(id, n), s = 1 / 8, h = s / 2;
