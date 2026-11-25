@@ -490,7 +490,7 @@ O Lucas pediu otimizações sem mexer na imagem nem no jogo. O que foi medido e 
 
 ## Espaço de eventos
 
-- O Lucas pediu: o campo do ArraiEd, na zona `festa` (canto de baixo do terreno novo), virou o espaço de eventos da fazenda, onde acontecem o ArraiEd, a Feira Agronômica Sustentável, a rave da Luma, o festival gastronômico do Patrinho, a gincana da roça e as noites (veja Noites no espaço de eventos). Existe com o terreno novo limpo (`espacoAberto`, `S.canto === 2`); `montarEspacoEventos` roda ao abrir o jogo e quando o Ed tira a cerca do canto.
+- O Lucas pediu: o campo do ArraiEd, na zona `festa` (canto de baixo do terreno novo), virou o espaço de eventos da fazenda, onde acontecem o ArraiEd, a Feira Agronômica Sustentável, a rave da Luma, o festival gastronômico do Patrinho, a gincana da roça, o festival de pipas e as noites (veja Noites no espaço de eventos). Existe com o terreno novo limpo (`espacoAberto`, `S.canto === 2`); `montarEspacoEventos` roda ao abrir o jogo e quando o Ed tira a cerca do canto.
 - `ESPACO`: o retângulo (x0..x1, z0..z1 em ladrilhos), o portal na ponta da rua de baixo, a praça e o caminho de terra. Cerca baixa de madeira (`vCercaEventos`, com o vão do portal), o portal com vasinhos (`vPortalEventos`) e a placa "ESPAÇO DE EVENTOS / Fazenda Joli Pig" dos dois lados, o caminho de terra até a praça e o gramado aparado em faixas (um plano transparente por cima da grama). `faixaPortal` pendura a faixa do evento embaixo da viga.
 - Não aceita enfeite (`livreParaEnfeite` confere `noEspacoEventos`). Os enfeites que já estavam lá voltaram para a loja uma vez, com aviso (`arrumarEspacoEventos`, `S.espacoEventosArrumado`).
 - Tocar no portal abre o menu do espaço (`itensEspaco`, alvo `{ k: 'eventos' }`): quando é a próxima feira, montar a barraca do Ed, inscrever no concurso e os troféus.
@@ -534,6 +534,13 @@ O Lucas pediu otimizações sem mexer na imagem nem no jogo. O que foi medido e 
 - Pontos: 3, 2 e 1 por colocação. No fim, o pódio (o `vPodio` do campeonato, na escala de 1/8 e centrado) aparece num puf, os três primeiros sobem com a medalha no peito (`medalhaNoPeito`; no Kevin e no Ed também) e tocam a fanfarra e o confete.
 - O prêmio (`premiarGincana`): XP para o Ed pela colocação, uma fração do nível (`GINCANA.premio`: 40% no ouro, 25% na prata, 15% no bronze, 8% sem medalha), só na primeira gincana do dia; as outras só valem a diversão. `S.gincana` guarda `vezes`, `ouros`, `recorde` (os pontos do Ed) e `dia`. Pular a gincana não dá prêmio. No fim tudo sai de cena (`limparGincana`: as cópias, as medalhas, o pódio, a juíza); fora da tarde, a arena também.
 - Para testar: `__fazenda.gincana` (`montar`, `desmontar`, `motivo`, `obj`, `arena`, `toque('tela' | 'esq' | 'dir')`, `dia`, `GINCANA`, `PROVAS_GINCANA`, `gincanaEm`) e `__fazenda.pedirCena('gincana')`. Num navegador sem tela, use `--use-angle=gl-egl --ignore-gpu-blocklist` para ter 60 quadros por segundo; com a janela do Chrome coberta, ele cai para 1 ou 2 quadros e a gincana fica em câmera lenta.
+
+## Festival de pipas
+
+- O Lucas pediu (nível 68, na área que ele marcou no mapa dos níveis 62 a 80, no espaço de eventos, x 57 a 62, z 63 a 68): em `PIPAS.chance` das tardes, numa hora sorteada (`pipasDia`, só na memória), as pessoas, os porquinhos e as nanos soltam pipas coloridas no espaço (`montarPipas`, `festaPipas`; `vPipa`, as linhas são `THREE.Line` refeitas a cada quadro). Entra na regra de um evento por dia, e a rave e a gincana não começam com ele montado. Some no fim da tarde. Falas: `FALAS_PIPAS`, `FALAS_PIPAS_PORCO`.
+- Pelo portal, "Soltar pipa com o Ed" (`pipasNoPortal`, `comecarJogoPipa`): o Ed vai até o lugar dele e abre o joguinho (`#pipaUI`, com os estilos da gincana e o céu `.pi-ceu`): a pipa tem altura de 0 a 1, o vento muda devagar e dá rajadas, e cada toque em PUXA! (ou espaço) dá um puxão. O que conta é o tempo dentro da faixa verde, que também anda (`PIPAS.duracao`, 25 s); se a pipa chega no chão, cai e volta do meio. O prêmio é `PIPAS.premio` de um nível (`xpDeUmNivel`) vezes a fração do tempo na faixa, só na primeira vez do dia; `S.pipas` guarda `vezes`, `recorde` (em %) e `dia`.
+- Na janela Cenas, o cartão "Festival de pipas" com "Chamar as pipas" (a partir do nível 67).
+- Para testar: `__fazenda.pipas` (`montar`, `desmontar`, `jogar`, `toque`, `obj`, `jogo`, `motivo`, `PIPAS`).
 
 ## Rave da Luma
 
