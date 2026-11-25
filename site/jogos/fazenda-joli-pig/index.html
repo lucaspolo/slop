@@ -9288,6 +9288,230 @@ function montarFinalShow(N){
     F.artistas.push(p);
   });
 }
+// ================= Desfile de moda dos bichos (o Lucas pediu: nível 62, as vacas e as galinhas desfilam como modelos; não é
+// concurso). A quinta noite do sorteio do espaço de eventos (NOITES_DEF.desfile). A passarela fica onde ele marcou no mapa
+// (x 63 e 64, z 53 a 60): comprida no sentido de z, com o fundo e a cortina de onde as modelos saem em cima (z 53) e a ponta
+// embaixo (z 61), onde ficam os fotógrafos. A plateia senta dos dois lados, virada para a passarela. A Lúcia apresenta cada
+// modelo (sem a cena dela, o Beto); a modelo sai da cortina, desfila até a ponta rebolando, gira, posa para os flashes e
+// volta. No fim, todas desfilam juntas, param em fila e se curvam, com confete
+const DESFILE = { nivel: 62, centro: [64, 57], fundo: -3.3, ponta: 3.1, alto: 5 / 16, modelos: 6, vaca: 1 / 19, galinha: 1 / 15, vel: 1.7,
+  lugares: [-2.4, -1.2, 0, 1.2, 2.4].flatMap(v => [[-1.75, v], [1.75, v], [-2.55, v + 0.5], [2.55, v + 0.5]]), fotografos: [[-0.9, 4.7], [-0.3, 4.95], [0.35, 4.8], [0.95, 4.6]], apresentador: [1.6, 4.25] };
+const desfileEm = (u, v) => [DESFILE.centro[0] + u, DESFILE.centro[1] + v];
+// a passarela: o tablado comprido de tapete rosa com a beira branca e as luzinhas, e no fundo o painel com a cortina de onde as
+// modelos saem (o letreiro vem por cima, numa placa). Cubinhos de 1/16: x -16 a 15 (2 ladrilhos), z -64 a 63 (8 ladrilhos)
+function vPassarela(){
+  const v = new Vox(), tapete = (x, y, z) => Math.abs(x + 0.5) > 12.5 ? 0xfdf8ef : (z & 7) === 0 && Math.abs(x + 0.5) < 2 ? 0xff9cc8 : 0xe0408a;
+  v.box(-16, 0, -60, 15, 3, 63, (x, y, z) => y === 3 ? tapete(x, y, z) : y === 0 ? 0x2a2026 : 0x3a2a40);
+  for (let z = -56; z <= 63; z += 6) for (const x of [-16, 15]) v.set(x, 4, z, NEON[((z + 56) / 6) % 5]);
+  // o painel do fundo, com estrelinhas, e a entrada em arco com a cortina vermelha recuada
+  v.box(-24, 0, -64, 23, 56, -62, (x, y) => hash(x, y, 9) < 0.05 ? 0xffd34d : 0x2a1640);
+  v.box(-9, 4, -62, 8, 34, -61, (x, y) => y >= 30 && Math.abs(x + 0.5) > 9.5 - (y - 30) * 1.6 ? 0x2a1640 : x % 2 ? 0xa82234 : 0xbd2c3c);
+  for (let y = 4; y <= 36; y++) for (const x of [-10, 9]) v.set(x, y, -61, 0xd9b23c);
+  v.box(-10, 35, -61, 9, 36, -61, 0xd9b23c);
+  for (let x = -22; x <= 21; x += 3) v.set(x, 56, -61, NEON[((x + 22) / 3) % 5]);
+  return v;
+}
+// as roupas do desfile, desenhadas por cima da vaca (vVaca: a cabeça em (0, 13, 10), os chifres em y 16 e 17, o dorso em y
+// perto de 15) e da galinha (vGalinha: a cabeça em (0, 9.5, 2.8), a crista em cima, o corpo até y 8)
+const LOOKS_VACA = ['chapéu de sol e colar de pérolas', 'laço gigante e óculos de coração', 'capa de super-heroína', 'coroa e manto de rainha', 'saia de bailarina e flor na orelha'];
+const LOOKS_GALINHA = ['boá de plumas cor-de-rosa', 'chapéu-coco e gravata-borboleta', 'óculos de estrela e colar de contas', 'vestido de festa com paetês', 'tiara de flores'];
+const NOMES_VACA_MODELO = ['Mimosa', 'Estrela', 'Malhada', 'Boneca', 'Pintada', 'Florisbela', 'Princesa', 'Jujuba'];
+const NOMES_GALINHA_MODELO = ['Penélope', 'Pipoca', 'Cocada', 'Margarida', 'Filó', 'Clotilde', 'Fofura', 'Baronesa'];
+// o pano que cobre o dorso da vaca (a capa e o manto): um cubinho acima do dorso, de z -9 a 7
+function panoNasCostas(v, cor, borda){
+  for (let x = -6; x <= 6; x++) for (let z = -9; z <= 7; z++){
+    const q = 1 - (x / 5.6) ** 2 - (z / 9.6) ** 2; if (q < -0.25) continue;
+    const y = Math.round(10 + 4.8 * Math.sqrt(Math.max(0, q))) + 1, beira = Math.abs(x) >= 5 || z === -9 || z === 7;
+    v.set(x, y, z, beira ? (typeof borda === 'function' ? borda(x, z) : borda) : cor);
+    if (Math.abs(x) >= 5) v.set(x, y - 1, z, beira ? (typeof borda === 'function' ? borda(x, z) : borda) : cor);
+  }
+}
+function vVacaDesfile(k){
+  const v = vVaca(false);
+  if (k === 0){
+    v.box(-1, 9, 9, 1, 10, 9, null);
+    // o chapéu de palha de aba larga com a fita rosa, e o colar de pérolas pendurado no pescoço
+    for (let x = -6; x <= 6; x++) for (let z = 4; z <= 16; z++){ const d = Math.hypot(x, z - 10); if (d <= 5.8) v.set(x, 18, z, d > 5 ? 0xcfa94e : hash(x, 18, z) < 0.5 ? 0xe8c66a : 0xdcb85a); }
+    for (let y = 19; y <= 21; y++) for (let x = -3; x <= 3; x++) for (let z = 7; z <= 13; z++) if (Math.hypot(x, z - 10) <= (y === 21 ? 2.2 : 3)) v.set(x, y, z, y === 19 ? 0xff5fa2 : 0xe8c66a);
+    for (let a = 0; a <= Math.PI; a += Math.PI / 9){ const x = Math.round(Math.cos(a) * 4.2), y = Math.round(10.6 - Math.sin(a) * 2.6); v.set(x, y, 8, ((a * 10) | 0) % 2 ? 0xfdfbf6 : 0xf3e6d6); }
+  } else if (k === 1){
+    // o laço gigante no alto da cabeça e os óculos de coração
+    v.ell(-2.6, 18, 10, 2, 1.6, 1, 0xff5fa2); v.ell(2.6, 18, 10, 2, 1.6, 1, 0xff5fa2); v.box(-1, 17, 10, 0, 18, 10, 0xd83a7a);
+    for (const s of [-1, 1]){ const c = s * 2; for (const [dx, dy] of [[-1, 0], [0, 0], [1, 0], [-1, 1], [1, 1], [0, -1]]) v.set(c + dx, 14 + dy, 14, 0xe0303a); }
+    v.set(0, 14, 14, 0x2a2026);
+  } else if (k === 2){
+    // a capa vermelha de beira dourada e a máscara azul nos olhos
+    panoNasCostas(v, 0xd8302a, 0xf2c33b);
+    v.box(-4, 15, 14, 4, 15, 14, 0x2f5fc8); v.box(-4, 14, 14, -3, 14, 14, 0x2f5fc8); v.box(3, 14, 14, 4, 14, 14, 0x2f5fc8);
+  } else if (k === 3){
+    // a coroa dourada com as pedrinhas e o manto roxo de beira branca pintadinha
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 8){ const x = Math.round(Math.cos(a) * 2.6), z = Math.round(10 + Math.sin(a) * 2.6), ponta = Math.round(a / (Math.PI / 8)) % 2 === 0;
+      v.box(x, 17, z, x, ponta ? 20 : 18, z, 0xf2c33b); }
+    v.set(0, 19, 13, 0xd8302a); v.set(-2, 18, 12, 0x2f6fd6); v.set(2, 18, 12, 0x5aa847);
+    panoNasCostas(v, 0x7a3a9a, (x, z) => (x + z) % 3 === 0 ? 0x2a2026 : 0xfdfbf6);
+  } else {
+    // a saia de tule em volta da barriga e a flor atrás da orelha
+    for (const [y, rx, rz] of [[6, 7.4, 11.4], [7, 6.8, 10.8]]) for (let x = -8; x <= 8; x++) for (let z = -12; z <= 12; z++){
+      const fora = (x / rx) ** 2 + (z / rz) ** 2, dentro = (x / 5) ** 2 + (z / 9) ** 2; if (fora <= 1 && dentro >= 0.85) v.set(x, y, z, hash(x, y, z) < 0.3 ? 0xfdf8ef : 0xffb3d1); }
+    v.set(6, 16, 9, 0xffd34d); for (const [dy, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) v.set(6, 16 + dy, 9 + dz, 0xff5fa2);
+  }
+  return v;
+}
+function vGalinhaDesfile(k){
+  const v = vGalinha();
+  if (k === 0){
+    // o boá de plumas fofas em volta do pescoço
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 10){ const x = Math.round(Math.cos(a) * 3), z = Math.round(2.4 + Math.sin(a) * 2.6);
+      for (const y of [7, 8]) v.set(x, y, z, hash(x, y, z) < 0.5 ? 0xff5fa2 : 0xffa6cf); if (hash(x, 1, z) < 0.4) v.set(x + Math.sign(x), 7, z, 0xff5fa2); }
+  } else if (k === 1){
+    // o chapéu-coco preto de fita vermelha e a gravata-borboleta
+    for (let x = -3; x <= 3; x++) for (let z = 0; z <= 6; z++) if (Math.hypot(x, z - 2.8) <= 3) v.set(x, 12, z, 0x1c1820);
+    for (let y = 13; y <= 15; y++) for (let x = -2; x <= 2; x++) for (let z = 1; z <= 5; z++) if (Math.hypot(x, z - 2.8) <= (y === 15 ? 1.4 : 2)) v.set(x, y, z, y === 13 ? 0xd8302a : 0x1c1820);
+    v.set(0, 7, 5, 0x8a1a24); v.box(-2, 6, 5, -1, 8, 5, 0xd8302a); v.box(1, 6, 5, 2, 8, 5, 0xd8302a);
+  } else if (k === 2){
+    // os óculos de estrela amarelos e o colar de contas coloridas
+    for (const x of [-2, 2]) for (const [dx, dy] of [[0, 0], [-1, 0], [1, 0], [0, 1], [0, -1]]) v.set(x + dx, 10 + dy, 5, dx || dy ? 0xffd34d : 0x2a2026);
+    v.set(0, 10, 5, 0xffd34d);
+    for (let a = 0; a <= Math.PI; a += Math.PI / 7){ const x = Math.round(Math.cos(a) * 2.6), z = Math.round(3.4 + Math.sin(a) * 1.8); v.set(x, 7, z, NEON[Math.round(a * 3) % 5]); }
+  } else if (k === 3){
+    // o vestido de festa azul com paetês e o lacinho na cabeça
+    for (let y = 1; y <= 4; y++){ const r = 4.6 + (4 - y) * 0.35; for (let x = -6; x <= 6; x++) for (let z = -6; z <= 6; z++){ const d = Math.hypot(x / r, z / (r + 0.8)); if (d <= 1 && d >= 0.72) v.set(x, y, z, hash(x, y, z) < 0.12 ? 0xfdf8ef : 0x3a6fd8); } }
+    v.box(-2, 12, 2, -1, 12, 2, 0x3a6fd8); v.box(1, 12, 2, 2, 12, 2, 0x3a6fd8);
+  } else {
+    // a tiara de florzinhas em volta da cabeça
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 6){ const x = Math.round(Math.cos(a) * 2.4), z = Math.round(2.8 + Math.sin(a) * 2.4), i = Math.round(a / (Math.PI / 6));
+      v.set(x, 11, z, i % 2 ? 0x5aa847 : [0xff5fa2, 0xffd34d, 0xb06aff][(i / 2) % 3]); if (i % 2 === 0) v.set(x, 12, z, 0xffd34d); }
+  }
+  return v;
+}
+const FALAS_DESFILE_ABRE = ['Boa noite, Fazenda Joli Pig! Começa agora o Desfile de Moda dos Bichos!', 'Luzes, câmera, passarela! O desfile vai começar!', 'Fotógrafos a postos: as modelos da fazenda estão chegando!',
+  'Senhoras, senhores e porquinhos: a passarela é delas!', 'Bem-vindos ao desfile mais fofinho da região!', 'Atenção, plateia: hoje tem moda na roça!', 'Preparem os aplausos: o desfile vai começar!',
+  'A coleção desta noite foi costurada aqui mesmo na fazenda!', 'Silêncio... a primeira modelo está atrás da cortina!', 'Boa noite! Hoje a passarela é das vacas e das galinhas!', 'Que noite chique! Com vocês, o Desfile de Moda dos Bichos!',
+  'Arrumem os chapéus: o desfile vai começar!', 'A moda chegou na Fazenda Joli Pig! Que comece o desfile!', 'Holofotes acesos, tapete rosa estendido: vamos ao desfile!', 'Boa noite! Celulares e flashes prontos para as estrelas da fazenda!',
+  'Coleção primavera-verão da roça: vem aí!', 'Respeitável público, a passarela está aberta!', 'Hoje ninguém fica parado: é noite de desfile!', 'As modelos ensaiaram a semana toda. Vamos ver!', 'Que comece o desfile! Muuu e có-có para todos!'];
+const FALAS_DESFILE_FIM = ['Palmas para todas as modelos da fazenda!', 'Esse foi o Desfile de Moda dos Bichos! Boa noite!', 'Que coleção! Obrigada, modelos, e até o próximo desfile!', 'Fim do desfile! As modelos vão descansar os cascos e as patinhas.',
+  'Uma salva de palmas para a passarela mais fofa do mundo!', 'Obrigada, fotógrafos, plateia e modelos! Boa noite!', 'E assim termina a noite mais chique da roça!', 'As estrelas da noite agradecem! Até a próxima!',
+  'Que noite de moda! Todo mundo de volta para o curral e o galinheiro!', 'Fim do desfile! Amanhã as roupas vão para o museu... brincadeira!', 'Palmas, palmas! Que elegância!', 'O desfile acabou, mas a moda continua na fazenda!',
+  'Obrigada a todos! Cuidado com o degrau da passarela!', 'Boa noite e muito obrigada por virem ao desfile!', 'Esse foi o desfile! Que noite!', 'As modelos mandam beijos para a plateia!', 'Até o próximo desfile, Fazenda Joli Pig!',
+  'Que lindas! Palmas para a coleção da roça!', 'Encerramos o desfile com chave de ouro!', 'Boa noite! As luzes da passarela vão se apagar...'];
+const FALAS_DESFILE_PLATEIA = ['Que elegância!', 'Linda demais!', 'Arrasou na passarela!', 'Que chapéu!', 'Diva!', 'Olha esse rebolado!', 'Que pose!', 'Quero essa roupa!', 'Nunca vi vaca tão chique!', 'Que galinha mais estilosa!',
+  'Bravo!', 'Mais um giro!', 'É uma estrela!', 'Que brilho!', 'Moda na roça!', 'Ela nasceu para a passarela!', 'Uau!', 'Que charme!', 'Tira uma foto minha com ela!', 'Que coleção maravilhosa!'];
+const FALAS_DESFILE_PORCO = ['Oinc! (bate palmas com as patinhas)', 'Oinc oinc! (quer o chapéu)', 'Óinc! (de queixo caído)', 'Oinc! (assobia)', 'Oinc-oinc! (pede bis)', 'Óóinc! (que roupa!)', 'Oinc! (imita a pose)',
+  'Oinc oinc! (rebola sentado)', 'Oinc! (fã da modelo)', 'Óinc! (suspira)', 'Oinc! (cochicha: que chique)', 'Oinc-oinc! (aplaude de pé)', 'Oinc! (quer desfilar também)', 'Óinc! (tira foto)', 'Oinc oinc! (dança na cadeira)',
+  'Oinc! (de olho no colar)', 'Óóinc! (que brilho!)', 'Oinc! (pede autógrafo)', 'Oinc-oinc! (ama a capa)', 'Oinc! (rabinho abanando)'];
+const FALAS_DESFILE_VACA = ['Muuu! (joga o cabelo)', 'Muuu... (pose de capa de revista)', 'Mu! (pisca para os fotógrafos)', 'Muuu! (rebola o rabo)', 'Mu-mu! (manda beijo)', 'Muuu! (olhar de modelo)', 'Mu! (gira o sininho)',
+  'Muuuu! (desfila no ritmo)', 'Mu! (faz biquinho)', 'Muuu! (passo de passarela)', 'Mu-muuu! (acena para a plateia)', 'Muuu! (pose com o casco na cintura)', 'Mu! (vira de lado para a foto)', 'Muuu... (elegância total)',
+  'Mu! (sorri para os flashes)', 'Muuu! (estica o pescoço)', 'Mu-mu! (pisca duas vezes)', 'Muuu! (rodopia)', 'Mu! (empina o focinho)', 'Muuu! (a estrela da noite)'];
+const FALAS_DESFILE_GALINHA = ['Có-có! (pose de capa de revista)', 'Cóóó! (abre as asas)', 'Có! (pisca para os fotógrafos)', 'Có-có-có! (rebola as penas)', 'Có! (manda beijo de bico)', 'Cóóó... (olhar de modelo)',
+  'Có! (gira na ponta do pé)', 'Có-có! (desfila no ritmo)', 'Có! (faz biquinho)', 'Cóóó! (passo de passarela)', 'Có-có! (acena com a asa)', 'Có! (asa na cintura)', 'Có! (vira de lado para a foto)', 'Cóóó... (elegância total)',
+  'Có! (sorri para os flashes)', 'Có-có! (estica o pescoço)', 'Có! (pisca duas vezes)', 'Cóóó! (rodopia)', 'Có! (empina o bico)', 'Có-có-có! (a estrela da noite)'];
+// o programa da noite: DESFILE.modelos modelos, vacas e galinhas alternadas, cada uma com nome e roupa sorteados sem repetir
+function programaDesfile(){
+  const lv = [0, 1, 2, 3, 4].sort(() => Math.random() - 0.5), lg = [0, 1, 2, 3, 4].sort(() => Math.random() - 0.5);
+  const nv = NOMES_VACA_MODELO.slice().sort(() => Math.random() - 0.5), ng = NOMES_GALINHA_MODELO.slice().sort(() => Math.random() - 0.5), comeca = Math.random() < 0.5 ? 'vaca' : 'galinha';
+  return Array.from({ length: DESFILE.modelos }, (_, i) => { const tipo = (i % 2 === 0) === (comeca === 'vaca') ? 'vaca' : 'galinha', j = Math.floor(i / 2);
+    return tipo === 'vaca' ? { tipo, k: lv[j % 5], nome: nv[j] } : { tipo, k: lg[j % 5], nome: ng[j] }; });
+}
+const ANUNCIOS_DESFILE = ['Com vocês, {nome}, de {look}!', 'Agora na passarela: {nome}, de {look}!', 'Atenção, fotógrafos: {nome} chegou, de {look}!', 'Ela é a estrela da coleção: {nome}, de {look}!', 'Direto do {casa}: {nome}, de {look}!', 'Palmas para {nome}, de {look}!'];
+// uma modelo: o grupo com o desenho dela e o que o balão precisa
+function montarModelo(N, M){
+  const g = new THREE.Group(), s = M.tipo === 'vaca' ? DESFILE.vaca : DESFILE.galinha, f = M.tipo === 'vaca' ? vVacaDesfile : vGalinhaDesfile;
+  g.add(malha(geo('modelo' + M.tipo + M.k, () => f(M.k).build(s, { origin: [0.5, 0, 0.5], jitter: 0.02 })))); N.g.add(g);
+  M.g = g; M.fala = { g, nome: M.tipo, topo: () => g.position.clone().add(new THREE.Vector3(0, M.tipo === 'vaca' ? 1.3 : 0.95, 0)) };
+  g.visible = false; return M;
+}
+// anda, rebola, gira e posa: põe a modelo em v (ao longo da passarela), virada para a frente ou para o fundo
+function poseModelo(M, v, t, olhaFrente, anda){
+  const [x, z] = desfileEm(0, v); M.g.position.set(x, DESFILE.alto + (anda ? Math.abs(Math.sin(t * 7)) * 0.035 : 0), z);
+  M.g.rotation.set(0, olhaFrente ? 0 : Math.PI, anda ? Math.sin(t * 3.5) * 0.07 : 0);
+}
+NOITES_DEF.desfile = {
+  centro: desfileEm(0, 1.4), musica: 'desfile', icone: 'vaca', titulo: 'Desfile de moda', levar: 'Ir ao desfile', ateOFim: true,
+  cartao: 'De noite, as vacas e as galinhas da fazenda desfilam numa passarela no espaço de eventos, com roupas de festa, fotógrafos e a Lúcia apresentando.',
+  faixa: [['DESFILE DE MODA', 1, '#ffd34d'], ['hoje à noite, na passarela da fazenda', 0.55, '#fdf8ef']], corFaixa: '#5a1a4a',
+  anuncio: 'Desfile de moda no espaço de eventos! A passarela está montada e as modelos estão se arrumando atrás da cortina.',
+  fimTexto: 'Acabou o desfile de moda. As modelos voltam para o curral e o galinheiro, cheias de pose.',
+  trava: () => nivel() < DESFILE.nivel ? `O desfile de moda vem no nível ${DESFILE.nivel}.` : null,
+  estado: N => { const D = N.desfile, M = D && D.prog[D.i]; return M ? `Na passarela: ${M.nome}, de ${(M.tipo === 'vaca' ? LOOKS_VACA : LOOKS_GALINHA)[M.k]}.` : D && D.fase === 'final' ? 'As modelos estão agradecendo.' : 'O desfile vai começar.'; },
+  lugarEd: () => desfileEm(-3.3, 4.3), olharEd: () => desfileEm(0, 1),
+  montar(N){
+    const s16 = 1 / 16, [px, pz] = desfileEm(0, 0);
+    const pas = malha(geo('passarela', () => vPassarela().build(s16, { origin: [0.5, 0, 0.5] }))); pas.position.set(px, 0, pz + 0.5 * s16); N.g.add(pas);
+    const placa = placaDeTexto(texturaTexto([['DESFILE JOLI PIG', 1, '#ffd34d'], ['moda na roça', 0.55, '#ff9cc8']], 512, 160, '#2a1640', '#ffd34d'), 2.4, 0.75);
+    placa.position.set(px, 2.95, pz - 3.82); N.g.add(placa);
+    // a apresentadora na beira da ponta, virada para a passarela (a Lúcia com o megafone ou, sem a cena dela, o Beto)
+    const [ax, az] = desfileEm(...DESFILE.apresentador), apr = new THREE.Group(); apr.position.set(ax, 0, az); apr.rotation.y = -Math.PI / 2 - 0.5; N.g.add(apr);
+    let host;
+    if (S.viuCineLucia){
+      apr.add(malha(geo('lucia', () => vLucia().build(LUCIA.escala, { origin: [0.5, 0, 0.5], jitter: 0.02 }))));
+      const mega = malha(geo('fgMegafone', () => vMegafone().build(NANO.sNano / 2, { origin: [0.5, 0, 0.5], jitter: 0.02 }))); mega.position.set(LUCIA.megafone[0] * LUCIA.escala, LUCIA.megafone[1] * LUCIA.escala, LUCIA.megafone[2] * LUCIA.escala); apr.add(mega);
+      host = { g: apr, nome: 'lucia', topo(){ return apr.position.clone().add(new THREE.Vector3(0, 0.62, 0)); } };
+    } else { const p = FAMILIA_SPA.beto.cria(); const k = pickaveis.indexOf(p.g); if (k >= 0) pickaveis.splice(k, 1); p.colocar(ax, az); p.ang = p.angAlvo = -Math.PI / 2 - 0.5; p.update(0, 0); N.g.add(p.g); host = p; }
+    // os fotógrafos na ponta, em pé, cada um com o flash
+    texturaHalo();
+    const flashes = DESFILE.fotografos.map(([u, v], i) => { const [x, z] = desfileEm(u, v), j = sentarPlateia(N, 'pessoa', x, z, ...desfileEm(0, 2.5), null, false);
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: texHalo, color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 })); sp.position.set(x, 1.05, z); sp.scale.setScalar(0.9); N.g.add(sp); return { sp, t: 0, j }; });
+    // a plateia dos dois lados, virada para a passarela: a família na frente, perto da ponta
+    const lugares = DESFILE.lugares.slice().sort((a, b) => b[1] - a[1] + (Math.abs(a[0]) - Math.abs(b[0])) * 3);
+    const em = ([u, v]) => { const [x, z] = desfileEm(u, v), [ox, oz] = desfileEm(0, v); return [x, z, ox, oz]; };
+    familiaNaNoite().forEach(q => { const l = lugares.shift(); if (l){ const [x, z, ox, oz] = em(l); sentarPlateia(N, 'familia', x, z, ox, oz, q); } });
+    lugares.sort(() => Math.random() - 0.5);
+    for (const l of lugares){ const [x, z, ox, oz] = em(l); sentarPlateia(N, sorteia(['porco', 'porco', 'porco', 'nano', 'nano']), x, z, ox, oz); }
+    const prog = programaDesfile().map(M => montarModelo(N, M));
+    N.desfile = { prog, i: -1, fase: 'abre', t: -1.5, host, flashes, flash: 0 };
+  },
+  // as fases: abre (a apresentadora dá boa-noite), anuncio, passa (a modelo desfila: ida, giro, pose com flashes e volta) e,
+  // depois da última, o final com todas
+  atualizar(N, dt, t){
+    const D = N.desfile; D.t += dt;
+    const host = D.host, fala = txt => { if (N.perto){ falar(host, txt, tempoDeLeitura(txt)); Som.tom(520, 0.08, 'square', 0.02, 760); } };
+    const flash = () => { const F = sorteia(D.flashes); F.t = 0.18; if (N.perto) Som.tom(2600, 0.04, 'square', 0.015, 1800); };
+    if (D.fase === 'abre' && D.t >= 0){
+      if (D.i < 0 && !D.ola){ D.ola = true; fala(variar(FALAS_DESFILE_ABRE)); D.t = -3.6; return; }
+      D.i++;
+      if (D.i >= D.prog.length){ D.fase = 'final'; D.t = 0; fala(variar(FALAS_DESFILE_FIM)); D.prog.forEach((M, i) => { M.fim = -i * 1.05; M.g.visible = false; }); }
+      else { const M = D.prog[D.i], look = (M.tipo === 'vaca' ? LOOKS_VACA : LOOKS_GALINHA)[M.k];
+        fala(sorteia(ANUNCIOS_DESFILE).replace('{nome}', M.nome).replace('{look}', look).replace('{casa}', M.tipo === 'vaca' ? 'curral' : 'galinheiro')); D.fase = 'anuncio'; D.t = 0; }
+    } else if (D.fase === 'anuncio' && D.t >= 3.2){ D.fase = 'passa'; D.t = 0; }
+    else if (D.fase === 'passa'){
+      const M = D.prog[D.i], ida = (DESFILE.ponta - DESFILE.fundo) / DESFILE.vel, T = D.t;
+      M.g.visible = true;
+      if (T < ida) poseModelo(M, DESFILE.fundo + T * DESFILE.vel, t, true, true);
+      else if (T < ida + 1.1){ poseModelo(M, DESFILE.ponta, t, true, false); M.g.rotation.y = (T - ida) / 1.1 * Math.PI * 2; }
+      else if (T < ida + 3.4){
+        poseModelo(M, DESFILE.ponta, t, true, false); M.g.rotation.z = Math.sin((T - ida - 1.1) * 2) * 0.12;
+        if (!M.posou){ M.posou = true; if (N.perto){ falar(M.fala, variar(M.tipo === 'vaca' ? FALAS_DESFILE_VACA : FALAS_DESFILE_GALINHA), 2); (M.tipo === 'vaca' ? Som.muu : Som.co).call(Som); } for (const j of N.gente) j.salto = 0.55; if (N.perto) falaPlateia(N, FALAS_DESFILE_PLATEIA, FALAS_DESFILE_PORCO); }
+        if ((D.flash -= dt) <= 0){ D.flash = rnd(0.15, 0.4); flash(); }
+      } else if (T < ida * 2 + 3.4) poseModelo(M, DESFILE.ponta - (T - ida - 3.4) * DESFILE.vel, t, false, true);
+      else { M.g.visible = false; D.fase = 'abre'; D.t = -0.8; }
+    } else if (D.fase === 'final'){
+      // todas desfilam em fila até o lugar delas, viram para a frente, se curvam e acenam
+      D.prog.forEach((M, i) => { const k = D.t + M.fim; if (k < 0) return; M.g.visible = true;
+        const alvo = DESFILE.ponta - 0.15 - i * 1.05, v = Math.min(alvo, DESFILE.fundo + k * DESFILE.vel);
+        poseModelo(M, v, t, true, v < alvo);
+        if (D.t > 7.6 && D.t < 9) M.g.rotation.x = Math.sin((D.t - 7.6) / 1.4 * Math.PI) * 0.35; });
+      if (!D.confete && D.t > 7.8){ D.confete = true; const [x, z] = desfileEm(0, 0.5); if (N.perto){ confete(x, 2.4, z, 90, 2); Som.moeda(); } for (const j of N.gente){ j.salto = 0.55; j.aplaude = 2.5; } }
+      if (D.t > 8 && D.t < 10 && (D.flash -= dt) <= 0){ D.flash = rnd(0.08, 0.2); flash(); }
+      if (D.t > 12){ acabarNoite(NOITES_DEF.desfile.fimTexto); return; }
+    }
+    for (const F of D.flashes){ F.t = Math.max(0, F.t - dt); F.sp.material.opacity = F.t > 0 ? 1 : 0; }
+    if (!N.perto) return;
+    for (const j of N.gente) animarPlateia(j, dt, t);
+    if (host.update) host.update(dt, t);
+  },
+  limpar(N){ const D = N.desfile; if (D) for (const F of D.flashes) F.sp.material.dispose(); },
+  // as luzes: os dois holofotes seguem a modelo da vez (no final, a fila toda), uma luz quente na plateia e a do painel
+  luzes(N, L, por, t){
+    const D = N.desfile, M = D.fase === 'passa' && D.prog[D.i];
+    const alvo = M && M.g.visible ? M.g.position : (() => { const [x, z] = desfileEm(0, D.fase === 'final' ? 0.6 : 2.6); return new THREE.Vector3(x, 0, z); })();
+    if (!D.luz) D.luz = alvo.clone(); D.luz.lerp(alvo, 0.1);
+    por(L[0], [1.8, 5, 1.4, 0xfff0d0], D.luz.x - 0.7, 2.2, D.luz.z + 0.4);
+    por(L[1], [1.4, 5, 1.4, 0xffc0e0], D.luz.x + 0.7, 2.2, D.luz.z + 0.4);
+    const [ax, az] = desfileEm(0, 2); por(L[2], [0.45, 8, 1.5, 0xffc080], ax, 1.6, az);
+    const [bx, bz] = desfileEm(0, -3.2); por(L[3], [0.9, 4, 1.6, 0xb06aff], bx, 1.8, bz);
+  },
+};
+NOMES_NOITE.desfile = 'o desfile de moda';
 // ================= Festival gastronômico do Patrinho (o Lucas pediu: encomenda e festa). Uma vez por nível, a partir do
 // FESTIVAL.nivel (com o Patrinho já visto e o espaço de eventos aberto), o Patrinho encomenda de 3 a 4 ingredientes da
 // fazenda, com prazo de FESTIVAL.prazo dias. Os itens ficam separados no celeiro (itensPrometidos). Entregue pelo caderno
@@ -17257,6 +17481,13 @@ const TEMAS = {
     { tipo: 'square', vol: 0.024, leg: 0.55, notas: 'G4:.5 C5:.5 E5:.5 G5:.5 F5:.5 E5:.5 D5:1 E5:.5 D5:.5 C5:.5 B4:.5 A4:1 G4:1 A4:.5 B4:.5 C5:.5 D5:.5 E5:1 C5:1 D5:.5 C5:.5 B4:.5 D5:.5 C5:2' },
     { tipo: 'triangle', vol: 0.05, leg: 0.5, notas: 'C3:.5 G3:.5 C3:.5 G3:.5 C3:.5 G3:.5 C3:.5 G3:.5 G2:.5 D3:.5 G2:.5 D3:.5 G2:.5 D3:.5 G2:.5 D3:.5 C3:.5 G3:.5 C3:.5 G3:.5 F2:.5 C3:.5 F2:.5 C3:.5 G2:.5 D3:.5 G2:.5 D3:.5 C3:.5 G3:.5 C3:.5 G3:.5' },
     { tipo: 'x', vol: 0.03, notas: 'r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5' } ] },
+  // Desfile de moda: batida de passarela em mi menor (o bumbo no seno, o baixo de oitavas na onda quadrada, a melodia de
+  // passarela no triângulo e o chimbal no contratempo), 118 bpm. Composição original
+  desfile: { bpm: 118, ganho: 0.8, loop: true, faixas: [
+    { tipo: 'sine', vol: 0.09, leg: 0.3, notas: 'E1:1 E1:1 E1:1 E1:1 E1:1 E1:1 E1:1 E1:1 C2:1 C2:1 C2:1 C2:1 D2:1 D2:1 D2:1 D2:1' },
+    { tipo: 'square', vol: 0.018, leg: 0.6, notas: 'E2:.5 E3:.5 E2:.5 E3:.5 E2:.5 E3:.5 E2:.5 G2:.5 E2:.5 E3:.5 E2:.5 E3:.5 E2:.5 E3:.5 E2:.5 G2:.5 C2:.5 C3:.5 C2:.5 C3:.5 C2:.5 C3:.5 C2:.5 E2:.5 D2:.5 D3:.5 D2:.5 D3:.5 B1:.5 B2:.5 B1:.5 D2:.5' },
+    { tipo: 'triangle', vol: 0.045, leg: 0.7, notas: 'E5:.75 G5:.25 B5:.5 r:.5 A5:.5 G5:.5 E5:1 r:1 D5:.5 E5:.5 G5:1 r:1 C5:.75 E5:.25 G5:.5 r:.5 B5:.5 A5:.5 G5:1 F#5:.5 G5:.5 A5:.5 B5:.5 A5:1 r:1' },
+    { tipo: 'x', vol: 0.04, notas: 'r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5' } ] },
   // Festival gastronômico: chorinho de cozinha em ré maior (o cavaquinho na onda quadrada, o violão de sete cordas no
   // triângulo e o pandeiro)
   festival: { bpm: 116, ganho: 0.95, loop: true, faixas: [
@@ -32564,7 +32795,7 @@ async function iniciar(){
     vagalumes: () => vagalumes, VAGALUMES, prometidos: { itensPrometidos, separadoPedidos, opcoesFrete, faltaNoPedido, caderno: abrirCaderno },
     observatorio: { PLANETARIO, desvio: desvioPlanetario, ANTENA, novaEncomenda: novaEncomendaEt, antena: () => antenaVis, caixa: () => caixaEtVis, mensagem: abrirMensagemEt, tocarUltimaCadente: () => { const E = CADENTES[CADENTES.length - 1]; if (!E) return 'sem'; const s = tela(E.m.position); return tocarCadente(s.x, s.y); }, ceu: CEU, ceuDaNoite, pedir: pedirAEstrela, realizar: realizarPedido, tocarCadente, cadentes: () => CADENTES, chuvaCena: () => chuvaCena, cometa: () => cometaVis, caderno: abrirCaderno, obsEd: () => obsEd, ocular: () => ocular, abrirOcular, fecharOcular, tocar: tocarOcular, naOcular, ASTRO, luaDoDia, ceuHoje, descobrir: descobrirAstro, vis: () => observVis, OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
-    luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, festival: { FESTIVAL, BARRACAS_FESTIVAL, estado: () => S.festival, novo: () => { const F = festival(); F.pedido = null; F.feitos = F.feitos.filter(n => n !== nivel()); agendarFestival(); return F.pedido; }, entregar: entregarFestival, montar: montarFestival, encerrar: encerrarFestival, desmontar: desmontarFestival, vis: () => festivalVis, itens: itensFestival, provar: provarFestival, abrir: abrirEncomendaPatrinho, conferir: conferirFestival }, gincana: { GINCANA, PROVAS_GINCANA, arena: () => arenaGincana, obj: () => gincana, montar: montarArenaGincana, desmontar: desmontarArenaGincana, motivo: motivoGincana, toque: k => toqueGincana(k), dia: () => gincanaDia, gincanaEm }, festivalEm, noites: { NOITES, NOITES_DEF, CINEMA, FILMES, FD, CAUSOS, CAUSOS_NOITE, ETS_NOITE, SHOW, NUMEROS_SHOW, programaShow, barraca: itensBarracaEt, comprar: comprarEt, obj: () => noite, dia: () => noiteDia, comecar: (id, chamada = true) => comecarNoite(id, chamada), acabar: () => acabarNoite(), eventoDoDia, marcarEventoDoDia, motivo: motivoNoite, trava: travaNoiteHoje, programa: programaCinema, quadro: quadroFilme }, kevin: { obj: () => kevin, KEVIN, POSES_KEVIN, cena: () => kevinCena, posicoes: posicoesKevinCena, ARTE_KEVIN, ARTES_KEVIN, arte: () => arteKevin, prox: () => arteKevinProx, chamar: chamarKevin, encerrar: encerrarArteKevin, forcar: id => { if (arteKevin) encerrarArteKevin(); const l = ARTES_KEVIN[id].pode(); return l ? !!iniciarArteKevin(id, l) : false; }, tocar: tocarKevin }, foguete: { FOGUETE, prox: () => S.fogueteEspera, zerar: () => { S.fogueteEspera = 0; }, obj: () => foguete, falas: falasFoguete }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { passeio: { obj: () => passeio, pode: podePasseio, caminho: caminhoPasseio, VOO_PASSEIO }, frete: { opcoes: opcoesFrete, mandar: mandarFrete, pagar: pagarFrete, itens: () => { const r = { estado: '', itens: [] }; itensFrete(r); return r; } }, rega: comecarRegaAerea, faixa: passarFaixa, FAIXA, voo: () => voo, JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, encomenda: { ENCOMENDAS, encomendar, cancelar: cancelarEncomenda, itens: () => { const r = { estado: '', itens: [] }; itensEncomenda(r); return r; } }, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, dormir: pedirDormir, item: itemDormir, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
+    luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, festival: { FESTIVAL, BARRACAS_FESTIVAL, estado: () => S.festival, novo: () => { const F = festival(); F.pedido = null; F.feitos = F.feitos.filter(n => n !== nivel()); agendarFestival(); return F.pedido; }, entregar: entregarFestival, montar: montarFestival, encerrar: encerrarFestival, desmontar: desmontarFestival, vis: () => festivalVis, itens: itensFestival, provar: provarFestival, abrir: abrirEncomendaPatrinho, conferir: conferirFestival }, gincana: { GINCANA, PROVAS_GINCANA, arena: () => arenaGincana, obj: () => gincana, montar: montarArenaGincana, desmontar: desmontarArenaGincana, motivo: motivoGincana, toque: k => toqueGincana(k), dia: () => gincanaDia, gincanaEm }, festivalEm, noites: { NOITES, NOITES_DEF, DESFILE, programaDesfile, CINEMA, FILMES, FD, CAUSOS, CAUSOS_NOITE, ETS_NOITE, SHOW, NUMEROS_SHOW, programaShow, barraca: itensBarracaEt, comprar: comprarEt, obj: () => noite, dia: () => noiteDia, comecar: (id, chamada = true) => comecarNoite(id, chamada), acabar: () => acabarNoite(), eventoDoDia, marcarEventoDoDia, motivo: motivoNoite, trava: travaNoiteHoje, programa: programaCinema, quadro: quadroFilme }, kevin: { obj: () => kevin, KEVIN, POSES_KEVIN, cena: () => kevinCena, posicoes: posicoesKevinCena, ARTE_KEVIN, ARTES_KEVIN, arte: () => arteKevin, prox: () => arteKevinProx, chamar: chamarKevin, encerrar: encerrarArteKevin, forcar: id => { if (arteKevin) encerrarArteKevin(); const l = ARTES_KEVIN[id].pode(); return l ? !!iniciarArteKevin(id, l) : false; }, tocar: tocarKevin }, foguete: { FOGUETE, prox: () => S.fogueteEspera, zerar: () => { S.fogueteEspera = 0; }, obj: () => foguete, falas: falasFoguete }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { passeio: { obj: () => passeio, pode: podePasseio, caminho: caminhoPasseio, VOO_PASSEIO }, frete: { opcoes: opcoesFrete, mandar: mandarFrete, pagar: pagarFrete, itens: () => { const r = { estado: '', itens: [] }; itensFrete(r); return r; } }, rega: comecarRegaAerea, faixa: passarFaixa, FAIXA, voo: () => voo, JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, encomenda: { ENCOMENDAS, encomendar, cancelar: cancelarEncomenda, itens: () => { const r = { estado: '', itens: [] }; itensEncomenda(r); return r; } }, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, dormir: pedirDormir, item: itemDormir, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
     // auditoria de colisões: o que o desenho de uma construção (n = nível da reforma, ou 'andaime') põe fora do terreno dela
     fora(id, n){
       const p = PREDIO[id], fab = !!FABRICAS[id], v = n === 'andaime' ? vAndaime(id) : vReforma(id, n), s = 1 / 8, h = s / 2;
@@ -34728,6 +34959,7 @@ function catalogoModelos(){
       g.userData.anima = (dt, t) => { ch.scale.set(1 + Math.sin(t * 13) * 0.08, 1 + Math.sin(t * 9) * 0.15, 1 + Math.cos(t * 11) * 0.08); };
       return g;
     } }] }, varios('Barraca dos ETs', [['Rosa', () => vBarracaEt(0xff3ea5)], ['Azul', () => vBarracaEt(0x3ad0ff)], ['Verde', () => vBarracaEt(0x8fd06a)]]), um('Cogumelo lunar', vCogumeloLunar), um('Pedra lunar', vPedraLunar), um('Foguetinho de jardim', vFoguetinhoJardim)] },
+    { nome: 'Desfile de moda', itens: [um('Passarela do desfile', vPassarela), varios('Vaca modelo', LOOKS_VACA.map((n, k) => [n, () => vVacaDesfile(k)])), varios('Galinha modelo', LOOKS_GALINHA.map((n, k) => [n, () => vGalinhaDesfile(k)]))] },
     { nome: 'Rave: estandes e enfeites', itens: [um('Barraca de pulseiras neon', vBarracaNeon), um('Bar de água de coco', vBarCoco), um('Food truck', vFoodTruck), um('Torre de LED', vTorreLed), um('Banheiros químicos', vBanheiroQuimico),
       varios('Bandeira de vento', [['Rosa', () => vBandeiraVento(NEON[0], NEON[2])], ['Azul', () => vBandeiraVento(NEON[1], NEON[4])], ['Verde', () => vBandeiraVento(NEON[3], NEON[0])]]), um('Arco de balões', vArcoBaloes),
       varios('Pufe', [['Roxo', () => vPufe(NEON[4])], ['Rosa', () => vPufe(NEON[0])], ['Azul', () => vPufe(NEON[1])], ['Amarelo', () => vPufe(NEON[2])]])] },
