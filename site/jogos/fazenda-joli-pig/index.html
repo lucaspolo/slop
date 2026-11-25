@@ -7666,6 +7666,134 @@ const FALAS_RAVE = ['Solta o som, Summer!', 'Uhuu, Cachohits!', 'Que batida!', '
 const FALAS_RAVE_PORCO = ['Oinc! (dança de rabinho)', 'Oinc oinc! (pula na batida)', 'Óinc! (passinho de porquinho)', 'Oinc! (gira, gira)', 'Oinc-oinc! (casco pra cima)', 'Oinc! (ama essa música)',
   'Óóinc! (que batida!)', 'Oinc oinc! (chama os amigos)', 'Oinc! (rebola)', 'Oinc! (pede mais uma)', 'Óinc! (faz o passinho do Ed)', 'Oinc-oinc! (tá suando)', 'Oinc! (acena pra DJ)',
   'Oinc oinc! (pulinho duplo)', 'Óinc! (dança com a nano)', 'Oinc! (não quer ir embora)', 'Oinc-oinc! (focinho pro alto)', 'Oinc! (coreografia ensaiada)', 'Óóinc! (Summer Cachohits!)', 'Oinc! (gira o rabinho)', 'Oinc oinc! (melhor dia!)'];
+// ================= Noites no espaço de eventos: os modelos do cinema na roça, da noite de causos e da noite dos ETs, em
+// cubinhos de 1/16 (um ladrilho), com a frente em +z
+// o telão do cinema: a lona branca esticada numa armação de madeira, com as lâmpadas no alto e as cortinas de veludo dos
+// lados. O filme passa numa placa à parte, na frente da lona (TELAO.tela diz onde)
+const TELAO = { tela: { x0: -26, x1: 25, y0: 14, y1: 44, z: 1 } };
+function vTelao(){
+  const v = new Vox(), T = TELAO.tela, madeira = (x, y, z) => hash(x, y >> 2, z) < 0.4 ? 0x7a5232 : 0x8a5e38, veludo = (x, y, z) => (x & 1) ? 0xa82234 : 0xc0303f;
+  // os dois postes com os pés, as escoras atrás e as travessas de cima e de baixo
+  for (const x of [T.x0 - 3, T.x1 + 2]){
+    v.box(x, 0, -1, x + 1, 50, 0, madeira); v.box(x - 2, 0, -3, x + 3, 1, 2, madeira);
+    for (let k = 0; k <= 22; k++) v.box(x, k, -1 - Math.round((22 - k) * 0.4), x + 1, k, -1 - Math.round((22 - k) * 0.4), madeira);
+  }
+  v.box(T.x0 - 3, 47, -1, T.x1 + 3, 49, 0, madeira); v.box(T.x0 - 3, T.y0 - 2, -1, T.x1 + 3, T.y0 - 1, 0, madeira);
+  // a lona, com a moldura preta em volta, como a das telas de cinema
+  v.box(T.x0 - 1, T.y0, 0, T.x1 + 1, T.y1 + 2, 0, (x, y) => x < T.x0 || x > T.x1 || y > T.y1 ? 0x24222a : 0xf6f4ee);
+  // as cortinas de veludo, presas no alto e franzidas, abrindo um pouco por cima da beira da lona
+  for (const [a, b] of [[T.x0 - 2, T.x0 + 3], [T.x1 - 3, T.x1 + 2]]) for (let x = a; x <= b; x++) for (let y = T.y0 - 3; y <= 46; y++){
+    const larg = y > 40 ? 1 : 0, borda = x === a || x === b;
+    if (borda && y < 40 && hash(x, y, 3) < 0.2) continue;
+    v.set(x, y, 1, veludo(x, y)); if (larg || (x & 1)) v.set(x, y, 2, veludo(x + 1, y));
+  }
+  // o bando de lâmpadas no alto da travessa
+  for (let x = T.x0 - 2; x <= T.x1 + 2; x += 4) v.set(x, 50, 0, 0xffe07a);
+  return v;
+}
+// o projetor de rolo numa mesinha; os rolos (vRoloFilme) são malhas à parte, que giram com o filme
+const PROJETOR = { rolos: [[0, 22, -6], [0, 21, 5]] };
+function vProjetor(){
+  const v = new Vox(), madeira = (x, y, z) => hash(x, y, z) < 0.4 ? 0x9a6a3e : 0xb07a48;
+  for (const [x, z] of [[-6, -6], [5, -6], [-6, 5], [5, 5]]) v.box(x, 0, z, x, 9, z, madeira);
+  v.box(-7, 10, -7, 6, 10, 6, madeira);
+  // o corpo do projetor, cinza-chumbo, com as alças dos rolos, a lente na frente e a luzinha vermelha atrás
+  v.box(-4, 11, -6, 3, 17, 5, (x, y, z) => y === 17 || x === -4 || x === 3 ? 0x2e2c36 : 0x3a3a44);
+  for (const [, y, z] of PROJETOR.rolos) v.box(0, 18, z, 0, y - 1, z, 0x2e2c36);
+  v.ell(-0.5, 14, 6.5, 2.4, 2.4, 1.6, (x, y, z) => z >= 7 ? 0xbfe6ff : 0x24222a);
+  v.set(-1, 15, -7, 0xe8483a); v.box(2, 12, -7, 2, 13, -7, 0x6a6a74);
+  return v;
+}
+// um rolo de filme: o disco preto com três furos, de pé (gira em volta do x)
+function vRoloFilme(){
+  const v = new Vox();
+  for (let y = -5; y <= 5; y++) for (let z = -5; z <= 5; z++){
+    const d = Math.hypot(y, z), a = Math.atan2(y, z), furo = d > 1.6 && d < 3 && Math.cos(a * 3) > 0.55;
+    if (d <= 4.4 && !furo) v.box(-1, y, z, 0, y, z, d < 1.4 ? 0x9a9aa4 : d > 3.6 ? 0x1c1a22 : 0x2e2c36);
+  }
+  return v;
+}
+// o carrinho de pipoca: listrado de vermelho e branco, com as rodas, o puxador, a vitrine cheia de pipoca transbordando e o
+// toldinho listrado em cima
+function vPipoqueira(){
+  const v = new Vox(), listra = x => ((x + 20) >> 1) % 2 ? 0xfbf6ea : 0xd8302a;
+  for (const x of [-8, 7]) for (let y = -3; y <= 3; y++) for (let z = -3; z <= 3; z++){ const d = Math.hypot(y, z); if (d <= 3.3) v.set(x, y + 4, z, d < 1 ? 0xffd34d : 0x2e2a2a); }
+  v.box(-7, 4, -5, 6, 12, 4, (x, y) => y === 12 || y === 4 ? 0xb8222a : listra(x));
+  v.box(-2, 10, 5, 1, 10, 5, 0xffd34d);
+  v.box(-9, 9, -6, -9, 12, -6, 0x6a6a74); v.box(-12, 12, -6, -9, 12, -6, 0x6a6a74);
+  // a vitrine: as colunas vermelhas nos cantos e a pipoca subindo até transbordar
+  for (const [x, z] of [[-7, -5], [6, -5], [-7, 4], [6, 4]]) v.box(x, 13, z, x, 23, z, 0xd8302a);
+  v.box(-6, 13, -4, 5, 18, 3, (x, y, z) => { const h = hash(x, y, z); return h < 0.55 ? 0xfff6d8 : h < 0.85 ? 0xfbe8a4 : 0xf2c94c; });
+  for (let x = -6; x <= 5; x++) for (let z = -4; z <= 3; z++) if (hash(x, 19, z) < 0.55) v.set(x, 19, z, hash(x, 20, z) < 0.6 ? 0xfff6d8 : 0xfbe8a4);
+  for (const [x, y, z] of [[6, 14, 5], [-7, 15, 5], [2, 13, 5], [-3, 20, 0]]) v.set(x, y, z, 0xfff6d8);
+  // o toldinho
+  for (let x = -9; x <= 8; x++) for (let z = -7; z <= 6; z++){ const y = 24 + Math.round(Math.min(Math.abs(z + 0.5), 7) < 3 ? 1 : 0); v.set(x, y, z, listra(x)); }
+  for (let x = -9; x <= 8; x++) if (x & 1) v.set(x, 23, 6, listra(x));
+  return v;
+}
+// a esteira de palha da plateia, trançada, com as franjas nas pontas
+function vEsteiraPalha(){
+  const v = new Vox();
+  for (let x = -8; x <= 7; x++) for (let z = -11; z <= 10; z++) v.set(x, 0, z, ((x >> 1) + (z >> 1)) % 2 ? 0xe2c483 : 0xd4b06a);
+  for (let x = -8; x <= 7; x += 2) for (const z of [-12, 11]) v.set(x, 0, z, 0xc9a35e);
+  return v;
+}
+// o banco de tronco da roda de causos: um tronco deitado, de casca escura e as pontas claras, com os anéis
+function vTroncoBanco(){
+  const v = new Vox();
+  for (let x = -11; x <= 10; x++) for (let y = 0; y <= 6; y++) for (let z = -3; z <= 3; z++){
+    const d = Math.hypot(y - 3, z);
+    if (d > 3.5) continue;
+    const ponta = x === -11 || x === 10;
+    v.set(x, y, z, ponta ? (Math.round(d) % 2 ? 0xc99a66 : 0xb38052) : hash(x >> 1, y, z) < 0.35 ? 0x5a3a22 : 0x6a4428);
+  }
+  return v;
+}
+// a barraca dos ETs: o balcão redondo de metal com a faixa de neon, o mastro no meio e o chapéu de disco voador, com as
+// luzinhas na beira e uma cúpula de vidro em cima. cor: a cor do neon de cada barraca
+function vBarracaEt(cor){
+  const v = new Vox(), metal = (x, y, z) => hash(x, y, z) < 0.3 ? CDV.cascoE : CDV.casco;
+  for (let x = -10; x <= 10; x++) for (let z = -10; z <= 10; z++){
+    const d = Math.hypot(x, z);
+    if (d <= 10.4) for (let y = 0; y <= 8; y++){ if (d < 8.6 && y < 8) continue; v.set(x, y, z, y === 5 ? cor : y === 8 ? CDV.topo : metal(x, y, z)); }
+  }
+  v.box(-1, 0, -1, 0, 26, 0, CDV.borda);
+  for (let x = -14; x <= 14; x++) for (let z = -14; z <= 14; z++){
+    const d = Math.hypot(x, z); if (d > 14.4) continue;
+    const y = 26 + (d < 10 ? 1 : 0) + (d < 5 ? 1 : 0);
+    v.set(x, y, z, d > 13.4 ? CDV.borda : metal(x, y, z));
+  }
+  for (let k = 0; k < 16; k++){ const a = k / 16 * Math.PI * 2; v.set(Math.round(Math.cos(a) * 14), 25, Math.round(Math.sin(a) * 14), CDV.luzes[k % 3]); }
+  v.ell(0, 29, 0, 4.5, 4, 4.5, CDV.vidro, (x, y) => y >= 29);
+  return v;
+}
+// os enfeites que só os ETs vendem, em cubinhos de 1/16 em volta do meio do ladrilho
+// o cogumelo lunar: três cogumelos de chapéu azul e lilás com bolinhas, que brilham de noite (os chapéus são o brilho)
+const COGUMELO_LUNAR = { chapeus: [0x6fe3ff, 0xb68cff, 0x8ff0d0], bolinha: 0xf4fbff, talo: 0xeae6f4 };
+function vCogumeloLunar(){
+  const v = new Vox(), C = COGUMELO_LUNAR;
+  for (const [x, z, h, r, c] of [[-2, -1, 7, 4, 0], [3, 2, 4, 3, 1], [-3, 4, 3, 2.4, 2]]){
+    v.box(x, 0, z, x + 1, h, z + 1, C.talo);
+    v.ell(x + 0.5, h + 1, z + 0.5, r, r * 0.6, r, (xx, y, zz) => hash(xx, y, zz) < 0.14 ? C.bolinha : C.chapeus[c], (xx, y) => y >= h + 1);
+  }
+  return v;
+}
+// a pedra lunar: cinza, cheia de crateras, com cristais lilás brotando
+function vPedraLunar(){
+  const v = new Vox(), crateras = [[3, 5, 3, 1.8], [-3, 4, 2, 1.4], [0, 6, -3, 1.6], [-4, 2, -3, 1.3]];
+  v.ell(0, 0, 0, 6.5, 6, 5.5, (x, y, z) => hash(x, y, z) < 0.3 ? 0x9a9aa2 : 0xb4b4bc, (x, y) => y >= 0);
+  for (const [cx, cy, cz, r] of crateras) for (const e of [...v.m.values()]) if (Math.hypot(e.x - cx, e.y - cy, e.z - cz) <= r) v.set(e.x, e.y, e.z, 0x7c7c86);
+  for (const [x, z, h] of [[4, -2, 3], [5, -1, 2], [-5, 1, 2]]) v.box(x, 3, z, x, 3 + h, z, 0xc79cff);
+  return v;
+}
+// o foguetinho de jardim: vermelho e branco, de janelinha azul, em pé nas três aletas
+function vFoguetinhoJardim(){
+  const v = new Vox();
+  for (let y = 2; y <= 18; y++){ const r = y > 14 ? 3 * (19 - y) / 5 : 3; for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) if (Math.hypot(x, z) <= r + 0.2) v.set(x, y, z, y > 14 ? 0xe2402f : y < 5 ? 0xb8b8c2 : (y >> 2) % 2 ? 0xfbf6ea : 0xe2402f); }
+  for (let a = 0; a < 3; a++){ const t = a / 3 * Math.PI * 2 + 0.5, dx = Math.cos(t), dz = Math.sin(t); for (let k = 3; k <= 6; k++) for (let y = 0; y <= 6 - (k - 3); y++) v.set(Math.round(dx * k), y, Math.round(dz * k), 0xe2402f); }
+  for (let x = -1; x <= 1; x++) for (let y = 10; y <= 12; y++) v.set(x, y, 3, Math.abs(x) + Math.abs(y - 11) < 2 ? 0x8fe0ff : 0x7c8fa3);
+  return v;
+}
 // ================= o recanto do fundo da mata (o Lucas pediu): o fundo da primeira coluna da mata, atrás da cachoeira, não
 // tinha trilha. Agora uma trilha sai do fim da trilha do meio (a parcela do nível 44), passa atrás do lago da cachoeira e
 // desce pela beira do mapa até uma clareirinha. Lá ficam as câmeras da mata (armadilhas fotográficas que o Hud, que também é
@@ -8660,6 +8788,159 @@ function vCanecaJoli(){
   for (const [x, y] of [[-1, 1], [-1, 2], [-1, 3], [0, 3], [1, 3], [1, 2], [0, 2]]) v.set(x, y, 3, MOLETOM.p);
   v.box(-1, 4, -1, 1, 4, 1, 0x5a3320); v.box(3, 1, 0, 3, 3, 0, R); v.set(0, 5, 0, 0xfdfcf8); v.set(1, 5, 0, 0xfdfcf8);
   return v;
+}
+// ================= Kevin: irmão do Ed, um porco de verdade, de quatro patas (o Lucas pediu), rosa e sem roupa. Muito
+// arteiro, adora assustar: o jeito vem das sobrancelhas grossas (uma arqueada, a outra descendo), do olho meio fechado de
+// malandro e do sorriso torto com um dentinho. O desenho segue o porquinho do spa (o barril do corpo, a cabeça redonda, o
+// focinho de disco e as patas penduradas no quadril), em cubinhos de KEVIN.escala, com o chão em y 0 e a frente em +z.
+// Partes: tronco, cabeça (no pivô do pescoço), as quatro patas (no quadril) e o rabinho enrolado (no pivô do rabo)
+const KEVIN = { escala: 1 / 50, quadril: 8, pernas: [[-6.5, 8.5], [6.5, 8.5], [-6.5, -9.5], [6.5, -9.5]], pivoCabeca: [0, 16, 9], pivoRabo: [0, 18, -16], altura: 0.78,
+  pele: 0xf5a3b3, barriga: 0xf2b7c2, focinho: 0xf7889f, narina: 0x9c3450, orelha: 0xe3748c, casco: 0x7a4a50, sobrancelha: 0x4a2622,
+  palpebra: 0xb85a70, olho: 0x1a1414, bochecha: 0xf27e97, boca: 0x7a2236, dente: 0xfdfaf4, lencol: 0xf7f6f0, lencolSombra: 0xe4e2da };
+function vKevin(parte = 'inteiro'){
+  const v = new Vox(), K = KEVIN;
+  if (parte === 'pata'){
+    // a pata pendurada no quadril: redonda (4 × 4 sem os cantos), com o casco escuro embaixo
+    for (let x = -2; x <= 1; x++) for (let z = -2; z <= 1; z++){
+      if ((x === -2 || x === 1) && (z === -2 || z === 1)) continue;
+      for (let y = -8; y <= -1; y++) v.set(x, y, z, y <= -7 ? K.casco : K.pele);
+    }
+    return v;
+  }
+  if (parte === 'rabo'){
+    // o rabinho enrolado, saindo do alto das costas, em volta do pivô do rabo
+    const [px, py, pz] = K.pivoRabo;
+    for (const [x, y, z] of [[0, 17, -16], [0, 18, -17]]) v.set(x - px, y - py, z - pz, K.pele);
+    for (let k = 0; k <= 13; k++){ const a = -Math.PI / 2 + k * 0.55, r = 2.4 - k * 0.09; v.set(Math.round(Math.cos(a) * r) - px, Math.round(20.5 + Math.sin(a) * r) - py, (k > 7 ? -19 : -18) - pz, K.pele); }
+    return v;
+  }
+  if (parte === 'tronco' || parte === 'inteiro'){
+    // o corpo: um barril redondo, com a barriga mais clarinha
+    v.ell(0, 15, -1, 10.6, 10.2, 15, (x, y) => y <= 8 ? K.barriga : K.pele, (x, y) => y >= 5);
+  }
+  if (parte === 'cabeca' || parte === 'inteiro'){
+    const c = new Vox();
+    // a cabeça grande e redonda; o focinho, um disco achatado com as narinas fundas
+    c.ell(0, 18.5, 15.5, 9.6, 9.4, 8, K.pele);
+    c.ell(0, 16, 24.2, 4.8, 4, 2.6, K.focinho);
+    const frente = (x, y) => { for (let z = 40; z > 0; z--) if (c.has(x, y, z)) return z; return 0; };
+    for (const x of [-2, 2]) for (const y of [15, 16]){ const z = frente(x, y); c.set(x, y, z, K.narina); c.set(x, y, z - 1, K.narina); }
+    for (const s of [-1, 1]){
+      // o olho de malandro: a pálpebra pesada cobre a metade de cima, e embaixo o olho preto com um brilho
+      for (const dx of [0, 1, 2]){ const x = s * (3 + dx); if (dx < 2){ c.set(x, 21, frente(x, 21), dx === 1 ? 0xffffff : K.olho); c.set(x, 20, frente(x, 20), K.olho); } c.set(x, 22, frente(x, 22), K.palpebra); }
+      // a bochecha corada
+      for (const dx of [2, 3]){ const x = s * (4 + dx); c.set(x, 17, frente(x, 17), K.bochecha); }
+    }
+    // as sobrancelhas grossas, saltadas do rosto: a esquerda arqueada lá em cima, a direita descendo para o meio (a cara de
+    // quem está tramando alguma)
+    for (const [x, y] of [[-3, 24], [-4, 25], [-5, 25], [-6, 25], [-7, 24], [-4, 24], [-5, 24], [-6, 24], [2, 23], [3, 23], [4, 23], [4, 24], [5, 24], [6, 24], [6, 25], [7, 24], [5, 23]]){ const z = frente(x, y); c.set(x, y, z + 1, K.sobrancelha); }
+    // o sorriso torto: sobe pela bochecha só de um lado, com um dentinho para fora
+    // (na bochecha, ao lado do focinho, para aparecer na câmera de cima)
+    for (const [x, y] of [[-5, 12], [-6, 13], [5, 12], [6, 12], [6, 13], [7, 13], [7, 14], [8, 15], [8, 16]]){ const z = frente(x, y); c.set(x, y, z, K.boca); }
+    { const z = frente(6, 11); c.set(6, 11, z, K.dente); c.set(6, 10, frente(6, 10), K.dente); }
+    // as orelhas em pé, pontudas, um pouco para fora e para a frente, com o lado de dentro rosa-escuro
+    for (const s of [-1, 1]) [[2, 7], [2, 7], [3, 7], [3, 7], [4, 7], [5, 7], [5, 7], [6, 7]].forEach(([a, b], h) => {
+      const y = 24 + h, z = 12 + Math.floor(h * 0.7);
+      for (let x = a; x <= b; x++){ c.set(s * x, y, z, K.pele); c.set(s * x, y, z + 1, x > a && x < b && h < 6 ? K.orelha : K.pele); }
+    });
+    // a cabeça sozinha vem em volta do pivô do pescoço; no modelo inteiro fica no lugar
+    const [px, py, pz] = parte === 'cabeca' ? K.pivoCabeca : [0, 0, 0];
+    for (const e of c.m.values()) v.set(e.x - px, e.y - py, e.z - pz, e.c);
+  }
+  if (parte === 'inteiro'){
+    const p = vKevin('pata'), r = vKevin('rabo'), [rx, ry, rz] = K.pivoRabo;
+    for (const [px, pz] of K.pernas) for (const e of p.m.values()) v.set(e.x + Math.floor(px) + 1, e.y + K.quadril, e.z + Math.floor(pz) + 1, e.c);
+    for (const e of r.m.values()) v.set(e.x + rx, e.y + ry, e.z + rz, e.c);
+  }
+  return v;
+}
+// o rosto do Kevin, para o ícone (VI.kevin) e o diálogo das cenas
+function vKevinCabeca(){ return vKevin('cabeca'); }
+// o lençol de fantasma da travessura de noite: cobre o Kevin inteiro, com a barra ondulada (as patinhas aparecem embaixo) e
+// os dois furos dos olhos. Fica no tronco, nas mesmas coordenadas dele
+function vLencolFantasma(){
+  const v = new Vox(), K = KEVIN, cx = 0, cy = 15, cz = 3.5, rx = 13, ry = 17.5, rz = 26;
+  const barra = (x, z) => 4 + Math.round(Math.sin(Math.atan2(x, z - cz) * 7) * 1.6);
+  for (let x = -rx - 1; x <= rx + 1; x++) for (let y = 0; y <= cy + ry + 1; y++) for (let z = cz - rz - 1; z <= cz + rz + 1; z++){
+    const f = ((x - cx) / rx) ** 2 + ((Math.max(y, cy) - cy) / ry) ** 2 + ((z - cz) / rz) ** 2;
+    const fd = ((x - cx) / (rx - 1.6)) ** 2 + ((Math.max(y, cy) - cy) / (ry - 1.6)) ** 2 + ((z - cz) / (rz - 1.6)) ** 2;
+    if (f > 1 || fd < 1 || y < barra(x, z)) continue;
+    v.set(x, y, z, hash(x, y >> 1, z) < 0.25 ? K.lencolSombra : K.lencol);
+  }
+  // os furos dos olhos, na frente, na altura dos olhos do Kevin
+  for (const s of [-1, 1]) for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1], [0, 2], [1, 2]]){
+    const x = s * (3 + dx), y = 20 + dy; for (let z = cz + rz + 1; z > 0; z--) if (v.has(x, y, z)){ v.set(x, y, z, 0x1a1414); v.set(x, y, z - 1, 0x1a1414); break; }
+  }
+  return v;
+}
+// o Kevin no mundo: anda como os porquinhos (colocar, ir, olhar, topo, update) e tem as poses dele, que se misturam devagar
+// de uma para a outra. pose: 'parado' (também andando), 'espreita' (agachado, de cabeça baixa, esperando a vítima), 'buu'
+// (empinado nas patas de trás, o susto), 'rindo' (rolando de costas, de pernas para o ar), 'sentado'. aceno: balança a
+// cabeça (quando fala); pulo: um pulinho; abana: o rabinho abanando mais rápido
+const POSES_KEVIN = {
+  // rx e rz giram o corpo em volta do pivô (em cubinhos); dy desce ou sobe o corpo; pernas: o giro de cada pata (frente
+  // esquerda, frente direita, trás esquerda, trás direita); cab: o giro da cabeça para baixo (+) ou para cima (-)
+  parado: { rx: 0, rz: 0, piv: [0, 0, 0], dy: 0, pernas: [0, 0, 0, 0], cab: 0 },
+  espreita: { rx: 0.14, rz: 0, piv: [0, 0, 0], dy: -1.8, pernas: [0.3, 0.3, -0.42, -0.42], cab: 0.3 },
+  buu: { rx: -0.78, rz: 0, piv: [0, 0, -10], dy: 0, pernas: [-0.9, -0.6, 0.78, 0.78], cab: -0.25 },
+  rindo: { rx: 0, rz: 2.55, piv: [0, 15, 0], dy: -4.5, pernas: [0, 0, 0, 0], cab: -0.2 },
+  sentado: { rx: -0.5, rz: 0, piv: [0, 8, -9.5], dy: -5.5, pernas: [0.5, 0.5, -1.15, -1.15], cab: -0.1 },
+};
+class Kevin {
+  constructor(){
+    const s = KEVIN.escala, op = { origin: [0.5, 0, 0.5], jitter: 0.015, ao: AO_SUAVE }, V = a => new THREE.Vector3(a[0] * s, a[1] * s, a[2] * s);
+    this.nome = 'kevin'; this.escala = s; this.altura = KEVIN.altura;
+    this.g = new THREE.Group(); this.corpo = new THREE.Group(); this.g.add(this.corpo);
+    this.corpo.add(malha(geo('kevinTronco', () => vKevin('tronco').build(s, op))));
+    this.cab = new THREE.Group(); this.cab.position.copy(V(KEVIN.pivoCabeca)); this.cab.add(malha(geo('kevinCabeca', () => vKevin('cabeca').build(s, op)))); this.corpo.add(this.cab);
+    this.rabo = new THREE.Group(); this.rabo.position.copy(V(KEVIN.pivoRabo)); this.rabo.add(malha(geo('kevinRabo', () => vKevin('rabo').build(s, op)))); this.corpo.add(this.rabo);
+    this.pernas = KEVIN.pernas.map(([px, pz]) => { const q = new THREE.Group(); q.position.set(px * s, KEVIN.quadril * s, pz * s); q.add(malha(geo('kevinPata', () => vKevin('pata').build(s, { ...op, origin: [0, 0, 0] })))); this.corpo.add(q); return q; });
+    // o lençol de fantasma (só na travessura de noite)
+    this.lencol = malha(geo('kevinLencol', () => vLencolFantasma().build(s, op))); this.lencol.visible = false; this.corpo.add(this.lencol);
+    this.pos = new THREE.Vector2(); this.pontos = []; this.vel = 2.6; this.ang = 0; this.angAlvo = 0; this.fase = 0; this.estado = 'parado'; this.aoChegar = null;
+    this.pose = 'parado'; this.aceno = 0; this.pulo = 0; this.abana = 0; this.alt = 0;
+    // a pose de agora, que vai chegando na pose pedida
+    const P = POSES_KEVIN.parado; this.p = { rx: 0, rz: 0, piv: [0, 0, 0], dy: 0, pernas: P.pernas.slice(), cab: 0 };
+    this._q = new THREE.Quaternion(); this._e = new THREE.Euler(); this._v = new THREE.Vector3();
+  }
+  colocar(x, z){ this.pos.set(x, z); this.g.position.set(x, this.alt, z); }
+  ir(pontos, aoChegar){ this.pontos = pontos.slice(); this.aoChegar = aoChegar; this.estado = this.pontos.length ? 'andando' : 'parado'; if (!this.pontos.length && aoChegar) aoChegar(); }
+  olhar(x, z){ if (Math.hypot(x - this.pos.x, z - this.pos.y) > 0.01) this.angAlvo = Math.atan2(x - this.pos.x, z - this.pos.y); }
+  topo(){ return new THREE.Vector3(this.pos.x, this.altura * (this.pose === 'buu' ? 1.25 : this.pose === 'espreita' || this.pose === 'rindo' ? 0.8 : 1), this.pos.y); }
+  update(dt, t){
+    if (this.estado === 'andando'){
+      const p = this.pontos[0], dx = p[0] - this.pos.x, dz = p[1] - this.pos.y, d = Math.hypot(dx, dz), passo = this.vel * dt;
+      if (d <= passo){ this.pos.set(p[0], p[1]); this.pontos.shift(); if (!this.pontos.length){ this.estado = 'parado'; const cb = this.aoChegar; this.aoChegar = null; if (cb) cb(); } }
+      else { this.pos.x += dx / d * passo; this.pos.y += dz / d * passo; this.angAlvo = Math.atan2(dx, dz); }
+      this.fase += dt * 12;
+    }
+    this.ang = anguloPerto(this.ang, this.angAlvo, Math.min(1, dt * 10));
+    this.g.position.set(this.pos.x, this.alt, this.pos.y); this.g.rotation.y = this.ang;
+    const andando = this.estado === 'andando', alvo = POSES_KEVIN[andando ? 'parado' : this.pose] || POSES_KEVIN.parado, P = this.p, k = Math.min(1, dt * 9);
+    P.rx += (alvo.rx - P.rx) * k; P.rz += (alvo.rz - P.rz) * k; P.dy += (alvo.dy - P.dy) * k; P.cab += (alvo.cab - P.cab) * k;
+    for (let i = 0; i < 3; i++) P.piv[i] += (alvo.piv[i] - P.piv[i]) * k;
+    for (let i = 0; i < 4; i++) P.pernas[i] += (alvo.pernas[i] - P.pernas[i]) * k;
+    const s = this.escala, rindo = this.pose === 'rindo' && !andando, buu = this.pose === 'buu' && !andando;
+    // rolando de rir: balança de um lado para o outro, de costas, e as quatro patas pedalam no ar
+    const rz = P.rz + (rindo ? Math.sin(t * 9) * 0.28 : 0), rx = P.rx + (buu ? Math.sin(t * 20) * 0.03 : 0);
+    this._e.set(rx, 0, rz, 'ZXY'); this._q.setFromEuler(this._e);
+    this._v.set(P.piv[0] * s, P.piv[1] * s, P.piv[2] * s).applyQuaternion(this._q);
+    this.corpo.quaternion.copy(this._q);
+    this.corpo.position.set(P.piv[0] * s - this._v.x, P.piv[1] * s - this._v.y + P.dy * s, P.piv[2] * s - this._v.z);
+    // andando, as patas em diagonal vão juntas (como os porquinhos do spa), com o corpo subindo e descendo
+    const sw = andando ? Math.sin(this.fase) * 0.6 : 0;
+    this.pernas.forEach((g, i) => { g.rotation.x = P.pernas[i] + (i === 0 || i === 3 ? sw : -sw) + (rindo ? Math.sin(t * 14 + i * 1.7) * 0.55 : buu && i < 2 ? Math.sin(t * 16 + i * 2) * 0.35 : 0); });
+    if (andando) this.corpo.position.y += Math.abs(Math.sin(this.fase)) * 0.012;
+    if (this.pulo > 0){ this.pulo -= dt; const q = 1 - Math.max(0, this.pulo) / 0.4; this.corpo.position.y += Math.sin(q * Math.PI) * 0.16; }
+    // a cabeça: respira, balança falando e, rindo, chacoalha
+    let cx = P.cab + Math.sin(t * 1.4) * 0.02 + (andando ? Math.sin(this.fase * 2) * 0.04 : 0), cy = Math.sin(t * 0.6) * 0.08;
+    if (this.aceno > 0){ this.aceno -= dt; cx += Math.sin(t * 10) * 0.08; }
+    if (rindo){ cx += Math.sin(t * 18) * 0.1; cy = 0; }
+    this.cab.rotation.set(cx, cy, 0);
+    // o rabinho abana sempre um pouco; mais rápido quando ele está aprontando
+    if (this.abana > 0) this.abana -= dt;
+    this.rabo.rotation.y = Math.sin(t * (this.abana > 0 || rindo || andando ? 16 : 4)) * (this.abana > 0 || rindo ? 0.55 : 0.25);
+  }
 }
 // a Lúcia, nano dona do Nano Hostel (o Lucas pediu bem detalhada, a partir de um desenho dela): o mesmo tamanho das outras
 // nanos, com quatro vezes mais cubinhos (escala 1/224). Cabelão preto, comprido e rebelde, com coque no alto e laço amarelo;
@@ -31795,7 +32076,18 @@ function catalogoModelos(){
       const p = new Picoca();
       p.g.userData.anima = (dt, t) => { p.estado = 'andando'; p.pontos = [[1e6, 0]]; if (p.pulo <= 0 && Math.sin(t * 0.8) > 0.97) p.pulo = 0.5; p.update(dt, t); p.pos.set(0, 0); p.g.position.set(0, 0, 0); p.g.rotation.y = 0; };
       p.g.userData.anima(0, 0); return p.g;
-    } }] }, um('Lúcia', vLucia), varios('Nano do hostel', [0, 1, 2, 3, 4].map(k => [`Nano ${k + 1}`, () => vNano(k)])), um('Carolina', vCarolina), um('Lucas', vLucas), varios('Visitante da trilha', [0, 1, 2, 3, 4, 5].map(k => ['Visitante ' + (k + 1), () => vVisitante(k)])), { nome: 'Saci Pererê', variantes: [{ nome: '', cria: () => {
+    } }] }, { nome: 'Kevin', variantes: [{ nome: 'Sozinho', cria: vox(vKevin) }, { nome: 'Com o Ed', cria: () => {
+      // lado a lado, na escala do jogo, para comparar o tamanho
+      const g = new THREE.Group(), p = new Porco(COR.ed, COR.edBolso, 'ed'), k = new Kevin();
+      p.update(0, 0); p.g.position.set(-0.5, 0, 0); k.colocar(0.45, 0); k.update(0, 0); k.g.position.set(0.45, 0, 0); g.add(p.g, k.g);
+      return g;
+    } }, ...[['Andando', 'andando'], ['À espreita', 'espreita'], ['BUUU!', 'buu'], ['Rolando de rir', 'rindo'], ['Sentado', 'sentado'], ['De lençol de fantasma', 'lencol']].map(([n, pose]) => ({ nome: n, cria: () => {
+      const k = new Kevin();
+      if (pose === 'lencol') k.lencol.visible = true; else if (pose !== 'andando') k.pose = pose;
+      k.g.userData.anima = (dt, t) => { if (pose === 'andando' || pose === 'lencol'){ k.estado = 'andando'; k.pontos = [[0, 1e6]]; } k.update(dt, t); k.pos.set(0, 0); k.g.position.set(0, 0, 0); k.g.rotation.y = 0; };
+      for (let i = 0; i < 40; i++) k.g.userData.anima(0.05, i * 0.05);
+      return k.g;
+    } })), { nome: 'Rosto', cria: vox(vKevinCabeca) }] }, um('Lúcia', vLucia), varios('Nano do hostel', [0, 1, 2, 3, 4].map(k => [`Nano ${k + 1}`, () => vNano(k)])), um('Carolina', vCarolina), um('Lucas', vLucas), varios('Visitante da trilha', [0, 1, 2, 3, 4, 5].map(k => ['Visitante ' + (k + 1), () => vVisitante(k)])), { nome: 'Saci Pererê', variantes: [{ nome: '', cria: () => {
       const p = new Porco(0, 0, 'saci', MODELO_SACI);
       p.pE.visible = false;
       p.g.userData.anima = (dt, t) => { p.update(dt, t); p.pos.set(0, 0); p.g.position.set(0, 0, 0); p.g.rotation.y = 0; };
@@ -31836,6 +32128,20 @@ function catalogoModelos(){
     { nome: 'Cenário', itens: [varios('Árvore', [['Maçãs', () => vArvore(0)], ['Sem fruta', () => vArvore(1)], ['Laranjas', () => vArvore(2)]]), um('Arbusto', vArbusto), um('Redemoinho', vRedemoinho), um('Fardo de feno', vFeno), um('Flores', () => vFlores(3)), um('Capim', () => vCapim(1)), um('Cova', vCova), varios('Cerca', [['Reta', () => vCerca(3)], ['Canto', () => vCerca(5)]]), varios('Portão', [['Arco da entrada', () => vPortao(true)], ['Simples', () => vPortao(false)]]), um('Placa', vPlaca), um('Correio', vCorreio)] },
     { nome: 'Enfeites', itens: [um('Malas de viagem', vMalasViagem), um('Poste de placas', vPlacaViagem), um('Globo terrestre', vGloboViagem), um('Canteiro de flores', vCanteiroFlor), um('Banco de praça', vBanco), um('Espantalho', vEspantalho), um('Poste de luz', vPoste), { nome: 'Varal de luzes', variantes: [{ nome: '', cria: () => { const v = vVaralTrecho(), m = malha(v.build(1 / RES_VARAL)); m.userData.cubos = v.m.size; return m; } }] }, um('Chafariz', vFonte), um('Estátua do Ed', vEstatua), um('Casinha da Luma', vCasinhaLuma), um('Carriola florida', vCarriola), um('Mesa de piquenique', vMesaPiquenique), um('Relógio de sol', vRelogioSol), um('Pérgola', vPergola), um('Balanço de pneu', VI.balanco), um('Cavalinho de mola', VI.cavalinho), um('Gangorra', VI.gangorra), um('Gira-gira', VI.giraGira), um('Balanço de parquinho', VI.balancoParque), um('Escorregador', VI.escorregador), um('Comedouro de passarinho', vComedouro), um('Fogueira de roda', vFogueiraRoda), varios('Laguinho com sapinho', [['Laguinho', vLaguinho], ['Sapinho', vSapinho]]), varios('Topiaria', Object.keys(FORMAS_TOPIARIA).map(k => [FORMAS_TOPIARIA[k].nome, () => vTopiaria(k)])), um('Poço dos desejos', vPocoDesejos), varios('Estátua da família', Object.keys(FORMAS_ESTATUA).map(k => [FORMAS_ESTATUA[k].nome, () => vEstatuaFamilia(k)])), varios('Bandeirinhas do ArraiEd', [['Inteiras', vBandeirinhas], ['Mastros', vBandeirinhasMastros], ['Cordão', vBandeirinhasCordao]])] },
     { nome: 'Objetos', itens: [varios('Missão NANO', [['Foguete', vFoguete], ['Plataforma', vPlataformaFoguete], ['Paraquedas', () => vParaquedas(0xd8302a, 0xffffff)], ['Nano de capacete', () => vNanoMissao(2)], ['Nano com fuligem', () => vNanoMissao(2, true)], ['Megafone', vMegafone], ['Chapéu de festa', vConeFesta]]), varios('ArraiEd', [['Fogueira', vFogueira], ['Fogo', vChama], ['Mastro', vMastro], ['Barraca do milho', () => vBarraca('milho')], ['Barraca da pescaria', () => vBarraca('pescaria')], ['Bandeirinhas', vBandeirinhas]]), um('Cartão-postal', vCartaoPostal), um('Osso da Luma', vOsso), um('Biscoito da Luma', vBiscoito), um('Ponte do lago', vPonte), um('Rampa dos patos', vRampaPatos), um('Fábrica de barras', vFabBarras), um('Chocolateria', vChocolateria), um('Oficina de borracha', vOficina), um('Mirante da mata', vMirante), varios('Fogo na mata', [0, 1, 2].map(f => ['Fase ' + (f + 1), () => vFogo(f)])), varios('Lixo na mata', [['Garrafa', () => vLixo(0)], ['Latinha', () => vLixo(1)], ['Saquinho', () => vLixo(2)]]), um('Galho caído', vGalho), varios('Recanto da mata', [['Caixa de jataí', vCaixaJatai], ['Câmera da mata', vCameraTrap], ['Tora de shiitake', () => vToraCogumelo(2)], ['Tora brotando', () => vToraCogumelo(1)], ['Lugar da tora', () => vToraCogumelo(0)], ['Câmera na mão do Hud', vCameraMao], ['Armadilha na mão', vArmadilhaMao]]), um('Enxada', vEnxada), um('Regador', vRegador), um('Cesta', vCesta), um('Caneca', vCaneca), um('Lanterna', vLanterna), um('Lua', vLua), um('Saco', vSaco), um('Mochila', vMochila), um('Carrinho de mão', vCarrinho), um('Mesa do café', vMesaCafe), um('Banquinho', vBancoCafe), um('Bolinha da Luma', vBolinha), um('Nano Hostel', vNanoHostel), um('Nano Metrô', vNanoMetro), varios('Nano pessoa', [0, 1, 2, 3, 4, 5].map(k => ['Nano ' + (k + 1), () => vNano(k * 7, k === 2)])), um('Prato', vPratoCafe), um('Fatia de bolo', vFatia), um('Seta', vSeta)] },
+    { nome: 'Noites no espaço de eventos', itens: [um('Telão do cinema', vTelao), { nome: 'Projetor', variantes: [{ nome: '', cria: () => {
+      const g = new THREE.Group(), rolos = PROJETOR.rolos.map(([x, y, z]) => { const r = malha(vRoloFilme().build(1 / 16, { origin: [0, 0, 0] })); r.position.set(x / 16, y / 16, z / 16); g.add(r); return r; });
+      g.add(malha(vProjetor().build(1 / 16, { origin: [0.5, 0, 0.5] })));
+      g.userData.anima = dt => rolos.forEach((r, i) => { r.rotation.x -= dt * (i ? 2.4 : 1.8); });
+      return g;
+    } }] }, um('Rolo de filme', vRoloFilme), um('Carrinho de pipoca', vPipoqueira), um('Esteira de palha', vEsteiraPalha), um('Banco de tronco', vTroncoBanco), { nome: 'Roda de causos', variantes: [{ nome: '', cria: () => {
+      // a fogueira do ArraiEd no meio e os bancos de tronco em volta, na escala do jogo
+      const g = new THREE.Group(), s = 1 / 16;
+      g.add(malha(vFogueira().build(s, { origin: [0.5, 0, 0.5] })));
+      const ch = new THREE.Mesh(vChama().build(s, { origin: [0.5, 0, 0.5], jitter: 0.04 }), new THREE.MeshBasicMaterial({ vertexColors: true })); g.add(ch);
+      for (let k = 0; k < 6; k++){ const a = k / 6 * Math.PI * 2 + 0.5, b = malha(vTroncoBanco().build(s, { origin: [0.5, 0, 0.5] })); b.position.set(Math.cos(a) * 1.9, 0, Math.sin(a) * 1.9); b.rotation.y = -a + Math.PI / 2; g.add(b); }
+      g.userData.anima = (dt, t) => { ch.scale.set(1 + Math.sin(t * 13) * 0.08, 1 + Math.sin(t * 9) * 0.15, 1 + Math.cos(t * 11) * 0.08); };
+      return g;
+    } }] }, varios('Barraca dos ETs', [['Rosa', () => vBarracaEt(0xff3ea5)], ['Azul', () => vBarracaEt(0x3ad0ff)], ['Verde', () => vBarracaEt(0x8fd06a)]]), um('Cogumelo lunar', vCogumeloLunar), um('Pedra lunar', vPedraLunar), um('Foguetinho de jardim', vFoguetinhoJardim)] },
   ];
   grupos.splice(1, 0, grupoTrajes);
   grupos.push({ nome: 'Ícones', itens: Object.keys(VI).filter(k => !usados.has(k)).sort().map(k => um((PRODUTOS[k] && PRODUTOS[k].nome) || k, VI[k])) });
