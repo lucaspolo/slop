@@ -1400,14 +1400,20 @@ const PACOTES_RACAO = [{ q: 5, p: 15, nivel: 1 }, { q: 20, p: 54, nivel: 1 }, { 
 const descontoRacao = (q, p) => Math.round((1 - p / q / (PACOTES_RACAO[0].p / PACOTES_RACAO[0].q)) * 100);
 // adubo: um saco corta o tempo que falta de uma planta longa (minTempo em segundos) pela metade
 const ADUBO = { nivel: 6, preco: 70, pacote: [5, 330], minTempo: 300, fator: 0.5 };
-// curva de XP: começo rápido e miolo mais longo, para o dinheiro acompanhar o que cada nível libera
-const XP_NIVEL = [0];
-{ let inc = 15; const passos = [15, 25, 40, 60, 100, 180, 300, 450, 600, 800, 1000, 1250, 1500, 1800, 2100, 2400, 2700, 3000, 3300];
+// curva de XP: começo rápido e miolo mais longo, para o dinheiro acompanhar o que cada nível libera. Até o nível 30 cada
+// nível pede 10% a mais que o anterior; daí em diante, 5% (XP_CURVA.alto). O Lucas achou lenta a subida nos níveis altos:
+// o XP que entra (2 XP por minuto em cada canteiro, os pedidos, as fábricas) não cresce 10% por nível
+const XP_CURVA = { passos: [15, 25, 40, 60, 100, 180, 300, 450, 600, 800, 1000, 1250, 1500, 1800, 2100, 2400, 2700, 3000, 3300], meio: 1.1, alto: 1.05, desde: 31 };
+function curvaXp(desde, alto){
+  const X = [0]; let inc = 15;
   for (let n = 1; n < 60; n++){
-    if (n <= passos.length) inc = passos[n - 1];
-    else inc = Math.round(inc * 1.1 / 50) * 50;
-    XP_NIVEL.push(XP_NIVEL[n - 1] + inc);
-  } }
+    if (n <= XP_CURVA.passos.length) inc = XP_CURVA.passos[n - 1];
+    else inc = Math.round(inc * (n >= desde ? alto : XP_CURVA.meio) / 50) * 50;
+    X.push(X[n - 1] + inc);
+  }
+  return X;
+}
+const XP_NIVEL = curvaXp(XP_CURVA.desde, XP_CURVA.alto);
 const xpPara = n => XP_NIVEL[Math.min(n - 1, XP_NIVEL.length - 1)] + Math.max(0, n - XP_NIVEL.length) * 1e6;
 // curva antiga, só para converter saves feitos antes do rebalanceamento sem o jogador perder nível
 const XP_ANTIGO = [0, 15, 40, 80, 140, 220, 330, 470, 650, 880, 1160, 1500, 1900, 2400, 3000];
@@ -1421,6 +1427,9 @@ const XP_V2 = [0];
     XP_V2.push(XP_V2[n - 1] + inc);
   } }
 const xpParaV2 = n => XP_V2[Math.min(n - 1, XP_V2.length - 1)] + Math.max(0, n - XP_V2.length) * 1e6;
+// curva da versão 3 (10% por nível até o fim), só para converter saves dessa versão
+const XP_V3 = curvaXp(99, XP_CURVA.meio);
+const xpParaV3 = n => XP_V3[Math.min(n - 1, XP_V3.length - 1)] + Math.max(0, n - XP_V3.length) * 1e6;
 const nivelDe = xp => { let n = 1; while (xp >= xpPara(n + 1)) n++; return n; };
 // terrenos de 4 x 4 canteiros, com um caminho de grama entre eles. Os seis primeiros ficam na horta, ao lado da casa, com uma
 // fileira de grama até a cerca de baixo (no mapa 3 eles desceram HORTA_DESCE ladrilhos, ver migrarHorta); os do
@@ -17822,7 +17831,7 @@ const geo = (chave, fn) => GEO[chave] || (GEO[chave] = fn());
 const CHAVE_SALVO = 'fazendaJoliPig.v1';
 let S = null;
 function estadoNovo(){
-  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedidos: [], versao: 3, mapa: 6, feito: [], dicas: true, alimentador: {}, coletor: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], pomarBlocos: [], colmeias: [], enfeites: [], guardados: {}, parcelas: [], mata: [], trufas: [], maca: null, macaAte: 0, anotado: false, som: true, nAnimal: 0, vendeu: 0, viuCineInicio: false, salvoEm: Date.now() };
+  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedidos: [], versao: 4, mapa: 6, feito: [], dicas: true, alimentador: {}, coletor: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], pomarBlocos: [], colmeias: [], enfeites: [], guardados: {}, parcelas: [], mata: [], trufas: [], maca: null, macaAte: 0, anotado: false, som: true, nAnimal: 0, vendeu: 0, viuCineInicio: false, salvoEm: Date.now() };
   const l = LOTES[2];
   for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) s.campo[x + ',' + z] = { e: 'grama' };
   for (const [dx, dz] of [[2, 2], [3, 2], [2, 3], [3, 3]]) s.campo[(l.x + dx) + ',' + (l.z + dz)] = { e: 'arado' };
@@ -17840,13 +17849,14 @@ function migrar(){
   const v = S.versao || 1;
   if (v < 2) S.xp = converterXp(S.xp, xpParaAntigo);
   else if (v < 3) S.xp = converterXp(S.xp, xpParaV2);
+  else if (v < 4) S.xp = converterXp(S.xp, xpParaV3);
   // as secagens que já estavam no terreiro foram pagas com a receita antiga
   if (v < 3 && S.fabricas && S.fabricas.terreiro){
     const t = S.fabricas.terreiro;
     if (Array.isArray(t.fila)) for (const f of t.fila) if (f && f.r === 'secar') f.r = 'secarAntigo';
     if (Array.isArray(t.feitos)) t.feitos = t.feitos.map(r => r === 'secar' ? 'secarAntigo' : r);
   }
-  S.versao = 3;
+  S.versao = 4;
   // as fábricas passaram a produzir em paralelo: o que estava esperando na fila em cadeia termina no máximo no tempo
   // de uma receita a partir de agora (não faz nada nos saves novos, onde isso já vale sempre)
   for (const st of Object.values(S.fabricas || {})) if (st && Array.isArray(st.fila)){
