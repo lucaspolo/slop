@@ -494,7 +494,7 @@ O Lucas pediu otimizações sem mexer na imagem nem no jogo. O que foi medido e 
 - `ESPACO`: o retângulo (x0..x1, z0..z1 em ladrilhos), o portal na ponta da rua de baixo, a praça e o caminho de terra. Cerca baixa de madeira (`vCercaEventos`, com o vão do portal), o portal com vasinhos (`vPortalEventos`) e a placa "ESPAÇO DE EVENTOS / Fazenda Joli Pig" dos dois lados, o caminho de terra até a praça e o gramado aparado em faixas (um plano transparente por cima da grama). `faixaPortal` pendura a faixa do evento embaixo da viga.
 - Não aceita enfeite (`livreParaEnfeite` confere `noEspacoEventos`). Os enfeites que já estavam lá voltaram para a loja uma vez, com aviso (`arrumarEspacoEventos`, `S.espacoEventosArrumado`).
 - Tocar no portal abre o menu do espaço (`itensEspaco`, alvo `{ k: 'eventos' }`): quando é a próxima feira, montar a barraca do Ed, inscrever no concurso e os troféus.
-- Um evento por dia (o Lucas pediu): a Feira Agronômica e o festival do Patrinho, marcados com antecedência, ficam com o dia deles. Nos outros dias, o primeiro evento sorteado que começa (a rave, a arena da gincana ou uma das noites) fica com o dia (`marcarEventoDoDia`, `S.eventoDia`), e os sorteios seguintes do mesmo dia não acontecem (`eventoDoDia`, `outroEventoHoje`; a noite nem é sorteada se o dia já tem evento). O que o jogador chama pela janela Cenas, ou a gincana jogada pela cena, continua valendo e não marca o dia.
+- Um evento por dia (o Lucas pediu): a Feira Agronômica e o festival do Patrinho, marcados com antecedência, ficam com o dia deles. Nos outros dias, o primeiro evento sorteado que começa (a rave, a arena da gincana, as pipas, o bloco de Carnaval ou uma das noites) fica com o dia (`marcarEventoDoDia`, `S.eventoDia`), e os sorteios seguintes do mesmo dia não acontecem (`eventoDoDia`, `outroEventoHoje`; a noite nem é sorteada se o dia já tem evento). O que o jogador chama pela janela Cenas, ou a gincana jogada pela cena, continua valendo e não marca o dia.
 - Para testar: `__fazenda.eventos` (`ESPACO`, `VIS`, `montar`, `arrumar`, `no`, `itens`); o evento do dia em `__fazenda.noites` (`eventoDoDia`, `marcarEventoDoDia`).
 
 ## Feira Agronômica Sustentável
@@ -638,6 +638,13 @@ O Lucas pediu otimizações sem mexer na imagem nem no jogo. O que foi medido e 
 - Visitantes (`novoGrupoTrem`, a cada `TREM.intervalo`): de 4 a 6 pessoas, porquinhos e nanos chegam pela rua de cima, esperam na estação, embarcam (os vagões ficam cheios) e dão `TREM.voltas` voltas, com fumaça e falas (`FALAS_TREM`). Na volta pagam `TREM.bilhete` cada um, e o Ed ganha `TREM.xpGrupo` de XP.
 - Menu da estação (`menuTrem`): "Passear de trem" leva o Ed até a estação, ele some no vagão, o trem dá uma volta com a câmera acompanhando e ele desce; XP de `TREM.xpEd` de um nível só na primeira volta do dia (`S.trem`: `voltas`, `dia`). O resto do trem fica só na memória.
 - Para testar: `__fazenda.trem` (`vis`, `grupo`, `partir`, `passear`, `TREM`, `TRILHO`, `parada`).
+
+## Bloco de Carnaval
+
+- O Lucas pediu (nível 78, pelo percurso que ele desenhou no mapa dos níveis 62 a 80: a estrada, da porteira em (30, 26) até o fim do mapa em (30, 70)). Em `BLOCO.chance` das tardes, numa hora sorteada (`blocoDia`, só na memória), o trio elétrico da DJ Summer Cachohits (`vTrioEletrico`, com a Luma de fone e óculos em cima, como na rave) desce a estrada devagar (`BLOCO.vel`), e o bloco vai atrás pulando na batida (pessoas, porquinhos e nanos, com `novoJogadorQuadra`), com confete e falas (`FALAS_BLOCO`, `FALAS_BLOCO_PORCO`). Chegando ao fim da estrada, desmonta (`acabarBloco`). Entra na regra de um evento por dia; não sai com a rave, numa noite, no ArraiEd nem numa cena (`motivoBloco`).
+- Tocar no trio (`itensBloco`): "Entrar no bloco" (o Ed vai até o trio e pula logo atrás dele até o fim, com os braços para cima, gesto `bloco` do `trabalhar`; XP de `BLOCO.xp` de um nível na primeira vez do dia, `S.bloco`) e "Seguir o bloco" (a câmera vai junto). A janela Cenas tem "Chamar o bloco".
+- Música: `TEMAS.carnaval`, marchinha original, que toca quando a câmera está perto do trio.
+- Para testar: `__fazenda.bloco` (`sair`, `entrar`, `acabar`, `estado`, `motivo`).
 
 ## Engenho do Sr. Mofi
 

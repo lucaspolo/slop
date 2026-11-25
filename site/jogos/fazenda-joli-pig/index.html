@@ -7658,7 +7658,7 @@ let rave = null, raveDia = { dia: -1, hora: 2 };
 // são marcados com dias de antecedência e ficam com o dia deles; nos outros dias, o primeiro evento sorteado que começa
 // (a rave, a gincana ou uma das noites) fica com o dia (S.eventoDia) e os outros sorteios daquele dia não acontecem.
 // Chamar pela janela Cenas (ou jogar a gincana pela cena) continua valendo: é pedido do jogador, e não marca o dia
-const NOME_EVENTO = { aniversario: 'o aniversário da fazenda', pipas: 'o festival de pipas', feira: 'a Feira Agronômica', festival: 'o festival do Patrinho', rave: 'a rave da Luma', gincana: 'a gincana', cinema: 'o cinema na roça', causos: 'a noite de causos', ets: 'a noite dos ETs', show: 'o show de talentos' };
+const NOME_EVENTO = { bloco: 'o bloco de Carnaval', aniversario: 'o aniversário da fazenda', pipas: 'o festival de pipas', feira: 'a Feira Agronômica', festival: 'o festival do Patrinho', rave: 'a rave da Luma', gincana: 'a gincana', cinema: 'o cinema na roça', causos: 'a noite de causos', ets: 'a noite dos ETs', show: 'o show de talentos' };
 function eventoDoDia(d = diaAtual()){
   if (!S) return null;
   if (feiraAgroNoDia(d)) return 'feira';
@@ -9663,6 +9663,112 @@ function menuTrem(r){
   const T = TREM_VIS, livre = ed.estado === 'parado' && !tarefaAtual && ed.g.visible && !ed.sentado;
   r.estado = T.ed ? 'O Ed está passeando de trem!' : T.estado === 'andando' ? `O trem está dando a volta com ${T.grupo ? T.grupo.gente.length + ' visitantes' : 'passageiros'}.` : T.grupo ? 'Tem visitantes chegando para o passeio.' : `O trem está na estação. Os próximos visitantes chegam em ${tempo(Math.max(0, T.prox))}. Cada passagem custa ${reais(TREM.bilhete)}.`;
   r.itens.push({ rotulo: 'Passear de trem', sub: T.estado !== 'parado' || T.grupo ? 'o trem está ocupado' : livre ? 'o Ed dá uma volta no trilho' : 'quando o Ed estiver livre', icone: 'trem', off: !livre || T.estado !== 'parado' || !!T.grupo || T.ed, fn: passearDeTrem });
+}
+// ================= Bloco de Carnaval (o Lucas pediu: nível 78, pelo percurso que ele desenhou no mapa dos níveis 62 a 80: a
+// estrada, da porteira (30, 26) até o fim do mapa (30, 70)). Em BLOCO.chance das tardes, numa hora sorteada, o trio elétrico
+// da Summer Cachohits (a Luma de DJ, como na rave) desce a estrada devagar, com as caixas de som piscando, e o bloco vem
+// pulando atrás, com confete. Entra na regra de um evento por dia. Pelo menu do trio: seguir o bloco com a câmera, ou o Ed
+// entra no bloco e pula até o fim (XP de BLOCO.xp de um nível, uma vez no dia). bloco e blocoDia ficam só na memória
+const BLOCO = { nivel: 78, chance: 0.25, hora: [0.42, 0.56], fim: 0.66, de: [30.5, 26.5], ate: [30.5, 70.5], vel: 0.34, gente: 26, xp: 0.15, bpm: 112 };
+let bloco = null, blocoDia = { dia: -1, hora: 2 };
+// o trio elétrico: a cabine na frente, a carroceria com a parede de caixas de som e as luzes, o palco em cima com a grade
+// e a faixa (cubinhos de 1/16, a frente em +z)
+function vTrioEletrico(){
+  const v = new Vox(), preto = 0x1c1824;
+  for (const z of [-16, -8, 8, 16]) for (const x of [-9, 8]) for (let y = 0; y <= 5; y++) for (let w = -2; w <= 2; w++) if (Math.hypot(y - 2.5, w) <= 2.7) v.set(x, y, z + w, Math.hypot(y - 2.5, w) < 1.2 ? 0x9a9aa4 : 0x2a2a30);
+  v.box(-8, 3, -20, 7, 4, 19, 0x3a3a48);
+  v.box(-8, 5, 12, 7, 15, 19, (x, y, z) => y >= 10 && y <= 13 && z === 19 && Math.abs(x + 0.5) < 6 ? 0x9fd8f0 : 0xff3ea5);
+  v.box(-8, 16, 12, 7, 16, 19, preto);
+  // a parede de caixas de som dos dois lados, com os cones e as luzinhas
+  v.box(-8, 5, -20, 7, 19, 11, (x, y, z) => (x === -8 || x === 7) ? ((y - 5) % 5 && (z + 20) % 5 ? 0x2a2632 : NEON[((y + z) >> 2) % 5]) : preto);
+  v.box(-9, 20, -21, 8, 20, 12, 0x6a6a7a);
+  for (let z = -21; z <= 12; z += 3) for (const x of [-9, 8]) v.box(x, 21, z, x, 23, z, 0xd9d9e0);
+  for (let z = -21; z <= 12; z++) for (const x of [-9, 8]) v.set(x, 24, z, 0xd9d9e0);
+  return v;
+}
+const FALAS_BLOCO = ['Alalaô!', 'Ninguém fica parado!', 'É Carnaval na roça!', 'Toca mais, Cachohits!', 'Que bloco animado!', 'Joga confete!', 'Pula, pula, pula!', 'Mais um, mais um!', 'Que fantasia linda!', 'O trio tá chegando!',
+  'Abre alas pro bloco!', 'Eu não vou embora!', 'Que alegria!', 'Bloco da Fazenda Joli Pig!', 'Mão pra cima!', 'Que marchinha boa!', 'Atrás do trio elétrico!', 'Serpentina pra todo lado!', 'Melhor Carnaval da região!', 'Vem, Ed!'];
+const FALAS_BLOCO_PORCO = ['Oinc! (pula atrás do trio)', 'Oinc oinc! (de fantasia)', 'Óinc! (joga confete)', 'Oinc! (dança de rabinho)', 'Oinc-oinc! (alalaô!)', 'Óóinc! (que festa!)', 'Oinc! (pula na marchinha)', 'Oinc oinc! (não para)',
+  'Oinc! (cheio de serpentina)', 'Óinc! (suspira feliz)', 'Oinc! (mão pra cima)', 'Oinc-oinc! (gira)', 'Oinc! (segue a Cachohits)', 'Óinc! (de máscara)', 'Oinc oinc! (canta junto)', 'Oinc! (abre alas)', 'Óóinc! (viva!)',
+  'Oinc! (de confete no focinho)', 'Oinc-oinc! (feliz da vida)', 'Oinc! (dança com a nano)'];
+const motivoBloco = () => !S.viuCineInicio ? 'Ainda não.' : nivel() < BLOCO.nivel ? `O bloco de Carnaval vem no nível ${BLOCO.nivel}.` : bloco ? 'O bloco já está na rua!' : rave ? 'A Luma está tocando na rave.'
+  : noite ? 'Agora é hora das noites.' : arraia ? 'O ArraiEd está acontecendo!' : cine ? 'Espere a cena acabar.' : null;
+function sairBloco(){
+  if (bloco) return bloco;
+  const g = new THREE.Group(); scene.add(g);
+  const trio = new THREE.Group(); trio.add(malha(geo('trioEletrico', () => vTrioEletrico().build(1 / 16, { origin: [0.5, 0, 0.5] })))); g.add(trio);
+  // a DJ em cima do trio, de fone e óculos, como na rave
+  const L = montarLuma(false); L.cabeca.add(malha(geo('acessoriosDJ', () => vAcessoriosDJ().build(1 / 57, { origin: [0.5, 0, 0.5], jitter: 0.01 }))));
+  const dj = new THREE.Group(); dj.add(L.g); dj.position.set(0, 21 / 16, -0.3); dj.scale.setScalar(1.3); trio.add(dj);
+  const faixa = placaDeTexto(texturaTexto([['BLOCO JOLI PIG', 1, '#ffd34d'], ['com a DJ Summer Cachohits', 0.5, '#ff3ea5']], 512, 128, '#1c1824', '#ff3ea5'), 1.1, 0.28);
+  faixa.position.set(0, 0.6, 1.25); trio.add(faixa);
+  const gente = [];
+  for (let i = 0; i < BLOCO.gente; i++){ const j = novoJogadorQuadra(sorteia(['pessoa', 'pessoa', 'porco', 'porco', 'nano', 'nano'])); j.y = 0; j.off = Math.floor(Math.random() * 4); j.du = rnd(-0.45, 0.45); j.dv = 2.4 + i * 0.22 + rnd(0, 0.3); j.altoPulo = rnd(0.1, 0.2); gente.push(j); }
+  trio.traverse(o => { o.userData.alvo = { k: 'bloco' }; }); pickaveis.push(trio);
+  bloco = { g, trio, L, dj, gente, k: 0, t: 0, batida: -1, confete: 2, fala: 3, ed: false };
+  posicionarBloco(0);
+  aviso('Bloco de Carnaval na estrada! O trio da Summer Cachohits saiu da porteira, e o bloco vai atrás.', 'grande', 7);
+  return bloco;
+}
+function posicionarBloco(dt, t = 0){
+  const B = bloco, [x0, z0] = BLOCO.de, [x1, z1] = BLOCO.ate, d = Math.hypot(x1 - x0, z1 - z0), ux = (x1 - x0) / d, uz = (z1 - z0) / d;
+  const x = x0 + ux * B.k, z = z0 + uz * B.k; B.trio.position.set(x, 0, z); B.trio.rotation.y = Math.atan2(ux, uz);
+  B.gente.forEach(j => { const jx = x - ux * j.dv + uz * j.du, jz = z - uz * j.dv - ux * j.du; colocarJogador(j, jx, jz); j.ang = Math.atan2(x - jx, z - jz); });
+  if (B.ed){ const ex = x - ux * 1.8, ez = z - uz * 1.8; ed.colocar(ex, ez); ed.olhar(x, z); }
+}
+function acabarBloco(){
+  const B = bloco; if (!B) return;
+  bloco = null;
+  for (const j of B.gente) tirarJogadorQuadra(j);
+  const k = pickaveis.indexOf(B.trio); if (k >= 0) pickaveis.splice(k, 1);
+  scene.remove(B.g);
+  if (Musica.atual && Musica.atual.id === 'carnaval' && !cine) Musica.parar();
+  if (B.ed){
+    ed.estado = 'parado'; ed.trab = null;
+    const P = S.bloco || (S.bloco = { vezes: 0, dia: -1 }); P.vezes++;
+    if (P.dia !== diaAtual()){ P.dia = diaAtual(); ganharXP(Math.max(30, Math.round(xpDeUmNivel() * BLOCO.xp)), ed.topo()); }
+    const f = sorteia(['Que Carnaval! Tô sem fôlego!', 'Alalaô! Melhor bloco do mundo!', 'Pulei até o fim da estrada!', 'Ano que vem tem mais!']); falar(ed, f, tempoDeLeitura(f)); salvar();
+  }
+  aviso('O bloco chegou no fim da estrada. A Summer Cachohits agradece e o povo volta para casa cantando a marchinha.');
+}
+function atualizarBloco(dt, t){
+  if (!S) return;
+  if (blocoDia.dia !== diaAtual()) blocoDia = { dia: diaAtual(), hora: Math.random() < BLOCO.chance ? rnd(...BLOCO.hora) : 2 };
+  const r = S.relogio || 0;
+  if (!bloco && r >= blocoDia.hora && r < BLOCO.fim && !motivoBloco() && !outroEventoHoje('bloco')){ blocoDia.hora = 2; sairBloco(); marcarEventoDoDia('bloco'); }
+  const B = bloco; if (!B) return;
+  B.t += dt; const total = Math.hypot(BLOCO.ate[0] - BLOCO.de[0], BLOCO.ate[1] - BLOCO.de[1]);
+  B.k = Math.min(total, B.k + BLOCO.vel * dt);
+  posicionarBloco(dt, t);
+  if (B.k >= total){ acabarBloco(); return; }
+  const tx = B.trio.position.x, tz = B.trio.position.z, perto = !vistaEd && Math.hypot(tx - cam.alvo.x, tz - cam.alvo.z) < cam.vista * 1.1 + 6;
+  if (B.segue) cam.alvo.lerp(new THREE.Vector3(tx, 0, tz), Math.min(1, dt * 2));
+  if (perto){ if (Musica.pode() && (!Musica.atual || Musica.atual.id !== 'carnaval')) Musica.trocar('carnaval'); }
+  else if (Musica.atual && Musica.atual.id === 'carnaval') Musica.parar();
+  if (!perto) return;
+  const b = 60 / BLOCO.bpm, n = Math.floor(B.t / b), nova = n !== B.batida, f = (B.t % b) / b; B.batida = n;
+  const L = B.L; L.cabeca.rotation.x = -0.25 + Math.sin(f * Math.PI) * 0.35; L.pernas[0].rotation.x = -1.2 + Math.sin(B.t * 9) * 0.35;
+  for (const j of B.gente){ if (nova && (n + j.off) % 2 === 0) j.salto = 0.55; if (j.tipo === 'nano') j.pose = (n + j.off) % 4 < 2 ? 'acena' : 'pula'; j.correndo = true; animarJogador(j, dt, t); }
+  if (B.ed && nova && n % 2 === 0) ed.pulo = 0.42;
+  if ((B.confete -= dt) <= 0){ B.confete = rnd(2, 4); confete(tx + rnd(-1, 1), 2.2, tz - rnd(1, 4), 50, 1.4); }
+  if ((B.fala -= dt) <= 0){ B.fala = rnd(2.5, 5); const j = sorteia(B.gente); if (j && naTelaBicho(new THREE.Vector3(j.x, 0.5, j.z))){ const fl = variar(j.tipo === 'porco' ? FALAS_BLOCO_PORCO : FALAS_BLOCO); falar(j, fl, Math.min(2.6, tempoDeLeitura(fl))); } }
+}
+function entrarNoBloco(){
+  const B = bloco; if (!B || B.ed) return;
+  const x = B.trio.position.x, z = B.trio.position.z;
+  andarAte(ed, Math.round(x + 1.6), Math.round(z + 2), () => {
+    if (!bloco || bloco.ed) return;
+    bloco.ed = true; bloco.segue = true; ed.estado = 'trabalhando'; ed.trab = { t: 0, dur: 1e9, ferr: 'bloco', aoFim: null }; cam.vista = Math.min(cam.vista, 8);
+    falar(ed, 'Alalaô! Tô no bloco!', 2);
+  });
+}
+function itensBloco(){
+  const B = bloco, r = { titulo: 'Bloco de Carnaval', icone: 'luma', itens: [], estado: 'O trio elétrico da DJ Summer Cachohits desce a estrada, e o bloco vai atrás pulando.' };
+  if (!B){ r.estado = 'O bloco já passou.'; return r; }
+  const livre = ed.estado === 'parado' && !tarefaAtual && ed.g.visible && !ed.sentado, ja = S.bloco && S.bloco.dia === diaAtual();
+  r.itens.push({ rotulo: B.ed ? 'O Ed está no bloco!' : 'Entrar no bloco', sub: B.ed ? 'pulando até o fim da estrada' : livre ? `o Ed pula até o fim${ja ? '' : ' · XP na primeira vez do dia'}` : 'quando o Ed estiver livre', icone: 'ed', off: B.ed || !livre, fn: entrarNoBloco });
+  r.itens.push({ rotulo: B.segue ? 'Parar de seguir o bloco' : 'Seguir o bloco', sub: 'a câmera vai junto com o trio', icone: 'luma', leve: true, fn: () => { B.segue = !B.segue; if (B.segue) cam.vista = Math.min(cam.vista, 8); } });
+  return r;
 }
 // ================= Engenho do Sr. Mofi e o canavial (o Lucas pediu: nível 76, nos lugares que ele marcou no mapa dos níveis 62
 // a 80: o engenho em x 65 a 67, z 27 e 28, e o canavial em x 69 a 72, z 30 a 33). O engenho é uma fábrica (FABRICAS.engenho,
@@ -18531,6 +18637,12 @@ const TEMAS = {
     { tipo: 'triangle', vol: 0.05, notas: 'G2:.75 D3:.25 r:.5 G2:.5 G2:.75 D3:.25 r:.5 G2:.5 A2:.75 E3:.25 r:.5 A2:.5 D3:.75 A2:.25 r:.5 D3:.5 G2:.75 D3:.25 r:.5 G2:.5 C3:.75 G2:.25 r:.5 C3:.5 D3:.75 A2:.25 r:.5 D3:.5 G2:2' },
     { tipo: 'sine', vol: 0.015, notas: 'G6:.25 r:1.75 D6:.25 r:1.75 G6:.25 r:1.75 D6:.25 r:1.75 G6:.25 r:1.75 C6:.25 r:1.75 D6:.25 r:1.75 G6:.25 r:1.75' },
     { tipo: 'x', vol: 0.04, notas: 'x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5' } ] },
+  // Bloco de Carnaval: marchinha original em sol maior, com o metal na melodia, o surdo no baixo e a caixa
+  carnaval: { bpm: 112, ganho: 0.85, loop: true, faixas: [
+    { tipo: 'square', vol: 0.024, leg: 0.75, notas: 'D5:.5 G5:.5 G5:.5 A5:.5 B5:1 G5:1 C6:.5 B5:.5 A5:.5 G5:.5 A5:2 D5:.5 F#5:.5 F#5:.5 G5:.5 A5:1 F#5:1 B5:.5 A5:.5 G5:.5 F#5:.5 G5:2' },
+    { tipo: 'triangle', vol: 0.055, notas: 'G2:.5 r:.5 D3:.5 r:.5 G2:.5 r:.5 D3:.5 r:.5 C3:.5 r:.5 G2:.5 r:.5 D3:.5 r:.5 A2:.5 r:.5 D3:.5 r:.5 A2:.5 r:.5 D3:.5 r:.5 A2:.5 r:.5 G2:.5 r:.5 D3:.5 r:.5 G2:.5 r:.5 D3:.5 r:.5' },
+    { tipo: 'sawtooth', vol: 0.008, leg: 0.4, notas: 'r:.5 B3:.5 r:.5 B3:.5 r:.5 B3:.5 r:.5 B3:.5 r:.5 E4:.5 r:.5 E4:.5 r:.5 F#4:.5 r:.5 F#4:.5 r:.5 C4:.5 r:.5 C4:.5 r:.5 C4:.5 r:.5 C4:.5 r:.5 D4:.5 r:.5 C4:.5 r:.5 B3:.5 r:.5 B3:.5' },
+    { tipo: 'x', vol: 0.045, notas: 'x:.25 x:.25 r:.25 x:.25 x:.5 x:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.5 x:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.5 x:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.5 x:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.5 x:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.5 x:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.5 x:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.5 x:.25 x:.25' } ] },
   // Um cafezinho: caixinha de música de fim de tarde, baixinha
   cafezinho: { bpm: 80, ganho: 1.3, loop: true, faixas: [
     { tipo: 'sine', vol: 0.03, leg: 0.6, notas: 'E5:.5 G5:.5 C6:.5 G5:.5 D5:.5 G5:.5 B5:.5 G5:.5 C5:.5 E5:.5 A5:.5 E5:.5 F5:.5 A5:.5 C6:.5 A5:.5' },
@@ -21890,6 +22002,8 @@ class Porco {
         // quase abduzido: subindo no raio, os braços para cima e as pernas esperneando; depois segurando a enxada fincada
         case 'puxado': this.bD.rotation.set(-0.2, 0, 2.5 + Math.sin(t * 13) * 0.4); this.bE.rotation.set(-0.2, 0, -2.5 - Math.sin(t * 13 + 1) * 0.4); this.pE.rotation.x = Math.sin(t * 17) * 0.8; this.pD.rotation.x = -Math.sin(t * 17) * 0.8; break;
         case 'segura': this.bD.rotation.set(-0.95, 0, 0.12); this.bE.rotation.set(-0.95, 0, -0.12); this.pE.rotation.x = Math.sin(t * 15) * 0.7; this.pD.rotation.x = -Math.sin(t * 15) * 0.7; this.corpo.rotation.x = -0.12 + Math.sin(t * 9) * 0.04; this.corpo.position.y += Math.sin(t * 11) * 0.02; break;
+        // no bloco de Carnaval: os braços para cima, balançando na marchinha
+        case 'bloco': this.bD.rotation.set(-0.3, 0, 2.6 + Math.sin(t * 7.3) * 0.3); this.bE.rotation.set(-0.3, 0, -2.6 + Math.sin(t * 7.3 + 1.5) * 0.3); this.corpo.rotation.x = -0.05; break;
         // devolvendo o galo: os dois braços sobem, soltando ele no mourão
         case 'soltar': { const k = Math.min(1, w.t / w.dur); this.bE.rotation.set(-1.15 - k * 0.9, 0, -0.32); this.bD.rotation.set(-1.15 - k * 0.9, 0, 0.32); this.corpo.rotation.x = -0.05; break; }
       }
@@ -31890,6 +32004,7 @@ function itensDoAlvoBase(alvo){
   if (alvo.k === 'feiraAgro') return itensBarracaAgro(alvo.i);
   if (alvo.k === 'palcoAgro') return itensPalcoAgro();
   if (alvo.k === 'rave') return itensRave();
+  if (alvo.k === 'bloco') return itensBloco();
   if (alvo.k === 'noite') return itensNoite();
   if (alvo.k === 'barracaEt') return itensBarracaEt(alvo.i);
   if (alvo.k === 'festival') return itensFestival(alvo.i);
@@ -32641,6 +32756,8 @@ function abrirCenas(){
   if (espacoAberto() && nivel() >= ARRENDAMENTO.nivel){
     if (nivel() >= PIPAS.nivel - 1){ const mp = festaPipas ? 'O festival de pipas já está acontecendo!' : motivoPipas();
       h += `<div class="cartao"><div class="cab"><img src="${icone('festa')}" alt=""><div><h4>Festival de pipas</h4></div></div><div class="info">Nas tardes de vento, a fazenda solta pipas coloridas no espaço de eventos, e o Ed pode soltar a dele num joguinho de toques.${mp ? `<br><small>${esc(mp)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-pipas type="button"${mp ? ' disabled' : ''}>Chamar as pipas</button></div></div>`; }
+    if (nivel() >= BLOCO.nivel - 1){ const mb = motivoBloco();
+      h += `<div class="cartao"><div class="cab"><img src="${icone('luma')}" alt=""><div><h4>Bloco de Carnaval</h4></div></div><div class="info">O trio elétrico da DJ Summer Cachohits desce a estrada da fazenda, e o bloco vai atrás pulando. O Ed pode entrar no bloco.${mb ? `<br><small>${esc(mb)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-bloco type="button"${mb ? ' disabled' : ''}>Chamar o bloco</button></div></div>`; }
     const motivoRv = motivoRave();
     h += `<div class="cartao"><div class="cab"><img src="${icone('luma')}" alt=""><div><h4>A rave da Luma</h4></div></div><div class="info">De dia, a DJ Summer Cachohits (a Luma!) toca no espaço de eventos, de fone e óculos escuros, e a bicharada dança.${motivoRv ? `<br><small>${esc(motivoRv)}</small>` : ''}</div><div class="botoes"><button class="botao mini rosa" data-rave type="button"${motivoRv ? ' disabled' : ''}>Chamar a rave</button></div></div>`;
   }
@@ -32689,6 +32806,8 @@ function abrirCenas(){
   $('janela').querySelectorAll('[data-noite]').forEach(b => b.addEventListener('click', () => { Som.clique(); fecharJanela(); const id = b.dataset.noite; if (comecarNoite(id, true)) cam.alvo.set(NOITES_DEF[id].centro[0], 0, NOITES_DEF[id].centro[1]); else aviso(motivoNoite(id) || 'Agora não dá.'); }));
   const bpi = $('janela').querySelector('[data-pipas]');
   if (bpi) bpi.addEventListener('click', () => { Som.clique(); fecharJanela(); if (!motivoPipas() && !festaPipas){ montarPipas(); const [x, z] = centroPipas(); cam.alvo.set(x, 0, z); } else aviso(motivoPipas() || 'Agora não dá.'); });
+  const bbl = $('janela').querySelector('[data-bloco]');
+  if (bbl) bbl.addEventListener('click', () => { Som.clique(); fecharJanela(); if (!motivoBloco()){ const B = sairBloco(); B.segue = true; cam.vista = Math.min(cam.vista, 8); } else aviso(motivoBloco()); });
   const brv = $('janela').querySelector('[data-rave]');
   if (brv) brv.addEventListener('click', () => { Som.clique(); fecharJanela(); if (comecarRave()) cam.alvo.set(RAVE.pista[0], 0, RAVE.pista[1]); else aviso(motivoRave() || 'Agora não dá.'); });
   const br = $('janela').querySelector('[data-redemoinho]');
@@ -33464,7 +33583,7 @@ function quadro(agoraP){
   atualizarBichosMata(dt, t);
   atualizarVisitaCachoeira(dt, t); atualizarCachoeira(dt, t);
   atualizarRelogioFoguete(dt);
-  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t); atualizarRecanto(dt, t); passoAcharEd(dt); atualizarFeiraAgro(dt, t); atualizarFestival(dt, t); if ((tickEstufa -= dt) <= 0){ tickEstufa = 1; atualizarEstufa(); conferirAniversario(); } atualizarAniversario(dt, t); atualizarPipas(dt, t); atualizarTrem(dt, t); atualizarPier(dt, t); atualizarEngenho(dt, t); atualizarGincana(dt, t); atualizarRave(dt, t); atualizarNoites(dt, t);
+  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t); atualizarRecanto(dt, t); passoAcharEd(dt); atualizarFeiraAgro(dt, t); atualizarFestival(dt, t); if ((tickEstufa -= dt) <= 0){ tickEstufa = 1; atualizarEstufa(); conferirAniversario(); } atualizarAniversario(dt, t); atualizarPipas(dt, t); atualizarTrem(dt, t); atualizarPier(dt, t); atualizarEngenho(dt, t); atualizarBloco(dt, t); atualizarGincana(dt, t); atualizarRave(dt, t); atualizarNoites(dt, t);
   atualizarBeijaFlor(dt, t);
   atualizarCurupira(dt, t);
   atualizarArteKevin(dt, t);
@@ -33736,7 +33855,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { feira: ganchoFeira(), resgate: ganchoResgate(), engenho: { CANAVIAL, vis: () => CANAVIAL_VIS, colher: colherCanavial, estagio: estagioCanavial }, pier: { PIER, PEIXES, obj: () => S.peixes, vis: () => PIER_VIS, racao: jogarRacaoPeixes, lixo: tirarLixoLago, caderno: abrirCadernoPeixes }, aniversario: { ANIV, obj: () => S.aniversario, vis: () => anivVis, montar: montarAniversario, desmontar: desmontarAniversario, parabens: comecarParabens, conferir: conferirAniversario, agendar: agendarAniversario }, trem: { TREM, TRILHO, vis: () => TREM_VIS, passear: passearDeTrem, grupo: novoGrupoTrem, partir: partirTrem, parada: PARADA_TREM }, pipas: { PIPAS, obj: () => festaPipas, jogo: () => jogoPipa, montar: montarPipas, desmontar: desmontarPipas, jogar: comecarJogoPipa, toque: toquePipa, motivo: motivoPipas }, estufa: { ESTUFA, obj: () => estufa(), plantar: plantarEstufa, colher: colherEstufa, vis: () => ESTUFA_VIS, posVaso: posVasoEstufa }, nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: (id, extra) => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, Object.assign(l, extra)) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => n.g.getWorldPosition(new THREE.Vector3()).toArray()) }, encerrar: () => encerrarArteNano(), prox: () => arteNanoProx, chapeu: () => chapeuFora, visita: { chamar: () => chamarBeto(), despedir: () => despedirBeto(), estado: () => caminhaoE.estado, caminhao: () => caminhao } }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, VINHETAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
+  window.__fazenda = { feira: ganchoFeira(), resgate: ganchoResgate(), bloco: { BLOCO, estado: () => bloco, sair: sairBloco, entrar: entrarNoBloco, acabar: acabarBloco, motivo: motivoBloco }, engenho: { CANAVIAL, vis: () => CANAVIAL_VIS, colher: colherCanavial, estagio: estagioCanavial }, pier: { PIER, PEIXES, obj: () => S.peixes, vis: () => PIER_VIS, racao: jogarRacaoPeixes, lixo: tirarLixoLago, caderno: abrirCadernoPeixes }, aniversario: { ANIV, obj: () => S.aniversario, vis: () => anivVis, montar: montarAniversario, desmontar: desmontarAniversario, parabens: comecarParabens, conferir: conferirAniversario, agendar: agendarAniversario }, trem: { TREM, TRILHO, vis: () => TREM_VIS, passear: passearDeTrem, grupo: novoGrupoTrem, partir: partirTrem, parada: PARADA_TREM }, pipas: { PIPAS, obj: () => festaPipas, jogo: () => jogoPipa, montar: montarPipas, desmontar: desmontarPipas, jogar: comecarJogoPipa, toque: toquePipa, motivo: motivoPipas }, estufa: { ESTUFA, obj: () => estufa(), plantar: plantarEstufa, colher: colherEstufa, vis: () => ESTUFA_VIS, posVaso: posVasoEstufa }, nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: (id, extra) => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, Object.assign(l, extra)) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => n.g.getWorldPosition(new THREE.Vector3()).toArray()) }, encerrar: () => encerrarArteNano(), prox: () => arteNanoProx, chapeu: () => chapeuFora, visita: { chamar: () => chamarBeto(), despedir: () => despedirBeto(), estado: () => caminhaoE.estado, caminhao: () => caminhao } }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, VINHETAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
     galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, flamingos: { soltar: soltarFlamingos, obj: () => flamingos, pousos: pousoFlamingos, sumir: sumirFlamingos, FLAMINGOS, avancar: seg => { const t0 = performance.now() / 1000; for (let i = 0; i < Math.round(seg / 0.05); i++) atualizarFlamingos(0.05, t0 + i * 0.05); } }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { circulo: { forcar: () => { discoJogo.forcarCirculo = true; discoJogo.prox = 0; }, fazer: fazerCirculo, lote: loteParaCirculo, grupo: () => grupoCirculo, soltar: soltarGrupoCirculo, CIRCULO }, sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, puxar: () => { discoJogo.forcarPuxar = true; discoJogo.prox = 0; }, puxao: () => puxao, obj: () => discoJogo, abducao: () => abducao, presente: { soltar: presenteEt, obj: () => caixaEt, abrir: abrirCaixaEt }, visita: { forcar: () => { discoJogo.forcarVisita = true; discoJogo.prox = 0; }, obj: () => etVisita, itens: itensEt, trocar: trocarEt, pedido: pedidoEt, temDisco: temDiscoJardim, VISITA_ET } }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(AMPLIACAO).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     visitaPresa: VISITA_PRESA, pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
@@ -35934,6 +36053,7 @@ function catalogoModelos(){
       g.userData.anima = (dt, t) => { ch.scale.set(1 + Math.sin(t * 13) * 0.08, 1 + Math.sin(t * 9) * 0.15, 1 + Math.cos(t * 11) * 0.08); };
       return g;
     } }] }, varios('Barraca dos ETs', [['Rosa', () => vBarracaEt(0xff3ea5)], ['Azul', () => vBarracaEt(0x3ad0ff)], ['Verde', () => vBarracaEt(0x8fd06a)]]), um('Cogumelo lunar', vCogumeloLunar), um('Pedra lunar', vPedraLunar), um('Foguetinho de jardim', vFoguetinhoJardim)] },
+    { nome: 'Bloco de Carnaval', itens: [um('Trio elétrico', vTrioEletrico)] },
     { nome: 'Engenho do Sr. Mofi', itens: [um('Engenho', vEngenho), varios('Canavial', [0, 1, 2, 3].map(e => [['Plantado', 'Crescendo', 'Quase', 'Pronto'][e], () => vCanavial(e)]))] },
     { nome: 'Píer dos peixinhos', itens: [um('Píer', vPier), varios('Peixe', [...PEIXES, MASCOTE_PEIXE].map(F => [F.nome, () => vPeixe(F.cor, F.cor2)])), varios('Lixo do lago', Object.keys(LIXOS_LAGO).map(k => [k, () => vLixoLago(k)]))] },
     { nome: 'Aniversário da fazenda', itens: [um('Bolo gigante', vBoloGigante), um('Mesa do bolo', vMesaAniv), um('Presentes', vPresentes)] },
