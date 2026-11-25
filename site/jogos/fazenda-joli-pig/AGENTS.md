@@ -615,6 +615,14 @@ O Lucas pediu otimizações sem mexer na imagem nem no jogo. O que foi medido e 
 - Receitas: sorvete de morango (3 leites, 6 morangos e 1 mel, R$ 420), picolé de jabuticaba (6 jabuticabas e 2 méis, R$ 450) e casquinha de chocolate (2 leites, 1 barra de chocolate, 1 fubá e 1 ovo, R$ 470; precisa da fábrica de barras).
 - Desenho (`vSorveteria`): casinha rosa-claro com faixas verde-menta, telhado de chantili com confeitos, janela de atendimento com toldo listrado, porta de vidro e uma casquinha gigante de três bolas no telhado. Reformas: o carrinho de picolé com a sombrinha; o letreiro de picolé e as bandeirolas; os selos de ouro e a casquinha dourada.
 
+## Trem da fazenda
+
+- O Lucas pediu (nível 70, nos lugares que ele marcou no mapa dos níveis 62 a 80): uma obra do Maurinho (`OBRAS.trem`, uma etapa de R$ 3,2 milhões, 35 min e 18 mil de XP) com a estação em x 66 a 69, z 23 e 24 (`vEstacao`, de frente para o trilho) e o trilho dando a volta no fundo do pomar, de (64, 6) a (72, 25), com a estufa dentro (`TREM.cantos`; `TRILHO` é o caminho com as curvas arredondadas, `pontoTrilho(s)` dá o ponto e o rumo).
+- Com a obra pronta, o leito do trilho vira caminho de terra (`aplicarTrilho`, uma vez, refazendo o chão; o enfeite que estava em cima volta para a loja) e o trem aparece (`montarTrem`: o trilho num desenho só, `vTrilho`, em coordenadas do mundo; a maria-fumaça `vLocomotiva` e dois vagões `vVagaoTrem`, vazios ou com passageiros). Ele para na frente da estação (`PARADA_TREM`).
+- Visitantes (`novoGrupoTrem`, a cada `TREM.intervalo`): de 4 a 6 pessoas, porquinhos e nanos chegam pela rua de cima, esperam na estação, embarcam (os vagões ficam cheios) e dão `TREM.voltas` voltas, com fumaça e falas (`FALAS_TREM`). Na volta pagam `TREM.bilhete` cada um, e o Ed ganha `TREM.xpGrupo` de XP.
+- Menu da estação (`menuTrem`): "Passear de trem" leva o Ed até a estação, ele some no vagão, o trem dá uma volta com a câmera acompanhando e ele desce; XP de `TREM.xpEd` de um nível só na primeira volta do dia (`S.trem`: `voltas`, `dia`). O resto do trem fica só na memória.
+- Para testar: `__fazenda.trem` (`vis`, `grupo`, `partir`, `passear`, `TREM`, `TRILHO`, `parada`).
+
 ## Estufa do Maurinho
 
 - O Lucas pediu (nível 66, no lugar que ele marcou no mapa dos níveis 62 a 80): uma obra do Maurinho (`OBRAS.estufa`, uma etapa de R$ 2,4 milhões, 30 min e 16 mil de XP) no fundo do pomar, em x 66 a 70, z 8 a 11, girada com a porta para o caminho de cima (z 7, com o caminho até a rua).

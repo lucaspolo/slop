@@ -1324,6 +1324,13 @@ const OBRAS = {
     vestir: m => vestirEstufa(m),
     menu(r){ menuEstufa(r); },
   },
+  trem: { nome: 'Trem da fazenda', de: 'do', nivel: 70, predio: 'estacao', icone: 'trem', andaimeAlto: 22,
+    etapas: [{ preco: 3200000, minutos: 35, xp: 18000 }],
+    desc: 'Uma estação de tijolo e um trilho dando a volta no fundo do pomar, com uma maria-fumaça de dois vagões. Visitantes vêm passear e pagam a passagem, e o Ed também dá a volta dele.',
+    pronto: 'De tempos em tempos chegam visitantes para o passeio. Toque na estação para o Ed passear de trem.',
+    modelo: () => vEstacao(),
+    menu(r){ menuTrem(r); },
+  },
   galpao: { nome: 'Galpão do trator', nivel: 42, predio: 'galpao', icone: 'trator',
     etapas: [{ preco: 400000, minutos: 15, xp: 5000 }],
     desc: 'Um galpão de zinco com um trator verde. O Ed sobe nele e ara, planta ou colhe um terreno de canteiros inteiro de uma passada só.',
@@ -1537,6 +1544,8 @@ const PREDIOS = [
   // a sorveteria (nível 64): abaixo do museu, de frente para a câmera, com o caminho da porta até a descida (mapa 8)
   naZona('museu', { id:'sorveteria', nome:'Sorveteria',          x0:2, z0:9, x1:3, z1:10, porta:[2, 11], fab:'sorveteria' }),
   // a estufa do Maurinho (nível 66): no fundo do pomar, com a porta para o caminho de cima (girada; mapa 9)
+  // a estação do trem (nível 70): de frente para o trilho, que passa logo abaixo dela
+  naZona('pomar', { id:'estacao',    nome:'Estação do trem',     x0:23, z0:17, x1:26, z1:18, porta:[24, 16], obra: 'trem' }),
   naZona('pomar', { id:'estufa',     nome:'Estufa do Maurinho',  x0:23, z0:2, x1:27, z1:5, porta:[25, 1], obra: 'estufa', ry: Math.PI }),
   // as quadras da fazenda (o Lucas pediu): o gramado inteiro entre a descida, a rua de baixo e o spa; a entrada dá para a
   // descida, no fim do caminho do museu
@@ -9448,6 +9457,188 @@ function vEstufa(){
   v.box(31, 1, 30, 36, 2, 31, 0x9a6a3e); v.box(33, 3, 30, 34, 4, 31, 0x3a8ad8);
   v.box(24, 10, 30, 30, 13, 30, 0xf3e3c3); v.box(26, 11, 31, 28, 12, 31, 0x5aa847);
   return v;
+}
+// ================= Trem da fazenda (o Lucas pediu: nível 70, nos lugares que ele marcou no mapa dos níveis 62 a 80: a estação
+// em x 66 a 69, z 23 e 24, e o trilho dando a volta no fundo do pomar, de (64, 6) a (72, 25), com a estufa dentro). Uma obra do
+// Maurinho: a estação e o trilho. Pronta, o leito do trilho vira caminho de terra (aplicarTrilho; o enfeite que estava em cima
+// volta para a loja) e uma maria-fumaça com dois vagões fica na estação. De tempos em tempos (TREM.intervalo) um grupo de
+// visitantes chega pela rua de cima, embarca e dá TREM.voltas voltas; no fim paga a passagem (TREM.bilhete cada um). Pelo
+// menu da estação o Ed também dá uma volta, com a câmera acompanhando (XP uma vez por dia). O trem fica só na memória
+const TREM = { nivel: 70, cantos: [[64.5, 6.5], [72.5, 6.5], [72.5, 25.5], [64.5, 25.5]], raio: 1.2, vel: 2.4, parada: 66.6, bilhete: 900, gente: [4, 6],
+  intervalo: [240, 420], voltas: 2, xpGrupo: 150, xpEd: 0.03, chegada: [65.5, 5.5], espera: [[66.6, 22.3], [67.3, 22.4], [68, 22.3], [68.7, 22.4], [69.4, 22.3], [66.2, 22.6]], vagoes: [1.3, 2.45] };
+// o caminho do trilho: o retângulo dos cantos com as curvas arredondadas, em pontos, e o comprimento acumulado
+const TRILHO = (() => {
+  const C = TREM.cantos, r = TREM.raio, P = [];
+  for (let i = 0; i < C.length; i++){
+    const A = C[(i + C.length - 1) % C.length], B = C[i], D = C[(i + 1) % C.length];
+    const da = Math.hypot(B[0] - A[0], B[1] - A[1]), dd = Math.hypot(D[0] - B[0], D[1] - B[1]);
+    const ent = [B[0] - (B[0] - A[0]) / da * r, B[1] - (B[1] - A[1]) / da * r], sai = [B[0] + (D[0] - B[0]) / dd * r, B[1] + (D[1] - B[1]) / dd * r];
+    for (let k = 0; k <= 8; k++){ const u = k / 8, a = (1 - u) * (1 - u), b = 2 * u * (1 - u), c = u * u; P.push([a * ent[0] + b * B[0] + c * sai[0], a * ent[1] + b * B[1] + c * sai[1]]); }
+  }
+  P.push(P[0]);
+  const L = [0]; for (let i = 1; i < P.length; i++) L.push(L[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
+  return { P, L, total: L[L.length - 1] };
+})();
+function pontoTrilho(s){
+  const T = TRILHO; s = ((s % T.total) + T.total) % T.total;
+  let i = 1; while (i < T.L.length - 1 && T.L[i] < s) i++;
+  const a = T.P[i - 1], b = T.P[i], k = (s - T.L[i - 1]) / Math.max(1e-6, T.L[i] - T.L[i - 1]);
+  return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, Math.atan2(b[0] - a[0], b[1] - a[1])];
+}
+// onde a locomotiva para: no trecho de baixo (indo para oeste), na frente da estação
+const PARADA_TREM = (() => { let melhor = 0, d = Infinity; for (let s = 0; s < TRILHO.total; s += 0.02){ const [x, z, a] = pontoTrilho(s); const e = Math.abs(x - TREM.parada) + Math.abs(z - TREM.cantos[2][1]) * 3 + (Math.sin(a) > -0.5 ? 9 : 0); if (e < d){ d = e; melhor = s; } } return melhor; })();
+const noTrilho = (x, z) => TRILHO.P.some((p, i) => i && Math.hypot(x + 0.5 - p[0], z + 0.5 - p[1]) < 0.75);
+// o leito do trilho vira caminho (andável, sem enfeite)
+function aplicarTrilho(){
+  const t = TREM_VIS; if (t.trilho) return; t.trilho = true;
+  if (Array.isArray(S.enfeites) && S.enfeites.some(e => noTrilho(e.x, e.z))){ if (!S.guardados) S.guardados = {}; devolverEnfeites(noTrilho, 'do trilho do trem'); }
+  for (let z = 5; z <= 27; z++) for (let x = 62; x <= 73; x++) if (noTrilho(x, z) && (tipo(x, z) === 'grama' || tipo(x, z) === 'arvore')) setT(x, z, 'caminho');
+  refazerChao();
+}
+// ----- os desenhos (cubinhos de 1/16, a frente em +z)
+const COR_TREM = { verde: 0x2f6a3a, verde2: 0x3f8a4a, vermelho: 0xd8302a, preto: 0x24242a, ouro: 0xf2c33b, madeira: 0xb07a48, madeira2: 0x8a5a36, cinza: 0x8a8a96 };
+function vLocomotiva(){
+  const v = new Vox(), C = COR_TREM;
+  v.box(-5, 2, -10, 4, 3, 9, C.preto);
+  for (const z of [-6, 0, 6]) for (const x of [-6, 5]) for (let y = 0; y <= 5; y++) for (let w = -2; w <= 2; w++) if (Math.hypot(y - 2.5, w) <= 2.6) v.set(x, y, z + w, Math.hypot(y - 2.5, w) < 1.2 ? C.ouro : C.vermelho);
+  // a caldeira comprida com as cintas douradas e a chaminé na frente
+  for (let z = -2; z <= 9; z++) for (let x = -4; x <= 3; x++) for (let y = 4; y <= 11; y++) if (Math.hypot(x + 0.5, y - 7.5) <= 3.9) v.set(x, y, z, z % 4 === 0 ? C.ouro : C.verde);
+  v.box(-2, 12, 6, 1, 17, 8, C.preto); v.box(-3, 18, 5, 2, 18, 9, C.preto);
+  v.ell(-0.5, 12, 1, 1.2, 1, 1.2, C.ouro);
+  // a cabine atrás, com as janelas e o teto, e o limpa-trilhos vermelho na frente
+  v.box(-5, 4, -10, 4, 13, -3, (x, y, z) => y >= 8 && y <= 10 && (z === -3 || x === -5 || x === 4) && (z + x) % 3 ? 0x9fd8f0 : C.verde2);
+  v.box(-6, 14, -11, 5, 14, -2, C.vermelho);
+  for (let k = 0; k <= 3; k++) v.box(-4 + k, 1, 10 + k, 3 - k, 2, 10 + k, C.vermelho);
+  v.box(-1, 7, 10, 0, 8, 10, 0xfff1a8);
+  return v;
+}
+function vVagaoTrem(cheio){
+  const v = new Vox(), C = COR_TREM;
+  v.box(-5, 2, -7, 4, 3, 6, C.preto);
+  for (const z of [-4, 3]) for (const x of [-6, 5]) for (let y = 0; y <= 4; y++) for (let w = -2; w <= 2; w++) if (Math.hypot(y - 2, w) <= 2.2) v.set(x, y, z + w, Math.hypot(y - 2, w) < 1 ? C.ouro : C.vermelho);
+  v.box(-5, 4, -7, 4, 4, 6, C.madeira2);
+  for (const x of [-5, 4]) v.box(x, 5, -7, x, 7, 6, (xx, y, z) => y === 7 ? C.vermelho : (z & 1) ? C.madeira : C.madeira2);
+  for (const z of [-7, 6]) v.box(-5, 5, z, 4, 7, z, (xx, y) => y === 7 ? C.vermelho : C.madeira);
+  for (const z of [-4, 2]) v.box(-4, 5, z, 3, 5, z + 1, C.madeira2);
+  for (const [x, z] of [[-5, -7], [4, -7], [-5, 6], [4, 6]]) v.box(x, 8, z, x, 13, z, C.ouro);
+  v.box(-6, 14, -8, 5, 14, 7, (x, y, z) => ((z + 8) >> 1) % 2 ? 0xfdf8ef : C.vermelho);
+  if (cheio) for (const [x, z, i] of [[-2.5, -3, 0], [1.5, -3, 1], [-2.5, 3, 2], [1.5, 3, 3]]){ const c = [0xe8483a, 0x3a8ad8, 0xf2c13a, 0x5aa847][i]; v.box(Math.round(x) - 1, 6, z - 1, Math.round(x), 8, z, c); v.ell(Math.round(x) - 0.5, 10, z - 0.5, 1.3, 1.3, 1.3, [0xf3d6c2, 0xc68e62, 0x8d5a3a, 0xe2b48c][i]); }
+  return v;
+}
+// o trilho inteiro num desenho só, em coordenadas do mundo (cubinho de 1/16): o cascalho, os dormentes e os dois trilhos
+function vTrilho(){
+  const v = new Vox();
+  for (let s = 0; s < TRILHO.total; s += 1 / 32){
+    const [x, z, a] = pontoTrilho(s), nx = Math.cos(a), nz = -Math.sin(a);
+    for (let w = -7; w <= 7; w++){ const X = Math.round((x + nx * w / 16) * 16), Z = Math.round((z + nz * w / 16) * 16); if (!v.has(X, 0, Z)) v.set(X, 0, Z, hash(X, 0, Z) < 0.5 ? 0x9a9488 : 0x8a8478); }
+    if (Math.abs((s * 16) % 4) < 0.5) for (let w = -6; w <= 6; w++) v.set(Math.round((x + nx * w / 16) * 16), 1, Math.round((z + nz * w / 16) * 16), 0x7a5232);
+    for (const w of [-4, 4]) v.set(Math.round((x + nx * w / 16) * 16), 2, Math.round((z + nz * w / 16) * 16), 0xb8b8c4);
+  }
+  return v;
+}
+// a estação: plataforma de tijolo com a beira amarela, telhado verde com lambrequim sobre colunas de ferro, a parede do fundo
+// com a bilheteria e o relógio, o banco e a placa (cubinhos de 1/8: x 0 a 31, z 0 a 15, a frente para o trilho em +z)
+function vEstacao(){
+  const v = new Vox(), C = COR_TREM, tijolo = (x, y, z) => ((x + z + (y % 2) * 2) >> 1) % 2 ? 0xb4603e : 0xa2533a;
+  v.box(0, 0, 0, 31, 2, 15, tijolo); v.box(0, 3, 14, 31, 3, 15, 0xf2c13a); v.box(0, 3, 0, 31, 3, 13, (x, y, z) => hash(x, 3, z) < 0.5 ? 0xc9c0b0 : 0xbdb4a4);
+  v.box(2, 4, 1, 29, 14, 2, (x, y) => y >= 7 && y <= 10 && x >= 12 && x <= 18 ? 0x9fd8f0 : 0xf3ead8);
+  v.box(12, 6, 3, 18, 6, 3, C.madeira);
+  v.ell(24, 12, 3, 2.2, 2.2, 0.6, 0xfdfbf6); v.set(24, 12, 4, C.preto); v.set(24, 13, 4, C.preto);
+  for (const x of [2, 10, 21, 29]) v.box(x, 4, 12, x, 15, 12, C.preto);
+  for (let z = 0; z <= 15; z++){ const y = 16 + Math.round(Math.max(0, 6 - z) * 0.4); v.box(0, y, z, 31, y, z, z % 3 ? C.verde : C.verde2); }
+  for (let x = 0; x <= 31; x += 2) v.set(x, 15, 15, 0xfdf8ef);
+  v.box(4, 4, 8, 8, 5, 9, C.madeira); v.box(4, 6, 9, 8, 7, 9, C.madeira2);
+  v.box(11, 17, 15, 20, 19, 15, 0xfdf8ef); v.box(12, 18, 15, 19, 18, 15, C.verde);
+  return v;
+}
+// ----- o trem andando
+const TREM_VIS = { g: null, carros: null, s: 0, estado: 'parado', voltas: 0, andou: 0, prox: 60, grupo: null, ed: false, fumaca: 0, trilho: false };
+function montarTrem(){
+  const T = TREM_VIS; if (T.g) return;
+  const g = new THREE.Group(); scene.add(g); T.g = g;
+  g.add(malha(geo('trilhoTrem', () => vTrilho().build(1 / 16, { origin: [0, 0, 0] }))));
+  const loco = malha(geo('locomotiva', () => vLocomotiva().build(1 / 16, { origin: [0.5, 0, 0.5], jitter: 0.02 })));
+  T.carros = [loco, ...TREM.vagoes.map(() => new THREE.Group())]; for (const c of T.carros) g.add(c);
+  T.s = PARADA_TREM; trocarVagoes(false); posicionarTrem();
+  g.traverse(o => { o.userData.alvo = { k: 'predio', p: PREDIO.estacao }; }); pickaveis.push(g);
+}
+function trocarVagoes(cheio){
+  const T = TREM_VIS; T.cheio = cheio;
+  for (let i = 1; i < T.carros.length; i++){ const c = T.carros[i]; while (c.children.length) c.remove(c.children[0]); c.add(malha(geo('vagaoTrem' + (cheio ? 'C' : 'V'), () => vVagaoTrem(cheio).build(1 / 16, { origin: [0.5, 0, 0.5], jitter: 0.02 })))); c.traverse(o => { o.userData.alvo = { k: 'predio', p: PREDIO.estacao }; }); }
+}
+function posicionarTrem(){
+  const T = TREM_VIS;
+  T.carros.forEach((c, i) => { const [x, z, a] = pontoTrilho(T.s - (i ? TREM.vagoes[i - 1] : 0)); c.position.set(x, 0.12, z); c.rotation.y = a; });
+}
+function partirTrem(voltas){ const T = TREM_VIS; T.estado = 'andando'; T.voltas = voltas; T.andou = 0; Som.tom(760, 0.5, 'square', 0.03, 620); }
+const FALAS_TREM = ['Piuí! Que passeio lindo!', 'Olha a estufa de vidro!', 'Dá para ver o pomar inteiro daqui!', 'Que trenzinho caprichado!', 'Mais uma volta, por favor!', 'Segura o chapéu!', 'Piuí, piuí!', 'Que vento bom!',
+  'Nunca andei de maria-fumaça!', 'Olha a fumacinha!', 'Que fazenda bonita!', 'Tira uma foto minha no vagão!', 'Esse trem é do Maurinho?', 'Que barulhinho bom do trilho!', 'Eu quero ser maquinista!', 'Valeu cada centavo!',
+  'Vou trazer a família da próxima vez!', 'Olha os porquinhos lá embaixo!', 'O trem não tem pressa, e eu também não!', 'Que passeio gostoso!'];
+function atualizarTrem(dt, t){
+  if (!S || !obraConcluida('trem')) return;
+  const T = TREM_VIS;
+  if (!T.trilho) aplicarTrilho();
+  if (!T.g) montarTrem();
+  const [lx, , lz] = [T.carros[0].position.x, 0, T.carros[0].position.z], perto = !vistaEd && Math.hypot(lx - cam.alvo.x, lz - cam.alvo.z) < cam.vista * 1.1 + 6;
+  if (T.estado === 'andando'){
+    const d = TREM.vel * dt; T.s += d; T.andou += d;
+    if (T.andou >= TREM_VIS.voltas * TRILHO.total - 0.01){ T.s = PARADA_TREM + T.voltas * TRILHO.total; T.estado = 'parado'; Som.tom(620, 0.4, 'square', 0.03, 520); chegouTrem(); }
+    posicionarTrem();
+    if (perto && (T.fumaca -= dt) <= 0){ T.fumaca = 0.25; const c = T.carros[0], [fx, fz] = [c.position.x + Math.sin(c.rotation.y) * 0.45, c.position.z + Math.cos(c.rotation.y) * 0.45]; fumaca(fx, 1.25, fz); }
+    if (T.ed) cam.alvo.lerp(new THREE.Vector3(lx, 0, lz), Math.min(1, dt * 2));
+    if (T.cheio && perto && Math.random() < dt * 0.3 && T.grupo){ const f = variar(FALAS_TREM), c = T.carros[1]; falar({ g: c, nome: 'pessoa', topo: () => c.position.clone().add(new THREE.Vector3(0, 1.1, 0)) }, f, 2.2); }
+  }
+  // os visitantes: chegam pela rua de cima, esperam na estação, embarcam, e depois da volta pagam e vão embora
+  const G = T.grupo;
+  if (!G && T.estado === 'parado' && !T.ed && (T.prox -= dt) <= 0){ T.prox = rnd(...TREM.intervalo); novoGrupoTrem(); }
+  if (G){
+    for (const j of G.gente){
+      if (!j.rota || !j.rota.length){ j.correndo = false; if (perto) animarJogador(j, dt, t); continue; }
+      const [tx, tz] = j.rota[0], dx = tx - j.x, dz = tz - j.z, dd = Math.hypot(dx, dz), passo = 1.2 * dt;
+      if (dd <= passo){ j.x = tx; j.z = tz; j.rota.shift(); } else { j.x += dx / dd * passo; j.z += dz / dd * passo; j.ang = Math.atan2(dx, dz); }
+      j.correndo = !!(j.rota && j.rota.length); colocarJogador(j, j.x, j.z); if (perto) animarJogador(j, dt, t);
+    }
+    if (G.fase === 'chegando' && G.gente.every(j => !j.rota.length)){ G.fase = 'embarcado'; for (const j of G.gente) j.g.visible = false; trocarVagoes(true); partirTrem(TREM.voltas); }
+    if (G.fase === 'indo' && G.gente.every(j => !j.rota.length)){ for (const j of G.gente) tirarJogadorQuadra(j); T.grupo = null; }
+  }
+}
+function novoGrupoTrem(){
+  const n = Math.round(rnd(...TREM.gente)), gente = [];
+  for (let i = 0; i < n; i++){
+    const j = novoJogadorQuadra(sorteia(['pessoa', 'pessoa', 'porco', 'nano'])), [ex, ez] = TREM.espera[i % TREM.espera.length];
+    j.y = 0; colocarJogador(j, TREM.chegada[0] + rnd(-0.3, 0.3), TREM.chegada[1] - i * 0.5); j.rota = [[TREM.chegada[0], 21.5], [ex, ez]]; gente.push(j);
+  }
+  TREM_VIS.grupo = { gente, fase: 'chegando' };
+}
+function chegouTrem(){
+  const T = TREM_VIS, G = T.grupo;
+  if (G && G.fase === 'embarcado'){
+    trocarVagoes(false); G.fase = 'indo';
+    const n = G.gente.length, v = n * TREM.bilhete;
+    G.gente.forEach((j, i) => { const [ex, ez] = TREM.espera[i % TREM.espera.length]; colocarJogador(j, ex, ez); j.g.visible = true; j.rota = [[TREM.chegada[0], 21.5], [TREM.chegada[0], TREM.chegada[1] - 1]]; });
+    S.dinheiro += v; S.vendeu = (S.vendeu || 0) + v; chipPulsa('chipDinheiro');
+    const [cx, cz] = centroPredio(PREDIO.estacao); flutuar(new THREE.Vector3(cx, 1.4, cz), `+${reais(v)} de passagens`, 'ouro'); ganharXP(TREM.xpGrupo, new THREE.Vector3(cx, 1.4, cz)); Som.moeda(); hud(); salvar();
+  }
+  if (T.ed){
+    T.ed = false; ed.g.visible = true; ed.colocar(67.5, 22.4); ed.estado = 'parado'; ed.trab = null;
+    const P = S.trem || (S.trem = { voltas: 0, dia: -1 }); P.voltas++;
+    if (P.dia !== diaAtual()){ P.dia = diaAtual(); ganharXP(Math.max(20, Math.round(xpDeUmNivel() * TREM.xpEd)), ed.topo()); }
+    const f = sorteia(['Piuí! Que volta gostosa!', 'Que vista da fazenda lá de cima do trem!', 'Valeu, Maurinho! Que trenzinho!', 'Mais uma volta depois, quero ver a estufa de novo!']); falar(ed, f, tempoDeLeitura(f)); salvar();
+  }
+}
+function passearDeTrem(){
+  const T = TREM_VIS; if (T.estado !== 'parado' || T.grupo || T.ed) return;
+  andarAte(ed, 67.5, 22.4, () => {
+    if (T.estado !== 'parado' || T.grupo) return;
+    T.ed = true; ed.g.visible = false; ed.estado = 'trabalhando'; ed.trab = { t: 0, dur: 1e9, ferr: null, aoFim: null };
+    partirTrem(1); cam.vista = Math.min(cam.vista, 7);
+  });
+}
+function menuTrem(r){
+  if (!obraConcluida('trem')){ if (!r.estado) r.estado = OBRAS.trem.desc; return; }
+  const T = TREM_VIS, livre = ed.estado === 'parado' && !tarefaAtual && ed.g.visible && !ed.sentado;
+  r.estado = T.ed ? 'O Ed está passeando de trem!' : T.estado === 'andando' ? `O trem está dando a volta com ${T.grupo ? T.grupo.gente.length + ' visitantes' : 'passageiros'}.` : T.grupo ? 'Tem visitantes chegando para o passeio.' : `O trem está na estação. Os próximos visitantes chegam em ${tempo(Math.max(0, T.prox))}. Cada passagem custa ${reais(TREM.bilhete)}.`;
+  r.itens.push({ rotulo: 'Passear de trem', sub: T.estado !== 'parado' || T.grupo ? 'o trem está ocupado' : livre ? 'o Ed dá uma volta no trilho' : 'quando o Ed estiver livre', icone: 'trem', off: !livre || T.estado !== 'parado' || !!T.grupo || T.ed, fn: passearDeTrem });
 }
 // ================= Festival de pipas (o Lucas pediu: nível 68, na área que ele marcou no mapa dos níveis 62 a 80, no espaço
 // de eventos, x 57 a 62, z 63 a 68). Em PIPAS.chance das tardes (uma tarde de vento), numa hora sorteada, as pessoas, os
@@ -17657,6 +17848,7 @@ const VI = {
   chocolateria(){ return vChocolateria(); }, chocobarra(){ return vFabBarras(); },
   oficina(){ return vOficina(); },
   estufa(){ return vEstufa(); },
+  trem(){ return vLocomotiva(); },
   baunilha(){ const v = new Vox(); for (const [x, c] of [[-2, 0x4a2a18], [0, 0x5a3420], [2, 0x4a2a18]]) v.box(x, 0, -5, x, 1, 5, c); v.box(-3, 2, 3, 3, 2, 4, 0xfff1a8); return v; },
   orquidea(){ const v = vPlantaEstufa('orquidea', 3); v.box(5, -3, 5, 11, 0, 11, 0xc0703a); return v; },
   sorveteBaunilha(){ const v = new Vox(); v.box(-4, 0, -4, 4, 4, 4, (x, y) => y === 4 ? 0xfdf8ef : 0xf2e6c0); v.ell(0, 5.5, 0, 3.6, 2, 3.6, 0xfff3c8); v.box(-1, 7, 0, 1, 7, 0, 0x4a2a18); return v; },
@@ -32853,7 +33045,7 @@ function quadro(agoraP){
   atualizarBichosMata(dt, t);
   atualizarVisitaCachoeira(dt, t); atualizarCachoeira(dt, t);
   atualizarRelogioFoguete(dt);
-  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t); atualizarRecanto(dt, t); passoAcharEd(dt); atualizarFeiraAgro(dt, t); atualizarFestival(dt, t); if ((tickEstufa -= dt) <= 0){ tickEstufa = 1; atualizarEstufa(); } atualizarPipas(dt, t); atualizarGincana(dt, t); atualizarRave(dt, t); atualizarNoites(dt, t);
+  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t); atualizarRecanto(dt, t); passoAcharEd(dt); atualizarFeiraAgro(dt, t); atualizarFestival(dt, t); if ((tickEstufa -= dt) <= 0){ tickEstufa = 1; atualizarEstufa(); } atualizarPipas(dt, t); atualizarTrem(dt, t); atualizarGincana(dt, t); atualizarRave(dt, t); atualizarNoites(dt, t);
   atualizarBeijaFlor(dt, t);
   atualizarCurupira(dt, t);
   atualizarArteKevin(dt, t);
@@ -33125,7 +33317,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { feira: ganchoFeira(), resgate: ganchoResgate(), pipas: { PIPAS, obj: () => festaPipas, jogo: () => jogoPipa, montar: montarPipas, desmontar: desmontarPipas, jogar: comecarJogoPipa, toque: toquePipa, motivo: motivoPipas }, estufa: { ESTUFA, obj: () => estufa(), plantar: plantarEstufa, colher: colherEstufa, vis: () => ESTUFA_VIS, posVaso: posVasoEstufa }, nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: (id, extra) => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, Object.assign(l, extra)) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => n.g.getWorldPosition(new THREE.Vector3()).toArray()) }, encerrar: () => encerrarArteNano(), prox: () => arteNanoProx, chapeu: () => chapeuFora, visita: { chamar: () => chamarBeto(), despedir: () => despedirBeto(), estado: () => caminhaoE.estado, caminhao: () => caminhao } }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, VINHETAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
+  window.__fazenda = { feira: ganchoFeira(), resgate: ganchoResgate(), trem: { TREM, TRILHO, vis: () => TREM_VIS, passear: passearDeTrem, grupo: novoGrupoTrem, partir: partirTrem, parada: PARADA_TREM }, pipas: { PIPAS, obj: () => festaPipas, jogo: () => jogoPipa, montar: montarPipas, desmontar: desmontarPipas, jogar: comecarJogoPipa, toque: toquePipa, motivo: motivoPipas }, estufa: { ESTUFA, obj: () => estufa(), plantar: plantarEstufa, colher: colherEstufa, vis: () => ESTUFA_VIS, posVaso: posVasoEstufa }, nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: (id, extra) => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, Object.assign(l, extra)) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => n.g.getWorldPosition(new THREE.Vector3()).toArray()) }, encerrar: () => encerrarArteNano(), prox: () => arteNanoProx, chapeu: () => chapeuFora, visita: { chamar: () => chamarBeto(), despedir: () => despedirBeto(), estado: () => caminhaoE.estado, caminhao: () => caminhao } }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, VINHETAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
     galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, flamingos: { soltar: soltarFlamingos, obj: () => flamingos, pousos: pousoFlamingos, sumir: sumirFlamingos, FLAMINGOS, avancar: seg => { const t0 = performance.now() / 1000; for (let i = 0; i < Math.round(seg / 0.05); i++) atualizarFlamingos(0.05, t0 + i * 0.05); } }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { circulo: { forcar: () => { discoJogo.forcarCirculo = true; discoJogo.prox = 0; }, fazer: fazerCirculo, lote: loteParaCirculo, grupo: () => grupoCirculo, soltar: soltarGrupoCirculo, CIRCULO }, sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, puxar: () => { discoJogo.forcarPuxar = true; discoJogo.prox = 0; }, puxao: () => puxao, obj: () => discoJogo, abducao: () => abducao, presente: { soltar: presenteEt, obj: () => caixaEt, abrir: abrirCaixaEt }, visita: { forcar: () => { discoJogo.forcarVisita = true; discoJogo.prox = 0; }, obj: () => etVisita, itens: itensEt, trocar: trocarEt, pedido: pedidoEt, temDisco: temDiscoJardim, VISITA_ET } }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(AMPLIACAO).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     visitaPresa: VISITA_PRESA, pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
@@ -35286,7 +35478,7 @@ function catalogoModelos(){
       ...[['queijaria', 'Queijaria'], ['padaria', 'Padaria'], ['cozinha', 'Cozinha de doces']].map(([id, nome]) => varios('Ampliação: ' + nome, [['Em obra', () => vEmAmpliacao(id, 0)], ['Ampliada', () => vAmpliada(id, 0)], ['1ª reforma', () => vAmpliada(id, 1)], ['2ª reforma', () => vAmpliada(id, 2)], ['3ª reforma', () => vAmpliada(id, 3)]], 4)),
       ...['moinho', 'terreiro', 'torrador', 'chocobarra', 'chocolateria', 'oficina'].map(id => varios('Ampliação: ' + FABRICAS[id].nome, [['Ampliado', () => vFabAmpliada(id, 0)], ['1ª reforma', () => vFabAmpliada(id, 1)], ['2ª reforma', () => vFabAmpliada(id, 2)], ['3ª reforma', () => vFabAmpliada(id, 3)]])),
       um('Prancheta', vPrancheta), um('Trena', vTrena), um('Martelo', vMartelo)] },
-    { nome: 'Obras do Maurinho', itens: [um('Estufa do Maurinho', vEstufa), varios('Planta da estufa', [['Baunilha', () => vPlantaEstufa('baunilha', 3)], ['Baunilha nova', () => vPlantaEstufa('baunilha', 1)], ['Orquídea', () => vPlantaEstufa('orquidea', 3)], ['Orquídea nova', () => vPlantaEstufa('orquidea', 1)]]),
+    { nome: 'Obras do Maurinho', itens: [um('Estação do trem', vEstacao), um('Locomotiva', vLocomotiva), varios('Vagão do trem', [['Vazio', () => vVagaoTrem(false)], ['Com passageiros', () => vVagaoTrem(true)]]), um('Estufa do Maurinho', vEstufa), varios('Planta da estufa', [['Baunilha', () => vPlantaEstufa('baunilha', 3)], ['Baunilha nova', () => vPlantaEstufa('baunilha', 1)], ['Orquídea', () => vPlantaEstufa('orquidea', 3)], ['Orquídea nova', () => vPlantaEstufa('orquidea', 1)]]),
       varios('Quadras da fazenda', [['Futebol', () => vQuadras(1)], ['Com basquete e vôlei', () => vQuadras(2)], ['Com tênis e placar', () => vQuadras(3)], ['Obra no começo', () => vObraSubindo('quadras', 0, 1)], ['Obra na metade', () => vObraSubindo('quadras', 0, 4)]]),
       varios('Spa dos pigs', [['Pronto', () => vSpa()], ['Com a ala nova', () => vSpa(true)], ['Com a piscina olímpica', () => vSpa(3)], ['Obra no começo', () => vObraSubindo('spa', 0, 1)], ['Obra na metade', () => vObraSubindo('spa', 0, 4)], ['Ala nova na metade', () => vObraSubindo('spa', 1, 4)], ['Piscina na metade', () => vObraSubindo('spa', 2, 4)]]),
       varios('Resort das Aposentadas', [['Pronto', vResort], ['Obra no começo', () => vObraSubindo('resort', 0, 1)], ['Obra na metade', () => vObraSubindo('resort', 0, 4)], ['Obra quase pronta', () => vObraSubindo('resort', 0, 7)]]),
