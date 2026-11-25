@@ -1324,6 +1324,13 @@ const OBRAS = {
     vestir: m => vestirEstufa(m),
     menu(r){ menuEstufa(r); },
   },
+  pier: { nome: 'Píer dos peixinhos', de: 'do', nivel: 74, predio: 'pier', icone: 'peixe', andaimeAlto: 6,
+    etapas: [{ preco: 900000, minutos: 20, xp: 9000 }],
+    desc: 'Um píer de madeira entrando no lago. Do píer o Ed dá ração para os peixinhos, e o Hud fotografa cada espécie para o caderno dos peixes; com a rede, o Ed tira o lixo que aparece boiando. Ninguém pesca: os peixes são amiguinhos.',
+    pronto: 'Toque no píer para dar ração aos peixinhos, tirar o lixo do lago e ver o caderno dos peixes.',
+    modelo: () => vPier(),
+    menu(r){ menuPier(r); },
+  },
   trem: { nome: 'Trem da fazenda', de: 'do', nivel: 70, predio: 'estacao', icone: 'trem', andaimeAlto: 22,
     etapas: [{ preco: 3200000, minutos: 35, xp: 18000 }],
     desc: 'Uma estação de tijolo e um trilho dando a volta no fundo do pomar, com uma maria-fumaça de dois vagões. Visitantes vêm passear e pagam a passagem, e o Ed também dá a volta dele.',
@@ -1545,6 +1552,8 @@ const PREDIOS = [
   naZona('museu', { id:'sorveteria', nome:'Sorveteria',          x0:2, z0:9, x1:3, z1:10, porta:[2, 11], fab:'sorveteria' }),
   // a estufa do Maurinho (nível 66): no fundo do pomar, com a porta para o caminho de cima (girada; mapa 9)
   // a estação do trem (nível 70): de frente para o trilho, que passa logo abaixo dela
+  // o píer dos peixinhos (nível 74): entra no lago a partir da rua do lago
+  naZona('lago', { id:'pier',       nome:'Píer dos peixinhos',  x0:4, z0:2, x1:4, z1:4, porta:[4, 5], obra: 'pier' }),
   naZona('pomar', { id:'estacao',    nome:'Estação do trem',     x0:23, z0:17, x1:26, z1:18, porta:[24, 16], obra: 'trem' }),
   naZona('pomar', { id:'estufa',     nome:'Estufa do Maurinho',  x0:23, z0:2, x1:27, z1:5, porta:[25, 1], obra: 'estufa', ry: Math.PI }),
   // as quadras da fazenda (o Lucas pediu): o gramado inteiro entre a descida, a rua de baixo e o spa; a entrada dá para a
@@ -9640,6 +9649,151 @@ function menuTrem(r){
   const T = TREM_VIS, livre = ed.estado === 'parado' && !tarefaAtual && ed.g.visible && !ed.sentado;
   r.estado = T.ed ? 'O Ed está passeando de trem!' : T.estado === 'andando' ? `O trem está dando a volta com ${T.grupo ? T.grupo.gente.length + ' visitantes' : 'passageiros'}.` : T.grupo ? 'Tem visitantes chegando para o passeio.' : `O trem está na estação. Os próximos visitantes chegam em ${tempo(Math.max(0, T.prox))}. Cada passagem custa ${reais(TREM.bilhete)}.`;
   r.itens.push({ rotulo: 'Passear de trem', sub: T.estado !== 'parado' || T.grupo ? 'o trem está ocupado' : livre ? 'o Ed dá uma volta no trilho' : 'quando o Ed estiver livre', icone: 'trem', off: !livre || T.estado !== 'parado' || !!T.grupo || T.ed, fn: passearDeTrem });
+}
+// ================= Píer dos peixinhos (o Lucas pediu: nível 74, no lugar que ele marcou no mapa dos níveis 62 a 80, no lago,
+// x 42, z 29 a 31). A fazenda é vegetariana: ninguém pesca, os peixes são amiguinhos. Uma obra do Maurinho: o píer de
+// madeira, que vira ponte para o Ed andar até a ponta (aplicarPier). Duas coisas lá:
+// - Peixinhos: o Ed joga ração (PIER.racao) e os peixes vêm à tona, nadam em volta e pulam; a câmera do Hud fotografa a
+//   espécie que apareceu para o caderno dos peixes (S.peixes.vistos). Cada espécie tem quando aparece (estação, noite,
+//   chuva, rara); fechando o caderno, o dourado vira o mascote do lago e pula perto do píer de vez em quando.
+// - Rede da limpeza: de tempos em tempos (PIER.lixo) aparece lixo boiando no lago (garrafa, sacola, bota velha); o Ed tira
+//   com a rede, do píer, e ganha XP. S.peixes: { vistos: { id: dia }, lixo: [{ k, x, z }], limpos, completo }
+const PIER = { nivel: 74, racao: 2, ponta: [42.5, 29.4], ed: [42.5, 29.8], agua: -0.36, cardume: [3, 5], dura: 12, xpRacao: 8, xpFoto: 400, xpLixo: 40, completo: 0.3, lixo: [360, 720], maxLixo: 5, mascote: [15, 35] };
+const PEIXES = [
+  { id: 'lambari', nome: 'Lambari', cor: 0xc8d0d8, cor2: 0xe8b84a, quando: 'sempre', pode: () => true },
+  { id: 'piau', nome: 'Piau-três-pintas', cor: 0xb8b090, cor2: 0x2a2a2a, quando: 'de dia', pode: () => periodo().id !== 'noite' },
+  { id: 'pacu', nome: 'Pacu', cor: 0x8a9098, cor2: 0xf08a2c, quando: 'no verão', pode: () => estacaoAtual().nome === 'Verão' },
+  { id: 'tambaqui', nome: 'Tambaqui', cor: 0x6a6a5a, cor2: 0x3a3a34, quando: 'no outono', pode: () => estacaoAtual().nome === 'Outono' },
+  { id: 'cara', nome: 'Cará', cor: 0x9ab06a, cor2: 0x3a5a8a, quando: 'no inverno', pode: () => estacaoAtual().nome === 'Inverno' },
+  { id: 'tucunare', nome: 'Tucunaré', cor: 0xd8c040, cor2: 0x2a5a2a, quando: 'na primavera', pode: () => estacaoAtual().nome === 'Primavera' },
+  { id: 'cascudo', nome: 'Cascudo', cor: 0x5a4a3a, cor2: 0x8a7a5a, quando: 'à noite', pode: () => periodo().id === 'noite' },
+  { id: 'traira', nome: 'Traíra', cor: 0x6a5a3a, cor2: 0x3a3020, quando: 'à noite, com chuva', pode: () => periodo().id === 'noite' && chovendo() },
+  { id: 'carpa', nome: 'Carpa colorida', cor: 0xf27a2a, cor2: 0xfdf8ef, quando: 'com chuva', pode: () => chovendo() },
+  { id: 'pirarucu', nome: 'Pirarucu', cor: 0x5a6a5a, cor2: 0xd8302a, quando: 'raro, a qualquer hora', pode: () => Math.random() < 0.12 },
+];
+const MASCOTE_PEIXE = { id: 'dourado', nome: 'Dourado', cor: 0xf2c33b, cor2: 0xe08a2a };
+const LIXOS_LAGO = { garrafa: 'uma garrafa', sacola: 'uma sacola', bota: 'uma bota velha' };
+const peixes = () => S.peixes || (S.peixes = { vistos: {}, lixo: [], limpos: 0, completo: false });
+// o peixinho: corpo em gota, rabo em leque, nadadeira de cima e o olho (de lado, a frente em +z)
+function vPeixe(cor, cor2){
+  const v = new Vox();
+  v.ell(0, 3, 0, 1.6, 2.2, 4.2, (x, y, z) => y >= 4 && (z & 1) ? cor2 : cor);
+  for (let k = 0; k <= 3; k++) v.box(0, 3 - k, -5 - k, 0, 3 + k, -5 - k, cor2);
+  v.box(0, 6, -2, 0, 6, 1, cor2); v.set(-1, 4, 2, 0x1a1414); v.set(1, 4, 2, 0x1a1414);
+  return v;
+}
+function vLixoLago(k){
+  const v = new Vox();
+  if (k === 'garrafa'){ v.box(-1, 0, -4, 1, 2, 3, 0x7ac0a8); v.box(0, 1, 4, 0, 1, 5, 0x3a8ad8); v.box(-1, 0, -1, 1, 2, 0, 0xfdf8ef); }
+  else if (k === 'sacola'){ v.ell(0, 1, 0, 3, 1.2, 3, 0xeef2f6); v.box(-2, 2, 0, -2, 3, 0, 0xeef2f6); v.box(2, 2, 0, 2, 3, 0, 0xeef2f6); }
+  else { v.box(-2, 0, -3, 1, 2, 3, 0x5a3a24); v.box(-2, 3, -3, 1, 7, -1, 0x6a4428); v.box(-2, 0, 3, 1, 1, 4, 0x2a2020); }
+  return v;
+}
+// o píer: tábuas sobre os esteios, a mureta de corda dos lados, o balde de ração e a rede pendurada (cubinhos de 1/8; x 0 a 7,
+// z 0 a 23; a ponta em z 0, no lago, e a entrada em z 23, na rua do lago; o chão do mundo em y 0 e a água em y -3)
+function vPier(){
+  const v = new Vox();
+  v.box(0, -1, 0, 7, 0, 23, (x, y, z) => y === 0 ? ((z & 1) ? 0xc08a56 : 0xb07a48) : 0x8a5a36);
+  for (const z of [1, 8, 15, 22]) for (const x of [0, 7]) v.box(x, -6, z, x, 3, z, 0x7a5232);
+  for (const x of [0, 7]) v.box(x, 2, 1, x, 2, 22, 0xe8d6a8);
+  v.box(1, 1, 1, 2, 2, 2, 0x3a8ad8); v.set(1, 3, 1, 0xe8c66a);
+  v.box(6, 1, 3, 6, 4, 3, 0x7a5232); for (let y = 2; y <= 5; y++) for (let z = 4; z <= 6; z++) if ((y + z) % 2) v.set(6, y, z, 0xe8d6a8);
+  return v;
+}
+// o píer pronto vira ponte (o Ed anda até a ponta); o enfeite não chega lá, é água
+function aplicarPier(){ if (PIER_VIS.ponte) return; PIER_VIS.ponte = true; const p = PREDIO.pier; for (let z = p.z0; z <= p.z1; z++) setT(p.x0, z, 'ponte'); }
+const PIER_VIS = { ponte: false, cardume: null, lixo: [], prox: null, mascote: 20, sig: '' };
+function jogarRacaoPeixes(){
+  const P = peixes(); if (PIER_VIS.cardume) return;
+  if (S.racao < PIER.racao){ aviso('Falta ração para os peixinhos.', 'ruim'); Som.erro(); return; }
+  andarAte(ed, ...PIER.ed, () => {
+    if (PIER_VIS.cardume || S.racao < PIER.racao) return;
+    ed.olhar(PIER.ponta[0], PIER.ponta[1] - 1); ed.trabalhar(1, 'saco', null);
+    S.racao -= PIER.racao; chipPulsa('chipRacao');
+    for (let i = 0; i < 10; i++) particula(PIER.ponta[0] + rnd(-0.5, 0.5), 0.2, PIER.ponta[1] - rnd(0.3, 1.2), 0xc9a06a, 0.6);
+    // a espécie da vez: entre as que podem aparecer agora, com mais chance para as que ainda não estão no caderno
+    const podem = PEIXES.filter(F => F.pode()), novas = podem.filter(F => !P.vistos[F.id]);
+    const F = novas.length && Math.random() < 0.6 ? sorteia(novas) : sorteia(podem);
+    const n = Math.round(rnd(...PIER.cardume)), lista = [F, ...Array.from({ length: n - 1 }, () => PEIXES[0])];
+    const g = new THREE.Group(); scene.add(g);
+    PIER_VIS.cardume = { g, t: 0, F, peixes: lista.map((E, i) => { const m = malha(geo('peixe' + E.id, () => vPeixe(E.cor, E.cor2).build(1 / 34, { origin: [0.5, 0, 0.5] }))); g.add(m); return { m, E, a: rnd(0, 6), r: rnd(0.5, 1.1), vel: rnd(0.8, 1.4) * (i % 2 ? 1 : -1), pulo: rnd(1.5, 6) }; }) };
+    ganharXP(PIER.xpRacao, ed.topo());
+    setTimeout(() => fotografarPeixe(F), 2600);
+    salvar();
+  });
+}
+function fotografarPeixe(F){
+  const P = peixes(); Som.tom(2600, 0.05, 'square', 0.02, 1800);
+  if (P.vistos[F.id]){ const f = `${F.nome} de novo! Já está no caderno.`; falar(ed, f, 2.4); return; }
+  P.vistos[F.id] = diaAtual(); ganharXP(PIER.xpFoto, ed.topo());
+  aviso(`Foto nova no caderno dos peixes: ${F.nome}! (${Object.keys(P.vistos).length} de ${PEIXES.length})`, 'grande', 5);
+  if (!P.completo && PEIXES.every(E => P.vistos[E.id])){
+    P.completo = true; ganharXP(Math.max(100, Math.round(xpDeUmNivel() * PIER.completo)), ed.topo());
+    setTimeout(() => aviso('Caderno dos peixes completo! O dourado veio morar no lago e virou o mascote do píer.', 'grande', 7), 2500);
+  }
+  salvar();
+}
+function tirarLixoLago(){
+  const P = peixes(); if (!P.lixo.length) return;
+  andarAte(ed, ...PIER.ed, () => {
+    const n = P.lixo.length; if (!n) return;
+    ed.trabalhar(1.4 + n * 0.25, 'segura', null);
+    // cada pedaço voa até a rede, no píer, e some
+    PIER_VIS.lixo.forEach((L, i) => { L.voa = { t: -i * 0.25, de: L.m.position.clone() }; });
+    P.limpos = (P.limpos || 0) + n; P.lixo = [];
+    ganharXP(PIER.xpLixo * n, ed.topo()); setTimeout(() => { aviso(`O Ed tirou ${n > 1 ? `${n} pedaços de lixo` : 'o lixo'} do lago com a rede. Os peixinhos agradecem!`); Som.moeda(); }, 1400);
+    salvar();
+  });
+}
+function atualizarPier(dt, t){
+  if (!S || !obraConcluida('pier')) return;
+  const P = peixes(), V = PIER_VIS;
+  if (!V.ponte) aplicarPier();
+  // o lixo novo boiando num ladrilho de lago
+  if (V.prox == null) V.prox = rnd(...PIER.lixo);
+  if ((V.prox -= dt) <= 0){ V.prox = rnd(...PIER.lixo);
+    if (P.lixo.length < PIER.maxLixo){ const tiles = []; for (let z = 27; z <= 31; z++) for (let x = 38; x <= 56; x++) if (tipo(x, z) === 'lago') tiles.push([x, z]); const [x, z] = sorteia(tiles); P.lixo.push({ k: sorteia(Object.keys(LIXOS_LAGO)), x: x + rnd(0.2, 0.8), z: z + rnd(0.2, 0.8) }); salvar(); } }
+  // os desenhos do lixo seguem a lista do save (os que voam para a rede somem no fim)
+  const sig = P.lixo.map(L => L.k + L.x.toFixed(2)).join(',');
+  if (sig !== V.sig && !V.lixo.some(L => L.voa)){ V.sig = sig; for (const L of V.lixo) scene.remove(L.m); V.lixo = P.lixo.map(L => { const m = malha(geo('lixoLago' + L.k, () => vLixoLago(L.k).build(1 / 24, { origin: [0.5, 0, 0.5] }))); m.position.set(L.x, PIER.agua, L.z); m.rotation.y = L.x * 3; scene.add(m); return { m, d: L }; }); }
+  for (const L of V.lixo){
+    if (L.voa){ L.voa.t += dt; const k = clamp(L.voa.t / 0.7, 0, 1); L.m.position.lerpVectors(L.voa.de, new THREE.Vector3(PIER.ponta[0], 0.6, PIER.ponta[1] - 0.3), k); L.m.position.y += Math.sin(k * Math.PI) * 0.6; if (k >= 1) L.m.visible = false; }
+    else { L.m.position.y = PIER.agua + Math.sin(t * 1.5 + L.m.position.x) * 0.02; L.m.rotation.z = Math.sin(t + L.m.position.z) * 0.15; }
+  }
+  if (V.lixo.length && V.lixo.every(L => L.voa && !L.m.visible)){ for (const L of V.lixo) scene.remove(L.m); V.lixo = []; V.sig = ''; }
+  // o cardume em volta da ponta do píer: nadam em roda e pulam; depois de PIER.dura segundos afundam
+  const C = V.cardume;
+  if (C){
+    C.t += dt; const [px, pz] = PIER.ponta, fim = C.t > PIER.dura;
+    for (const F of C.peixes){
+      F.a += F.vel * dt; const x = px + Math.cos(F.a) * F.r, z = pz - 0.9 + Math.sin(F.a) * F.r * 0.7;
+      F.pulo -= dt; let y = PIER.agua - (fim ? (C.t - PIER.dura) * 0.4 : 0) + Math.sin(t * 6 + F.a) * 0.02;
+      if (F.pulo < 0 && F.pulo > -0.6 && !fim){ const k = -F.pulo / 0.6; y += Math.sin(k * Math.PI) * 0.5; if (k < 0.05) for (let i = 0; i < 4; i++) particula(x, PIER.agua + 0.05, z, 0xdff3ff, 0.6); }
+      else if (F.pulo <= -0.6) F.pulo = rnd(2, 6);
+      F.m.position.set(x, y, z); F.m.rotation.y = F.a + (F.vel > 0 ? Math.PI : 0);
+    }
+    if (C.t > PIER.dura + 1.5){ scene.remove(C.g); V.cardume = null; }
+  }
+  // o mascote, depois do caderno completo: o dourado pula perto do píer de vez em quando
+  if (P.completo){
+    if (!V.dourado){ V.dourado = malha(geo('peixeDourado', () => vPeixe(MASCOTE_PEIXE.cor, MASCOTE_PEIXE.cor2).build(1 / 26, { origin: [0.5, 0, 0.5] }))); V.dourado.visible = false; scene.add(V.dourado); }
+    if ((V.mascote -= dt) <= 0){ V.mascote = rnd(...PIER.mascote); V.pulo = 0; V.de = [PIER.ponta[0] + rnd(-1.6, -0.6), PIER.ponta[1] - rnd(0.6, 1.6)]; }
+    if (V.pulo != null){ V.pulo += dt; const k = V.pulo / 1.1; if (k >= 1){ V.pulo = null; V.dourado.visible = false; particula(V.de[0] + 0.9, PIER.agua + 0.05, V.de[1], 0xdff3ff, 0.8); }
+      else { V.dourado.visible = true; V.dourado.position.set(V.de[0] + k * 0.9, PIER.agua + Math.sin(k * Math.PI) * 0.8, V.de[1]); V.dourado.rotation.set(-Math.cos(k * Math.PI) * 0.9, Math.PI / 2, 0); if (k < 0.05) for (let i = 0; i < 5; i++) particula(V.de[0], PIER.agua + 0.05, V.de[1], 0xdff3ff, 0.7); } }
+  }
+}
+function abrirCadernoPeixes(){
+  const P = peixes();
+  const card = F => { const viu = P.vistos[F.id] != null; return `<div class="cartao${viu ? '' : ' bloq'}"><div class="cab"><img src="${icone(viu ? 'peixe_' + F.id : 'peixe')}" alt=""><div><h4>${viu ? F.nome : '???'}</h4></div></div><div class="info">${viu ? `Fotografado no dia ${P.vistos[F.id] + 1}.` : `Aparece ${F.quando}.`}</div></div>`; };
+  abrirJanela(topo('peixe', 'Caderno dos peixes', `${Object.keys(P.vistos).length} de ${PEIXES.length} peixes · fotos do Hud no píer`, 'azul') + `<div class="janela-corpo">${P.completo ? '<p style="margin:0 0 10px;font-weight:700">O dourado é o mascote do lago!</p>' : ''}<div class="grade">${PEIXES.map(card).join('')}</div></div>`);
+}
+function menuPier(r){
+  if (!obraConcluida('pier')){ if (!r.estado) r.estado = OBRAS.pier.desc; return; }
+  const P = peixes(), livre = ed.estado === 'parado' && !tarefaAtual && ed.g.visible && !ed.sentado, n = P.lixo.length;
+  r.estado = `No caderno: ${Object.keys(P.vistos).length} de ${PEIXES.length} peixes.${n ? ` Tem ${n > 1 ? `${n} pedaços de lixo boiando` : 'lixo boiando'} no lago.` : ' O lago está limpinho.'} Aqui ninguém pesca: os peixes são amiguinhos.`;
+  r.itens.push({ rotulo: 'Jogar ração para os peixinhos', sub: PIER_VIS.cardume ? 'os peixinhos ainda estão comendo' : livre ? `${PIER.racao} rações · o Hud fotografa quem aparecer` : 'quando o Ed estiver livre', icone: 'racao', off: !livre || !!PIER_VIS.cardume || S.racao < PIER.racao, fn: jogarRacaoPeixes });
+  if (n) r.itens.push({ rotulo: `Tirar o lixo do lago (${n})`, sub: livre ? 'com a rede, do píer' : 'quando o Ed estiver livre', icone: 'peixe', off: !livre, fn: tirarLixoLago });
+  r.itens.push({ rotulo: 'Caderno dos peixes', sub: `${Object.keys(P.vistos).length} de ${PEIXES.length}`, icone: 'peixe', leve: true, fn: abrirCadernoPeixes });
 }
 // ================= Aniversário da fazenda (o Lucas pediu: nível 72, na área que ele marcou no mapa dos níveis 62 a 80, no
 // espaço de eventos, x 59 a 62, z 54 a 56: a mesa do bolo). A cada ANIV.intervalo dias da fazenda (a ideia era uma vez por
@@ -18589,6 +18743,8 @@ function tirarClicavel(g){
 const canvas = $('tela');
 let renderer, scene, camera, sol, ceuLuz;
 const ICONE = {};
+for (const F of [...PEIXES, MASCOTE_PEIXE]) VI['peixe_' + F.id] = () => vPeixe(F.cor, F.cor2);
+VI.peixe = () => vPeixe(PEIXES[0].cor, PEIXES[0].cor2);
 function gerarIcones(){
   const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
   const T = 96; r.setPixelRatio(1); r.setSize(T, T, false);
@@ -33198,7 +33354,7 @@ function quadro(agoraP){
   atualizarBichosMata(dt, t);
   atualizarVisitaCachoeira(dt, t); atualizarCachoeira(dt, t);
   atualizarRelogioFoguete(dt);
-  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t); atualizarRecanto(dt, t); passoAcharEd(dt); atualizarFeiraAgro(dt, t); atualizarFestival(dt, t); if ((tickEstufa -= dt) <= 0){ tickEstufa = 1; atualizarEstufa(); conferirAniversario(); } atualizarAniversario(dt, t); atualizarPipas(dt, t); atualizarTrem(dt, t); atualizarGincana(dt, t); atualizarRave(dt, t); atualizarNoites(dt, t);
+  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t); atualizarRecanto(dt, t); passoAcharEd(dt); atualizarFeiraAgro(dt, t); atualizarFestival(dt, t); if ((tickEstufa -= dt) <= 0){ tickEstufa = 1; atualizarEstufa(); conferirAniversario(); } atualizarAniversario(dt, t); atualizarPipas(dt, t); atualizarTrem(dt, t); atualizarPier(dt, t); atualizarGincana(dt, t); atualizarRave(dt, t); atualizarNoites(dt, t);
   atualizarBeijaFlor(dt, t);
   atualizarCurupira(dt, t);
   atualizarArteKevin(dt, t);
@@ -33470,7 +33626,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { feira: ganchoFeira(), resgate: ganchoResgate(), aniversario: { ANIV, obj: () => S.aniversario, vis: () => anivVis, montar: montarAniversario, desmontar: desmontarAniversario, parabens: comecarParabens, conferir: conferirAniversario, agendar: agendarAniversario }, trem: { TREM, TRILHO, vis: () => TREM_VIS, passear: passearDeTrem, grupo: novoGrupoTrem, partir: partirTrem, parada: PARADA_TREM }, pipas: { PIPAS, obj: () => festaPipas, jogo: () => jogoPipa, montar: montarPipas, desmontar: desmontarPipas, jogar: comecarJogoPipa, toque: toquePipa, motivo: motivoPipas }, estufa: { ESTUFA, obj: () => estufa(), plantar: plantarEstufa, colher: colherEstufa, vis: () => ESTUFA_VIS, posVaso: posVasoEstufa }, nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: (id, extra) => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, Object.assign(l, extra)) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => n.g.getWorldPosition(new THREE.Vector3()).toArray()) }, encerrar: () => encerrarArteNano(), prox: () => arteNanoProx, chapeu: () => chapeuFora, visita: { chamar: () => chamarBeto(), despedir: () => despedirBeto(), estado: () => caminhaoE.estado, caminhao: () => caminhao } }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, VINHETAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
+  window.__fazenda = { feira: ganchoFeira(), resgate: ganchoResgate(), pier: { PIER, PEIXES, obj: () => S.peixes, vis: () => PIER_VIS, racao: jogarRacaoPeixes, lixo: tirarLixoLago, caderno: abrirCadernoPeixes }, aniversario: { ANIV, obj: () => S.aniversario, vis: () => anivVis, montar: montarAniversario, desmontar: desmontarAniversario, parabens: comecarParabens, conferir: conferirAniversario, agendar: agendarAniversario }, trem: { TREM, TRILHO, vis: () => TREM_VIS, passear: passearDeTrem, grupo: novoGrupoTrem, partir: partirTrem, parada: PARADA_TREM }, pipas: { PIPAS, obj: () => festaPipas, jogo: () => jogoPipa, montar: montarPipas, desmontar: desmontarPipas, jogar: comecarJogoPipa, toque: toquePipa, motivo: motivoPipas }, estufa: { ESTUFA, obj: () => estufa(), plantar: plantarEstufa, colher: colherEstufa, vis: () => ESTUFA_VIS, posVaso: posVasoEstufa }, nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: (id, extra) => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, Object.assign(l, extra)) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => n.g.getWorldPosition(new THREE.Vector3()).toArray()) }, encerrar: () => encerrarArteNano(), prox: () => arteNanoProx, chapeu: () => chapeuFora, visita: { chamar: () => chamarBeto(), despedir: () => despedirBeto(), estado: () => caminhaoE.estado, caminhao: () => caminhao } }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, VINHETAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
     galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, flamingos: { soltar: soltarFlamingos, obj: () => flamingos, pousos: pousoFlamingos, sumir: sumirFlamingos, FLAMINGOS, avancar: seg => { const t0 = performance.now() / 1000; for (let i = 0; i < Math.round(seg / 0.05); i++) atualizarFlamingos(0.05, t0 + i * 0.05); } }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { circulo: { forcar: () => { discoJogo.forcarCirculo = true; discoJogo.prox = 0; }, fazer: fazerCirculo, lote: loteParaCirculo, grupo: () => grupoCirculo, soltar: soltarGrupoCirculo, CIRCULO }, sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, puxar: () => { discoJogo.forcarPuxar = true; discoJogo.prox = 0; }, puxao: () => puxao, obj: () => discoJogo, abducao: () => abducao, presente: { soltar: presenteEt, obj: () => caixaEt, abrir: abrirCaixaEt }, visita: { forcar: () => { discoJogo.forcarVisita = true; discoJogo.prox = 0; }, obj: () => etVisita, itens: itensEt, trocar: trocarEt, pedido: pedidoEt, temDisco: temDiscoJardim, VISITA_ET } }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(AMPLIACAO).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     visitaPresa: VISITA_PRESA, pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
@@ -35668,6 +35824,7 @@ function catalogoModelos(){
       g.userData.anima = (dt, t) => { ch.scale.set(1 + Math.sin(t * 13) * 0.08, 1 + Math.sin(t * 9) * 0.15, 1 + Math.cos(t * 11) * 0.08); };
       return g;
     } }] }, varios('Barraca dos ETs', [['Rosa', () => vBarracaEt(0xff3ea5)], ['Azul', () => vBarracaEt(0x3ad0ff)], ['Verde', () => vBarracaEt(0x8fd06a)]]), um('Cogumelo lunar', vCogumeloLunar), um('Pedra lunar', vPedraLunar), um('Foguetinho de jardim', vFoguetinhoJardim)] },
+    { nome: 'Píer dos peixinhos', itens: [um('Píer', vPier), varios('Peixe', [...PEIXES, MASCOTE_PEIXE].map(F => [F.nome, () => vPeixe(F.cor, F.cor2)])), varios('Lixo do lago', Object.keys(LIXOS_LAGO).map(k => [k, () => vLixoLago(k)]))] },
     { nome: 'Aniversário da fazenda', itens: [um('Bolo gigante', vBoloGigante), um('Mesa do bolo', vMesaAniv), um('Presentes', vPresentes)] },
     { nome: 'Festival de pipas', itens: [varios('Pipa', CORES_PIPA.map(([a, b], i) => [String(i + 1), () => vPipa(a, b)]))] },
     { nome: 'Desfile de moda', itens: [um('Passarela do desfile', vPassarela), varios('Vaca modelo', LOOKS_VACA.map((n, k) => [n, () => vVacaDesfile(k)])), varios('Galinha modelo', LOOKS_GALINHA.map((n, k) => [n, () => vGalinhaDesfile(k)]))] },
