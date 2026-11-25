@@ -7133,7 +7133,7 @@ function itensEspaco(){
   const prox = F.marcada ? (feiraAgroAberta() ? 'acontecendo agora, até o fim da tarde' : feiraAgroHoje() ? (S.relogio < FEIRA_AGRO.abre ? 'hoje, daqui a pouco' : 'encerrada por hoje') : 'amanhã') : null;
   r.estado = `Aqui acontecem o ArraiEd, a Feira Agronômica Sustentável (uma vez por nível, durante um dia) e, de dia, de vez em quando, a rave da DJ Summer Cachohits.${prox ? ` Feira: ${prox}.` : ' A próxima feira vem quando o Ed subir de nível.'}${rave ? ' A Summer Cachohits está tocando agora!' : ''}${textoNoitesPortal()}`;
   if (noite) noiteItens(noite, r);
-  festivalNoPortal(r); gincanaNoPortal(r); pipasNoPortal(r);
+  festivalNoPortal(r); gincanaNoPortal(r); pipasNoPortal(r); aniversarioNoPortal(r);
   if (F.marcada){
     r.itens.push({ rotulo: Object.keys(F.banca || {}).length ? 'Trocar o que está na barraca do Ed' : 'Montar a barraca do Ed', sub: textoBancaAgro(), icone: 'cesta', fn: () => abrirBancaAgro() });
     if (!F.inscrito && !F.resultado) r.itens.push({ rotulo: 'Inscrever um produto no concurso', sub: 'os jurados anunciam os vencedores à tarde', icone: 'trofeu', fn: () => abrirInscricaoAgro() });
@@ -7284,7 +7284,7 @@ function agendarFeiraAgro(){
   if (!espacoAberto() || nivel() < ARRENDAMENTO.nivel) return;
   const F = feiraAgro();
   if (F.marcada || F.feitas.includes(nivel())) return;
-  let dia = diaAtual() + 1; while (festivalNoDia(dia)) dia++;
+  let dia = diaAtual() + 1; while (festivalNoDia(dia) || aniversarioNoDia(dia)) dia++;
   F.marcada = { nivel: nivel(), dia, montou: false };
   salvar();
   setTimeout(() => aviso(`Amanhã tem Feira Agronômica Sustentável no espaço de eventos! Produtores da região vão expor e vender. Toque no portal para montar a barraca do Ed e inscrever um produto no concurso.`, 'grande', 8), 3000);
@@ -7298,7 +7298,7 @@ function conferirFeiraAgro(dt){
     if (F.marcada.montou) encerrarFeiraAgro();
     else {
       // o dia passou sem a feira abrir (o jogo fechado, a viagem do Dia de Feira, o resgate): ela fica para o próximo dia
-      F.marcada.dia = diaAtual() + (rel >= FEIRA_AGRO.fecha ? 1 : 0); salvar();
+      F.marcada.dia = diaAtual() + (rel >= FEIRA_AGRO.fecha ? 1 : 0); while (festivalNoDia(F.marcada.dia) || aniversarioNoDia(F.marcada.dia)) F.marcada.dia++; salvar();
       aviso(F.marcada.dia > diaAtual() ? 'A Feira Agronômica não deu para acontecer hoje e ficou para amanhã.' : 'A Feira Agronômica que ficou para trás acontece hoje!', 'grande', 6);
     }
     return;
@@ -7635,17 +7635,18 @@ let rave = null, raveDia = { dia: -1, hora: 2 };
 // são marcados com dias de antecedência e ficam com o dia deles; nos outros dias, o primeiro evento sorteado que começa
 // (a rave, a gincana ou uma das noites) fica com o dia (S.eventoDia) e os outros sorteios daquele dia não acontecem.
 // Chamar pela janela Cenas (ou jogar a gincana pela cena) continua valendo: é pedido do jogador, e não marca o dia
-const NOME_EVENTO = { pipas: 'o festival de pipas', feira: 'a Feira Agronômica', festival: 'o festival do Patrinho', rave: 'a rave da Luma', gincana: 'a gincana', cinema: 'o cinema na roça', causos: 'a noite de causos', ets: 'a noite dos ETs', show: 'o show de talentos' };
+const NOME_EVENTO = { aniversario: 'o aniversário da fazenda', pipas: 'o festival de pipas', feira: 'a Feira Agronômica', festival: 'o festival do Patrinho', rave: 'a rave da Luma', gincana: 'a gincana', cinema: 'o cinema na roça', causos: 'a noite de causos', ets: 'a noite dos ETs', show: 'o show de talentos' };
 function eventoDoDia(d = diaAtual()){
   if (!S) return null;
   if (feiraAgroNoDia(d)) return 'feira';
   if (festivalNoDia(d)) return 'festival';
+  if (aniversarioNoDia(d)) return 'aniversario';
   const E = S.eventoDia; return E && E.dia === d ? E.id : null;
 }
 // o evento sorteado que começou fica com o dia (se ninguém ficou antes)
 function marcarEventoDoDia(id){ if (!eventoDoDia()){ S.eventoDia = { dia: diaAtual(), id }; salvar(); } }
 const outroEventoHoje = id => { const e = eventoDoDia(); return e && e !== id ? e : null; };
-const motivoRave = () => !espacoAberto() ? 'O espaço de eventos ainda não existe.' : feiraAgroHoje() ? 'Hoje o espaço é da Feira Agronômica.' : festivalHoje() && (S.relogio || 0) < FESTIVAL.fecha + 0.02 ? 'Hoje o espaço é do festival do Patrinho.' : arenaGincana ? 'A gincana está no espaço de eventos.' : festaPipas ? 'O festival de pipas está no espaço de eventos.' : rave ? 'A rave já está rolando!' : noite ? 'Agora o espaço é das noites.'
+const motivoRave = () => !espacoAberto() ? 'O espaço de eventos ainda não existe.' : feiraAgroHoje() ? 'Hoje o espaço é da Feira Agronômica.' : anivVis ? 'Hoje o espaço é do aniversário da fazenda.' : festivalHoje() && (S.relogio || 0) < FESTIVAL.fecha + 0.02 ? 'Hoje o espaço é do festival do Patrinho.' : arenaGincana ? 'A gincana está no espaço de eventos.' : festaPipas ? 'O festival de pipas está no espaço de eventos.' : rave ? 'A rave já está rolando!' : noite ? 'Agora o espaço é das noites.'
   : !((S.relogio || 0) >= FEIRA_AGRO.abre && (S.relogio || 0) < RAVE.fim) ? 'A rave da Luma é de dia.' : !luma || luma.estado !== 'dentro' ? 'A Luma está brincando lá fora. Espere ela voltar para casa.' : cine || cenaPedida ? 'Espere a cena acabar.' : null;
 // o fone (com as conchas rosa-neon) e os óculos escuros, no desenho da cabeça da Luma (vLumaCabeca)
 function vAcessoriosDJ(){
@@ -9640,6 +9641,154 @@ function menuTrem(r){
   r.estado = T.ed ? 'O Ed está passeando de trem!' : T.estado === 'andando' ? `O trem está dando a volta com ${T.grupo ? T.grupo.gente.length + ' visitantes' : 'passageiros'}.` : T.grupo ? 'Tem visitantes chegando para o passeio.' : `O trem está na estação. Os próximos visitantes chegam em ${tempo(Math.max(0, T.prox))}. Cada passagem custa ${reais(TREM.bilhete)}.`;
   r.itens.push({ rotulo: 'Passear de trem', sub: T.estado !== 'parado' || T.grupo ? 'o trem está ocupado' : livre ? 'o Ed dá uma volta no trilho' : 'quando o Ed estiver livre', icone: 'trem', off: !livre || T.estado !== 'parado' || !!T.grupo || T.ed, fn: passearDeTrem });
 }
+// ================= Aniversário da fazenda (o Lucas pediu: nível 72, na área que ele marcou no mapa dos níveis 62 a 80, no
+// espaço de eventos, x 59 a 62, z 54 a 56: a mesa do bolo). A cada ANIV.intervalo dias da fazenda (a ideia era uma vez por
+// estação, mas pelo calendário de verdade seria raro demais), a festa é marcada com antecedência, como a Feira Agronômica e o
+// festival, e fica com o dia dela. De ANIV.abre a ANIV.fecha o espaço tem a mesa com o bolo gigante do Patrinho, o arco de
+// balões, os presentes, a família em volta e convidados. Na hora do parabéns (ANIV.parabens, ou antes, pelo portal) as velas
+// acendem, cada um dá os parabéns, toca a vinheta (original), cai confete e o flash tira a foto da família, que vai para o
+// museu (S.aniversario.fotos). O Ed ganha o presente e pode comer um pedaço do bolo.
+// S.aniversario: { proximo (o dia), feitos, fotos: [{ dia, nivel }], cantou, comeu, avisou }
+const ANIV = { nivel: 72, intervalo: 30, abre: 0.1, fecha: 0.62, parabens: 0.32, mesa: [61, 55.5], xp: 0.2, bolo: 0.04, presente: 150000, convidados: 10 };
+const aniversario = () => S.aniversario || (S.aniversario = { proximo: null, feitos: 0, fotos: [] });
+const aniversarioNoDia = d => !!(S && S.aniversario && S.aniversario.proximo === d);
+const aniversarioHoje = () => aniversarioNoDia(diaAtual());
+const aniversarioAberto = () => aniversarioHoje() && (S.relogio || 0) >= ANIV.abre && (S.relogio || 0) < ANIV.fecha;
+const diaLivreAniv = d => { while (feiraAgroNoDia(d) || festivalNoDia(d)) d++; return d; };
+let anivVis = null;
+function agendarAniversario(){
+  if (!S || !espacoAberto() || nivel() < ANIV.nivel) return;
+  const A = aniversario(); if (A.proximo != null) return;
+  A.proximo = diaLivreAniv(diaAtual() + 1); salvar();
+  setTimeout(() => aviso(`A Fazenda Joli Pig vai fazer aniversário ${A.proximo === diaAtual() + 1 ? 'amanhã' : `no dia ${A.proximo + 1}`}! A família prepara uma festa no espaço de eventos, com o bolo gigante do Patrinho.`, 'grande', 7), 2200);
+}
+// o bolo de três andares (morango, creme e chocolate), com as velinhas e o coração no alto (cubinhos de 1/16)
+function vBoloGigante(){
+  const v = new Vox();
+  for (const [y0, y1, r, c, c2] of [[0, 5, 8, 0xf27fa4, 0xfdf8ef], [6, 10, 6, 0xfdf8ef, 0xf27fa4], [11, 14, 4, 0x6a3a24, 0xfdf8ef]])
+    for (let y = y0; y <= y1; y++) for (let x = -r; x <= r; x++) for (let z = -r; z <= r; z++){ const d = Math.hypot(x, z); if (d <= r + 0.4) v.set(x, y, z, y === y1 && d > r - 1.2 ? c2 : d > r - 0.6 && (y - y0) % 3 === 1 && (x + z) % 2 ? 0xd8302a : c); }
+  for (const [x, z] of [[-2, -2], [2, -2], [0, 0], [-2, 2], [2, 2]]) v.box(x, 15, z, x, 17, z, (xx, y) => y % 2 ? 0x3ad0ff : 0xfdf8ef);
+  for (const [x, y] of [[-1, 20], [1, 20], [-2, 21], [0, 21], [2, 21], [-1, 22], [1, 22], [0, 19]]) v.set(x, y, 0, 0xd8302a);
+  v.box(0, 15, -3, 0, 18, -3, 0xf2c33b);
+  return v;
+}
+// a mesa comprida com a toalha xadrez cor-de-rosa
+function vMesaAniv(){
+  const v = new Vox();
+  v.box(-22, 9, -9, 21, 9, 8, (x, y, z) => ((x >> 2) + (z >> 2)) % 2 ? 0xffb3d1 : 0xfdf8ef);
+  for (const z of [-9, 8]) v.box(-22, 6, z, 21, 8, z, (x, y) => (x >> 2) % 2 ? 0xffb3d1 : 0xfdf8ef);
+  for (const [x, z] of [[-20, -7], [19, -7], [-20, 6], [19, 6]]) v.box(x, 0, z, x + 1, 8, z + 1, 0x8a5a36);
+  return v;
+}
+// a pilha de presentes com laço
+function vPresentes(){
+  const v = new Vox();
+  for (const [x0, z0, l, a, c, f] of [[-8, -4, 7, 6, 0x3a8ad8, 0xffd34d], [0, -5, 6, 8, 0xe0408a, 0xfdf8ef], [-5, 3, 5, 5, 0x5aa847, 0xff5fa2], [-4, -3, 4, 4, 0xb06aff, 0xffd34d]]){
+    const y0 = x0 === -4 ? 7 : 0;
+    v.box(x0, y0, z0, x0 + l - 1, y0 + a - 1, z0 + l - 1, (x, y, z) => x === x0 + (l >> 1) || z === z0 + (l >> 1) ? f : c);
+    v.set(x0 + (l >> 1) - 1, y0 + a, z0 + (l >> 1), f); v.set(x0 + (l >> 1) + 1, y0 + a, z0 + (l >> 1), f);
+  }
+  return v;
+}
+const FALAS_PARABENS = ['Parabéns, Fazenda Joli Pig!', 'Feliz aniversário, fazenda!', 'Viva a Fazenda Joli Pig!', 'Mais um ano de muita colheita!', 'Parabéns, maninho, que fazenda linda!', 'Que venham muitos anos de roça!',
+  'Hip hip, hurra!', 'Parabéns pra nossa casa!', 'Essa fazenda é a melhor do mundo!', 'Um brinde aos bichos e às plantas!', 'Parabéns, Ed! Você caprichou!', 'Que festa bonita!', 'Saúde e muita chuva na hora certa!',
+  'Que o celeiro viva cheio!', 'Feliz aniversário, Joli Pig!', 'Parabéns de todo coração!', 'Muitos anos de vida pra fazenda!', 'Que alegria estar aqui!', 'Parabéns pra família inteira!', 'Viva! Viva! Viva!'];
+const FALAS_ANIV_CONVIDADO = ['Que bolo enorme!', 'O Patrinho caprichou!', 'Feliz aniversário!', 'Que festa linda!', 'Eu quero o pedaço com a cereja!', 'Olha os balões!', 'Parabéns pra fazenda!', 'Que família bonita!',
+  'Já é hora do parabéns?', 'Trouxe um presentinho!', 'Que cheiro de bolo!', 'Essa fazenda merece!', 'Vamos tirar uma foto!', 'Que dia especial!', 'Que alegria!', 'Bolo de três andares!',
+  'Eu vim de longe pra festa!', 'Olha a toalha cor-de-rosa!', 'Feliz aniversário, Joli Pig!', 'Que festa caprichada!'];
+const FALAS_ANIV_PORCO = ['Oinc! (de olho no bolo)', 'Oinc oinc! (parabéns!)', 'Óinc! (que festa!)', 'Oinc! (quer a cereja)', 'Oinc-oinc! (dança de alegria)', 'Óóinc! (que bolo!)', 'Oinc! (traz um presente)', 'Oinc oinc! (rabinho abanando)',
+  'Oinc! (cheira o bolo)', 'Óinc! (suspira)', 'Oinc! (bate palmas)', 'Oinc-oinc! (viva!)', 'Oinc! (espera o pedaço)', 'Óinc! (sorri pra foto)', 'Oinc oinc! (pula)', 'Oinc! (adora festa)', 'Óóinc! (parabéns!)',
+  'Oinc! (lambuzado de glacê)', 'Oinc-oinc! (feliz da vida)', 'Oinc! (de chapéu de festa)'];
+function montarAniversario(){
+  if (anivVis) return anivVis;
+  montarEspacoEventos();
+  const g = new THREE.Group(), s16 = 1 / 16, [mx, mz] = ANIV.mesa, mm = (k, f, s = s16) => malha(geo(k, () => f().build(s, { origin: [0.5, 0, 0.5], jitter: 0.02 }))); scene.add(g);
+  const mesa = mm('mesaAniv', vMesaAniv); mesa.position.set(mx, 0, mz); g.add(mesa);
+  const bolo = mm('boloGigante', vBoloGigante); bolo.position.set(mx, 10 / 16, mz); g.add(bolo);
+  const pres = mm('presentesAniv', vPresentes); pres.position.set(mx + 2, 0, mz - 0.9); g.add(pres);
+  const arco = mm('arcoBaloes', vArcoBaloes); arco.position.set(mx, 0, mz - 2.2); g.add(arco);
+  const placa = placaDeTexto(texturaTexto([['PARABÉNS, FAZENDA!', 1, '#ff3ea5'], ['Joli Pig', 0.6, '#3a8ad8']], 512, 128, '#fdf8ef', '#ff3ea5'), 2, 0.5); placa.position.set(mx, 2.15, mz - 2.2); g.add(placa);
+  // as velinhas acesas (halos), só no parabéns
+  texturaHalo();
+  const velas = [[-2, -2], [2, -2], [0, 0], [-2, 2], [2, 2]].map(([x, z]) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: texHalo, color: 0xffb347, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 })); sp.position.set(mx + x / 16, 10 / 16 + 18.5 / 16, mz + z / 16); sp.scale.setScalar(0.25); g.add(sp); return sp; });
+  // a família em volta da mesa, de frente para ela, e os convidados atrás
+  const familia = [];
+  const quem = ['beto', 'pelucio', 'patrinho', 'maurinho', 'milton', 'hud', 'dani'].filter(q => FAMILIA_SPA[q].pode());
+  quem.forEach((q, i) => { const F = FAMILIA_SPA[q], p = F.cria(); const k = pickaveis.indexOf(p.g); if (k >= 0) pickaveis.splice(k, 1); if (F.escala) p.g.scale.setScalar(F.escala);
+    const a = Math.PI * (0.15 + 0.7 * i / Math.max(1, quem.length - 1)), x = mx + Math.cos(a) * 2.2, z = mz + Math.sin(a) * 1.4 + 0.3; p.colocar(x, z); p.olhar(mx, mz); p.ang = p.angAlvo; g.add(p.g); p.update(0, 0);
+    familia.push({ p, nome: q }); });
+  if (S.viuCinePicoca){ const P = new Picoca(); P.colocar(mx - 2.6, mz - 0.4); P.olhar(mx, mz); P.ang = P.angAlvo; g.add(P.g); familia.push({ p: P, nome: 'picoca' }); }
+  const convidados = [];
+  for (let i = 0; i < ANIV.convidados; i++){ const j = novoJogadorQuadra(sorteia(['pessoa', 'pessoa', 'porco', 'nano'])), a = rnd(0.2, Math.PI - 0.2), r = rnd(3.2, 4.4), x = mx + Math.cos(a) * r, z = mz + Math.sin(a) * r * 0.75 + 0.6; j.y = 0; colocarJogador(j, x, z); j.ang = Math.atan2(mx - x, mz - z); convidados.push(j); }
+  g.traverse(o => { o.userData.alvo = { k: 'eventos' }; });
+  anivVis = { g, velas, familia, convidados, fala: 3, parabens: null };
+  return anivVis;
+}
+function desmontarAniversario(){
+  const V = anivVis; if (!V) return;
+  anivVis = null;
+  for (const j of V.convidados) tirarJogadorQuadra(j);
+  for (const s of V.velas) s.material.dispose();
+  scene.remove(V.g);
+}
+// o parabéns: as velas acendem, cada um dá os parabéns, a vinheta toca, cai confete e o flash tira a foto
+function comecarParabens(){
+  const V = anivVis, A = aniversario(); if (!V || V.parabens || A.cantou) return;
+  V.parabens = { t: 0, i: 0 };
+  const [mx, mz] = ANIV.mesa; if (Math.hypot(mx - cam.alvo.x, mz - cam.alvo.z) < cam.vista * 1.1 + 6) Musica.vinheta('parabens');
+}
+function passoParabens(dt){
+  const V = anivVis, P = V.parabens, A = aniversario(); P.t += dt;
+  for (const s of V.velas) s.material.opacity = 0.65 + Math.sin(P.t * 18 + s.position.x * 40) * 0.25;
+  // cada um da família dá os parabéns, um depois do outro
+  if (P.t > 1 + P.i * 0.9 && P.i < V.familia.length){ const F = V.familia[P.i++]; const f = variar(FALAS_PARABENS); falar(F.p, f, 2.4); F.p.pulo = 0.45; if (F.p.aceno != null) F.p.aceno = 1.2; }
+  if (!P.confete && P.t > 2 + V.familia.length * 0.9){ P.confete = true; const [mx, mz] = ANIV.mesa; confete(mx, 2.6, mz, 90, 2); Som.moeda(); for (const j of V.convidados) j.salto = 0.55; }
+  if (!P.foto && P.t > 3.6 + V.familia.length * 0.9){
+    P.foto = true; A.cantou = true;
+    const fl = document.createElement('div'); fl.style.cssText = 'position:fixed;inset:0;background:#fff;opacity:.9;z-index:40;pointer-events:none;transition:opacity .6s'; document.body.appendChild(fl); setTimeout(() => { fl.style.opacity = '0'; }, 60); setTimeout(() => fl.remove(), 800);
+    Som.tom(2600, 0.06, 'square', 0.02, 1800);
+    (A.fotos = A.fotos || []).push({ dia: diaAtual(), nivel: nivel() });
+    S.dinheiro += ANIV.presente; chipPulsa('chipDinheiro'); ganharXP(Math.max(50, Math.round(xpDeUmNivel() * ANIV.xp)), ed.topo());
+    setTimeout(() => aviso(`Clique! A foto da família foi para o museu. De presente de aniversário, a família juntou ${reais(ANIV.presente)} para a fazenda.`, 'grande', 7), 700);
+    hud(); salvar();
+  }
+  if (P.t > 6 + V.familia.length * 0.9) for (const s of V.velas) s.material.opacity = 0;
+}
+function conferirAniversario(){
+  if (!S) return;
+  const A = S.aniversario; if (!A || A.proximo == null){ agendarAniversario(); return; }
+  const rel = S.relogio || 0;
+  if (diaAtual() > A.proximo || (aniversarioHoje() && rel >= ANIV.fecha)){
+    if (anivVis) desmontarAniversario();
+    // a festa que não aconteceu (o jogo fechado o dia inteiro) passa para o próximo dia livre; a que aconteceu marca a próxima
+    if (A.cantou){ A.feitos++; A.cantou = false; A.avisou = false; A.proximo = diaLivreAniv(diaAtual() + ANIV.intervalo); }
+    else A.proximo = diaLivreAniv(diaAtual() + (rel >= ANIV.fecha ? 1 : 0));
+    salvar(); return;
+  }
+  if (aniversarioHoje() && !A.avisou){ A.avisou = true; salvar(); aviso('Hoje é aniversário da Fazenda Joli Pig! A festa é no espaço de eventos, com parabéns ao meio-dia.', 'grande', 6); }
+  if (aniversarioAberto() && !anivVis && !cine) montarAniversario();
+  if (anivVis && !A.cantou && rel >= ANIV.parabens) comecarParabens();
+}
+function atualizarAniversario(dt, t){
+  const V = anivVis; if (!V) return;
+  if (V.parabens) passoParabens(dt);
+  const [mx, mz] = ANIV.mesa, perto = !vistaEd && Math.hypot(mx - cam.alvo.x, mz - cam.alvo.z) < cam.vista * 1.1 + 6;
+  if (!perto) return;
+  for (const F of V.familia) F.p.update(dt, t);
+  for (const j of V.convidados){ if (Math.random() < dt * 0.1) j.salto = 0.55; animarJogador(j, dt, t); }
+  if ((V.fala -= dt) <= 0){ V.fala = rnd(3, 6); const j = sorteia(V.convidados); if (j && naTelaBicho(new THREE.Vector3(j.x, 0.5, j.z))){ const f = variar(j.tipo === 'porco' ? FALAS_ANIV_PORCO : FALAS_ANIV_CONVIDADO); falar(j, f, Math.min(2.6, tempoDeLeitura(f))); } }
+}
+function aniversarioNoPortal(r){
+  const A = S.aniversario;
+  if (A && A.proximo != null && !anivVis && A.proximo > diaAtual()) r.estado += ` Aniversário da fazenda: ${A.proximo === diaAtual() + 1 ? 'amanhã' : `no dia ${A.proximo + 1}`}.`;
+  if (!anivVis) return;
+  r.estado += ' Hoje é aniversário da fazenda!';
+  const livre = ed.estado === 'parado' && !tarefaAtual && ed.g.visible && !ed.sentado, [mx, mz] = ANIV.mesa;
+  if (!A.cantou && !anivVis.parabens) r.itens.push({ rotulo: 'Cantar parabéns agora', sub: 'velas, confete e a foto da família', icone: 'festa', fn: () => { cam.alvo.set(mx, 0, mz); cam.vista = Math.min(cam.vista, 7); comecarParabens(); } });
+  r.itens.push({ rotulo: 'Comer um pedaço do bolo', sub: A.comeu === diaAtual() ? 'o Ed já comeu hoje' : livre ? 'o Ed vai até a mesa' : 'quando o Ed estiver livre', icone: 'festa', off: !livre || A.comeu === diaAtual(),
+    fn: () => andarAte(ed, mx - 0.4, mz + 1.3, () => { if (!anivVis || A.comeu === diaAtual()) return; ed.olhar(mx, mz); ed.trabalhar(1.6, 'comer', () => { A.comeu = diaAtual(); ganharXP(Math.max(10, Math.round(xpDeUmNivel() * ANIV.bolo)), ed.topo()); const f = sorteia(['Hummm, bolo de aniversário!', 'Que bolo, Patrinho!', 'Parabéns pra nós!']); falar(ed, f, 2.2); salvar(); }); }) });
+  r.itens.push({ rotulo: 'Ver a festa', sub: 'a câmera vai até lá', icone: 'festa', leve: true, fn: () => { cam.alvo.set(mx, 0, mz); cam.vista = Math.min(cam.vista, 8); } });
+}
 // ================= Festival de pipas (o Lucas pediu: nível 68, na área que ele marcou no mapa dos níveis 62 a 80, no espaço
 // de eventos, x 57 a 62, z 63 a 68). Em PIPAS.chance das tardes (uma tarde de vento), numa hora sorteada, as pessoas, os
 // porquinhos e as nanos soltam pipas coloridas no espaço (entra na regra de um evento por dia). Pelo portal, "Soltar pipa
@@ -9657,7 +9806,7 @@ function vPipa(c1, c2){
   for (let k = 1; k <= 14; k++){ const y = -10 - k, x = Math.round(Math.sin(k * 0.7) * 1.5); v.set(x, y, 0, 0xfdf8ef); if (k % 3 === 0){ v.set(x - 1, y, 0, k % 2 ? c1 : c2); v.set(x + 1, y, 0, k % 2 ? c1 : c2); } }
   return v;
 }
-const motivoPipas = () => !espacoAberto() ? 'O espaço de eventos ainda não existe.' : nivel() < PIPAS.nivel ? `O festival de pipas vem no nível ${PIPAS.nivel}.` : feiraAgroHoje() ? 'Hoje o espaço é da Feira Agronômica.'
+const motivoPipas = () => !espacoAberto() ? 'O espaço de eventos ainda não existe.' : nivel() < PIPAS.nivel ? `O festival de pipas vem no nível ${PIPAS.nivel}.` : feiraAgroHoje() ? 'Hoje o espaço é da Feira Agronômica.' : anivVis ? 'Hoje o espaço é do aniversário da fazenda.'
   : (festivalHoje() && (S.relogio || 0) < FESTIVAL.fecha) || festivalVis ? 'Hoje o espaço é do festival do Patrinho.' : rave ? 'A rave da Luma está tocando no espaço.' : noite ? 'Agora o espaço é das noites.'
   : arenaGincana ? 'A gincana está no espaço de eventos.' : arraia ? 'O ArraiEd está acontecendo!' : null;
 const centroPipas = () => [(PIPAS.area[0] + PIPAS.area[2] + 1) / 2, (PIPAS.area[1] + PIPAS.area[3] + 1) / 2];
@@ -10094,7 +10243,7 @@ function entregarFestival(){
   const F = festival(), P = F.pedido; if (!P || faltaFestival(P).length) return false;
   for (const [k, q] of P.itens){ S.celeiro[k] -= q; if (!S.celeiro[k]) delete S.celeiro[k]; }
   S.dinheiro += P.paga; chipPulsa('chipDinheiro'); Som.moeda();
-  let dia = diaAtual() + 1; while (feiraAgroNoDia(dia)) dia++;
+  let dia = diaAtual() + 1; while (feiraAgroNoDia(dia) || aniversarioNoDia(dia)) dia++;
   F.marcado = { dia, nivel: P.nivel, pratos: pratosFestival(P.itens), itens: P.itens, paga: P.paga, provados: [] };
   F.pedido = null;
   ganharXP(P.xp, ed.topo());
@@ -10111,7 +10260,7 @@ function conferirFestival(dt){
   const rel = S.relogio || 0;
   if (diaAtual() > M.dia || (festivalHoje() && rel >= FESTIVAL.fecha)){
     if (M.montou) encerrarFestival();
-    else { M.dia = diaAtual() + (rel >= FESTIVAL.fecha ? 1 : 0); while (feiraAgroNoDia(M.dia)) M.dia++; salvar(); aviso(M.dia > diaAtual() ? 'O festival do Patrinho não deu para acontecer hoje e ficou para amanhã.' : 'O festival do Patrinho que ficou para trás acontece hoje!', 'grande', 6); }
+    else { M.dia = diaAtual() + (rel >= FESTIVAL.fecha ? 1 : 0); while (feiraAgroNoDia(M.dia) || aniversarioNoDia(M.dia)) M.dia++; salvar(); aviso(M.dia > diaAtual() ? 'O festival do Patrinho não deu para acontecer hoje e ficou para amanhã.' : 'O festival do Patrinho que ficou para trás acontece hoje!', 'grande', 6); }
     return;
   }
   if (festivalHoje() && !M.avisou){ M.avisou = true; salvar(); aviso('Hoje tem o festival gastronômico do Patrinho no espaço de eventos! Abre logo cedo.', 'grande', 6); }
@@ -10268,7 +10417,7 @@ const gincanaEm = (u, v) => { const a = GINCANA.ang, [cx, cz] = GINCANA.centro; 
 // o ângulo de quem olha para a chegada (+u)
 const ANG_RAIA = Math.atan2(Math.cos(GINCANA.ang), -Math.sin(GINCANA.ang));
 let arenaGincana = null, gincanaDia = { dia: -1, hora: 2 }, gincana = null;
-const motivoGincana = () => !espacoAberto() ? 'O espaço de eventos ainda não existe.' : nivel() < GINCANA.nivel ? `A gincana vem no nível ${GINCANA.nivel}.` : feiraAgroHoje() ? 'Hoje o espaço é da Feira Agronômica.'
+const motivoGincana = () => !espacoAberto() ? 'O espaço de eventos ainda não existe.' : nivel() < GINCANA.nivel ? `A gincana vem no nível ${GINCANA.nivel}.` : feiraAgroHoje() ? 'Hoje o espaço é da Feira Agronômica.' : anivVis ? 'Hoje o espaço é do aniversário da fazenda.'
   : (festivalHoje() && (S.relogio || 0) < FESTIVAL.fecha) || festivalVis ? 'Hoje o espaço é do festival do Patrinho.' : rave ? 'A rave da Luma está tocando no espaço.' : noite ? 'Agora o espaço é das noites.' : arraia ? 'O ArraiEd está acontecendo!' : festaPipas ? 'O festival de pipas está no espaço de eventos.' : null;
 // ----- a arena: as raias, os cones, o pórtico, o placar e a torcida (montada de tarde, como enfeite; e pela cena)
 function montarArenaGincana(){
@@ -17184,6 +17333,8 @@ function menuMuseu(r){
   if (!obraConcluida('museu')){ r.estado = OBRAS.museu.desc; return; }
   const a = acervoMuseu(), ja = S.museuDia === diaAtual();
   r.estado = `No acervo: ${contagem(a.figs, 'figurinha', 'figurinhas')}, ${contagem(a.postais, 'cartão-postal', 'cartões-postais')} e ${contagem(a.cenas, 'cena', 'cenas')}, e a sala dos recordes.`;
+  const fotosAniv = S.aniversario && S.aniversario.fotos ? S.aniversario.fotos.length : 0;
+  if (fotosAniv) r.estado += ` Na parede, ${fotosAniv > 1 ? `${fotosAniv} fotos da família nos aniversários da fazenda` : 'a foto da família no aniversário da fazenda'}.`;
   r.itens.push({ rotulo: 'Visitar o museu', sub: ja ? 'o XP de hoje já veio' : `${MUSEU.xp} XP, uma vez por dia`, icone: 'museu', fn: () => enfileirar('museu', alvoMuseu()) });
 }
 function visitarMuseu(){
@@ -18172,6 +18323,8 @@ const VINHETAS = {
   // o "Viva a Fazenda Joli Pig!": arpejo subindo e acorde final
   viva: { bpm: 150, ganho: 0.9, faixas: [{ tipo: 'square', vol: 0.028, notas: 'G4:.25 B4:.25 D5:.25 G5:.25 B5:.25 D6:.25 G4+B4+D5+G5:2' }, { tipo: 'triangle', vol: 0.05, notas: 'G2:1.5 G2+D3:2' }, { tipo: 'x', vol: 0.06, notas: 'x:.25 x:.25 x:.25 x:.25 x:.25 x:.25 x:.5 x:.5' }] },
   // a flauta andina da Picoça no show de talentos: uma frase curta e original em lá menor pentatônico
+  // o parabéns do aniversário da fazenda: uma frase original em dó maior, subindo até o acorde final (não é a melodia de parabéns de sempre)
+  parabens: { bpm: 132, ganho: 1.6, faixas: [{ tipo: 'square', vol: 0.026, leg: 0.8, notas: 'C5:.5 E5:.5 G5:.5 C6:1 A5:.5 G5:.5 E5:.5 F5:.5 D5:.5 G5:1 E5:.5 G5:.5 C6:.5 E6:.5 D6:.5 C6+E6+G6:2' }, { tipo: 'triangle', vol: 0.05, notas: 'C3:2 F2:2 G2:2 C3:2 C3+G3:2' }, { tipo: 'x', vol: 0.03, notas: 'x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:.5 x:2' }] },
   flautaPicoca: { bpm: 112, ganho: 2.6, faixas: [{ tipo: 'sine', vol: 0.035, leg: 0.9, notas: 'A5:.5 C6:.5 E6:1 D6:.5 C6:.5 A5:1.5' }] },
   // a Luma saindo pela portinha: três notinhas fofas
   luma: { bpm: 200, ganho: 3.7, faixas: [{ tipo: 'sine', vol: 0.035, notas: 'C6:.5 E6:.5 G6:1' }] },
@@ -33045,7 +33198,7 @@ function quadro(agoraP){
   atualizarBichosMata(dt, t);
   atualizarVisitaCachoeira(dt, t); atualizarCachoeira(dt, t);
   atualizarRelogioFoguete(dt);
-  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t); atualizarRecanto(dt, t); passoAcharEd(dt); atualizarFeiraAgro(dt, t); atualizarFestival(dt, t); if ((tickEstufa -= dt) <= 0){ tickEstufa = 1; atualizarEstufa(); } atualizarPipas(dt, t); atualizarTrem(dt, t); atualizarGincana(dt, t); atualizarRave(dt, t); atualizarNoites(dt, t);
+  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t); atualizarRecanto(dt, t); passoAcharEd(dt); atualizarFeiraAgro(dt, t); atualizarFestival(dt, t); if ((tickEstufa -= dt) <= 0){ tickEstufa = 1; atualizarEstufa(); conferirAniversario(); } atualizarAniversario(dt, t); atualizarPipas(dt, t); atualizarTrem(dt, t); atualizarGincana(dt, t); atualizarRave(dt, t); atualizarNoites(dt, t);
   atualizarBeijaFlor(dt, t);
   atualizarCurupira(dt, t);
   atualizarArteKevin(dt, t);
@@ -33317,7 +33470,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { feira: ganchoFeira(), resgate: ganchoResgate(), trem: { TREM, TRILHO, vis: () => TREM_VIS, passear: passearDeTrem, grupo: novoGrupoTrem, partir: partirTrem, parada: PARADA_TREM }, pipas: { PIPAS, obj: () => festaPipas, jogo: () => jogoPipa, montar: montarPipas, desmontar: desmontarPipas, jogar: comecarJogoPipa, toque: toquePipa, motivo: motivoPipas }, estufa: { ESTUFA, obj: () => estufa(), plantar: plantarEstufa, colher: colherEstufa, vis: () => ESTUFA_VIS, posVaso: posVasoEstufa }, nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: (id, extra) => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, Object.assign(l, extra)) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => n.g.getWorldPosition(new THREE.Vector3()).toArray()) }, encerrar: () => encerrarArteNano(), prox: () => arteNanoProx, chapeu: () => chapeuFora, visita: { chamar: () => chamarBeto(), despedir: () => despedirBeto(), estado: () => caminhaoE.estado, caminhao: () => caminhao } }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, VINHETAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
+  window.__fazenda = { feira: ganchoFeira(), resgate: ganchoResgate(), aniversario: { ANIV, obj: () => S.aniversario, vis: () => anivVis, montar: montarAniversario, desmontar: desmontarAniversario, parabens: comecarParabens, conferir: conferirAniversario, agendar: agendarAniversario }, trem: { TREM, TRILHO, vis: () => TREM_VIS, passear: passearDeTrem, grupo: novoGrupoTrem, partir: partirTrem, parada: PARADA_TREM }, pipas: { PIPAS, obj: () => festaPipas, jogo: () => jogoPipa, montar: montarPipas, desmontar: desmontarPipas, jogar: comecarJogoPipa, toque: toquePipa, motivo: motivoPipas }, estufa: { ESTUFA, obj: () => estufa(), plantar: plantarEstufa, colher: colherEstufa, vis: () => ESTUFA_VIS, posVaso: posVasoEstufa }, nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: (id, extra) => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, Object.assign(l, extra)) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => n.g.getWorldPosition(new THREE.Vector3()).toArray()) }, encerrar: () => encerrarArteNano(), prox: () => arteNanoProx, chapeu: () => chapeuFora, visita: { chamar: () => chamarBeto(), despedir: () => despedirBeto(), estado: () => caminhaoE.estado, caminhao: () => caminhao } }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, VINHETAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
     galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, flamingos: { soltar: soltarFlamingos, obj: () => flamingos, pousos: pousoFlamingos, sumir: sumirFlamingos, FLAMINGOS, avancar: seg => { const t0 = performance.now() / 1000; for (let i = 0; i < Math.round(seg / 0.05); i++) atualizarFlamingos(0.05, t0 + i * 0.05); } }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { circulo: { forcar: () => { discoJogo.forcarCirculo = true; discoJogo.prox = 0; }, fazer: fazerCirculo, lote: loteParaCirculo, grupo: () => grupoCirculo, soltar: soltarGrupoCirculo, CIRCULO }, sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, puxar: () => { discoJogo.forcarPuxar = true; discoJogo.prox = 0; }, puxao: () => puxao, obj: () => discoJogo, abducao: () => abducao, presente: { soltar: presenteEt, obj: () => caixaEt, abrir: abrirCaixaEt }, visita: { forcar: () => { discoJogo.forcarVisita = true; discoJogo.prox = 0; }, obj: () => etVisita, itens: itensEt, trocar: trocarEt, pedido: pedidoEt, temDisco: temDiscoJardim, VISITA_ET } }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(AMPLIACAO).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     visitaPresa: VISITA_PRESA, pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
@@ -35515,6 +35668,7 @@ function catalogoModelos(){
       g.userData.anima = (dt, t) => { ch.scale.set(1 + Math.sin(t * 13) * 0.08, 1 + Math.sin(t * 9) * 0.15, 1 + Math.cos(t * 11) * 0.08); };
       return g;
     } }] }, varios('Barraca dos ETs', [['Rosa', () => vBarracaEt(0xff3ea5)], ['Azul', () => vBarracaEt(0x3ad0ff)], ['Verde', () => vBarracaEt(0x8fd06a)]]), um('Cogumelo lunar', vCogumeloLunar), um('Pedra lunar', vPedraLunar), um('Foguetinho de jardim', vFoguetinhoJardim)] },
+    { nome: 'Aniversário da fazenda', itens: [um('Bolo gigante', vBoloGigante), um('Mesa do bolo', vMesaAniv), um('Presentes', vPresentes)] },
     { nome: 'Festival de pipas', itens: [varios('Pipa', CORES_PIPA.map(([a, b], i) => [String(i + 1), () => vPipa(a, b)]))] },
     { nome: 'Desfile de moda', itens: [um('Passarela do desfile', vPassarela), varios('Vaca modelo', LOOKS_VACA.map((n, k) => [n, () => vVacaDesfile(k)])), varios('Galinha modelo', LOOKS_GALINHA.map((n, k) => [n, () => vGalinhaDesfile(k)]))] },
     { nome: 'Rave: estandes e enfeites', itens: [um('Barraca de pulseiras neon', vBarracaNeon), um('Bar de água de coco', vBarCoco), um('Food truck', vFoodTruck), um('Torre de LED', vTorreLed), um('Banheiros químicos', vBanheiroQuimico),
