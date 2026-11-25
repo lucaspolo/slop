@@ -7039,6 +7039,7 @@ function itensEspaco(){
   const prox = F.marcada ? (feiraAgroAberta() ? 'acontecendo agora, até o fim da tarde' : feiraAgroHoje() ? (S.relogio < FEIRA_AGRO.abre ? 'hoje, daqui a pouco' : 'encerrada por hoje') : 'amanhã') : null;
   r.estado = `Aqui acontecem o ArraiEd, a Feira Agronômica Sustentável (uma vez por nível, durante um dia) e, de dia, de vez em quando, a rave da DJ Summer Cachohits.${prox ? ` Feira: ${prox}.` : ' A próxima feira vem quando o Ed subir de nível.'}${rave ? ' A Summer Cachohits está tocando agora!' : ''}${textoNoitesPortal()}`;
   if (noite) noiteItens(noite, r);
+  festivalNoPortal(r);
   if (F.marcada){
     r.itens.push({ rotulo: Object.keys(F.banca || {}).length ? 'Trocar o que está na barraca do Ed' : 'Montar a barraca do Ed', sub: textoBancaAgro(), icone: 'cesta', fn: () => abrirBancaAgro() });
     if (!F.inscrito && !F.resultado) r.itens.push({ rotulo: 'Inscrever um produto no concurso', sub: 'os jurados anunciam os vencedores à tarde', icone: 'trofeu', fn: () => abrirInscricaoAgro() });
@@ -7189,7 +7190,8 @@ function agendarFeiraAgro(){
   if (!espacoAberto() || nivel() < ARRENDAMENTO.nivel) return;
   const F = feiraAgro();
   if (F.marcada || F.feitas.includes(nivel())) return;
-  F.marcada = { nivel: nivel(), dia: diaAtual() + 1, montou: false };
+  let dia = diaAtual() + 1; while (festivalNoDia(dia)) dia++;
+  F.marcada = { nivel: nivel(), dia, montou: false };
   salvar();
   setTimeout(() => aviso(`Amanhã tem Feira Agronômica Sustentável no espaço de eventos! Produtores da região vão expor e vender. Toque no portal para montar a barraca do Ed e inscrever um produto no concurso.`, 'grande', 8), 3000);
 }
@@ -7535,7 +7537,7 @@ const FALAS_ED_MENCAO = ['Não deu dessa vez, mas foi divertido!', 'Parabéns ao
 const RAVE = { chance: 0.4, hora: [0.12, 0.5], fim: 0.62, duracao: 150, gente: 60, bpm: 126, dj: zp('festa', 11, 10.6), pista: zp('festa', 11, 15.7), raio: [5.8, 4.1], longe: 1.25, folga: 0.42,
   outros: { minhoca: 6, galinha: 6, vaca: 2 } };
 let rave = null, raveDia = { dia: -1, hora: 2 };
-const motivoRave = () => !espacoAberto() ? 'O espaço de eventos ainda não existe.' : feiraAgroHoje() ? 'Hoje o espaço é da Feira Agronômica.' : rave ? 'A rave já está rolando!' : noite ? 'Agora o espaço é das noites.'
+const motivoRave = () => !espacoAberto() ? 'O espaço de eventos ainda não existe.' : feiraAgroHoje() ? 'Hoje o espaço é da Feira Agronômica.' : festivalHoje() && (S.relogio || 0) < FESTIVAL.fecha + 0.02 ? 'Hoje o espaço é do festival do Patrinho.' : rave ? 'A rave já está rolando!' : noite ? 'Agora o espaço é das noites.'
   : !((S.relogio || 0) >= FEIRA_AGRO.abre && (S.relogio || 0) < RAVE.fim) ? 'A rave da Luma é de dia.' : !luma || luma.estado !== 'dentro' ? 'A Luma está brincando lá fora. Espere ela voltar para casa.' : cine || cenaPedida ? 'Espere a cena acabar.' : null;
 // o fone (com as conchas rosa-neon) e os óculos escuros, no desenho da cabeça da Luma (vLumaCabeca)
 function vAcessoriosDJ(){
@@ -8947,6 +8949,232 @@ function montarFinalShow(N){
     if (q === 'kevin'){ const k = kevin; k.g.visible = true; k.alt = PALCO_Y; k.lencol.visible = false; k.pose = 'parado'; const [x, z] = noPalco(u, 0.5); k.colocar(x, z); k.ang = k.angAlvo = SHOW.ang; F.artistas.push(k); return; }
     const A = { g, artistas: [] }; const p = copiaShow(A, q, u, 0.5); F.artistas.push(p);
   });
+}
+// ================= Festival gastronômico do Patrinho (o Lucas pediu: encomenda e festa). Uma vez por nível, a partir do
+// FESTIVAL.nivel (com o Patrinho já visto e o espaço de eventos aberto), o Patrinho encomenda de 3 a 4 ingredientes da
+// fazenda, com prazo de FESTIVAL.prazo dias. Os itens ficam separados no celeiro (itensPrometidos). Entregue pelo caderno
+// ("Mandar para o Patrinho"), ele paga na hora e o festival acontece no dia seguinte (pulando o dia da Feira Agronômica),
+// de FESTIVAL.abre a FESTIVAL.fecha, no espaço de eventos: a cozinha dele com o fogão a lenha e o panelão, as barracas de
+// comida servindo pratos feitos com o que o Ed mandou, as mesas com gente comendo e os visitantes passeando. No fim do dia
+// ele paga a parte do Ed na bilheteria. S.festival: { feitos (os níveis que já tiveram), pedido, marcado }
+const FESTIVAL = { nivel: 31, valor: 1500, minimo: 30, maximo: 30, fator: 2, xp: 0.08, itens: [3, 4], prazo: 3, abre: 0.03, fecha: 0.66, gente: 22, parte: 0.4, provar: 0.012,
+  centro: zp('festa', 11, 13), ang: Math.PI / 4, cozinha: [0, -4.3], olhar: [0, -1.6], mesas: [[-1.3, -1.2], [1.3, -1.2], [-1.3, 1.3], [1.3, 1.3]] };
+const festivalEm = (u, v) => { const a = FESTIVAL.ang, [cx, cz] = FESTIVAL.centro; return [cx + Math.cos(a) * u + Math.sin(a) * v, cz - Math.sin(a) * u + Math.cos(a) * v]; };
+const festival = () => S.festival || (S.festival = { feitos: [], pedido: null, marcado: null });
+const festivalHoje = () => { const F = S.festival; return !!(F && F.marcado && F.marcado.dia === diaAtual()); };
+const festivalAberto = () => festivalHoje() && (S.relogio || 0) >= FESTIVAL.abre && (S.relogio || 0) < FESTIVAL.fecha;
+const festivalNoDia = d => { const F = S.festival; return !!(F && F.marcado && F.marcado.dia === d); };
+const feiraAgroNoDia = d => { const F = S.feiraAgro; return !!(F && F.marcada && F.marcada.dia === d); };
+// as barracas do festival: quem atende e o prato (o {i} vira o ingrediente da encomenda daquela barraca)
+const BARRACAS_FESTIVAL = [
+  { id: 'panqueca', nome: 'Pastelaria da Dona Panqueca', quem: 'panqueca', toldo: [0xf27fa4, 0xfdf8ef], cor: ['#c0406a', '#fdf8ef'], uv: [-4.1, -2.2], prato: 'Pastel de {i}' },
+  { id: 'mofi', nome: 'Caldo de Cana do Sr. Mofi', quem: 'mofi', toldo: [0x6cbf47, 0xf5d142], cor: ['#3f7a3a', '#f5d142'], uv: [-4.1, 0.4], prato: 'Caldo de cana geladinho', fixo: 'caldo' },
+  { id: 'cafe', nome: 'Joli Coffee', quem: 'pelucio', toldo: [0xe8a0b4, 0x6b3a22], cor: ['#6b3a22', '#fde4e1'], uv: [-4.1, 3], prato: 'Cafezinho coado na hora', fixo: 'cafe' },
+  { id: 'roca', nome: 'Barraca da Roça', quem: 'beto', toldo: [0x3a8fd0, 0xfdf8ef], cor: ['#2f6fb3', '#fdf8ef'], uv: [4.1, -2.2], prato: 'Creme de {i} da roça' },
+  { id: 'doces', nome: 'Doçaria da Vila', quem: 'pessoa', k: 7, toldo: [0xf08a2c, 0xfdf8ef], cor: ['#c0601a', '#fdf8ef'], uv: [4.1, 0.4], prato: 'Torta de {i}' },
+  { id: 'picoca', nome: 'Pão na Chapa da Picoça', quem: 'picoca', toldo: [0xd9b23c, 0x7a4a2a], cor: ['#7a4a2a', '#f2c335'], uv: [4.1, 3], prato: 'Pão na chapa com {i}' },
+];
+const FALAS_FESTIVAL = ['Que cheirinho bom!', 'Já provou o pastel?', 'O Patrinho cozinha demais!', 'Eu vou repetir!', 'Esse tempero é da fazenda?', 'Hummm, que delícia!',
+  'Guarda um lugar na mesa para mim!', 'Tá tudo fresquinho!', 'Que festival caprichado!', 'Me vê mais um, por favor!', 'Nunca comi nada tão gostoso!', 'Olha o tamanho desse panelão!',
+  'Os ingredientes são da Fazenda Joli Pig!', 'Vou levar para viagem!', 'Que fila na barraca do café!', 'Isso aqui é comida de restaurante!', 'Ai, comi demais...',
+  'O caldo de cana tá geladinho!', 'Quero a receita!', 'Ano que vem eu volto!'];
+const FALAS_FESTIVAL_PORCO = ['Oinc! (lambendo o focinho)', 'Oinc oinc! (pede mais)', 'Óinc! (de barriguinha cheia)', 'Oinc! (fareja o panelão)', 'Oinc-oinc! (dança de alegria)',
+  'Óóinc! (que delícia!)', 'Oinc! (divide com o amigo)', 'Oinc oinc! (rabinho abanando)', 'Oinc! (esperando na fila)', 'Óinc! (suspira)', 'Oinc! (quer sobremesa)', 'Oinc-oinc! (aplaude o chef)',
+  'Oinc! (cheira o café)', 'Óinc! (come o pastel inteiro)', 'Oinc oinc! (pede o caldo)', 'Oinc! (cochila depois de comer)', 'Óóinc! (muito bom!)', 'Oinc! (lambuzado)', 'Oinc! (volta para a fila)', 'Oinc-oinc! (feliz da vida)'];
+const FALAS_PATRINHO_FESTIVAL = ['Saindo mais uma panela, irmãozinho!', 'Tudo com ingrediente da fazenda do meu irmão!', 'Ninguém sai daqui com fome!', 'O segredo é o carinho... e um pouquinho de sal.',
+  'Prova esse caldo, tá no ponto!', 'Mais lenha no fogão!', 'Cozinhar para a família é o meu prato favorito.', 'Hoje o Joli Bistrô é aqui!', 'Fila andando, fila andando!',
+  'Quem quer repetir levanta a mão!', 'Esse cheiro chega até a cidade!', 'Um brinde aos produtores!', 'Vou precisar de mais panela!', 'Chef feliz é chef de barriga cheia!',
+  'Ninguém faz tempero como a terra da Joli Pig.', 'Olha o vapor subindo!', 'Mexe, mexe, não deixa grudar!', 'O nariz do chef nunca falha!', 'Quem trouxe o apetite?', 'Mais um prato saindo!'];
+// os pratos de cada barraca, a partir dos ingredientes que o Ed mandou
+function pratosFestival(itens){
+  const nomes = itens.map(([k]) => PRODUTOS[k].nome.toLowerCase());
+  return BARRACAS_FESTIVAL.map((B, i) => {
+    // o caldo de cana e o café têm o cardápio de sempre; as outras barracas usam os ingredientes do Ed, um por barraca
+    const j = BARRACAS_FESTIVAL.slice(0, i).filter(b => !b.fixo).length, k = itens[j % itens.length][0], n = nomes[j % nomes.length];
+    return { k: B.fixo === 'cafe' && PRODUTOS.torrado ? 'torrado' : k, nome: B.fixo ? B.prato : B.prato.replace('{i}', n) };
+  });
+}
+// o Patrinho liga com a encomenda (uma vez por nível)
+function agendarFestival(){
+  if (!S || !espacoAberto() || nivel() < FESTIVAL.nivel || !S.viuCinePatrinho) return;
+  const F = festival();
+  if (F.pedido || F.marcado || F.feitos.includes(nivel())) return;
+  const l = produtosLiberados().filter(k => PRODUTOS[k].venda >= FESTIVAL.minimo && !PRODUTOS[k].espacial);
+  if (l.length < 3) return;
+  const fab = l.filter(k => PRODUTOS[k].fab).sort(() => Math.random() - 0.5), crus = l.filter(k => !PRODUTOS[k].fab).sort(() => Math.random() - 0.5);
+  const n = Math.round(rnd(...FESTIVAL.itens)), esc = [...fab.slice(0, 2), ...crus.slice(0, n)].slice(0, n);
+  while (esc.length < n){ const k = sorteia(l); if (!esc.includes(k)) esc.push(k); }
+  const itens = esc.map(k => [k, clamp(Math.round(FESTIVAL.valor / PRODUTOS[k].venda), 3, FESTIVAL.maximo)]);
+  const valor = itens.reduce((a, [k, q]) => a + q * PRODUTOS[k].venda, 0), nv = nivel();
+  F.pedido = { nivel: nv, itens, paga: Math.round(valor * FESTIVAL.fator / 50) * 50, xp: Math.max(50, Math.round((xpPara(nv + 1) - xpPara(nv)) * FESTIVAL.xp)), prazo: diaAtual() + FESTIVAL.prazo };
+  salvar();
+  setTimeout(() => aviso(`O Patrinho ligou! Ele quer fazer um festival gastronômico no espaço de eventos com ingredientes da fazenda. A encomenda está no caderno.`, 'grande', 8), 4000);
+}
+const faltaFestival = P => P.itens.filter(([k, q]) => (S.celeiro[k] || 0) < q);
+// a carta da encomenda, aberta pelo caderno ou pelo portal
+function abrirEncomendaPatrinho(){
+  const P = S.festival && S.festival.pedido; if (!P) return;
+  const falta = faltaFestival(P), dias = P.prazo - diaAtual();
+  let h = `<div class="caderno"><p><b>Irmãozinho!</b></p><p>Quero fazer um festival gastronômico no espaço de eventos, com comida feita com o que a fazenda tem de melhor. Você me manda:</p><ul>`;
+  h += P.itens.map(([k, q]) => { const ok = (S.celeiro[k] || 0) >= q; return `<li class="${ok ? 'feito' : ''}"><span class="caixa">${ok ? '✓' : ''}</span><img src="${icone(k)}" alt=""><span class="texto">${esc(nomeProdutoQ(k, q))} <small>(tenho ${S.celeiro[k] || 0})</small></span></li>`; }).join('');
+  h += `</ul><p>Eu pago <span class="grifo">${reais(P.paga)}</span> e ${P.xp} xp na hora, e o festival é no dia seguinte, com uma parte da bilheteria para você. Prazo: ${dias > 1 ? `${dias} dias` : dias === 1 ? 'até amanhã' : 'hoje'}.</p><p><small>Os ingredientes ficam separados no celeiro até eu buscar.</small></p>`;
+  h += `<p><button class="botao azul" id="jFestivalManda" type="button"${falta.length ? ' disabled' : ''}><img src="${icone('patrinho')}" alt="">${falta.length ? 'Falta coisa no celeiro' : 'Mandar para o Patrinho'}</button></p><p style="text-align:right">Beijo do chef, Patrinho</p></div>`;
+  abrirJanela(topo('patrinho', 'Encomenda do Patrinho', 'para o festival gastronômico', 'rosa') + `<div class="janela-corpo">${h}</div>`);
+  const b = $('jFestivalManda'); if (b && !falta.length) b.addEventListener('click', () => { fecharJanela(); entregarFestival(); });
+}
+function entregarFestival(){
+  const F = festival(), P = F.pedido; if (!P || faltaFestival(P).length) return false;
+  for (const [k, q] of P.itens){ S.celeiro[k] -= q; if (!S.celeiro[k]) delete S.celeiro[k]; }
+  S.dinheiro += P.paga; chipPulsa('chipDinheiro'); Som.moeda();
+  let dia = diaAtual() + 1; while (feiraAgroNoDia(dia)) dia++;
+  F.marcado = { dia, nivel: P.nivel, pratos: pratosFestival(P.itens), itens: P.itens, paga: P.paga, provados: [] };
+  F.pedido = null;
+  ganharXP(P.xp, ed.topo());
+  aviso(`O Patrinho recebeu tudo e pagou ${reais(P.paga)}! O festival gastronômico é ${dia === diaAtual() + 1 ? 'amanhã' : `no dia ${dia + 1}`}, no espaço de eventos.`, 'grande', 6);
+  hud(); salvar(); return true;
+}
+// os objetos do festival montado (só na memória)
+let festivalVis = null;
+function conferirFestival(dt){
+  const F = S.festival; if (!F) return;
+  // a encomenda que passou do prazo: o Patrinho desmarca, sem multa; a próxima vem no nível seguinte
+  if (F.pedido && diaAtual() > F.pedido.prazo){ F.feitos.push(F.pedido.nivel); F.pedido = null; salvar(); aviso('O prazo da encomenda do Patrinho passou. Ele disse que tudo bem: no próximo nível ele liga de novo!', 'grande', 6); }
+  const M = F.marcado; if (!M) return;
+  const rel = S.relogio || 0;
+  if (diaAtual() > M.dia || (festivalHoje() && rel >= FESTIVAL.fecha)){
+    if (M.montou) encerrarFestival();
+    else { M.dia = diaAtual() + (rel >= FESTIVAL.fecha ? 1 : 0); while (feiraAgroNoDia(M.dia)) M.dia++; salvar(); aviso(M.dia > diaAtual() ? 'O festival do Patrinho não deu para acontecer hoje e ficou para amanhã.' : 'O festival do Patrinho que ficou para trás acontece hoje!', 'grande', 6); }
+    return;
+  }
+  if (festivalHoje() && !M.avisou){ M.avisou = true; salvar(); aviso('Hoje tem o festival gastronômico do Patrinho no espaço de eventos! Abre logo cedo.', 'grande', 6); }
+  if (festivalAberto() && !festivalVis && !cine) montarFestival();
+}
+function montarFestival(){
+  const F = festival(), M = F.marcado; if (!M || festivalVis) return;
+  montarEspacoEventos();
+  const g = new THREE.Group(); scene.add(g);
+  const V = festivalVis = { g, barracas: [], gente: [], cozinheiros: [], fala: 3, vapor: 0, chef: null };
+  const s16 = 1 / 16, A = FESTIVAL.ang, mm = (k, f, s) => malha(geo(k, () => f().build(s, { origin: [0.5, 0, 0.5], jitter: 0.02 })));
+  // a cozinha do Patrinho no fundo: o fogão a lenha, o panelão em cima, a lousa do cardápio e o chef atrás
+  const [kx, kz] = festivalEm(...FESTIVAL.cozinha), coz = new THREE.Group(); coz.position.set(kx, 0, kz); coz.rotation.y = A; g.add(coz);
+  coz.add(mm('fogaoLenha', vFogaoLenha, s16));
+  const pan = mm('panelao', vPanelao, s16); pan.position.set(-6 * s16, 13 * s16, 0); coz.add(pan);
+  const lousa = mm('placaCardapio', vPlacaCardapio, s16); lousa.position.set(1.4, 0, 0.3); lousa.rotation.y = -0.3; coz.add(lousa);
+  const txt = placaDeTexto(texturaTexto([['FESTIVAL DO CHEF', 0.8, '#ffd34d'], ...M.pratos.slice(0, 4).map(p => [p.nome, 0.45, '#fdf8ef'])], 256, 320, '#2a3a2e'), 0.62, 0.78);
+  txt.position.set(1.4 - Math.sin(-0.3) * 0.02, 15.5 * s16, 0.3 - 0.5 * s16 + 0.02); txt.rotation.y = -0.3; coz.add(txt);
+  if (FAMILIA_SPA.patrinho.pode()){ const p = FAMILIA_SPA.patrinho.cria(); const k = pickaveis.indexOf(p.g); if (k >= 0) pickaveis.splice(k, 1); const [x, z] = festivalEm(FESTIVAL.cozinha[0] - 0.35, FESTIVAL.cozinha[1] - 0.75); p.colocar(x, z); p.ang = p.angAlvo = A; g.add(p.g); V.chef = p; V.cozinheiros.push(p); }
+  V.panela = new THREE.Vector3(); pan.getWorldPosition(V.panela); V.panela.y += 0.6;
+  coz.traverse(o => { o.userData.alvo = { k: 'festival', i: -1 }; });
+  // as barracas de comida, dos dois lados, viradas para o meio
+  BARRACAS_FESTIVAL.forEach((B, i) => {
+    // viradas para o meio e um pouco para a câmera, para o balcão e quem atende aparecerem
+    const [x, z] = festivalEm(...B.uv), b = new THREE.Group(), ang = A + (B.uv[0] < 0 ? Math.PI / 4 : -Math.PI / 4); b.position.set(x, 0, z); b.rotation.y = ang; g.add(b);
+    b.add(malha(geo('barracaAgro' + B.toldo.join('_'), () => vBarracaAgro(...B.toldo).build(s16, { origin: [0.5, 0, 0.5] }))));
+    const placa = placaDeTexto(texturaTexto([[B.nome, 1, B.cor[1]]], 512, 96, B.cor[0], B.cor[1]), 1.7, 0.32); placa.position.set(0, 27.5 / 16, 7.6 / 16); placa.rotation.x = -0.25; b.add(placa);
+    const P = M.pratos[i]; [-0.35, 0.35].forEach(dx => { const pr = mm('pratoCafe', vPratoCafe, 1 / 19); pr.position.set(dx, 9 / 16, 0.05); b.add(pr); const mi = miniaturaAgro(P.k); mi.position.set(dx, 9 / 16 + 0.03, 0.05); b.add(mi); });
+    // quem atende, um passo atrás do balcão
+    const [ax, az] = [x - Math.sin(ang) * 0.62, z - Math.cos(ang) * 0.62];
+    let q = null;
+    if (B.quem === 'panqueca' || B.quem === 'mofi'){ q = new Porco(0, 0, B.quem, B.quem === 'panqueca' ? MODELO_PANQUECA : MODELO_MOFI); }
+    else if (B.quem === 'pelucio' && FAMILIA_SPA.pelucio.pode()) q = FAMILIA_SPA.pelucio.cria();
+    else if (B.quem === 'beto') q = FAMILIA_SPA.beto.cria();
+    else if (B.quem === 'picoca' && S.viuCinePicoca){ q = new Picoca(); }
+    if (q){ const k = pickaveis.indexOf(q.g); if (k >= 0) pickaveis.splice(k, 1); if (FAMILIA_SPA[B.quem] && FAMILIA_SPA[B.quem].escala) q.g.scale.setScalar(FAMILIA_SPA[B.quem].escala); q.colocar(ax, az); q.ang = q.angAlvo = ang; if (q.update) q.update(0, 0); g.add(q.g); V.cozinheiros.push(q); }
+    else { const m = mm('visitante' + (B.k || 3), () => vVisitante(B.k || 3), MIRANTE.sV); m.position.set(ax, 0, az); m.rotation.y = ang; g.add(m); }
+    b.traverse(o => { o.userData.alvo = { k: 'festival', i }; });
+    V.barracas.push({ B, g: b, x, z, ang, quem: q, topo: () => new THREE.Vector3(ax, 1.35, az) });
+  });
+  // as mesas no meio, com gente comendo em volta
+  for (const [u, v] of FESTIVAL.mesas){
+    const [x, z] = festivalEm(u, v), m = mm('mesaFestival', () => noMeioMesa(), s16); m.position.set(x, 0, z); m.rotation.y = A; g.add(m);
+    for (const [du, dv] of [[-0.45, -0.62], [0.45, -0.62], [-0.45, 0.62], [0.45, 0.62]]){ if (Math.random() < 0.25) continue; const [px, pz] = festivalEm(u + du, v + dv); const j = sentarPlateia(V, sorteia(['porco', 'porco', 'nano']), px, pz, x, z); j.mesa = true; }
+  }
+  // os visitantes passeando de barraca em barraca
+  for (let i = 0; i < FESTIVAL.gente; i++){
+    const j = novoJogadorQuadra(sorteia(['porco', 'porco', 'nano', 'pessoa', 'pessoa'])), [x, z] = festivalEm(rnd(-2.6, 2.6), rnd(-3, 3.6));
+    j.y = 0; colocarJogador(j, x, z); j.ang = rnd(0, 6); j.espera = rnd(0, 5); j.alvo = [x, z]; V.gente.push(j);
+  }
+  pickaveis.push(g);
+  faixaPortal([['FESTIVAL GASTRONÔMICO', 1, '#fdf8ef'], ['do chef Patrinho, com ingredientes da fazenda', 0.5, '#ffd34d']], '#7a2a1a');
+  M.montou = true; salvar();
+  aviso('O festival gastronômico do Patrinho abriu no espaço de eventos! Toque numa barraca para ver o prato e provar.', 'grande', 6);
+}
+// a mesa de piquenique dos enfeites, centrada
+const noMeioMesa = () => { const v = vMesaPiquenique(), w = new Vox(); for (const e of v.m.values()) w.set(e.x - 8, e.y, e.z - 8, e.c); return w; };
+function desmontarFestival(){
+  const V = festivalVis; if (!V) return;
+  festivalVis = null;
+  for (const j of V.gente) tirarJogadorQuadra(j);
+  const k = pickaveis.indexOf(V.g); if (k >= 0) pickaveis.splice(k, 1);
+  scene.remove(V.g); faixaPortal(null);
+  if (Musica.atual && Musica.atual.id === 'festival') Musica.parar();
+}
+// o fim do dia: o Patrinho paga a parte do Ed na bilheteria e o festival vira passado
+function encerrarFestival(){
+  const F = festival(), M = F.marcado; if (!M) return;
+  const parte = Math.round(M.paga * FESTIVAL.parte / 50) * 50;
+  if (M.montou){ S.dinheiro += parte; chipPulsa('chipDinheiro'); Som.moeda(); aviso(`O festival do Patrinho acabou! Ele mandou a parte do Ed na bilheteria: ${reais(parte)}.`, 'grande', 6); S.festivais = (S.festivais || 0) + 1; }
+  F.feitos.push(M.nivel); F.marcado = null;
+  desmontarFestival(); hud(); salvar();
+}
+function atualizarFestival(dt, t){
+  if (!S) return;
+  // a agenda confere uma vez por segundo (abre, avisa, fecha e paga)
+  atualizarFestival.acc = (atualizarFestival.acc || 0) + dt;
+  if (atualizarFestival.acc >= 1){ atualizarFestival.acc = 0; if (!cine) conferirFestival(1); }
+  const V = festivalVis; if (!V) return;
+  if (!festivalAberto()) return;
+  const [cx, cz] = festivalEm(...FESTIVAL.olhar), perto = !vistaEd && Math.hypot(cx - cam.alvo.x, cz - cam.alvo.z) < cam.vista * 1.1 + 5;
+  if (perto && !cine){ if (Musica.pode() && (!Musica.atual || Musica.atual.id !== 'festival')) Musica.trocar('festival'); }
+  else if (Musica.atual && Musica.atual.id === 'festival' && !cine) Musica.parar();
+  if (!perto) return;
+  // o vapor do panelão e os cozinheiros mexendo
+  if ((V.vapor -= dt) <= 0){ V.vapor = 0.18; particula(V.panela.x + rnd(-0.12, 0.12), V.panela.y, V.panela.z + rnd(-0.12, 0.12), 0xf4f4f0, 0.9); }
+  for (const q of V.cozinheiros){ if (q.update) q.update(dt, t); if (q.bD && q === V.chef) q.bD.rotation.set(-1.3 + Math.sin(t * 5) * 0.4, 0, 0.3); }
+  for (const j of V.gente){ if (j.mesa) animarPlateia(j, dt, t); else passearFestival(j, dt, t); }
+  if ((V.fala -= dt) <= 0){
+    V.fala = rnd(2.5, 4.5);
+    if (V.chef && Math.random() < 0.3){ const f = variar(FALAS_PATRINHO_FESTIVAL); falar(V.chef, f, tempoDeLeitura(f)); V.chef.aceno = 1.5; }
+    else falaPlateia(V, FALAS_FESTIVAL, FALAS_FESTIVAL_PORCO);
+  }
+}
+// um visitante passeando: vai até a frente de uma barraca, espera um pouco e vai para outra
+function passearFestival(j, dt, t){
+  const dx = j.alvo[0] - j.x, dz = j.alvo[1] - j.z, d = Math.hypot(dx, dz), passo = j.vel * 0.45 * dt;
+  if (d > passo){ j.x += dx / d * passo; j.z += dz / d * passo; j.ang = Math.atan2(dx, dz); j.correndo = true; }
+  else { j.correndo = false; if ((j.espera -= dt) <= 0){ j.espera = rnd(4, 9); const b = sorteia(festivalVis.barracas), lado = b.B.uv[0] < 0 ? 1 : -1; j.alvo = festivalEm(b.B.uv[0] + lado * rnd(0.9, 1.5), b.B.uv[1] + rnd(-0.5, 0.5)); j.olha = [b.x, b.z]; } else if (j.olha) j.ang = anguloPerto(j.ang, Math.atan2(j.olha[0] - j.x, j.olha[1] - j.z), 0.1); }
+  animarJogador(j, dt, t);
+}
+// tocar numa barraca (ou na cozinha): o prato e "Provar" (uma vez por barraca no dia, o Ed vai até lá e come)
+function itensFestival(i){
+  const F = S.festival, M = F && F.marcado, V = festivalVis;
+  const r = { titulo: i < 0 ? 'Cozinha do chef Patrinho' : BARRACAS_FESTIVAL[i].nome, icone: 'patrinho', itens: [] };
+  if (!M || !V){ r.estado = 'O festival já acabou.'; return r; }
+  if (i < 0){ r.estado = `Hoje o cardápio é: ${M.pratos.map(p => p.nome.toLowerCase()).join(', ')}. Tudo com ingredientes da Fazenda Joli Pig.`; return r; }
+  const P = M.pratos[i], provou = M.provados.includes(i), livre = ed.estado === 'parado' && !tarefaAtual && ed.g.visible && !ed.sentado;
+  r.estado = `Hoje tem ${P.nome.toLowerCase()}, feito com ${PRODUTOS[P.k].plural} da fazenda.`;
+  r.itens.push({ rotulo: provou ? 'Já provou hoje' : `Provar: ${P.nome}`, sub: provou ? 'volte amanhã... ou no próximo festival' : livre ? 'o Ed vai até a barraca e come' : 'quando o Ed estiver livre', icone: P.k, off: provou || !livre, fn: () => provarFestival(i) });
+  return r;
+}
+const FALAS_ED_PROVA = ['Hummm! Que delícia!', 'Aoooa! Isso tá bom demais!', 'Patrinho, você é um gênio!', 'Esse é da minha fazenda, sabia?', 'Quero mais um!', 'Oinc! Que tempero!',
+  'Nunca comi nada tão gostoso!', 'Vou contar pro Beto!', 'Que orgulho dos ingredientes!', 'Delícia de festival!', 'Isso merece um prêmio!', 'Tá quentinho e cheiroso!', 'Hum, dá para sentir o carinho.',
+  'Que sabor de roça!', 'Vou pedir a receita!', 'Minha barriga agradece!', 'Esse prato tem gosto de família.', 'Aoooa! Maravilha!', 'Hmmm... só mais um pedacinho.', 'Perfeito, irmãozinho!'];
+function provarFestival(i){
+  const F = S.festival, M = F && F.marcado, V = festivalVis; if (!M || !V || M.provados.includes(i)) return;
+  const B = V.barracas[i], lado = B.B.uv[0] < 0 ? 1 : -1, [x, z] = festivalEm(B.B.uv[0] + lado * 1, B.B.uv[1]);
+  andarAte(ed, x, z, () => {
+    if (!festivalVis || M.provados.includes(i)) return;
+    ed.olhar(B.x, B.z); ed.trabalhar(1.6, 'comer', () => {
+      M.provados.push(i); const xp = Math.max(5, Math.round((xpPara(nivel() + 1) - xpPara(nivel())) * FESTIVAL.provar));
+      ganharXP(xp, ed.topo()); const f = variar(FALAS_ED_PROVA); falar(ed, f, tempoDeLeitura(f)); salvar();
+    });
+  });
+}
+// o texto e os itens do portal sobre o festival
+function festivalNoPortal(r){
+  const F = S.festival; if (!F) return;
+  if (F.pedido){ const d = F.pedido.prazo - diaAtual(); r.estado += ` O Patrinho encomendou ingredientes para um festival gastronômico (prazo: ${d > 0 ? `${d} ${d > 1 ? 'dias' : 'dia'}` : 'hoje'}).`; r.itens.push({ rotulo: 'Encomenda do Patrinho', sub: faltaFestival(F.pedido).length ? 'ainda falta coisa no celeiro' : 'já tem tudo: mandar!', icone: 'patrinho', fn: () => abrirEncomendaPatrinho() }); }
+  else if (F.marcado){ r.estado += festivalHoje() ? (festivalAberto() ? ' O festival gastronômico do Patrinho está acontecendo!' : ' Hoje tem o festival gastronômico do Patrinho.') : ` O festival gastronômico do Patrinho é no dia ${F.marcado.dia + 1}.`; if (festivalAberto() && festivalVis) r.itens.push({ rotulo: 'Visitar o festival', sub: 'a câmera vai até lá', icone: 'patrinho', leve: true, fn: () => { const [x, z] = festivalEm(...FESTIVAL.olhar); cam.alvo.set(x, 0, z); cam.vista = Math.min(cam.vista, 7); } }); }
 }
 // ================= o recanto do fundo da mata (o Lucas pediu): o fundo da primeira coluna da mata, atrás da cachoeira, não
 // tinha trilha. Agora uma trilha sai do fim da trilha do meio (a parcela do nível 44), passa atrás do lago da cachoeira e
@@ -16240,6 +16468,12 @@ const TEMAS = {
     { tipo: 'square', vol: 0.024, leg: 0.55, notas: 'G4:.5 C5:.5 E5:.5 G5:.5 F5:.5 E5:.5 D5:1 E5:.5 D5:.5 C5:.5 B4:.5 A4:1 G4:1 A4:.5 B4:.5 C5:.5 D5:.5 E5:1 C5:1 D5:.5 C5:.5 B4:.5 D5:.5 C5:2' },
     { tipo: 'triangle', vol: 0.05, leg: 0.5, notas: 'C3:.5 G3:.5 C3:.5 G3:.5 C3:.5 G3:.5 C3:.5 G3:.5 G2:.5 D3:.5 G2:.5 D3:.5 G2:.5 D3:.5 G2:.5 D3:.5 C3:.5 G3:.5 C3:.5 G3:.5 F2:.5 C3:.5 F2:.5 C3:.5 G2:.5 D3:.5 G2:.5 D3:.5 C3:.5 G3:.5 C3:.5 G3:.5' },
     { tipo: 'x', vol: 0.03, notas: 'r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5' } ] },
+  // Festival gastronômico: chorinho de cozinha em ré maior (o cavaquinho na onda quadrada, o violão de sete cordas no
+  // triângulo e o pandeiro)
+  festival: { bpm: 116, ganho: 1.2, loop: true, faixas: [
+    { tipo: 'square', vol: 0.02, leg: 0.5, notas: 'A4:.5 D5:.5 F#5:.5 A5:.5 G5:.5 F#5:.5 E5:1 C#5:.5 E5:.5 G5:.5 B5:.5 A5:.5 G5:.5 F#5:1 F#5:.5 A5:.5 D6:.5 A5:.5 B5:.5 A5:.5 G5:.5 E5:.5 C#5:.5 E5:.5 A4:.5 C#5:.5 D5:2' },
+    { tipo: 'triangle', vol: 0.05, leg: 0.6, notas: 'D3:1 A2:1 D3:1 A2:1 A2:1 E3:1 A2:1 C#3:1 D3:1 F#3:1 G2:1 B2:1 A2:1 E3:1 D3:2' },
+    { tipo: 'x', vol: 0.03, notas: 'x:.25 r:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.25' } ] },
   // O irmão arteiro: marchinha travessa em mi menor, na ponta dos pés: o fagote em staccato subindo de meio em meio tom
   // (quem chega de mansinho) e o baixo em pizzicato
   kevin: { bpm: 118, ganho: 1.1, loop: true, faixas: [
@@ -17628,7 +17862,7 @@ function executarTirarCerca(){
   setTimeout(() => aviso('O matagal foi embora e o terreno agora faz parte da fazenda!', 'grande', 3.5), tempoDeLeitura(fala) * 1000);
   // o terreno limpo já mostra o que dá para comprar nele
   montarPlacasPomar(); montarLotes(); montarPlacasCercados(); montarDestinos();
-  montarEspacoEventos(); arrumarEspacoEventos(); agendarFeiraAgro();
+  montarEspacoEventos(); arrumarEspacoEventos(); agendarFeiraAgro(); agendarFestival();
   COLMEIA_SLOTS.forEach((_, i) => { if (i >= COLMEIA_CANTO) montarColmeia(i); });
   S.avisoLotesCanto = true; setTimeout(avisoLotesCanto, tempoDeLeitura(fala) * 1000 + 4000);
   hud(); salvar();
@@ -24026,7 +24260,7 @@ const CENAS = {
     // no fim da tarde ou de noite (antes da hora de nanar), com o terreno novo limpo, o Milton sem visita e o disco longe (o
     // ETzinho vem com ele para a festa)
     // o Hud e o Dani na rua largam o que fazem e vão para a festa (montarArraia)
-    pronta: () => nivel() >= ARRAIA.nivel && S.canto === 2 && (S.relogio || 0) >= ARRAIA.inicio && (S.relogio || 0) < ARRAIA.fim && aviaoLivre() && !(discoJogo && discoJogo.t >= 0) && !FEIRA_AGRO_VIS.montada && !rave,
+    pronta: () => nivel() >= ARRAIA.nivel && S.canto === 2 && (S.relogio || 0) >= ARRAIA.inicio && (S.relogio || 0) < ARRAIA.fim && aviaoLivre() && !(discoJogo && discoJogo.t >= 0) && !FEIRA_AGRO_VIS.montada && !festivalVis && !rave,
     podeRever: () => (!aviaoLivre() ? 'Dá para rever quando o Milton decolar.' : discoJogo && discoJogo.t >= 0 ? 'Dá para rever quando o disco voador for embora.' : null),
     get falas(){ return arraia && arraia.falas ? arraia.falas : FALAS_ARRAIA(); },
     foco(c){
@@ -29068,7 +29302,7 @@ function ganharXP(n, pos){
 function subiuNivel(n){
   Som.nivel(); if (ed) ed.pulo = 0.45;
   if (abrirRecanto()) montarAbelhasJatai();
-  agendarFeiraAgro();
+  agendarFeiraAgro(); agendarFestival();
   const libs = [];
   for (const k of ORDEM_CULTURAS) if (CULTURAS[k].nivel === n) libs.push(CULTURAS[k].nome);
   for (const k in ANIMAIS) if (ANIMAIS[k].nivel === n) libs.push(ANIMAIS[k].nome);
@@ -29266,6 +29500,8 @@ function itensPrometidos(){
   const l = [];
   for (const p of S.pedidos || []) if (p && p.itens) l.push(...p.itens);
   const E = S.encomendaEt; if (E && E.estado === 'nova' && E.itens) l.push(...E.itens);
+  // a encomenda do Patrinho para o festival, até o Ed mandar
+  const Fe = S.festival && S.festival.pedido; if (Fe && Fe.itens) l.push(...Fe.itens);
   return l;
 }
 // o que os pedidos em aberto ainda pedem de cada cultura, descontando o celeiro e o que vai sair dos canteiros
@@ -29646,6 +29882,7 @@ function itensDoAlvoBase(alvo){
   if (alvo.k === 'rave') return itensRave();
   if (alvo.k === 'noite') return itensNoite();
   if (alvo.k === 'barracaEt') return itensBarracaEt(alvo.i);
+  if (alvo.k === 'festival') return itensFestival(alvo.i);
   if (alvo.k === 'irrigador'){
     r.titulo = 'Irrigador automático'; r.icone = 'irrigador';
     r.estado = 'Rega sozinho os 16 canteiros deste terreno, e cada rega dá 1 xp. O mato continua por conta do Ed.';
@@ -30170,6 +30407,7 @@ function lembretes(){
   if (sede) out.push(['gota', `regar ${plural(sede, 'plantinha com sede', 'plantinhas com sede')}`]);
   if (mato) out.push(['mato', `tirar o mato de ${plural(mato, 'canteiro', 'canteiros')}`]);
   if (vazios) out.push(['semente', `plantar em ${plural(vazios, 'canteiro vazio', 'canteiros vazios')}`]);
+  if (S.festival && S.festival.pedido) out.push(['patrinho', faltaFestival(S.festival.pedido).length ? 'juntar a encomenda do Patrinho para o festival' : 'mandar a encomenda do Patrinho (já tem tudo!)']);
   for (const tp in ANIMAIS){
     const A = ANIMAIS[tp];
     const fome = ANI.filter(a => a.d.tipo === tp && a.d.e === 'fome').length, prontos = ANI.filter(a => a.d.tipo === tp && a.d.e === 'pronto').length;
@@ -30303,6 +30541,14 @@ function abrirCaderno(pagina){
       h += `<ul>${E.itens.map(([k, q]) => { const ok = (S.celeiro[k] || 0) >= q; return `<li class="${ok ? 'feito' : ''}"><span class="caixa">${ok ? '✓' : ''}</span><img src="${icone(k)}" alt=""><span class="texto">${esc(nomeProdutoQ(k, q))}</span></li>`; }).join('')}</ul>`;
       h += `<p>Paga <span class="grifo">${reais(E.paga)}</span> e ${E.xp} xp!${E.itens.every(([k, q]) => (S.celeiro[k] || 0) >= q) ? ' Já tenho tudo!!' : ''}</p>`;
     }
+    // a encomenda do Patrinho para o festival gastronômico
+    const Fe = S.festival && S.festival.pedido;
+    if (Fe){
+      const d = Fe.prazo - diaAtual();
+      h += `<p><b style="color:#b0405a">Encomenda do Patrinho</b> <small>(para o festival; prazo: ${d > 0 ? `${d} ${d > 1 ? 'dias' : 'dia'}` : 'hoje'})</small></p>`;
+      h += `<ul>${Fe.itens.map(([k, q]) => { const ok = (S.celeiro[k] || 0) >= q; return `<li class="${ok ? 'feito' : ''}"><span class="caixa">${ok ? '✓' : ''}</span><img src="${icone(k)}" alt=""><span class="texto">${esc(nomeProdutoQ(k, q))}</span></li>`; }).join('')}</ul>`;
+      h += `<p>Paga <span class="grifo">${reais(Fe.paga)}</span> e ${Fe.xp} xp! <button class="botao mini rosa" id="jFestival" type="button">${faltaFestival(Fe).length ? 'Ver a encomenda' : 'Mandar para o Patrinho'}</button></p>`;
+    }
     h += `<h3>Oferta de hoje</h3><p>O Joli Market tá pagando mais por <span class="grifo">${PRODUTOS[of].plural}</span>.</p>`;
   }
   if (S.viuCinePelucio){
@@ -30328,6 +30574,7 @@ function abrirCaderno(pagina){
   abrirJanela(topo('caderno', 'Caderno do Ed', 'Pedidos, desenhos e objetivos', 'rosa') + abasDoCaderno('pedidos') + `<div class="janela-corpo">${h}</div>`);
   ligarAbasDoCaderno();
   $('jBeto').addEventListener('click', () => { fecharJanela(); chamarBeto(); });
+  const bfe = $('jFestival'); if (bfe) bfe.addEventListener('click', () => { Som.clique(); abrirEncomendaPatrinho(); });
   $('jCenas').addEventListener('click', () => { Som.clique(); abrirCenas(); });
   const bp = $('jPelucio'); if (bp) bp.addEventListener('click', () => { fecharJanela(); chamarPelucio(); });
   const bh = $('jHud'); if (bh) bh.addEventListener('click', () => { fecharJanela(); chamarHud(); });
@@ -30447,7 +30694,7 @@ function abrirBeto(){
   if (guardados.length){
     const { direto, ingr } = reservaPedidos(), lista = o => ORDEM_PRODUTOS.filter(p => o[p] > 0 && aceita(p)).map(p => nomeQtd(p, o[p])).join(', ');
     const a = lista(direto), b = lista(ingr);
-    const praQuem = S.encomendaEt && S.encomendaEt.estado === 'nova' ? 'os pedidos e a encomenda dos ETs' : 'os pedidos';
+    const praQuem = ['os pedidos', S.encomendaEt && S.encomendaEt.estado === 'nova' ? 'a encomenda dos ETs' : null, S.festival && S.festival.pedido ? 'a encomenda do Patrinho' : null].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' e $1');
     corpo += `<p style="margin:10px 0 0;font-weight:700;font-size:13px;color:var(--tinta-suave)">${a ? `Separado para ${praQuem}: ${a}.` : ''}${a && b ? ' ' : ''}${b ? `${a ? 'E para' : 'Separado para'} fazer o que falta: ${b}.` : ''}</p>`;
   }
   if (freguesiaAtiva()) corpo += `<p style="margin:10px 0 0;font-weight:700;font-size:13px;color:var(--tinta-suave)">Freguesia: em cada visita, o ${visita === jaca ? 'Jaca' : 'Beto'} leva até ${reais(demandaVisita())} de cada produto pelo preço cheio. O que passar disso ele paga ${Math.round(FREGUESIA.resto * 100)}%.</p>`;
@@ -31182,7 +31429,7 @@ function quadro(agoraP){
   atualizarBichosMata(dt, t);
   atualizarVisitaCachoeira(dt, t); atualizarCachoeira(dt, t);
   atualizarRelogioFoguete(dt);
-  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t); atualizarRecanto(dt, t); passoAcharEd(dt); atualizarFeiraAgro(dt, t); atualizarRave(dt, t); atualizarNoites(dt, t);
+  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t); atualizarRecanto(dt, t); passoAcharEd(dt); atualizarFeiraAgro(dt, t); atualizarFestival(dt, t); atualizarRave(dt, t); atualizarNoites(dt, t);
   atualizarBeijaFlor(dt, t);
   atualizarCurupira(dt, t);
   atualizarArteKevin(dt, t);
@@ -31368,7 +31615,7 @@ async function iniciar(){
   if (parcelaDevolvida) setTimeout(() => aviso(`A sexta parcela da mata virou uma cachoeira. Os ${reais(PARCELA_SEXTA.preco)} voltaram para você.`, 'grande', 6), 2500);
   montarMirante(); montarPlacaMirante();
   montarPlacaCanto();
-  montarEspacoEventos(); arrumarEspacoEventos(); agendarFeiraAgro();
+  montarEspacoEventos(); arrumarEspacoEventos(); agendarFeiraAgro(); agendarFestival();
   montarEnvelope(); montarCartao();
   if (!Array.isArray(S.trufas)) S.trufas = [];
   S.trufas.forEach(montarTrufa);
@@ -31488,7 +31735,7 @@ async function iniciar(){
     vagalumes: () => vagalumes, VAGALUMES, prometidos: { itensPrometidos, separadoPedidos, opcoesFrete, faltaNoPedido, caderno: abrirCaderno },
     observatorio: { PLANETARIO, desvio: desvioPlanetario, ANTENA, novaEncomenda: novaEncomendaEt, antena: () => antenaVis, caixa: () => caixaEtVis, mensagem: abrirMensagemEt, tocarUltimaCadente: () => { const E = CADENTES[CADENTES.length - 1]; if (!E) return 'sem'; const s = tela(E.m.position); return tocarCadente(s.x, s.y); }, ceu: CEU, ceuDaNoite, pedir: pedirAEstrela, realizar: realizarPedido, tocarCadente, cadentes: () => CADENTES, chuvaCena: () => chuvaCena, cometa: () => cometaVis, caderno: abrirCaderno, obsEd: () => obsEd, ocular: () => ocular, abrirOcular, fecharOcular, tocar: tocarOcular, naOcular, ASTRO, luaDoDia, ceuHoje, descobrir: descobrirAstro, vis: () => observVis, OBSERV, VOLTA, estrela: estrelaCadente, volta: () => volta, podeDevolver: podeDevolverVaca, vacas: vacasNoEspaco, luneta: lugarDaLuneta, pouso: pousoMundo, vis: () => observVis },
     obras: { OBRAS, comecar: comecarObra, terminar: terminarObra, itens: itensObraLote, lote: obraLoteEm, passo: passoObra, placas: montarPlacasObras, predio: id => montarPredio(PREDIO[id]), vis: () => obraVis, PREDIO },
-    luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, noites: { NOITES, NOITES_DEF, CINEMA, FILMES, FD, CAUSOS, CAUSOS_NOITE, ETS_NOITE, SHOW, NUMEROS_SHOW, programaShow, barraca: itensBarracaEt, comprar: comprarEt, obj: () => noite, dia: () => noiteDia, comecar: (id, chamada = true) => comecarNoite(id, chamada), acabar: () => acabarNoite(), motivo: motivoNoite, trava: travaNoiteHoje, programa: programaCinema, quadro: quadroFilme }, kevin: { obj: () => kevin, KEVIN, POSES_KEVIN, cena: () => kevinCena, posicoes: posicoesKevinCena, ARTE_KEVIN, ARTES_KEVIN, arte: () => arteKevin, prox: () => arteKevinProx, chamar: chamarKevin, encerrar: encerrarArteKevin, forcar: id => { if (arteKevin) encerrarArteKevin(); const l = ARTES_KEVIN[id].pode(); return l ? !!iniciarArteKevin(id, l) : false; }, tocar: tocarKevin }, foguete: { FOGUETE, prox: () => S.fogueteEspera, zerar: () => { S.fogueteEspera = 0; }, obj: () => foguete, falas: falasFoguete }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { passeio: { obj: () => passeio, pode: podePasseio, caminho: caminhoPasseio, VOO_PASSEIO }, frete: { opcoes: opcoesFrete, mandar: mandarFrete, pagar: pagarFrete, itens: () => { const r = { estado: '', itens: [] }; itensFrete(r); return r; } }, rega: comecarRegaAerea, faixa: passarFaixa, FAIXA, voo: () => voo, JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, encomenda: { ENCOMENDAS, encomendar, cancelar: cancelarEncomenda, itens: () => { const r = { estado: '', itens: [] }; itensEncomenda(r); return r; } }, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, dormir: pedirDormir, item: itemDormir, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
+    luma: { situ: { envelope: montarEnvelope, boca: lumaBoca, livre: pontoLumaLivre, frente: frenteLivreLuma, chamar: lumaChamar, lista: situacoesLuma, sai: lumaSaiPara, saidas: saidasLuma, LUMA_SITU, AVENTURAS, vaca: vacaParaLuma, beira: beiraDoLago, mato: matoParaLuma, canteiro: canteiroParaLuma }, sair: () => { luma.prox = 0; }, morder: () => { luma.forcarMordida = true; }, obj: () => luma, portinha: () => portinha.ang, lugares: lugaresLuma }, sementes: { lucroColheita, canteiros: canteirosPorCultura, falta: faltaPedidos, oferta: ofertaDoDia, enfileirar: (x, z, k) => enfileirar('plantar', { k: 'tile', x, z }, k, true) }, nascerTrufa, sorteioTrufa, chamarPatrinho, patrinho: () => patrinho, pilotoBistro: () => pilotoBistro, caminhaoBistro: () => caminhaoBistro, PREDIO, gerarLinkFazenda, salvar, NATIVAS, MATA_SLOTS, comprarParcela, parcelaEm, PARCELAS, rota, tipo: (x, z) => tipo(x, z), CULTURAS, FRUTIFERAS, icone, atualizarCampo, derrubarMaca, macaAtiva, cafezinho: { forcar(conv, hud, comida, dani){ cafeForca = { conv, hud, comida, dani }; proxCafezinho = 0; }, desligar(b){ proxCafezinho = b === false ? 0 : Infinity; }, prox: () => proxCafezinho, plano: () => cafe && cafe.plano, lugar: lugarCafe, lanche: () => lanchePedido, parado: () => edParadoDesde ? performance.now() - edParadoDesde : 0 }, abrirCenas, pedirCena, CENAS, cenaPedida: () => cenaPedida, desenho: () => ({ ...renderer.info.render, geos: renderer.info.memory.geometries, objetos: (() => { let n = 0; scene.traverse(() => n++); return n; })() }), malhas: () => { const out = []; scene.traverse(o => { if (!o.isMesh || !o.geometry) return; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (!v) return; const g = o.geometry, t = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o.isInstancedMesh ? o.count : 1); const w = new THREE.Vector3(); o.getWorldPosition(w); out.push([Math.round(t), o.isInstancedMesh ? 'inst' : 'mesh', +w.x.toFixed(1), +w.z.toFixed(1)]); }); return out.sort((a, b) => b[0] - a[0]); }, picoca: () => picoca, festival: { FESTIVAL, BARRACAS_FESTIVAL, estado: () => S.festival, novo: () => { const F = festival(); F.pedido = null; F.feitos = F.feitos.filter(n => n !== nivel()); agendarFestival(); return F.pedido; }, entregar: entregarFestival, montar: montarFestival, encerrar: encerrarFestival, desmontar: desmontarFestival, vis: () => festivalVis, itens: itensFestival, provar: provarFestival, abrir: abrirEncomendaPatrinho, conferir: conferirFestival }, festivalEm, noites: { NOITES, NOITES_DEF, CINEMA, FILMES, FD, CAUSOS, CAUSOS_NOITE, ETS_NOITE, SHOW, NUMEROS_SHOW, programaShow, barraca: itensBarracaEt, comprar: comprarEt, obj: () => noite, dia: () => noiteDia, comecar: (id, chamada = true) => comecarNoite(id, chamada), acabar: () => acabarNoite(), motivo: motivoNoite, trava: travaNoiteHoje, programa: programaCinema, quadro: quadroFilme }, kevin: { obj: () => kevin, KEVIN, POSES_KEVIN, cena: () => kevinCena, posicoes: posicoesKevinCena, ARTE_KEVIN, ARTES_KEVIN, arte: () => arteKevin, prox: () => arteKevinProx, chamar: chamarKevin, encerrar: encerrarArteKevin, forcar: id => { if (arteKevin) encerrarArteKevin(); const l = ARTES_KEVIN[id].pode(); return l ? !!iniciarArteKevin(id, l) : false; }, tocar: tocarKevin }, foguete: { FOGUETE, prox: () => S.fogueteEspera, zerar: () => { S.fogueteEspera = 0; }, obj: () => foguete, falas: falasFoguete }, pessoas: () => ({ ed, beto, jaca, pelucio, patrinho, maurinho, milton, hud: irmaoHud, dani: irmaoDani }), curupira: { obj: () => curupira, soltar: soltarCurupira, chamar: chamarCurupira, pegadas: () => PEGADAS.length, prox: () => proxCurupira }, destino: { definir: definirDestino, tirar: tirarDestino, escolher: escolherDestino, menu: (x, z) => itensDoAlvo({ k: 'tile', x, z }), vagas: vagasDestino, usados: lotesDestinados, vis: () => DESTINO_VIS, DESTINO }, dani: { chamar: chamarDani, ativo: daniAtivo, itens: itensDani, obj: () => irmaoDani, tarefa: () => tarefaDani, DANI }, patos: { PATO, naAgua, alturaPato, pontoNaAgua, produtos: () => produtosLiberados(), ondas: () => ONDAS.length, rampa: () => rampaPatos, placa: () => PLACA_CERCADO.patos, lote: () => itensCercadoLote('patos'), menu: () => itensPredio(PREDIO.patos), RAMPA_PATOS, SAIDA_PATOS }, mapa: { W, H, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), PREDIOS, LOTES, POMAR_SLOTS, COLMEIA_SLOTS, MATA_SLOTS, PONTE, LAGO, Z_CERCA }, beto: () => beto, caminhao: () => caminhao, caminhaoMarket: () => caminhaoMarket, mochilas: () => ({ ed: ed.mochila, chao: mochilaChao }), composteira: () => ({ cena: cine, mesh: COMP_VIS.mesh, minhocas: MINHOCAS, bolha: COMP_VIS.bolha }), somarRestos, restosDaSecagem, simularComposteira, cfgComposteira, comprarMinhocas, entregarReceita, executarFabrica, iniciarCine, pularCine, chamarMilton, voo: () => voo, milton: () => milton, jato: { passeio: { obj: () => passeio, pode: podePasseio, caminho: caminhoPasseio, VOO_PASSEIO }, frete: { opcoes: opcoesFrete, mandar: mandarFrete, pagar: pagarFrete, itens: () => { const r = { estado: '', itens: [] }; itensFrete(r); return r; } }, rega: comecarRegaAerea, faixa: passarFaixa, FAIXA, voo: () => voo, JATO_VOO, JATO, aviao: () => aviao, temJato, taxa: () => taxaPista(), intervalo: intervaloMilton, porta: portaJato, pe: peEscada, caminho: caminhoDoAviao, cena: caminhoJatoCena, pendente: jatoPendente, passo: atualizarPista, vox: vJatinho, voxTeco: vTecoTeco, camera: () => camera }, comprarColetor, comprarAutomacao, escolherRepeticao, comprarPomarLote, pausarRelogios, mostrarAjuda, explicarHud, comprarEnfeite, colocarEnfeite, encomenda: { ENCOMENDAS, encomendar, cancelar: cancelarEncomenda, itens: () => { const r = { estado: '', itens: [] }; itensEncomenda(r); return r; } }, varal: { comprar: comprarVaral, malha: () => varalMalha, ergue: () => ergueVaral, VARAL }, aposenta: { APOSENTA, LUGAR_APOSENTA, candidata: galinhaParaAposentar, pronta: aposentadoriaPronta, obj: () => aposentando, estrada: () => aposentadaNaEstrada, cartao: { chegar: chegarCartao, ler: lerCartao, abrir: abrirCartao, malha: () => cartaoMalha }, FALAS_APOSENTA_ED, FALAS_APOSENTA_GALINHA, FALAS_APOSENTA_PENSAO, FALAS_CARTAO, FALAS_ED_CARTAO }, lanternas: () => LANTERNAS, nanar: { obj: () => nanar, sono: () => sono, precisa: precisaNanar, dormir: pedirDormir, item: itemDormir, segurar: segurarFila, fator: fatorEd, olhar: olharNanar, janelas: JANELAS_CASA, NANAR, NANAR_LUGAR }, luzes: { UNI_LUZ, soltar: soltarVeiculo, caminhao: () => caminhaoMarket }, ligarModoEnfeite, reformas: { reformar, terminar: terminarObra, obra: () => S.obra, maurinho: () => maurinhoObra, garupa: () => garupa, cine: () => maurinho, vagas: vagasFab, max: maxAnimais, estado: () => obraVis, janelas: () => JANELAS_CASA, rota, pontos: id => pontosObra(id), andavel,
     // auditoria de colisões: o que o desenho de uma construção (n = nível da reforma, ou 'andaime') põe fora do terreno dela
     fora(id, n){
       const p = PREDIO[id], fab = !!FABRICAS[id], v = n === 'andaime' ? vAndaime(id) : vReforma(id, n), s = 1 / 8, h = s / 2;
@@ -31855,8 +32102,8 @@ function calendarioHTML(){
   const cel = d => {
     const ehFeira = prox != null && d === prox, talvez = prox != null && d > prox && (d - prox) % FEIRA_DIA.intervalo === 0;
     const cls = ['cal-dia', d < hoje ? 'passou' : '', d === hoje ? 'hoje' : '', ehFeira || talvez ? 'feira' : '', talvez ? 'talvez' : ''].filter(Boolean).join(' ');
-    const ic = teve.has(d) ? 'moeda' : ehFeira || talvez ? 'caminhao' : null;
-    return `<div class="${cls}" title="Dia ${d + 1}${d === hoje ? ' (hoje)' : ''}${ehFeira ? ': dá para ir à feira' : talvez ? ': provável feira' : teve.has(d) ? ': teve feira' : ''}">${d + 1}${ic ? `<img src="${icone(ic)}" alt="">` : ''}</div>`;
+    const fest = festivalNoDia(d), ic = fest ? 'patrinho' : teve.has(d) ? 'moeda' : ehFeira || talvez ? 'caminhao' : null;
+    return `<div class="${cls}" title="Dia ${d + 1}${d === hoje ? ' (hoje)' : ''}${fest ? ': festival do Patrinho' : ehFeira ? ': dá para ir à feira' : talvez ? ': provável feira' : teve.has(d) ? ': teve feira' : ''}">${d + 1}${ic ? `<img src="${icone(ic)}" alt="">` : ''}</div>`;
   };
   let h = `<div class="cal">${DIAS_SEMANA.map(n => `<div class="cal-sem">${n}</div>`).join('')}${Array.from({ length: 14 }, (_, i) => cel(ini + i)).join('')}</div>`;
   let txt;
@@ -31868,13 +32115,14 @@ function calendarioHTML(){
       : k === 1 ? `A próxima feira é amanhã, ${DIAS_SEMANA_LONGO[prox % 7]} (dia ${prox + 1}).` : `A próxima feira é daqui a ${k} dias, ${DIAS_SEMANA_LONGO[prox % 7]} (dia ${prox + 1}).`;
     txt += ' A feira acontece de 7 em 7 dias, contados do dia em que a família foi; um dia sem ir não se perde, ela fica esperando.';
   }
+  if (S.festival && S.festival.marcado){ const d = S.festival.marcado.dia - hoje; txt += ` O festival gastronômico do Patrinho é ${d <= 0 ? 'hoje' : d === 1 ? 'amanhã' : `daqui a ${d} dias`}, no espaço de eventos (o rostinho dele no calendário).`; }
   return h + `<p>${txt}</p>`;
 }
 const podeLevarNaFeira = p => !!PRODUTOS[p].venda && !PRODUTOS[p].so;
 // no menu da casa, a partir do nível da feira
 function itemFeira(){
   const falta = diasParaFeira();
-  const motivo = feiraPedida ? 'a família já vai sair' : feiraAgroHoje() && (S.relogio || 0) < FEIRA_AGRO.fecha ? 'hoje tem Feira Agronômica no espaço de eventos' : falta ? `de novo em ${falta} ${falta > 1 ? 'dias' : 'dia'}` : (S.relogio || 0) >= FEIRA_DIA.ateHora ? 'só até o meio da tarde' : null;
+  const motivo = feiraPedida ? 'a família já vai sair' : feiraAgroHoje() && (S.relogio || 0) < FEIRA_AGRO.fecha ? 'hoje tem Feira Agronômica no espaço de eventos' : festivalHoje() && (S.relogio || 0) < FESTIVAL.fecha ? 'hoje tem o festival do Patrinho no espaço de eventos' : falta ? `de novo em ${falta} ${falta > 1 ? 'dias' : 'dia'}` : (S.relogio || 0) >= FEIRA_DIA.ateHora ? 'só até o meio da tarde' : null;
   return { rotulo: 'Dia de Feira', sub: motivo || 'vender a sobra do celeiro na feira da cidade', icone: 'caminhao', off: !!motivo, fn: abrirCargaFeira };
 }
 // a janela da carga: até FEIRA_DIA.produtos produtos da sobra, até maxQtd de cada. A barraca do Ed na Feira Agronômica usa a
