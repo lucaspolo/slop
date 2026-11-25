@@ -7111,7 +7111,9 @@ function vPainelSolar(){
 // no preço; os outros vendem enfeites que não tem na loja e coisas para a fazenda. À tarde (juri), os jurados anunciam o
 // concurso de produtos (cena concursoAgro) com o produto que o Ed inscreveu. Visitantes passeiam pelas barracas. No fim, o
 // que sobrou na barraca volta para o celeiro. Estado em S.feiraAgro; o resto (barracas, gente) só na memória
-const FEIRA_AGRO = { abre: 0.1, juri: 0.48, fecha: 0.66, bonus: 1.25, venda: [9, 15], xpItem: 0.0015, gente: 44, some: 4, rivais: 4,
+// abre assim que o Ed acorda (NANAR.acorda é 0,03; NANAR fica mais abaixo no arquivo)
+const NANAR_ACORDA_AGRO = 0.03;
+const FEIRA_AGRO = { abre: NANAR_ACORDA_AGRO, juri: 0.48, fecha: 0.66, bonus: 1.25, venda: [9, 15], xpItem: 0.0015, gente: 44, some: 4, rivais: 4,
   premios: [{ nome: 'ouro', cor: 0xf2c335, din: 250, xp: 0.1 }, { nome: 'prata', cor: 0xd8dde2, din: 150, xp: 0.06 }, { nome: 'bronze', cor: 0xd08a4a, din: 80, xp: 0.03 }], mencao: 0.01,
   palco: zp('festa', 11, 15.6), juiz: 49, edConcurso: zp('festa', 11, 13.3), compra: 0.85 };
 // as barracas (zona festa), em quarteirões dos dois lados do caminho do portal, com corredores entre as fileiras (o Lucas
@@ -7177,6 +7179,7 @@ const feiraAgro = () => S.feiraAgro || (S.feiraAgro = { feitas: [], marcada: nul
 const feiraAgroHoje = () => { const F = feiraAgro(); return !!F.marcada && diaAtual() === F.marcada.dia; };
 const feiraAgroAberta = () => feiraAgroHoje() && (S.relogio || 0) >= FEIRA_AGRO.abre && (S.relogio || 0) < FEIRA_AGRO.fecha;
 const xpDoNivel = () => XP_BASE_FEIRA() / FEIRA_DIA.xp;
+const barracaEdAgro = () => FEIRA_AGRO_VIS.barracas.find(b => b.P.id === 'ed');
 const FEIRA_AGRO_VIS = { montada: false, g: null, barracas: [], gente: [], fora: 0, venda: 0, conferir: 0, trofeu: null };
 // marca a feira do nível de agora para amanhã, se ainda não teve
 function agendarFeiraAgro(){
@@ -7194,11 +7197,16 @@ function conferirFeiraAgro(dt){
   const rel = S.relogio || 0, passou = diaAtual() > F.marcada.dia || (feiraAgroHoje() && rel >= FEIRA_AGRO.fecha);
   if (passou){
     if (F.marcada.montou) encerrarFeiraAgro();
-    else { F.marcada.dia = diaAtual() + (rel >= FEIRA_AGRO.fecha ? 1 : 0); salvar(); }
+    else {
+      // o dia passou sem a feira abrir (o jogo fechado, a viagem do Dia de Feira, o resgate): ela fica para o próximo dia
+      F.marcada.dia = diaAtual() + (rel >= FEIRA_AGRO.fecha ? 1 : 0); salvar();
+      aviso(F.marcada.dia > diaAtual() ? 'A Feira Agronômica não deu para acontecer hoje e ficou para amanhã.' : 'A Feira Agronômica que ficou para trás acontece hoje!', 'grande', 6);
+    }
     return;
   }
+  if (feiraAgroHoje() && !F.marcada.avisou){ F.marcada.avisou = true; salvar(); if (rel < FEIRA_AGRO.abre) aviso('Hoje tem Feira Agronômica Sustentável! Ela abre logo cedo, no espaço de eventos.', 'grande', 6); }
   if (!feiraAgroAberta()) return;
-  if (!V.montada) montarFeiraAgro();
+  if (!V.montada || !V.barracas.length){ if (V.montada) desmontarFeiraAgro(); montarFeiraAgro(); }
   // a barraca do Ed vende sozinha, para quem passa
   if ((V.venda -= dt) <= 0){ V.venda = rnd(...FEIRA_AGRO.venda); venderBancaAgro(); }
   // o concurso: com produto inscrito, a cena; sem, o resultado chega num aviso
@@ -7212,7 +7220,9 @@ function montarFeiraAgro(){
   montarEspacoEventos();
   V.montada = true; V.concursoPedido = false; V.venda = rnd(...FEIRA_AGRO.venda);
   const g = new THREE.Group(); scene.add(g); V.g = g;
-  V.barracas = PRODUTORES_AGRO.map((P, i) => montarBarracaAgro(P, i, g));
+  V.barracas = [];
+  PRODUTORES_AGRO.forEach((P, i) => { try { V.barracas[i] = montarBarracaAgro(P, i, g); } catch (e){ console.error('barraca', P.id, e); } });
+  V.barracas = V.barracas.filter(Boolean);
   // o palco do concurso, com a agrônoma atrás da mesa dos jurados
   const [px, pz] = FEIRA_AGRO.palco, palco = new THREE.Group();
   palco.add(malha(geo('palcoAgro', () => vPalcoAgro().build(1 / 16, { origin: [0.5, 0, 0.5] }))));
@@ -7276,14 +7286,14 @@ function miniaturaAgro(k){
 }
 // os produtos da barraca do Ed: até três miniaturas dos que têm mais
 function mostrarBancaEd(B){
-  B = B || FEIRA_AGRO_VIS.barracas[0]; if (!B) return;
+  B = B || barracaEdAgro(); if (!B) return;
   B.balcao.clear();
   const F = feiraAgro(), l = Object.keys(F.banca).filter(k => F.banca[k] > 0).sort((a, b) => F.banca[b] - F.banca[a]).slice(0, 3);
   l.forEach((k, n) => { const m = miniaturaAgro(k); m.position.x = (n - (l.length - 1) / 2) * 0.5; B.balcao.add(m); });
 }
 // o troféu do concurso fica na barraca do Ed até o fim da feira
 function mostrarTrofeuAgro(){
-  const F = feiraAgro(), V = FEIRA_AGRO_VIS, B = V.barracas[0];
+  const F = feiraAgro(), V = FEIRA_AGRO_VIS, B = barracaEdAgro();
   if (!B || !F.resultado || !(F.resultado.lugar >= 0 && F.resultado.lugar < 3) || V.trofeu) return;
   const m = malha(geo('trofeu' + F.resultado.lugar, () => vTrofeu(F.resultado.lugar).build(1 / 40, { origin: [0.5, 0, 0.5] })));
   m.position.set(0.62, 9 / 16, 0.1); B.g.add(m); V.trofeu = m;
@@ -7316,7 +7326,7 @@ function venderBancaAgro(){
   const q = Math.min(F.banca[k], 1 + Math.floor(Math.random() * 3)), valor = Math.round(preco(k) * FEIRA_AGRO.bonus) * q;
   F.banca[k] -= q; if (!F.banca[k]) delete F.banca[k];
   F.vendidos += q; F.ganho += valor; S.dinheiro += valor;
-  const B = FEIRA_AGRO_VIS.barracas[0], xp = Math.max(1, Math.round(xpDoNivel() * FEIRA_AGRO.xpItem * q));
+  const B = barracaEdAgro(), xp = Math.max(1, Math.round(xpDoNivel() * FEIRA_AGRO.xpItem * q));
   if (B){
     const pos = B.topo();
     if (naTelaBicho(pos)){ flutuar(pos, '+' + reais(valor), '', k); B.salto = 0.45; Som.moeda(); if (B.porco && Math.random() < 0.3){ const f = variar(FALAS_BETO_FEIRA); falar(B.porco, f, tempoDeLeitura(f)); } }
@@ -7332,7 +7342,7 @@ function precoAgro(it){
   return Math.round(PRODUTOS[it.prod].venda * it.q * FEIRA_AGRO.compra);
 }
 function comprarAgro(i, n){
-  const P = PRODUTORES_AGRO[i], it = P.vende[n], v = precoAgro(it), B = FEIRA_AGRO_VIS.barracas[i];
+  const P = PRODUTORES_AGRO[i], it = P.vende[n], v = precoAgro(it), B = FEIRA_AGRO_VIS.barracas.find(b => b.P === P);
   if (S.dinheiro < v){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return; }
   gastar(v); chipPulsa('chipDinheiro'); Som.moeda();
   const pos = B ? B.topo() : ed.g.position.clone();
@@ -30075,7 +30085,7 @@ const podeLevarNaFeira = p => !!PRODUTOS[p].venda && !PRODUTOS[p].so;
 // no menu da casa, a partir do nível da feira
 function itemFeira(){
   const falta = diasParaFeira();
-  const motivo = feiraPedida ? 'a família já vai sair' : falta ? `de novo em ${falta} ${falta > 1 ? 'dias' : 'dia'}` : (S.relogio || 0) >= FEIRA_DIA.ateHora ? 'só até o meio da tarde' : null;
+  const motivo = feiraPedida ? 'a família já vai sair' : feiraAgroHoje() && (S.relogio || 0) < FEIRA_AGRO.fecha ? 'hoje tem Feira Agronômica no espaço de eventos' : falta ? `de novo em ${falta} ${falta > 1 ? 'dias' : 'dia'}` : (S.relogio || 0) >= FEIRA_DIA.ateHora ? 'só até o meio da tarde' : null;
   return { rotulo: 'Dia de Feira', sub: motivo || 'vender a sobra do celeiro na feira da cidade', icone: 'caminhao', off: !!motivo, fn: abrirCargaFeira };
 }
 // a janela da carga: até FEIRA_DIA.produtos produtos da sobra, até maxQtd de cada. A barraca do Ed na Feira Agronômica usa a
