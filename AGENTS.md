@@ -86,21 +86,50 @@ O motor da simulação fica entre `// ===== MOTOR INÍCIO =====` e `// ===== MOT
 
 ### Casa ao Sol
 
-Editor de planta com sol e sombras. O motor fica no `<script id="sim-src">` (o objeto `CasaSim`) e não toca no DOM nem no three.js, então dá para carregar esse trecho no node e testar. Ele cuida de:
+Editor de planta com sol, sombras, medidores de luz e mapa de luz. O motor fica no `<script id="sim-src">` (o objeto `CasaSim`) e não toca no DOM nem no three.js, então dá para carregar esse trecho no node e testar. Ele cuida de:
 
 - posição do sol, com as fórmulas do SunCalc (azimute convertido para a partir do norte), nascer, pôr e trajetória do dia;
 - normalização da planta: pontas fundidas num nó, paredes partidas nos cruzamentos e nos T, duplicadas removidas, trechos alinhados emendados e aberturas presas dentro das suas paredes;
-- cômodos como faces do grafo das paredes; um grupo de paredes solto dentro de um cômodo (um pátio) vira furo nele;
-- peças das paredes em volta das aberturas e contorno da cobertura, pelo clipper-lib, que entra como parâmetro.
+- áreas como faces do grafo das paredes e das divisas; um grupo de paredes solto dentro de uma área (um pátio) vira furo nela;
+- encaixe do cursor (`encaixar`), que com `faces: true` atrai para as faces das paredes em vez do eixo, e os cantos dessas faces (`cantosDasFaces`), que é o que a régua usa;
+- peças das paredes em volta das aberturas e contorno da cobertura, pelo clipper-lib, que entra como parâmetro;
+- luz natural num ponto, em lux (seção "Luz natural" do motor, a partir de `cenaLuz`);
+- o que sai dessa luz: a série do dia (`luzDoDia`, `resumoDoDia`), as horas de sol direto num ponto ou num vidro (`horasDeSol`), a vista do céu de um ponto (`vistaDoCeu`) e os pontos do mapa de luz (`gradeDoComodo`, `prepararPonto`, `lerPonto`).
 
 Regras da página:
 
-- O modelo salvo (no `localStorage` e no JSON exportado) guarda paredes, aberturas, árvores, cobertura, local e as âncoras dos cômodos (`comodos`: um ponto, o nome e se é coberto). Os cômodos são recalculados a cada mudança, e a âncora dá nome e cobertura ao cômodo que contém o ponto.
+- O modelo salvo (no `localStorage` e no JSON exportado) guarda paredes, aberturas, árvores, cobertura, local, os medidores de luz (`medidores`: posição, altura do sensor, nome e a meta em lux, 0 quando não tem), as réguas (`reguas`: as duas pontas) e as âncoras das áreas (`comodos`: um ponto, o nome, `coberto`, `externo` e o acabamento do piso e do teto). As áreas são recalculadas a cada mudança, e a âncora dá nome, tipo e acabamento à área que contém o ponto.
+- Uma parede com `tipo: 'divisa'` é uma linha que fecha uma área sem ser parede (a boca de um corredor, a frente de uma varanda, dois ambientes de um salão). Mora em `paredes` para os nós, os cruzamentos e as áreas saírem da mesma conta, mas não tem corpo: não barra luz, não aceita abertura e no 3D é só uma faixa no chão. Código novo que trate parede como coisa sólida tem de pular as divisas (`ehDivisa`).
+- A área tem três tipos, tirados de `coberto` e `externo`: cômodo fechado (coberto), área coberta e aberta como uma varanda (coberto e externo) e área descoberta como um quintal (sem coberto). Muro é parede com outra altura.
+- Área sem âncora nasce cômodo fechado, a não ser que uma divisa a deixe aberta para fora de todas as áreas ou para uma área que não é cômodo fechado; aí nasce descoberta. `aplicar` chama `fixarAreas`, que dá a toda área nova uma âncora com o tipo de nascença. ⚠️ Sem isso o tipo era recalculado sempre, e marcar o corredor como coberto punha cobertura no quintal vizinho.
+- As réguas são desenhadas num SVG por cima da cena (`#reguas`), não no three.js, para o traço ter sempre o mesmo tamanho na tela e nada da casa o esconder. A régua é escolhida pelo rótulo; pelo traço ela só ganha do piso de uma área e da copa de uma árvore, para uma régua encostada numa parede não impedir de escolher a parede.
 - Toda mudança passa por `aplicar`, que normaliza, recalcula, reconstrói a cena e guarda o passo para desfazer.
 - A planta fica no plano (x, z), com z crescendo para baixo na tela. `local.norte` diz para onde aponta o norte, em graus no sentido horário a partir do alto da planta.
 - "Ver por dentro" troca o material da cobertura por um que não escreve cor nem profundidade: ela some da imagem, mas continua no mapa de sombras.
-- Só cômodo coberto conta como lado de dentro: a aba (brise) de uma janela vai para o lado que não é cômodo coberto.
-- Os valores térmicos dos materiais (U, capacidade térmica, fator solar do vidro e absortância das cores) são típicos e aproximados. Estão guardados para as próximas etapas: luz natural em cada cômodo, calor ao longo do dia e ventilação.
+- Só cômodo fechado conta como lado de dentro: a aba (brise) de uma janela vai para o lado que não é cômodo fechado, seja a rua, um quintal ou uma varanda.
+- Os valores térmicos dos materiais (U, capacidade térmica, fator solar do vidro e absortância das cores) são típicos e aproximados. Estão guardados para as próximas etapas: calor ao longo do dia e ventilação. A luz já usa a absortância (a parede devolve `1 - abs` da luz) e a transmissão do vidro (`tv`).
+
+Medidores de luz (a leitura é a iluminância na horizontal, na altura do sensor):
+
+- A leitura soma três partes: o sol direto, o céu que o ponto enxerga (de frente ou pelos vidros) e a luz refletida dentro do cômodo coberto.
+- Quanta luz há no céu vem do modelo da IES (RP-21); como ela se espalha, do céu geral da CIE (tipos 12, 7 e 1 para limpo, parcial e encoberto). A condição do céu fica na barra de baixo, junto da data e da hora, e é guardada com elas, fora do modelo.
+- `tracar` segue um raio contra as paredes (com o rebaixo do vão, o caixilho e o montante), a laje, as abas e as árvores. Porta comum conta fechada; cada vidro desconta a sua transmissão, que cai com a inclinação do raio.
+- A luz refletida é uma estimativa pelo método do fluxo dividido: o que entra pelos vidros, depois do primeiro rebate, espalhado por igual no cômodo. Por isso ela é a mesma em todos os pontos de um cômodo. Ao ar livre, numa área descoberta ou numa casa sem cobertura ela é zero. O piso e o teto de cada cômodo têm acabamento próprio (`PISOS`, `TETOS`); sem escolha valem 30% e 70%.
+- A conta da luz refletida é por zona (`prepararZona`): áreas cobertas ligadas por divisas são uma zona só, então dividir um salão com uma divisa não muda a luz. A luz entra na zona pelos vidros, pelas divisas que dão para fora dela e pela fresta em cima de uma parede mais baixa que a laje; esses vãos abertos contam como superfície que não devolve nada.
+- ⚠️ O sol direto só entra na luz refletida pelos vidros, não pelos vãos abertos. Espalhar por igual o sol que entra pela ponta de um corredor coberto fazia o corredor ler mais luz coberto do que descoberto (3.650 contra 2.660 lx no meio de um corredor de 10 m). O medidor que está no sol continua lendo o sol direto.
+- O desenho e a conta de luz usam as mesmas formas: `cobertura`, `caixaAba`, `formaArvore`, `CAIXILHO` e `profCaixilho` saem do motor. Mudou uma medida dessas, mude lá, para a sombra desenhada e a leitura continuarem batendo.
+- `prepararLuz` guarda o que só muda com a casa (o céu que cada medidor enxerga) e `lerLuz` aplica o céu do instante: animar o dia só refaz a segunda parte.
+- ⚠️ Ao mexer no motor de luz, confira de novo no node: um medidor ao ar livre tem de ler a luz de fora (`ceu.horizontal`); o céu visto pelos vidros tem de ficar a menos de 2% de uma soma de força bruta com `tracar` sobre `hemisferio(400000)`; a refletida de uma sala 4 × 4 × 2,8 m branca com uma janela de 1,2 × 1,2 m, com céu encoberto, dá perto de 1% da luz de fora, como na fórmula do BRE; e um medidor rente ao piso só lê sol direto dentro da mancha de sol que o three.js desenha.
+
+O que vem das leituras (o painel do medidor, o mapa e a planilha):
+
+- O painel do medidor mostra o dia inteiro: gráfico em escala logarítmica (o sol direto dá cem vezes a luz de dentro), tempo na meta ou acima (sem meta, acima de 300 lx), sol direto por estação e a vista do céu. O que é do dia inteiro é refeito por `campos.dia()` quando `luz.diaSujo` acende (mudou a data, o céu ou a casa); o que marca o instante, por `campos.hora()`. Painel novo que mostre algo do dia registra as suas funções em `campos`.
+- O mapa de luz (`est.mapa`, guardado fora do modelo) pinta o piso de cada cômodo com a luz a 0,75 m, numa grade de 25 cm (50 cm acima de 110 m²). Cada ponto usa a mesma conta de um medidor, então o mapa e um medidor no mesmo lugar dão o mesmo número, e a preparação anda aos poucos, 12 ms por quadro (`avancarMapa`), um cômodo de cada vez. Para animar o dia sem refazer tudo, o céu de cada ponto fica guardado em 432 pedaços e a hora só muda a luminância deles.
+- A textura do mapa guarda `log10` dos lux e o sombreador consulta a rampa de cores: as sete faixas têm borda nítida mesmo com o valor interpolado. A rampa (`LUX_CORES`) é de um matiz só, do escuro ao claro, com passos iguais de claridade; ao trocar uma cor, confira de novo a ordem e os passos.
+- O sinal da meta nunca vai só na cor: verde vem com ✓ e vermelho com ↓.
+- "Sol direto no vidro" conta o tempo em que o sol pega pelo menos um quarto do vidro. Contar qualquer réstia fazia o número pular de 2h40 para 5h20 entre os dois equinócios, que têm o mesmo sol.
+- ⚠️ Ao mexer nisso, confira de novo: o mapa contra a leitura de um medidor no mesmo ponto (os pedaços do céu erram menos de 3%), as horas de sol de um ponto ao ar livre contra a duração do dia, e a janela voltada para o equador com muito sol no inverno e nenhum no verão.
+- ⚠️ Ao mexer nas áreas, confira de novo: a casa de exemplo tem de dar as mesmas leituras (2.025, 2.472 e 936 lx em 21/06 às 10h, céu limpo); um salão dividido por uma divisa tem de dar a mesma luz do salão inteiro; uma área coberta tem de ler menos que a mesma área descoberta; e uma régua de face a face numa sala de 4 m pelo eixo, com paredes de 15 cm, tem de dar 3,85 m.
 
 ### Geradores de impressão 3D
 

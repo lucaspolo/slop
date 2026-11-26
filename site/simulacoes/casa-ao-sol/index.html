@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Casa ao Sol · slop</title>
-<meta name="description" content="Desenhe a planta de uma casa com o mouse, com paredes, janelas, portas, beirais e árvores, e veja por onde o sol entra em cada hora do dia e em cada época do ano.">
+<meta name="description" content="Desenhe a planta de uma casa com o mouse, com paredes, janelas, portas, beirais e árvores, veja por onde o sol entra em cada hora do dia e em cada época do ano e meça a luz natural, em lux, em qualquer ponto.">
 <link rel="icon" href="../../favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,6 +23,7 @@
   --sel: #2f7de1;
   --sel-claro: #e4efff;
   --mal: #d9482b;
+  --bom: #12872a;
   --ui: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --num: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   /* alturas medidas pelo script, para os painéis não se sobreporem */
@@ -37,6 +38,14 @@ body { margin: 0; overflow: hidden; background: #c9d6dc; color: var(--tinta); fo
 button, input, select { font: inherit; color: inherit; }
 #cena { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
 #rotulos { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; }
+/* réguas: um traço fino com um contorno claro em volta, para aparecer em cima de qualquer fundo */
+#reguas { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.regua path { fill: none; stroke-linecap: round; }
+.regua .halo { stroke: rgba(255, 255, 255, 0.85); stroke-width: 4.5; }
+.regua .traco { stroke: var(--tinta); stroke-width: 1.5; }
+.regua.hover .traco { stroke: var(--sel); }
+.regua.sel .traco { stroke: var(--sel); stroke-width: 2; }
+.regua.nova .traco { stroke-dasharray: 5 4; }
 
 .rot { position: absolute; left: 0; top: 0; white-space: nowrap; will-change: transform; }
 .rot-comodo { text-align: center; font-weight: 700; font-size: 12px; line-height: 1.15; color: #3d3427; text-shadow: 0 0 3px #f6efe1, 0 0 6px #f6efe1; }
@@ -46,6 +55,19 @@ button, input, select { font: inherit; color: inherit; }
 .rot-card.norte { background: var(--mal); color: #fff; }
 .rot-medida { font: 600 12px var(--num); color: #fff; background: rgba(29, 33, 40, 0.85); border-radius: 5px; padding: 2px 6px; }
 .rot-medida.sel { background: var(--sel); }
+/* leitura de um medidor de luz: fica logo acima dele */
+.rot-lux { margin-top: -22px; font: 600 12px var(--num); color: var(--tinta); background: rgba(255, 255, 255, 0.94); border: 1px solid #e3b25c; border-radius: 99px; padding: 1px 8px 1px 7px; box-shadow: 0 1px 4px rgba(30, 35, 45, 0.18); }
+.rot-lux em { font: 800 10px var(--ui); color: #8a4f00; margin-right: 5px; }
+.rot-lux.sel { border-color: var(--sel); box-shadow: 0 0 0 2px var(--sel-claro), 0 1px 4px rgba(30, 35, 45, 0.18); }
+.rot-lux.sonda { background: rgba(29, 33, 40, 0.88); color: #fff; border-color: transparent; }
+/* sinal da meta do medidor: a cor nunca vai sozinha, sempre com o ✓ ou a ↓ */
+.sinal { display: inline-grid; place-items: center; width: 13px; height: 13px; border-radius: 50%; margin-left: 5px; color: #fff; font: 800 9px/1 var(--ui); vertical-align: 1px; }
+.sinal.ok { background: var(--bom); }
+.sinal.baixo { background: var(--mal); }
+.sinal:empty { display: none; }
+/* com o mapa de luz ligado, o nome do cômodo fica claro para aparecer sobre as cores escuras */
+.rot-comodo.no-mapa { color: #fff; text-shadow: 0 0 3px #1d1206, 0 0 6px #1d1206; }
+.rot-comodo.no-mapa span { color: #f3e7d3; }
 
 .painel {
   position: fixed; z-index: 2;
@@ -66,7 +88,7 @@ button, input, select { font: inherit; color: inherit; }
 .crumbs a:hover { color: var(--tinta); }
 h1 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
 h1 i { width: 14px; height: 14px; border-radius: 50%; background: var(--sol); box-shadow: 0 0 0 4px var(--sol-claro); flex: none; }
-.ferramentas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.ferramentas { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
 .ferr {
   display: flex; flex-direction: column; align-items: center; gap: 3px;
   padding: 7px 2px 6px; border: 1px solid var(--linha); border-radius: 8px; background: var(--campo);
@@ -98,10 +120,10 @@ h1 i { width: 14px; height: 14px; border-radius: 50%; background: var(--sol); bo
 #btn-painel { display: none; }
 
 .lateral {
-  top: calc(66px + env(safe-area-inset-top, 0px));
+  top: calc(var(--vista-h) + 22px + env(safe-area-inset-top, 0px));
   right: calc(12px + env(safe-area-inset-right, 0px));
   width: 300px;
-  max-height: calc(100% - 66px - var(--tempo-h) - 34px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  max-height: calc(100% - var(--vista-h) - 22px - var(--tempo-h) - 34px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   display: flex; flex-direction: column; overflow: hidden;
 }
 .abas { display: flex; border-bottom: 1px solid var(--linha); padding: 0 6px; flex: none; }
@@ -130,6 +152,57 @@ h1 i { width: 14px; height: 14px; border-radius: 50%; background: var(--sol); bo
 .botao:hover { border-color: #b9b3a6; }
 .botao.perigo { color: var(--mal); }
 .nota { margin: 0; font-size: 12px; color: var(--suave); }
+.lux-total { margin: 0; font: 600 24px/1.1 var(--num); letter-spacing: -0.01em; }
+.lux-total small { display: block; margin-top: 2px; font: 500 12px var(--ui); letter-spacing: 0; color: var(--suave); min-height: 17px; }
+.medidores { display: flex; flex-direction: column; gap: 4px; }
+.medidor { display: flex; align-items: baseline; gap: 8px; border: 1px solid var(--linha); background: var(--campo); border-radius: 7px; padding: 5px 9px; cursor: pointer; text-align: left; }
+.medidor:hover { border-color: #b9b3a6; }
+.medidor b { font-weight: 800; }
+.medidor span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--suave); font-size: 12px; }
+.medidor output { font: 600 13px var(--num); white-space: nowrap; }
+.estado { display: flex; align-items: center; gap: 2px; margin: 0; font-size: 12px; font-weight: 700; }
+.estado .sinal { margin: 0 5px 0 0; }
+
+/* gráfico do dia: marcas finas, grade e eixos discretos, texto sempre na cor do texto */
+.grafico { display: block; width: 100%; height: auto; touch-action: none; cursor: crosshair; border-radius: 4px; }
+.grafico:focus-visible { outline: 2px solid var(--sel); outline-offset: 2px; }
+.grafico text { font: 400 9.5px var(--num); fill: var(--suave); }
+.grafico .grade { stroke: #e9e5dc; stroke-width: 1; }
+.grafico .eixo { stroke: #c4bfb3; stroke-width: 1; }
+.grafico .area { fill: var(--sel); opacity: 0.1; }
+.grafico .linha { fill: none; stroke: var(--sel); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.grafico .sol { fill: var(--sol); }
+.grafico .meta { stroke: var(--tinta); stroke-width: 1; stroke-dasharray: 4 3; }
+.grafico .agora { stroke: var(--tinta); stroke-width: 1; }
+.grafico .mira { stroke: var(--suave); stroke-width: 1; }
+.grafico .ponto { fill: var(--sel); stroke: #fcfbf8; stroke-width: 2; }
+.mira-txt { margin: 0; min-height: 34px; font-size: 12px; color: var(--suave); }
+.mira-txt b { font: 600 12px var(--num); color: var(--tinta); }
+.resumo { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.resumo b { font-weight: 800; }
+.chave { display: inline-block; width: 12px; height: 4px; margin-right: 6px; vertical-align: 3px; background: var(--sol); }
+.chave.linha { height: 2px; }
+.chave.quadro { height: 10px; width: 10px; vertical-align: -1px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(29, 33, 40, 0.15); }
+details.tabela summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--suave); }
+details.tabela table { width: 100%; margin-top: 6px; border-collapse: collapse; font: 400 11px var(--num); font-variant-numeric: tabular-nums; }
+details.tabela th { font: 800 10px var(--ui); text-transform: uppercase; letter-spacing: 0.05em; color: var(--suave); text-align: right; padding: 2px 0 4px; }
+details.tabela td { text-align: right; padding: 2px 0; border-top: 1px solid var(--linha); }
+details.tabela th:first-child, details.tabela td:first-child { text-align: left; }
+.vista-ceu { display: flex; gap: 12px; align-items: center; }
+.vista-ceu canvas { width: 132px; height: 132px; flex: none; }
+
+/* legenda do mapa de luz: fica no canto de baixo, em cima do relógio */
+.legenda {
+  left: calc(12px + env(safe-area-inset-left, 0px));
+  bottom: calc(var(--tempo-h) + 24px + env(safe-area-inset-bottom, 0px));
+  width: 290px; padding: 9px 12px 8px;
+}
+.legenda p { margin: 0 0 6px; font-size: 12px; font-weight: 700; display: flex; justify-content: space-between; gap: 8px; }
+.legenda p span { font: 400 11px var(--num); color: var(--suave); }
+.leg-barra { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.leg-barra i { height: 12px; border-radius: 2px; }
+.leg-marcas { position: relative; height: 15px; margin-top: 3px; font: 400 10px var(--num); color: var(--suave); }
+.leg-marcas span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
 .vazio { margin: 0; color: var(--suave); }
 
 .tempo {
@@ -161,7 +234,6 @@ h1 i { width: 14px; height: 14px; border-radius: 50%; background: var(--sol); bo
 }
 @media (max-width: 560px) {
   .topo { width: auto; right: calc(12px + env(safe-area-inset-right, 0px)); padding: 10px; gap: 8px; }
-  .ferramentas { grid-template-columns: repeat(7, minmax(42px, 1fr)); }
   .ferr { font-size: 10px; padding: 6px 0 5px; }
   .ferr kbd, .crumbs { display: none; }
   .dica { min-height: 0; font-size: 11px; }
@@ -190,19 +262,23 @@ h1 i { width: 14px; height: 14px; border-radius: 50%; background: var(--sol); bo
 </head>
 <body>
 <canvas id="cena" tabindex="0" aria-label="Casa em 3D com a luz e as sombras do sol na hora escolhida"></canvas>
+<svg id="reguas" aria-hidden="true"></svg>
 <div id="rotulos" aria-hidden="true"></div>
 
 <header class="topo painel">
   <nav class="crumbs" aria-label="Caminho"><a href="../../">slop</a> / <a href="../">simulações</a></nav>
   <h1><i aria-hidden="true"></i>Casa ao Sol</h1>
   <div class="ferramentas" role="toolbar" aria-label="Ferramentas de desenho">
-    <button type="button" class="ferr" data-ferr="selecionar" title="Selecionar e arrastar (V)"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.6L10 19z"/></svg>Selecionar<kbd>V</kbd></button>
-    <button type="button" class="ferr" data-ferr="parede" title="Parede (P)"><svg viewBox="0 0 24 24"><path d="M4 18V7h9v6h7"/><circle cx="4" cy="18" r="1.2"/><circle cx="20" cy="13" r="1.2"/></svg>Parede<kbd>P</kbd></button>
+    <button type="button" class="ferr" data-ferr="selecionar" title="Selecionar e arrastar (V)"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.6L10 19z"/></svg>Seleção<kbd>V</kbd></button>
+    <button type="button" class="ferr" data-ferr="parede" title="Parede ou muro (P)"><svg viewBox="0 0 24 24"><path d="M4 18V7h9v6h7"/><circle cx="4" cy="18" r="1.2"/><circle cx="20" cy="13" r="1.2"/></svg>Parede<kbd>P</kbd></button>
+    <button type="button" class="ferr" data-ferr="divisa" title="Divisa: fecha uma área sem ser parede (L)"><svg viewBox="0 0 24 24"><path d="M4 18V7h9v6h7" stroke-dasharray="2.5 3"/></svg>Divisa<kbd>L</kbd></button>
     <button type="button" class="ferr" data-ferr="retangulo" title="Cômodo retangular (R)"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="1"/></svg>Cômodo<kbd>R</kbd></button>
     <button type="button" class="ferr" data-ferr="janela" title="Janela (J)"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1"/><path d="M12 5v14M5 12h14"/></svg>Janela<kbd>J</kbd></button>
     <button type="button" class="ferr" data-ferr="porta" title="Porta (O)"><svg viewBox="0 0 24 24"><path d="M6 20V4h12v16M4 20h16"/><circle cx="15" cy="12" r="0.8"/></svg>Porta<kbd>O</kbd></button>
     <button type="button" class="ferr" data-ferr="porta-vidro" title="Porta de vidro (G)"><svg viewBox="0 0 24 24"><path d="M4 20V4h16v16M12 4v16M4 20h16M9 9l-2 2M17 9l-2 2"/></svg>Vidro<kbd>G</kbd></button>
     <button type="button" class="ferr" data-ferr="arvore" title="Árvore (A)"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="6"/><path d="M12 15v6"/></svg>Árvore<kbd>A</kbd></button>
+    <button type="button" class="ferr" data-ferr="medidor" title="Medidor de luz (M)"><svg viewBox="0 0 24 24"><path d="M4 17a8 8 0 0116 0"/><path d="M12 17l4-5"/><path d="M3 20h18"/></svg>Medidor<kbd>M</kbd></button>
+    <button type="button" class="ferr" data-ferr="regua" title="Régua: medida livre na planta (D)"><svg viewBox="0 0 24 24"><path d="M3 16.5L16.5 3l4.5 4.5L7.5 21z"/><path d="M7.5 13l2 2M10.5 10l2 2M13.5 7l2 2"/></svg>Régua<kbd>D</kbd></button>
   </div>
   <p class="dica" id="dica"></p>
 </header>
@@ -214,6 +290,7 @@ h1 i { width: 14px; height: 14px; border-radius: 50%; background: var(--sol); bo
   </div>
   <button type="button" class="alterna" id="ver-dentro" title="Deixa a cobertura invisível, mas ela continua fazendo sombra">Ver por dentro</button>
   <button type="button" class="alterna" id="ver-traj" title="Mostra o caminho do sol no dia e a rosa dos ventos">Trajetória</button>
+  <button type="button" class="alterna" id="ver-mapa" title="Pinta o piso de cada cômodo com a luz que chega ali, a 0,75 m do chão">Mapa de luz</button>
   <button type="button" class="icone" id="desfazer" title="Desfazer (Ctrl+Z)" aria-label="Desfazer"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></svg></button>
   <button type="button" class="icone" id="refazer" title="Refazer (Ctrl+Shift+Z)" aria-label="Refazer"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 000 10h3"/></svg></button>
   <button type="button" class="icone" id="btn-painel" title="Painel" aria-label="Abrir o painel"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg></button>
@@ -237,6 +314,7 @@ h1 i { width: 14px; height: 14px; border-radius: 50%; background: var(--sol); bo
   <div class="dia">
     <input type="date" id="data" aria-label="Data">
     <span id="estacoes"></span>
+    <select id="ceu" aria-label="Condição do céu" title="Condição do céu: muda a luz dos medidores e a força do sol"></select>
     <select id="vel" aria-label="Velocidade da animação" title="Velocidade da animação">
       <option value="0.5">30 min/s</option>
       <option value="1" selected>1 h/s</option>
@@ -246,6 +324,12 @@ h1 i { width: 14px; height: 14px; border-radius: 50%; background: var(--sol); bo
   <div class="info-sol" id="info-sol"></div>
 </footer>
 
+<div class="legenda painel" id="legenda" hidden>
+  <p>Luz a 0,75 m do piso, em lux <span id="leg-estado"></span></p>
+  <div class="leg-barra" id="leg-barra"></div>
+  <div class="leg-marcas" id="leg-marcas"></div>
+</div>
+
 <div id="erro" hidden>Não foi possível carregar o three.js. Verifique a conexão e recarregue a página.</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
@@ -253,7 +337,7 @@ h1 i { width: 14px; height: 14px; border-radius: 50%; background: var(--sol); bo
 <script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
 <script id="sim-src">
 /* Motor da Casa ao Sol. Sem three.js e sem DOM: roda igual no navegador e no Node.
-   Unidades: metros e horas; ângulos em graus na interface e em radianos nas contas.
+   Unidades: metros, horas e lux; ângulos em graus na interface e em radianos nas contas.
    A planta fica no plano (x, z): x cresce para a direita da tela e z para baixo,
    então o "para cima" da planta é -z. A altura é y. */
 const CasaSim = (function () {
@@ -446,7 +530,8 @@ const CasaSim = (function () {
 
   // ===== Catálogos =====
   // U em W/(m²·K) e capacidade térmica (ct) em kJ/(m²·K): valores típicos e aproximados,
-  // guardados para as próximas etapas (calor). fs é o fator solar do vidro.
+  // guardados para as próximas etapas (calor). fs é o fator solar do vidro e tv a fração da luz
+  // visível que atravessa o vidro de frente (usada nos medidores de luz).
   const MATERIAIS = {
     'tijolo':         { nome: 'Tijolo cerâmico rebocado', tipo: 'parede', U: 2.4, ct: 160 },
     'bloco-concreto': { nome: 'Bloco de concreto', tipo: 'parede', U: 2.8, ct: 200 },
@@ -456,9 +541,9 @@ const CasaSim = (function () {
     'laje-concreto':  { nome: 'Laje de concreto', tipo: 'cobertura', U: 3.7, ct: 220, cor: '#c4c1ba' },
     'fibrocimento':   { nome: 'Telha de fibrocimento com forro', tipo: 'cobertura', U: 2.0, ct: 20, cor: '#a7abae' },
     'telha-ceramica': { nome: 'Telha cerâmica com forro', tipo: 'cobertura', U: 2.0, ct: 30, cor: '#b86a4c' },
-    'vidro-simples':  { nome: 'Vidro simples', tipo: 'vidro', U: 5.7, fs: 0.87, cor: '#a8d8f0' },
-    'vidro-duplo':    { nome: 'Vidro duplo', tipo: 'vidro', U: 2.8, fs: 0.75, cor: '#a8d8f0' },
-    'vidro-controle': { nome: 'Vidro de controle solar', tipo: 'vidro', U: 5.5, fs: 0.40, cor: '#6f9fb3' },
+    'vidro-simples':  { nome: 'Vidro simples', tipo: 'vidro', U: 5.7, fs: 0.87, tv: 0.88, cor: '#a8d8f0' },
+    'vidro-duplo':    { nome: 'Vidro duplo', tipo: 'vidro', U: 2.8, fs: 0.75, tv: 0.78, cor: '#a8d8f0' },
+    'vidro-controle': { nome: 'Vidro de controle solar', tipo: 'vidro', U: 5.5, fs: 0.40, tv: 0.45, cor: '#6f9fb3' },
   };
 
   // cor de acabamento e absortância solar (fração do sol que a superfície absorve)
@@ -488,6 +573,8 @@ const CasaSim = (function () {
       aberturas: [],
       arvores: [],
       comodos: [], // âncoras: { ponto, nome, coberto } dão nome aos cômodos detectados
+      medidores: [], // medidores de luz: { id, pos, alt, nome }; alt é a altura do sensor
+      reguas: [], // medidas livres na planta: { id, a, b }
     };
   }
 
@@ -495,7 +582,9 @@ const CasaSim = (function () {
 
   function novaParede(m, a, b, props) {
     const p = Object.assign({}, m.padrao, props || {});
-    return { id: novoId(m, 'p'), a: mmP(a), b: mmP(b), esp: p.esp, alt: p.alt, mat: p.mat, cor: p.cor };
+    const w = { id: novoId(m, 'p'), a: mmP(a), b: mmP(b), esp: p.esp, alt: p.alt, mat: p.mat, cor: p.cor };
+    if (p.tipo === 'divisa') w.tipo = 'divisa';
+    return w;
   }
 
   function novaAbertura(m, parede, pos, tipo, props) {
@@ -505,6 +594,18 @@ const CasaSim = (function () {
       larg: t.larg, alt: t.alt, peitoril: t.peitoril, aba: 0, vidro: 'vidro-simples',
     }, props || {});
   }
+
+  // medidor de luz novo, com o sensor na altura de uma mesa e o primeiro nome livre (M1, M2...)
+  const ALT_MEDIDOR = 0.75;
+  function novoMedidor(m, pos, props) {
+    const usados = new Set((m.medidores || []).map((x) => x.nome));
+    let n = 1;
+    while (usados.has('M' + n)) n++;
+    // meta é o mínimo de lux que se quer ali; 0 é sem meta
+    return Object.assign({ id: novoId(m, 'm'), pos: mmP(pos), alt: ALT_MEDIDOR, nome: 'M' + n, meta: 0 }, props || {});
+  }
+
+  function novaRegua(m, a, b) { return { id: novoId(m, 'r'), a: mmP(a), b: mmP(b) }; }
 
   // casa de exemplo: dois quartos a oeste, cozinha a nordeste e sala em L, com a frente para o sul
   function exemplo() {
@@ -531,6 +632,8 @@ const CasaSim = (function () {
       { ponto: [8.5, 1.7], nome: 'Cozinha', coberto: true },
       { ponto: [6, 5.5], nome: 'Sala', coberto: true },
     );
+    // perto da porta de vidro da sala, junto da janela da cozinha (pega sol no inverno) e no fundo do quarto
+    for (const p of [[8, 7], [8.5, 0.9], [2, 3.4]]) m.medidores.push(novoMedidor(m, p));
     return normalizar(m);
   }
 
@@ -556,6 +659,21 @@ const CasaSim = (function () {
   function normalizar(entrada) {
     const m = copia(entrada);
     m.paredes = m.paredes || []; m.aberturas = m.aberturas || []; m.arvores = m.arvores || []; m.comodos = m.comodos || [];
+    m.medidores = (m.medidores || []).filter((x) => x && Array.isArray(x.pos));
+    for (const x of m.medidores) {
+      if (!x.id) x.id = novoId(m, 'm');
+      x.pos = mmP(x.pos);
+      x.alt = mm(isFinite(+x.alt) ? Math.max(0, Math.min(10, +x.alt)) : ALT_MEDIDOR);
+      x.nome = String(x.nome || 'M');
+      x.meta = +x.meta > 0 ? Math.round(+x.meta) : 0;
+    }
+    // réguas: pontas em milímetros; a que ficou sem comprimento some
+    m.reguas = (m.reguas || []).filter((r) => r && Array.isArray(r.a) && Array.isArray(r.b));
+    for (const r of m.reguas) {
+      if (!r.id) r.id = novoId(m, 'r');
+      r.a = mmP(r.a); r.b = mmP(r.b);
+    }
+    m.reguas = m.reguas.filter((r) => dist(r.a, r.b) >= 0.01);
 
     // 1. coordenadas em milímetros e pontas próximas fundidas no mesmo nó
     const nos = [];
@@ -565,7 +683,10 @@ const CasaSim = (function () {
       nos.push(q);
       return q.slice();
     };
-    for (const w of m.paredes) { w.a = no(w.a); w.b = no(w.b); }
+    for (const w of m.paredes) {
+      w.a = no(w.a); w.b = no(w.b);
+      if (w.tipo !== 'divisa') delete w.tipo;
+    }
 
     // 2. paredes curtas demais somem
     m.paredes = m.paredes.filter((w) => dist(w.a, w.b) >= MIN_PAREDE);
@@ -603,6 +724,8 @@ const CasaSim = (function () {
         if (!mesma && !inversa) continue;
         const L = dist(A.a, A.b);
         for (const ab of m.aberturas) if (ab.parede === B.id) { ab.parede = A.id; if (inversa) ab.pos = mm(L - ab.pos); }
+        // parede em cima de divisa ganha: a que fica toma o corpo da parede
+        if (ehDivisa(A) && !ehDivisa(B)) { delete A.tipo; A.esp = B.esp; A.alt = B.alt; A.mat = B.mat; A.cor = B.cor; }
         m.paredes.splice(j, 1);
       }
     }
@@ -619,7 +742,7 @@ const CasaSim = (function () {
       for (const [k, lista] of porNo) {
         if (lista.length !== 2) continue;
         const [A, B] = lista;
-        if (A === B || A.esp !== B.esp || A.alt !== B.alt || A.mat !== B.mat || A.cor !== B.cor) continue;
+        if (A === B || A.esp !== B.esp || A.alt !== B.alt || A.mat !== B.mat || A.cor !== B.cor || ehDivisa(A) !== ehDivisa(B)) continue;
         const p = chave(A.a) === k ? A.a : A.b;
         const outraA = chave(A.a) === k ? A.b : A.a, outraB = chave(B.a) === k ? B.b : B.a;
         const d1 = sub(p, outraA), d2 = sub(outraB, p);
@@ -636,9 +759,9 @@ const CasaSim = (function () {
       }
     }
 
-    // 6. aberturas: só em paredes que existem, dentro delas e sem se sobrepor
+    // 6. aberturas: só em paredes de verdade que existem, dentro delas e sem se sobrepor
     const porId = new Map(m.paredes.map((w) => [w.id, w]));
-    m.aberturas = m.aberturas.filter((ab) => porId.has(ab.parede));
+    m.aberturas = m.aberturas.filter((ab) => porId.has(ab.parede) && !ehDivisa(porId.get(ab.parede)));
     const remover = new Set();
     for (const w of m.paredes) {
       const L = dist(w.a, w.b), margem = w.esp / 2 + FOLGA;
@@ -659,6 +782,11 @@ const CasaSim = (function () {
   }
 
   function chave(p) { return Math.round(p[0] * 1000) + ',' + Math.round(p[1] * 1000); }
+
+  // Divisa: uma linha que fecha uma área sem ser parede (a boca de um corredor, a frente de uma varanda, a
+  // separação de dois ambientes de um salão). Mora junto das paredes, para os nós, os cruzamentos e as áreas
+  // saírem da mesma conta, mas não tem corpo: não barra luz, não aceita abertura e não aparece no 3D.
+  function ehDivisa(w) { return w.tipo === 'divisa'; }
 
   // ===== Grafo das paredes e cômodos =====
   function grafo(paredes) {
@@ -752,20 +880,60 @@ const CasaSim = (function () {
     comodos.forEach((c, i) => {
       const anc = (m.comodos || []).find((a) => !usadas.has(a) && dentroComFuros(a.ponto, c.pontos, c.furos));
       if (anc) usadas.add(anc);
-      c.nome = anc ? anc.nome : 'Cômodo ' + (i + 1);
+      c.nome = anc && anc.nome ? anc.nome : 'Cômodo ' + (i + 1);
+      // três tipos de área: cômodo fechado (coberto), área coberta aberta como uma varanda (coberto e
+      // externo) e área descoberta como um quintal (sem coberto)
       c.coberto = anc ? anc.coberto !== false : true;
+      c.externo = !!(anc && anc.externo);
+      c.piso = anc && PISOS[anc.piso] ? anc.piso : 'medio';
+      c.teto = anc && TETOS[anc.teto] ? anc.teto : 'claro';
       c.ancora = anc ? (m.comodos || []).indexOf(anc) : -1;
       c.indice = i;
     });
+    // A área que ainda não tem âncora nasce como cômodo fechado, a não ser que uma divisa a deixe aberta para
+    // fora de todas as áreas ou para uma área que não é cômodo fechado: o corredor e o quintal fechados só por
+    // uma linha nascem descobertos, e os dois ambientes de um salão dividido continuam cobertos.
+    const pares = Object.values(vizinhosDasDivisas(m, comodos));
+    for (let mudou = true; mudou;) {
+      mudou = false;
+      for (const [i, j] of pares) for (const [de, para] of [[i, j], [j, i]]) {
+        if (de < 0 || comodos[de].ancora >= 0 || !comodos[de].coberto) continue;
+        if (para < 0 || !comodos[para].coberto || comodos[para].externo) { comodos[de].coberto = false; mudou = true; }
+      }
+    }
     return comodos;
+  }
+
+  // Dá uma âncora a cada área que ainda não tem, guardando o tipo com que ela nasceu. Daí em diante o tipo
+  // só muda por escolha de quem desenha: sem isso, marcar o corredor como coberto trocaria o tipo do quintal
+  // ao lado, que dependia dele. Devolve o modelo com as âncoras novas, ou null se não faltava nenhuma.
+  function fixarAreas(m, der) {
+    const novas = der.comodos.filter((c) => c.ancora < 0);
+    if (!novas.length) return null;
+    const n = copia(m);
+    for (const c of novas) n.comodos.push({ ponto: mmP(c.centro), coberto: c.coberto, externo: c.externo });
+    return n;
   }
 
   function dentroDoComodo(p, c) { return dentroComFuros(p, c.pontos, c.furos); }
 
+  // de que áreas cada divisa é fronteira: o índice da área de cada lado, ou -1 onde não há área
+  function vizinhosDasDivisas(m, comodos) {
+    const viz = {}, areaEm = (p) => comodos.findIndex((c) => dentroDoComodo(p, c));
+    for (const w of m.paredes) {
+      const L = dist(w.a, w.b);
+      if (!ehDivisa(w) || L < 1e-9) continue;
+      const n = [-(w.b[1] - w.a[1]) / L * 0.05, (w.b[0] - w.a[0]) / L * 0.05], meio = mul(add(w.a, w.b), 0.5);
+      viz[w.id] = [areaEm(add(meio, n)), areaEm(sub(meio, n))];
+    }
+    return viz;
+  }
+
   // lado de fora da parede em relação à normal à esquerda (-dz, dx): +1, -1, ou 0 se os dois lados forem iguais.
-  // Só cômodos cobertos contam como dentro: a parede de um pátio descoberto tem o lado de fora no pátio.
+  // Só cômodo fechado conta como dentro: a parede de um pátio descoberto ou de uma varanda tem o lado de fora
+  // virado para eles.
   function ladoExterno(w, comodos) {
-    comodos = comodos.filter((c) => c.coberto);
+    comodos = comodos.filter((c) => c.coberto && !c.externo);
     const L = dist(w.a, w.b);
     if (L < 1e-9) return 0;
     const d = mul(sub(w.b, w.a), 1 / L), n = [-d[1], d[0]];
@@ -781,11 +949,20 @@ const CasaSim = (function () {
   function derivar(m) {
     const g = grafo(m.paredes);
     const comodos = detectarComodos(m, g);
+    // as paredes se estendem meia espessura onde encontram outra parede de verdade; a divisa não tem corpo
+    const corpo = grafo(m.paredes.filter((w) => !ehDivisa(w)));
     const lados = {}, extensoes = {};
     for (const w of m.paredes) {
-      lados[w.id] = ladoExterno(w, comodos);
-      extensoes[w.id] = [g.grau(w.a) >= 2 ? w.esp / 2 : 0, g.grau(w.b) >= 2 ? w.esp / 2 : 0];
+      lados[w.id] = ehDivisa(w) ? 0 : ladoExterno(w, comodos);
+      extensoes[w.id] = ehDivisa(w) ? [0, 0] : [corpo.grau(w.a) >= 2 ? w.esp / 2 : 0, corpo.grau(w.b) >= 2 ? w.esp / 2 : 0];
     }
+    // zonas de luz: áreas cobertas ligadas por divisas trocam luz como se fossem uma só
+    const zona = comodos.map((c, i) => i);
+    const raiz = (i) => { while (zona[i] !== i) i = zona[i]; return i; };
+    for (const [i, j] of Object.values(vizinhosDasDivisas(m, comodos))) {
+      if (i >= 0 && j >= 0 && comodos[i].coberto && comodos[j].coberto) zona[raiz(i)] = raiz(j);
+    }
+    comodos.forEach((c, i) => { c.zona = raiz(i); });
     const nos = g.nos.map((n) => n.p);
     return { grafo: g, comodos, lados, extensoes, nos };
   }
@@ -819,7 +996,37 @@ const CasaSim = (function () {
     return { ok: !bate, pos: p };
   }
 
-  // encaixe do cursor ao desenhar: nó existente, parede (para fazer um T), ângulo redondo e grade
+  // as duas faces de uma parede, cada uma como um trecho [de, até]. Na divisa, as duas são o próprio eixo
+  function facesDaParede(w) {
+    const L = dist(w.a, w.b) || 1, h = ehDivisa(w) ? 0 : w.esp / 2, n = [-(w.b[1] - w.a[1]) / L * h, (w.b[0] - w.a[0]) / L * h];
+    return [[add(w.a, n), add(w.b, n)], [sub(w.a, n), sub(w.b, n)]];
+  }
+
+  // cantos das faces: onde as faces de duas paredes que se encontram num nó se cruzam. São os cantos de
+  // dentro e de fora dos cômodos, onde uma trena de verdade encosta.
+  function cantosDasFaces(paredes) {
+    const porNo = new Map(), cantos = [];
+    for (const w of paredes) for (const p of [w.a, w.b]) {
+      const k = chave(p);
+      if (!porNo.has(k)) porNo.set(k, { p, lista: [] });
+      porNo.get(k).lista.push(w);
+    }
+    for (const { p, lista } of porNo.values()) {
+      for (let i = 0; i < lista.length; i++) for (let j = i + 1; j < lista.length; j++) {
+        for (const fa of facesDaParede(lista[i])) for (const fb of facesDaParede(lista[j])) {
+          // as retas inteiras, não só os trechos: as faces se cruzam um pouco além das pontas
+          const r = sub(fa[1], fa[0]), s = sub(fb[1], fb[0]), den = cross(r, s);
+          if (Math.abs(den) < 1e-6 * comp(r) * comp(s)) continue;
+          const q = add(fa[0], mul(r, cross(sub(fb[0], fa[0]), s) / den));
+          if (dist(q, p) < 1) cantos.push(mmP(q)); // paredes quase alinhadas se cruzam longe: não é canto
+        }
+      }
+    }
+    return cantos;
+  }
+
+  // encaixe do cursor ao desenhar: nó existente, parede (para fazer um T), ângulo redondo e grade.
+  // Com op.faces, o que atrai na parede são as duas faces dela, não o eixo (é o que a régua usa).
   function encaixar(p, op) {
     const paredes = op.paredes || [], raio = op.raio || 0.2, grade = op.grade || 0.1;
     if (op.livre) return { ponto: mmP(p), tipo: 'livre' };
@@ -835,9 +1042,9 @@ const CasaSim = (function () {
     if (melhor) return melhor;
 
     let perto = null, dperto = raio;
-    for (const w of paredes) {
-      const pr = projetar(p, w.a, w.b);
-      if (pr.dist < dperto && pr.t > 0 && pr.t < 1) { dperto = pr.dist; perto = { w, pr }; }
+    for (const w of paredes) for (const [a, b] of op.faces ? facesDaParede(w) : [[w.a, w.b]]) {
+      const pr = projetar(p, a, b);
+      if (pr.dist < dperto && pr.t > 0 && pr.t < 1) { dperto = pr.dist; perto = { w, a, b, pr }; }
     }
 
     if (op.de) {
@@ -849,7 +1056,7 @@ const CasaSim = (function () {
         if (perto) {
           // a reta no ângulo redondo cruza a parede perto do cursor? então para nela
           const longe = add(op.de, mul(dir, L * 4 + 10));
-          const x = intersecao(op.de, longe, perto.w.a, perto.w.b);
+          const x = intersecao(op.de, longe, perto.a, perto.b);
           if (x && dist(x.ponto, p) < raio * 2.5) return { ponto: mmP(x.ponto), tipo: 'parede', parede: perto.w.id, angulo: ang };
           return { ponto: mmP(perto.pr.ponto), tipo: 'parede', parede: perto.w.id };
         }
@@ -859,8 +1066,8 @@ const CasaSim = (function () {
     }
     if (perto) {
       // ao longo da parede, anda de grade em grade a partir da ponta a
-      const w = perto.w, L = dist(w.a, w.b), s = arred(perto.pr.t * L, grade);
-      if (s > 0 && s < L) return { ponto: mmP(add(w.a, mul(sub(w.b, w.a), s / L))), tipo: 'parede', parede: w.id };
+      const { w, a, b } = perto, L = dist(a, b), s = arred(perto.pr.t * L, grade);
+      if (s > 0 && s < L) return { ponto: mmP(add(a, mul(sub(b, a), s / L))), tipo: 'parede', parede: w.id };
       return { ponto: mmP(perto.pr.ponto), tipo: 'parede', parede: w.id };
     }
     return { ponto: [mm(arred(p[0], grade)), mm(arred(p[1], grade))], tipo: 'grade' };
@@ -903,13 +1110,629 @@ const CasaSim = (function () {
     return res;
   }
 
+  // a laje: fica em cima das paredes mais altas dos cômodos cobertos. null quando a casa não tem cobertura
+  function cobertura(m, der, ClipperLib) {
+    const cob = m.cobertura;
+    if (!cob || cob.tipo === 'nenhuma') return null;
+    const cobertos = der.comodos.filter((c) => c.coberto), corpo = m.paredes.filter((w) => !ehDivisa(w));
+    const espMax = corpo.reduce((s, w) => Math.max(s, w.esp), 0.1);
+    const nos = new Set();
+    for (const c of cobertos) for (const p of c.pontos.concat(...c.furos)) nos.add(chave(p));
+    const altas = corpo.filter((w) => nos.has(chave(w.a)) && nos.has(chave(w.b)));
+    const H = altas.length ? Math.max(...altas.map((w) => w.alt)) : m.padrao.alt;
+    return { H, esp: cob.esp, poligonos: poligonosCobertura(cobertos, cob.beiral + espMax / 2, ClipperLib) };
+  }
+
+  // ===== Formas que o desenho e a conta de luz dividem =====
+  const CAIXILHO = 0.05;   // largura do caixilho em volta do vidro
+  const MONTANTE_VIDRO = 0.04; // montante no meio das janelas com mais de 1,05 m
+  function profCaixilho(esp) { return Math.min(esp * 0.6, 0.09); } // quanto o caixilho ocupa da espessura da parede
+
+  // aba (brise) em cima da abertura, do lado de fora, nas coordenadas da parede:
+  // u ao longo dela, v na altura e n na normal à esquerda
+  function caixaAba(ab, esp, lado) {
+    if (!(ab.aba > 0) || !lado) return null;
+    const v = ab.peitoril + ab.alt, h = esp / 2;
+    return {
+      u0: ab.pos - ab.larg / 2 - 0.15, u1: ab.pos + ab.larg / 2 + 0.15, v0: v + 0.03, v1: v + 0.09,
+      n0: lado > 0 ? h : -h - ab.aba, n1: lado > 0 ? h + ab.aba : -h,
+    };
+  }
+
+  // tronco (um cone quase reto) e copa (uma esfera achatada) da árvore
+  function formaArvore(t) {
+    const hTronco = Math.max(0.5, t.alt - t.copa * 1.2);
+    return {
+      tronco: { r0: 0.14 + t.copa * 0.04, r1: 0.1 + t.copa * 0.03, alt: hTronco + t.copa * 0.5 },
+      copa: { r: t.copa, achat: 0.85, y: t.alt - t.copa * 0.85 },
+    };
+  }
+
+  // ===== Luz natural =====
+  // Iluminância horizontal, em lux, num ponto: o sol direto, o céu que o ponto enxerga (direto ou
+  // pelos vidros) e uma estimativa da luz refletida dentro do cômodo.
+  // Quanta luz há: modelo de disponibilidade da IES (RP-21), com constante solar de 127,5 klx,
+  // sol direto E·exp(-ext/sen h) e céu A + B·sen^C(h) na horizontal.
+  // Como o céu a distribui: céu geral da CIE (ISO 15469), tipos 12 (limpo), 7 (parcial) e 1 (encoberto):
+  // luminância relativa = (1 + a·exp(b/cos Z)) · (1 + c·(exp(d·X) - exp(d·π/2)) + e·cos²X),
+  // com Z a distância ao zênite e X o ângulo até o sol.
+  const CEUS = {
+    limpo:     { nome: 'Céu limpo', a: -1, b: -0.32, c: 10, d: -3, e: 0.45, ext: 0.21, A: 800, B: 15500, C: 0.5 },
+    parcial:   { nome: 'Parcialmente nublado', a: 0, b: -1, c: 5, d: -2.5, e: 0.3, ext: 0.8, A: 300, B: 45000, C: 1 },
+    encoberto: { nome: 'Encoberto', a: 4, b: -0.7, c: 0, d: -1, e: 0, ext: null, A: 300, B: 21000, C: 1 },
+  };
+  const CONSTANTE_SOLAR = 127500; // lux, fora da atmosfera
+  // fração da luz que cada superfície devolve. A das paredes sai da cor: 1 - absortância
+  const REFLETE = { vidro: 0.1, porta: 0.3, solo: 0.2 };
+  // acabamento do piso e do teto de cada cômodo: ref é a fração da luz que ele devolve
+  const PISOS = {
+    claro:  { nome: 'Claro', hex: '#f1e9d8', ref: 0.5 },
+    medio:  { nome: 'Médio', hex: '#e6d5b6', ref: 0.3 },
+    escuro: { nome: 'Escuro', hex: '#8f7a61', ref: 0.12 },
+  };
+  const TETOS = {
+    branco:  { nome: 'Branco', ref: 0.8 },
+    claro:   { nome: 'Claro', ref: 0.7 },
+    madeira: { nome: 'Madeira', ref: 0.4 },
+    escuro:  { nome: 'Escuro', ref: 0.15 },
+  };
+  const N_CEU = 512, N_VAO = 144, EPS = 1e-6;
+
+  // n direções num hemisfério, cada uma valendo o mesmo no cosseno com o eixo (o y): a soma de
+  // uma luminância nelas, vezes π/n, dá a iluminância no plano
+  function hemisferio(n) {
+    const dirs = [];
+    for (let i = 0; i < n; i++) {
+      const r = Math.sqrt((i + 0.5) / n), f = i * 2.399963229728653;
+      dirs.push([r * Math.cos(f), Math.sqrt(1 - r * r), r * Math.sin(f)]);
+    }
+    return dirs;
+  }
+  const HEMI_CEU = hemisferio(N_CEU), HEMI_VAO = hemisferio(N_VAO);
+
+  // transmissão do vidro conforme a inclinação do raio (Rivero): quase não muda até uns 50° e despenca depois
+  function transVidro(tv, cos) {
+    const s2 = Math.max(0, 1 - cos * cos);
+    return tv * Math.min(1, 1.018 * cos * (1 + s2 * Math.sqrt(s2)));
+  }
+
+  // tudo o que barra a luz, pronto para o traçado: paredes com os seus vãos e abas, a laje e as árvores.
+  // As divisas ficam de fora: são só linhas.
+  function cenaLuz(m, der, cob) {
+    const paredes = m.paredes.filter((w) => !ehDivisa(w)).map((w) => {
+      const L = dist(w.a, w.b), dx = (w.b[0] - w.a[0]) / L, dz = (w.b[1] - w.a[1]) / L;
+      const ext = der.extensoes[w.id] || [0, 0], lado = der.lados[w.id] || 0, h = w.esp / 2;
+      const vaos = [], abas = [];
+      for (const ab of m.aberturas) {
+        if (ab.parede !== w.id) continue;
+        const tipo = TIPOS_ABERTURA[ab.tipo] || TIPOS_ABERTURA.janela;
+        const vidro = tipo.vidro ? (MATERIAIS[ab.vidro] || MATERIAIS['vidro-simples']) : null;
+        const u0 = ab.pos - ab.larg / 2, u1 = ab.pos + ab.larg / 2, v0 = ab.peitoril, v1 = ab.peitoril + ab.alt;
+        // o vidro fica dentro do caixilho; janela larga tem um montante no meio, que o parte em duas folhas
+        const g0 = u0 + CAIXILHO, g1 = u1 - CAIXILHO, montante = ab.larg > 1.05;
+        vaos.push({
+          id: ab.id, u0, u1, v0, v1, pos: ab.pos, tv: vidro ? vidro.tv : 0, // porta comum conta fechada
+          g0, g1, gv0: v0 > 0.001 ? v0 + CAIXILHO : v0, gv1: v1 - CAIXILHO, montante, pf: profCaixilho(w.esp) / 2,
+          folhas: montante ? [[g0, ab.pos - MONTANTE_VIDRO / 2], [ab.pos + MONTANTE_VIDRO / 2, g1]] : [[g0, g1]],
+        });
+        const aba = caixaAba(ab, w.esp, lado);
+        if (aba) abas.push(aba);
+      }
+      return { id: w.id, ax: w.a[0], az: w.a[1], dx, dz, u0: -ext[0], u1: L + ext[1], v0: 0, v1: w.alt, n0: -h, n1: h, vaos, abas };
+    });
+    const arvores = m.arvores.map((t) => {
+      const f = formaArvore(t);
+      return { x: t.pos[0], z: t.pos[1], r: f.copa.r, ky: f.copa.achat, cy: f.copa.y, rt: (f.tronco.r0 + f.tronco.r1) / 2, ht: f.tronco.alt };
+    });
+    return { paredes, arvores, teto: cob || null, cobertos: cob ? der.comodos.filter((c) => c.coberto) : [] };
+  }
+
+  // trecho do raio dentro de uma caixa alinhada aos eixos (u, v, n); o resultado fica em TR
+  const TR = [0, 0];
+  function eixo(o, d, min, max) {
+    if (Math.abs(d) < 1e-12) return o >= min && o <= max;
+    let a = (min - o) / d, b = (max - o) / d;
+    if (a > b) { const s = a; a = b; b = s; }
+    if (a > TR[0]) TR[0] = a;
+    if (b < TR[1]) TR[1] = b;
+    return TR[0] <= TR[1];
+  }
+  function naCaixa(ou, ov, on, du, dv, dn, c, tmax) {
+    TR[0] = 0; TR[1] = tmax;
+    return eixo(ou, du, c.u0, c.u1) && eixo(ov, dv, c.v0, c.v1) && eixo(on, dn, c.n0, c.n1) && TR[1] > EPS;
+  }
+
+  // quanto da luz chega a o vindo da direção d (unitária): 0 se o raio bate em parede, laje, aba ou árvore,
+  // e cada vidro no caminho desconta a sua transmissão. primeira é o vidro mais perto de o no caminho.
+  // tmax limita o alcance (o raio que desce para no chão).
+  const BARRADO = { t: 0, primeira: null };
+  function tracar(cena, o, d, tmax) {
+    if (tmax == null) tmax = Infinity;
+    const ox = o[0], oy = o[1], oz = o[2], dx = d[0], dy = d[1], dz = d[2];
+    const teto = cena.teto;
+    if (teto && Math.abs(dy) > 1e-9) {
+      // a laje tem duas faces; quem cruza qualquer uma dentro do contorno está barrado
+      for (let k = 0; k < 2; k++) {
+        const t = (teto.H + k * teto.esp - oy) / dy;
+        if (t <= EPS || t >= tmax) continue;
+        const p = [ox + dx * t, oz + dz * t];
+        for (const pg of teto.poligonos) if (dentroComFuros(p, pg.contorno, pg.furos)) return BARRADO;
+      }
+    }
+    for (const a of cena.arvores) {
+      const rx = ox - a.x, rz = oz - a.z;
+      // copa: esfera achatada na altura
+      const ry = (oy - a.cy) / a.ky, ey = dy / a.ky;
+      const A = dx * dx + ey * ey + dz * dz, B = rx * dx + ry * ey + rz * dz, C = rx * rx + ry * ry + rz * rz - a.r * a.r;
+      const disc = B * B - A * C;
+      if (disc > 0) {
+        const s = Math.sqrt(disc);
+        if ((-B + s) / A > EPS && (-B - s) / A < tmax) return BARRADO;
+      }
+      // tronco: cilindro em pé
+      const A2 = dx * dx + dz * dz;
+      if (A2 > 1e-12) {
+        const B2 = rx * dx + rz * dz, disc2 = B2 * B2 - A2 * (rx * rx + rz * rz - a.rt * a.rt);
+        if (disc2 > 0) {
+          const s = Math.sqrt(disc2);
+          for (let k = -1; k <= 1; k += 2) {
+            const t = (-B2 + k * s) / A2, y = oy + dy * t;
+            if (t > EPS && t < tmax && y >= 0 && y <= a.ht) return BARRADO;
+          }
+        }
+      }
+    }
+    let T = 1, primeira = null, tPrimeira = Infinity;
+    for (const w of cena.paredes) {
+      const rx = ox - w.ax, rz = oz - w.az;
+      const ou = rx * w.dx + rz * w.dz, on = rz * w.dx - rx * w.dz;
+      const du = dx * w.dx + dz * w.dz, dn = dz * w.dx - dx * w.dz;
+      for (const aba of w.abas) if (naCaixa(ou, oy, on, du, dy, dn, aba, tmax)) return BARRADO;
+      if (!naCaixa(ou, oy, on, du, dy, dn, w, tmax)) continue;
+      // o raio só atravessa a parede se entra e sai por dentro do mesmo vão
+      const t0 = TR[0], t1 = TR[1];
+      const eu = ou + du * t0, ev = oy + dy * t0, xu = ou + du * t1, xv = oy + dy * t1;
+      let vao = null;
+      for (const v of w.vaos) {
+        if (eu >= v.u0 - EPS && eu <= v.u1 + EPS && xu >= v.u0 - EPS && xu <= v.u1 + EPS &&
+            ev >= v.v0 - EPS && ev <= v.v1 + EPS && xv >= v.v0 - EPS && xv <= v.v1 + EPS) { vao = v; break; }
+      }
+      if (!vao || !vao.tv) return BARRADO;
+      const en = on + dn * t0, xn = on + dn * t1;
+      if ((en < 0) !== (xn < 0)) {
+        // cruza o plano do vidro, no meio da parede: tem de passar por dentro do caixilho, que tem a sua
+        // profundidade (confere nas duas faces dele), e fora do montante
+        const tg = -on / dn, ug = ou + du * tg, vg = oy + dy * tg, folga = Math.abs(vao.pf / dn);
+        const su = Math.abs(du) * folga, sv = Math.abs(dy) * folga;
+        if (ug - su < vao.g0 || ug + su > vao.g1 || vg - sv < vao.gv0 || vg + sv > vao.gv1) return BARRADO;
+        if (vao.montante && Math.abs(ug - vao.pos) < MONTANTE_VIDRO / 2) return BARRADO;
+        T *= transVidro(vao.tv, Math.abs(dn));
+        if (tg < tPrimeira) { tPrimeira = tg; primeira = vao.id; }
+      }
+    }
+    return { t: T, primeira };
+  }
+
+  // luminância relativa do céu na direção (x, y, z)
+  function lumRel(ceu, x, y, z) {
+    const c = ceu.coef, s = ceu.s;
+    const grad = 1 + c.a * Math.exp(c.b / Math.max(y, 0.02));
+    if (c.c === 0 && c.e === 0) return grad;
+    const cosX = Math.max(-1, Math.min(1, x * s[0] + y * s[1] + z * s[2]));
+    return grad * (1 + c.c * (Math.exp(c.d * Math.acos(cosX)) - Math.exp(c.d * Math.PI / 2)) + c.e * cosX * cosX);
+  }
+
+  // a luz de um instante: normal é o sol direto num plano de frente para ele, difusa é o céu na horizontal,
+  // horizontal é a soma num ponto ao ar livre e sem sombra. dirSol é o vetor para o sol, no espaço da cena.
+  function estadoCeu(tipo, data, altitude, dirSol) {
+    const coef = CEUS[tipo] || CEUS.limpo;
+    const [a, mes, dia] = data.split('-').map(Number);
+    const diaDoAno = Math.round((Date.UTC(a, mes - 1, dia) - Date.UTC(a, 0, 0)) / DIA_MS);
+    const fora = CONSTANTE_SOLAR * (1 + 0.034 * Math.cos(2 * Math.PI * (diaDoAno - 2) / 365));
+    const sen = Math.sin(altitude);
+    let normal = 0, difusa;
+    if (altitude > 0) {
+      if (coef.ext != null) normal = fora * Math.exp(-coef.ext / sen);
+      difusa = coef.A + coef.B * Math.pow(sen, coef.C);
+    } else {
+      difusa = coef.A * Math.max(0, 1 + altitude / (6 * RAD)); // o crepúsculo civil apaga o céu aos poucos
+    }
+    // para distribuir a luz do céu, o sol nunca fica abaixo do horizonte
+    let s = dirSol;
+    if (s[1] < 0) { const n = Math.hypot(s[0], s[2]) || 1; s = [s[0] / n, 0, s[2] / n]; }
+    const ceu = { tipo, coef, s, sol: dirSol, altitude, normal, difusa, horizontal: difusa + normal * Math.max(0, sen), k: 0 };
+    // k leva a luminância relativa a absoluta: o céu inteiro tem de somar a difusa na horizontal
+    let soma = 0;
+    for (const d of HEMI_CEU) soma += lumRel(ceu, d[0], d[1], d[2]);
+    ceu.k = difusa / (soma * Math.PI / N_CEU);
+    return ceu;
+  }
+
+  function ceuEm(local, data, hora, tipo) {
+    const p = posicaoSol(instanteLocal(data, hora, local.fuso), local.lat, local.lon);
+    return estadoCeu(tipo, data, p.altitude, direcaoSol(p.altitude, p.azimute, local.norte));
+  }
+
+  // amostras do céu, de quatro em quatro números: direção (x, y, z) e peso. O peso já junta o cosseno,
+  // o ângulo sólido e o que os vidros deixam passar, então só falta a luminância daquela direção.
+  function somaCeu(ceu, am) {
+    let s = 0;
+    for (let i = 0; i < am.length; i += 4) s += am[i + 3] * lumRel(ceu, am[i], am[i + 1], am[i + 2]);
+    return s * ceu.k;
+  }
+
+  // o céu que o sensor de um medidor enxerga. Só muda quando a casa muda, não com a hora.
+  function prepararMedidor(cena, med) {
+    const p = [med.pos[0], med.alt, med.pos[1]], am = [];
+    // céu visto direto, sem vidro no caminho (ao ar livre, num pátio, numa casa sem cobertura)
+    for (const d of HEMI_CEU) {
+      const r = tracar(cena, p, d);
+      if (r.t > 0 && r.primeira === null) am.push(d[0], d[1], d[2], Math.PI / N_CEU);
+    }
+    // céu visto pelos vidros: cada folha de vidro é varrida em quadradinhos, e cada direção fica com o
+    // primeiro vidro que ela cruza, para não contar duas vezes
+    const sub = [0, 0, 0, 0];
+    for (const w of cena.paredes) for (const v of w.vaos) for (const [f0, f1] of v.tv ? v.folhas : []) {
+      const nu = Math.max(2, Math.min(16, Math.ceil((f1 - f0) / 0.12))), nv = Math.max(2, Math.min(20, Math.ceil((v.gv1 - v.gv0) / 0.12)));
+      const pu = (f1 - f0) / nu, pv = (v.gv1 - v.gv0) / nv, area = pu * pv;
+      // o ponto (u, y) do vidro, valendo a área a: direção e peso vão para saida[k..k+3]; peso 0 se o céu não aparece ali
+      const amostra = (u, y, a, saida, k) => {
+        let dx = w.ax + w.dx * u - p[0], dy = y - p[1], dz = w.az + w.dz * u - p[2];
+        const r2 = dx * dx + dy * dy + dz * dz, r = Math.sqrt(r2);
+        saida[k + 3] = 0;
+        if (dy <= 0 || r < 1e-3) return 0; // o sensor olha para cima
+        dx /= r; dy /= r; dz /= r;
+        const res = tracar(cena, p, [dx, dy, dz]);
+        if (res.t <= 0 || res.primeira !== v.id) return 0;
+        saida[k] = dx; saida[k + 1] = dy; saida[k + 2] = dz;
+        return (saida[k + 3] = dy * a * Math.abs(dz * w.dx - dx * w.dz) / Math.max(r2, a) * res.t);
+      };
+      const centros = new Float64Array(nu * nv * 4);
+      let algum = false;
+      for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+        if (amostra(f0 + (i + 0.5) * pu, v.gv0 + (j + 0.5) * pv, area, centros, (i * nv + j) * 4) > 0) algum = true;
+      }
+      if (!algum) continue;
+      const passa = (k) => centros[k * 4 + 3] > 0;
+      for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+        // onde a vista muda (a beirada do vidro, que o rebaixo da parede esconde de lado, e a borda de uma
+        // sombra), o quadradinho é refeito em nove
+        const k = i * nv + j, eu = passa(k);
+        const borda = i === 0 || j === 0 || i === nu - 1 || j === nv - 1 ||
+          passa(k - 1) !== eu || passa(k + 1) !== eu || passa(k - nv) !== eu || passa(k + nv) !== eu;
+        if (!borda) { if (eu) am.push(centros[k * 4], centros[k * 4 + 1], centros[k * 4 + 2], centros[k * 4 + 3]); continue; }
+        for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) {
+          if (amostra(f0 + (i + (a + 0.5) / 3) * pu, v.gv0 + (j + (b + 0.5) / 3) * pv, area / 9, sub, 0) > 0) am.push(sub[0], sub[1], sub[2], sub[3]);
+        }
+      }
+    }
+    return { p, amostras: am };
+  }
+
+  // A luz que entra numa zona e as superfícies que a espalham lá dentro. A zona é um cômodo coberto, ou
+  // vários ligados por divisas. A luz entra pelos vidros e pelas divisas que dão para fora da zona (a frente
+  // de uma varanda), que contam como vãos abertos do piso à laje.
+  function prepararZona(cena, m, membros) {
+    const porPontas = new Map();
+    for (const w of m.paredes) { porPontas.set(chave(w.a) + '|' + chave(w.b), w); porPontas.set(chave(w.b) + '|' + chave(w.a), w); }
+    const naZona = (p) => membros.some((c) => dentroDoComodo(p, c));
+    const amostras = [], pontosSol = [];
+    let areaParedes = 0, refParedes = 0, solo = 0;
+    for (const comodo of membros) for (const anel of [comodo.pontos].concat(comodo.furos)) {
+      for (let i = 0; i < anel.length; i++) {
+        const w = porPontas.get(chave(anel[i]) + '|' + chave(anel[(i + 1) % anel.length]));
+        if (!w) continue;
+        const L = dist(w.a, w.b), ex = (w.b[0] - w.a[0]) / L, ez = (w.b[1] - w.a[1]) / L;
+        // de que lado da parede fica este cômodo: a luz entra vindo do outro
+        const meio = [(w.a[0] + w.b[0]) / 2, (w.a[1] + w.b[1]) / 2], off = (ehDivisa(w) ? 0 : w.esp / 2) + 0.05;
+        const fora = dentroDoComodo([meio[0] - ez * off, meio[1] + ex * off], comodo) ? -1 : 1;
+        const nx = -ez * fora, nz = ex * fora;
+        // se do outro lado ainda é a zona, a parede é uma divisória de dentro: espalha luz pelas duas faces
+        // (ela aparece uma vez no contorno de cada cômodo), mas por ela não entra luz de fora
+        const interna = naZona([meio[0] + nx * off, meio[1] + nz * off]);
+        let vaos;
+        if (ehDivisa(w)) {
+          if (interna) continue; // linha entre dois ambientes da mesma zona: nem superfície nem entrada
+          vaos = [{ aberto: true, tv: 1, u0: 0, u1: L, v0: 0, v1: cena.teto.H, gv0: 0, gv1: cena.teto.H, folhas: [[0, L]] }];
+        } else {
+          vaos = cena.paredes.find((x) => x.id === w.id).vaos;
+          const lisa = L * w.alt - vaos.reduce((t, v) => t + (v.u1 - v.u0) * (v.v1 - v.v0), 0);
+          areaParedes += lisa; refParedes += lisa * (1 - (CORES[w.cor] || CORES.branco).abs);
+          // parede mais baixa que a laje (um muro debaixo de uma cobertura): a fresta em cima dela é um vão aberto
+          const H = cena.teto.H;
+          if (w.alt < H - 0.05 && !interna) vaos = vaos.concat([{ aberto: true, tv: 1, u0: 0, u1: L, v0: w.alt, v1: H, gv0: w.alt, gv1: H, folhas: [[0, L]] }]);
+        }
+        for (const v of vaos) {
+          const areaVao = (v.u1 - v.u0) * (v.v1 - v.v0);
+          // o vão aberto não devolve nada: a luz que bate nele vai embora
+          areaParedes += areaVao; refParedes += areaVao * (v.aberto ? 0 : v.tv ? REFLETE.vidro : REFLETE.porta);
+          if (!v.tv || interna) continue;
+          const passa = (cos) => (v.aberto ? 1 : transVidro(v.tv, cos));
+          const ag = v.gv1 - v.gv0, vidro = v.folhas.reduce((t, f) => t + f[1] - f[0], 0) * ag;
+          // ponto no vidro, um nada para fora dele; fu corre as folhas de ponta a ponta, pulando o montante
+          const ponto = (fu, fv) => {
+            const f = v.folhas[Math.min(v.folhas.length - 1, Math.floor(fu * v.folhas.length))];
+            const u = f[0] + (f[1] - f[0]) * (fu * v.folhas.length - v.folhas.indexOf(f));
+            return [w.a[0] + ex * u + nx * 0.002, v.gv0 + ag * fv, w.a[1] + ez * u + nz * 0.002];
+          };
+          // o céu e o chão que o vidro enxerga, no hemisfério do lado de fora
+          HEMI_VAO.forEach((h, k) => {
+            const d = [h[0] * ex + h[1] * nx, h[2], h[0] * ez + h[1] * nz];
+            const p = ponto(k % 2 ? 0.75 : 0.25, k % 4 < 2 ? 0.25 : 0.75);
+            const peso = Math.PI / N_VAO * vidro * passa(h[1]);
+            if (d[1] > 0.001) {
+              const r = tracar(cena, p, d);
+              if (r.t > 0) amostras.push(d[0], d[1], d[2], peso * r.t);
+            } else if (d[1] < -0.001) {
+              const tc = -p[1] / d[1], chao = [p[0] + d[0] * tc, p[2] + d[2] * tc];
+              if (cena.cobertos.some((c) => dentroDoComodo(chao, c))) return; // piso de outro cômodo: escuro
+              const r = tracar(cena, p, d, tc);
+              if (r.t > 0) solo += peso * r.t;
+            }
+          });
+          // O sol direto só entra nesta conta pelos vidros. O que entra por um lado aberto bate perto da
+          // beirada e boa parte volta para fora; espalhá-lo por igual pela zona fazia um corredor comprido
+          // ler mais luz coberto do que descoberto. O medidor que está no sol continua lendo o sol direto.
+          if (v.aberto) continue;
+          for (let i2 = 0; i2 < 4; i2++) for (let j2 = 0; j2 < 4; j2++) {
+            pontosSol.push({ p: ponto((i2 + 0.5) / 4, (j2 + 0.5) / 4), nx, nz, area: vidro / 16, passa });
+          }
+        }
+      }
+    }
+    // método do fluxo dividido: a luz que desce bate primeiro no piso e na metade de baixo das paredes,
+    // a que sobe do chão lá de fora bate no teto e na metade de cima
+    const A = membros.reduce((t, c) => t + c.area, 0);
+    const refPiso = membros.reduce((t, c) => t + c.area * (PISOS[c.piso] || PISOS.medio).ref, 0) / A;
+    const refTeto = membros.reduce((t, c) => t + c.area * (TETOS[c.teto] || TETOS.claro).ref, 0) / A;
+    return {
+      amostras, pontosSol, solo, membros, refPiso,
+      refParede: areaParedes ? refParedes / areaParedes : 0,
+      area: 2 * A + areaParedes,
+      refMedia: (A * refPiso + A * refTeto + refParedes) / (2 * A + areaParedes),
+      refBaixo: (A * refPiso + refParedes / 2) / (A + areaParedes / 2),
+      refAlto: (A * refTeto + refParedes / 2) / (A + areaParedes / 2),
+    };
+  }
+
+  // luz refletida dentro do cômodo, tratada como igual em todos os pontos dele: o fluxo que entra,
+  // depois do primeiro rebate, espalhado por todas as superfícies e somado nos rebates seguintes
+  function luzRefletida(cena, pc, ceu) {
+    // primeiro rebate: o céu bate no piso e na metade de baixo das paredes; o chão de fora, no teto e na de cima
+    let rebate = somaCeu(ceu, pc.amostras) * pc.refBaixo + pc.solo * REFLETE.solo * ceu.horizontal / Math.PI * pc.refAlto;
+    const s = ceu.sol;
+    if (ceu.normal > 0 && s[1] > 0) {
+      for (const q of pc.pontosSol) {
+        const cos = q.nx * s[0] + q.nz * s[2];
+        if (cos <= 0) continue;
+        const r = tracar(cena, q.p, s);
+        if (r.t <= 0) continue;
+        // a mancha de sol cai no piso da zona ou numa parede dela
+        const tc = q.p[1] / s[1], chao = [q.p[0] - s[0] * tc, q.p[2] - s[2] * tc], noPiso = pc.membros.some((c) => dentroDoComodo(chao, c));
+        rebate += ceu.normal * cos * q.passa(cos) * r.t * q.area * (noPiso ? pc.refPiso : pc.refParede);
+      }
+    }
+    return rebate / (pc.area * (1 - pc.refMedia));
+  }
+
+  function lerMedidor(cena, pm, ceu, refletida) {
+    let sol = 0;
+    if (ceu.normal > 0 && ceu.sol[1] > 0) sol = ceu.normal * ceu.sol[1] * tracar(cena, pm.p, ceu.sol).t;
+    const doCeu = somaCeu(ceu, pm.amostras);
+    return { sol, ceu: doCeu, refletida, total: sol + doCeu + refletida };
+  }
+
+  // zona coberta onde está o ponto, já com a luz que entra nela preparada; null ao ar livre ou num pátio
+  function comodoDaLuz(prep, m, der, pos) {
+    if (!prep.cena.teto) return null;
+    const c = der.comodos.find((x) => x.coberto && dentroDoComodo(pos, x));
+    if (!c) return null;
+    if (!prep.comodos.has(c.zona)) prep.comodos.set(c.zona, prepararZona(prep.cena, m, der.comodos.filter((x) => x.coberto && x.zona === c.zona)));
+    return prep.comodos.get(c.zona);
+  }
+
+  // prepara tudo o que não depende da hora: a cena, o céu que cada medidor vê e a entrada de luz dos cômodos.
+  // cob vem de cobertura(); sem ela a casa conta como descoberta.
+  function prepararLuz(m, der, cob) {
+    const prep = { cena: cenaLuz(m, der, cob), comodos: new Map(), medidores: [] };
+    for (const med of m.medidores || []) {
+      prep.medidores.push({ id: med.id, pm: prepararMedidor(prep.cena, med), comodo: comodoDaLuz(prep, m, der, med.pos) });
+    }
+    return prep;
+  }
+
+  // leitura de cada medidor num instante: { id, sol, ceu, refletida, total }, em lux
+  function lerLuz(prep, ceu) {
+    const refl = new Map();
+    return prep.medidores.map((x) => {
+      if (x.comodo && !refl.has(x.comodo)) refl.set(x.comodo, luzRefletida(prep.cena, x.comodo, ceu));
+      return Object.assign({ id: x.id }, lerMedidor(prep.cena, x.pm, ceu, x.comodo ? refl.get(x.comodo) : 0));
+    });
+  }
+
+  // leitura num ponto solto, aproveitando a cena preparada (a sonda que segue o cursor)
+  function sondarLuz(prep, m, der, med, ceu) {
+    const pc = comodoDaLuz(prep, m, der, med.pos);
+    return lerMedidor(prep.cena, prepararMedidor(prep.cena, med), ceu, pc ? luzRefletida(prep.cena, pc, ceu) : 0);
+  }
+
+  // fração do céu que o ponto aproveita: a luz que ele receberia de um céu todo igual, sobre a de um ponto ao ar livre
+  function ceuVisivel(pm) {
+    let s = 0;
+    for (let i = 3; i < pm.amostras.length; i += 4) s += pm.amostras[i];
+    return s / Math.PI;
+  }
+
+  // ===== Luz ao longo do dia =====
+  // leituras de todos os medidores de prep, de passo em passo (em horas): fora é a luz ao ar livre
+  function luzDoDia(prep, local, data, tipo, passo) {
+    const horas = [], fora = [], medidores = new Map(prep.medidores.map((x) => [x.id, []]));
+    for (let k = 0, n = Math.round(24 / passo); k <= n; k++) {
+      const ceu = ceuEm(local, data, k * passo, tipo);
+      horas.push(k * passo); fora.push(ceu.horizontal);
+      if (ceu.horizontal > 0) for (const l of lerLuz(prep, ceu)) medidores.get(l.id).push(l);
+      else for (const lista of medidores.values()) lista.push({ sol: 0, ceu: 0, refletida: 0, total: 0 });
+    }
+    return { passo, horas, fora, medidores };
+  }
+
+  // tempo em que uma condição vale ao longo de uma série, contando meio passo nas viradas; de e ate são
+  // a primeira e a última hora em que ela vale
+  function tempoEm(horas, passo, vale) {
+    let tempo = 0, de = null, ate = null, antes = false;
+    horas.forEach((h, k) => {
+      const agora = !!vale(k);
+      if (k > 0) tempo += ((antes ? 1 : 0) + (agora ? 1 : 0)) / 2 * passo;
+      if (agora) { if (de === null) de = h; ate = h; }
+      antes = agora;
+    });
+    return { tempo, de, ate };
+  }
+
+  // resumo das leituras de um medidor no dia: tempo acima de um limiar, pico e tempo com sol direto
+  function resumoDoDia(dia, leituras, limiar) {
+    let pico = 0, horaPico = null;
+    leituras.forEach((l, k) => { if (l.total > pico) { pico = l.total; horaPico = dia.horas[k]; } });
+    return {
+      pico, horaPico, limiar,
+      acima: tempoEm(dia.horas, dia.passo, (k) => leituras[k].total >= limiar),
+      sol: tempoEm(dia.horas, dia.passo, (k) => leituras[k].sol > 0),
+    };
+  }
+
+  // começo de cada estação, pelo hemisfério
+  function datasDasEstacoes(ano, lat) {
+    const sul = lat < 0;
+    return [
+      { data: ano + '-03-20', nome: sul ? 'outono' : 'primavera' }, { data: ano + '-06-21', nome: sul ? 'inverno' : 'verão' },
+      { data: ano + '-09-22', nome: sul ? 'primavera' : 'outono' }, { data: ano + '-12-21', nome: sul ? 'verão' : 'inverno' },
+    ];
+  }
+
+  // horas de sol direto num dia, de dez em dez minutos. chega(dirSol) devolve quanto do sol passa, e conta
+  // o tempo em que isso fica acima de minimo (0: qualquer sol)
+  function horasDeSol(local, data, chega, minimo) {
+    const passo = 1 / 6, horas = [];
+    for (let k = 0; k <= 144; k++) horas.push(k * passo);
+    return tempoEm(horas, passo, (k) => {
+      const p = posicaoSol(instanteLocal(data, horas[k], local.fuso), local.lat, local.lon);
+      return p.altitude > 0 && chega(direcaoSol(p.altitude, p.azimute, local.norte)) > (minimo || 0);
+    });
+  }
+  function solNoPonto(cena, p) { return (dir) => tracar(cena, p, dir).t; }
+
+  // sol no vidro de uma abertura, visto de fora: a fração de 25 pontos do vidro que o sol alcança.
+  // lado é o de fora (ladoExterno); null em porta comum ou em parede sem lado de fora
+  function solNoVidro(cena, aberturaId, lado) {
+    for (const w of cena.paredes) for (const v of w.vaos) {
+      if (v.id !== aberturaId) continue;
+      if (!v.tv || !lado) return null;
+      const nx = -w.dz * lado, nz = w.dx * lado, pontos = [], N = 5;
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+        const f = (i + 0.5) / N * v.folhas.length, folha = v.folhas[Math.min(v.folhas.length - 1, Math.floor(f))];
+        const u = folha[0] + (folha[1] - folha[0]) * (f % 1);
+        pontos.push([w.ax + w.dx * u + nx * 0.002, v.gv0 + (v.gv1 - v.gv0) * (j + 0.5) / N, w.az + w.dz * u + nz * 0.002]);
+      }
+      return (dir) => {
+        if (nx * dir[0] + nz * dir[2] <= 0) return 0;
+        let n = 0;
+        for (const p of pontos) if (tracar(cena, p, dir).t > 0) n++;
+        return n / pontos.length;
+      };
+    }
+    return null;
+  }
+
+  // ===== Vista do céu =====
+  // O que um ponto vê em cada direção, numa imagem n × n com o zênite no meio e o horizonte na borda,
+  // deitada como a planta (x para a direita, z para baixo): 0 fora do círculo, 1 tapado, 2 céu pelo vidro, 3 céu aberto
+  function vistaDoCeu(cena, p, n) {
+    const img = new Uint8Array(n * n);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const u = (i + 0.5) / n * 2 - 1, v = (j + 0.5) / n * 2 - 1, r = Math.hypot(u, v);
+      if (r > 1) continue;
+      const alt = (1 - r) * Math.PI / 2, c = Math.cos(alt) / (r || 1);
+      const res = tracar(cena, p, [c * u, Math.sin(alt), c * v]);
+      img[j * n + i] = res.t <= 0 ? 1 : res.primeira === null ? 3 : 2;
+    }
+    return img;
+  }
+  // onde uma direção cai nessa imagem, de -1 a 1 nos dois eixos; null abaixo do horizonte
+  function naVistaDoCeu(d) {
+    if (d[1] < 0) return null;
+    const r = 1 - Math.asin(Math.min(1, d[1])) / (Math.PI / 2), h = Math.hypot(d[0], d[2]) || 1;
+    return [r * d[0] / h, r * d[2] / h];
+  }
+
+  // ===== Mapa de luz =====
+  // O céu em 432 pedaços (12 faixas de altura × 36 de rumo). Cada ponto do mapa guarda quanto de cada pedaço
+  // chega nele; com a luminância dos pedaços num instante, a luz do céu no ponto é um produto escalar,
+  // e animar o dia fica barato mesmo com mais de mil pontos.
+  const FAIXAS = 12, RUMOS = 36, N_PEDACOS = FAIXAS * RUMOS;
+  function pedacoDoCeu(x, y, z) {
+    const f = Math.min(FAIXAS - 1, Math.floor(Math.asin(Math.max(0, Math.min(1, y))) / (Math.PI / 2) * FAIXAS));
+    const r = Math.floor((Math.atan2(z, x) / (2 * Math.PI) + 1) % 1 * RUMOS) % RUMOS;
+    return f * RUMOS + r;
+  }
+  // luminância de cada pedaço num instante, na média de quatro direções dentro dele
+  function luminanciaDosPedacos(ceu) {
+    const lum = new Float64Array(N_PEDACOS);
+    for (let f = 0; f < FAIXAS; f++) for (let r = 0; r < RUMOS; r++) {
+      let s = 0;
+      for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) {
+        const alt = (f + 0.25 + a * 0.5) / FAIXAS * Math.PI / 2, az = (r + 0.25 + b * 0.5) / RUMOS * 2 * Math.PI, c = Math.cos(alt);
+        s += lumRel(ceu, c * Math.cos(az), Math.sin(alt), c * Math.sin(az));
+      }
+      lum[f * RUMOS + r] = s / 4 * ceu.k;
+    }
+    return lum;
+  }
+
+  // pontos de um cômodo numa grade de lado passo, alinhada ao mundo: só os de dentro e afastados das paredes
+  function gradeDoComodo(m, comodo, passo) {
+    let xa = Infinity, xb = -Infinity, za = Infinity, zb = -Infinity;
+    for (const p of comodo.pontos) { xa = Math.min(xa, p[0]); xb = Math.max(xb, p[0]); za = Math.min(za, p[1]); zb = Math.max(zb, p[1]); }
+    const x0 = Math.floor(xa / passo) * passo, z0 = Math.floor(za / passo) * passo;
+    const nx = Math.max(1, Math.ceil((xb - x0) / passo - 1e-9)), nz = Math.max(1, Math.ceil((zb - z0) / passo - 1e-9));
+    const pontos = [];
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+      const p = [x0 + (i + 0.5) * passo, z0 + (j + 0.5) * passo];
+      if (!dentroDoComodo(p, comodo)) continue;
+      if (m.paredes.some((w) => !ehDivisa(w) && projetar(p, w.a, w.b).dist < w.esp / 2 + 0.02)) continue;
+      pontos.push({ i, j, x: p[0], z: p[1], coef: null });
+    }
+    return { x0, z0, nx, nz, passo, pontos };
+  }
+
+  // prepara um ponto do mapa, com a mesma conta de um medidor: quanto de cada pedaço do céu chega nele
+  function prepararPonto(cena, ponto, alt) {
+    const pm = prepararMedidor(cena, { pos: [ponto.x, ponto.z], alt }), am = pm.amostras;
+    const coef = new Float32Array(N_PEDACOS);
+    for (let i = 0; i < am.length; i += 4) coef[pedacoDoCeu(am[i], am[i + 1], am[i + 2])] += am[i + 3];
+    ponto.p = pm.p; ponto.coef = coef;
+  }
+
+  // luz num ponto preparado: sol direto mais céu (a refletida é do cômodo e entra por fora)
+  function lerPonto(cena, ponto, ceu, lum) {
+    let e = 0;
+    const coef = ponto.coef;
+    for (let k = 0; k < N_PEDACOS; k++) e += coef[k] * lum[k];
+    if (ceu.normal > 0 && ceu.sol[1] > 0) e += ceu.normal * ceu.sol[1] * tracar(cena, ponto.p, ceu.sol).t;
+    return e;
+  }
+
   return {
-    RAD, MATERIAIS, CORES, TIPOS_ABERTURA,
+    RAD, MATERIAIS, CORES, TIPOS_ABERTURA, CEUS, REFLETE, PISOS, TETOS, CAIXILHO, MONTANTE_VIDRO, ALT_MEDIDOR,
     instanteLocal, posicaoSol, direcaoSol, diaSolar, cardeal,
     dist, projetar, intersecao, areaAssinada, dentro, dentroComFuros, dentroDoComodo, centroide, pontoInterno, mm, mmP,
-    modeloVazio, exemplo, novoId, novaParede, novaAbertura, normalizar, copia,
+    modeloVazio, exemplo, novoId, novaParede, novaAbertura, novoMedidor, novaRegua, normalizar, copia,
     grafo, faces, detectarComodos, ladoExterno, derivar, pecasParede, encaixarAbertura, encaixar, moverNo,
-    poligonosCobertura,
+    facesDaParede, cantosDasFaces, fixarAreas,
+    poligonosCobertura, cobertura, caixaAba, formaArvore, profCaixilho,
+    hemisferio, transVidro, cenaLuz, tracar, estadoCeu, ceuEm, prepararMedidor, prepararZona, luzRefletida, ehDivisa,
+    prepararLuz, lerLuz, sondarLuz, comodoDaLuz, ceuVisivel,
+    luzDoDia, resumoDoDia, datasDasEstacoes, horasDeSol, solNoPonto, solNoVidro, vistaDoCeu, naVistaDoCeu,
+    luminanciaDosPedacos, gradeDoComodo, prepararPonto, lerPonto,
   };
 })();
 if (typeof module !== 'undefined') module.exports = CasaSim;
@@ -943,11 +1766,14 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
   const DICAS = {
     selecionar: '<b>Clique</b> numa parede, abertura, árvore ou cômodo para editar. <b>Arraste</b> um canto para mover as paredes. Arrastar o fundo move a câmera.',
     parede: '<b>Clique</b> para começar e a cada canto. Termina ao encostar noutra parede, com <b>Esc</b> ou duplo clique. Digite um número para o comprimento exato. <b>Shift</b> solta o encaixe.',
+    divisa: 'Uma linha que fecha uma área sem ser parede: a boca de um corredor, a frente de uma varanda, dois ambientes de um salão. <b>Clique</b> de canto a canto, como numa parede. Não barra a luz.',
     retangulo: '<b>Clique</b> em dois cantos opostos para criar um cômodo retangular.',
     janela: '<b>Clique</b> numa parede para pôr uma janela. Vermelho quer dizer que não cabe ali.',
     porta: '<b>Clique</b> numa parede para pôr uma porta.',
     'porta-vidro': '<b>Clique</b> numa parede para pôr uma porta de vidro.',
     arvore: '<b>Clique</b> no terreno para plantar uma árvore. Ela faz sombra como o resto.',
+    medidor: '<b>Clique</b> em qualquer ponto para pôr um medidor de luz. O número que segue o cursor é a luz ali, em lux, na altura de uma mesa.',
+    regua: '<b>Clique</b> em dois pontos para deixar uma medida na planta. As pontas grudam nos cantos, nas faces das paredes e nas beiradas das aberturas. <b>Shift</b> solta o encaixe.',
   };
 
   // ---------- Estado ----------
@@ -955,10 +1781,10 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     modelo: null, der: null,
     ferramenta: 'selecionar',
     sel: null, hover: null,
-    vista: 'planta', verDentro: true, trajetoria: true,
-    data: hojeISO(), hora: 10, tocando: false, vel: 1,
+    vista: 'planta', verDentro: true, trajetoria: true, mapa: false,
+    data: hojeISO(), hora: 10, tocando: false, vel: 1, ceu: 'limpo',
     grade: 0.1,
-    cadeia: null, retIni: null, cursor: null, digitado: '', fantasma: null,
+    cadeia: null, retIni: null, reguaIni: null, cursor: null, digitado: '', fantasma: null,
     arrasto: null,
     aba: 'casa', abaAntes: 'casa',
   };
@@ -974,6 +1800,13 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     t = ((t % 1440) + 1440) % 1440;
     return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
   };
+  // lux com três algarismos que importam: 8,4 lx, 430 lx, 1.240 lx, 84.300 lx
+  const fmtLux = (x) => {
+    if (!(x >= 0.05)) return '0 lx';
+    const v = x < 10 ? Math.round(x * 10) / 10 : x < 1000 ? Math.round(x) : x < 10000 ? Math.round(x / 10) * 10 : Math.round(x / 100) * 100;
+    return v.toLocaleString('pt-BR') + ' lx';
+  };
+  const fmtParte = (x) => (x < 0.001 ? 'menos de 0,1%' : fmt(x * 100, x < 0.1 ? 1 : 0) + '%');
   const lerp = (a, b, t) => a + (b - a) * t;
   const passo = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
@@ -997,7 +1830,7 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     clearTimeout(timerSalvar);
     timerSalvar = setTimeout(() => {
       try {
-        localStorage.setItem(CHAVE, JSON.stringify({ modelo: est.modelo, data: est.data, hora: est.hora, vista: est.vista, verDentro: est.verDentro, trajetoria: est.trajetoria }));
+        localStorage.setItem(CHAVE, JSON.stringify({ modelo: est.modelo, data: est.data, hora: est.hora, ceu: est.ceu, vista: est.vista, verDentro: est.verDentro, trajetoria: est.trajetoria, mapa: est.mapa }));
       } catch (e) { /* armazenamento cheio ou bloqueado */ }
     }, 300);
   }
@@ -1095,7 +1928,6 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
   cena.add(grpCasa, grpPlanta, grpSobre, grpSol);
 
   const MAT = {
-    piso: new THREE.MeshStandardMaterial({ color: '#e6d5b6', roughness: 0.85 }),
     patio: new THREE.MeshStandardMaterial({ color: '#cbc5b8', roughness: 0.95 }),
     caixilho: new THREE.MeshStandardMaterial({ color: '#3a3e44', roughness: 0.55 }),
     folha: new THREE.MeshStandardMaterial({ color: '#9b6b45', roughness: 0.7 }),
@@ -1107,6 +1939,10 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     beiral: new THREE.LineDashedMaterial({ color: '#2b2f36', dashSize: 0.25, gapSize: 0.18, transparent: true, opacity: 0.55 }),
     marcaVidro: new THREE.MeshBasicMaterial({ color: '#3d9be0' }),
     marcaPorta: new THREE.MeshBasicMaterial({ color: '#9b6b45' }),
+    divisa: new THREE.MeshBasicMaterial({ color: '#7b4fd0' }),
+    // o medidor não pega luz da cena, para aparecer também no escuro
+    medidorCorpo: new THREE.MeshBasicMaterial({ color: '#1d2128' }),
+    medidorSensor: new THREE.MeshBasicMaterial({ color: '#ffd45a' }),
   };
   const cacheMat = new Map();
   function matCor(hex, extra) {
@@ -1142,6 +1978,13 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     return m;
   }
 
+  // o piso de um cômodo, deitado no chão, com os furos dos pátios
+  function geoComodo(c) {
+    const forma = new THREE.Shape(c.pontos.map((p) => new THREE.Vector2(p[0], -p[1])));
+    for (const f of c.furos) forma.holes.push(new THREE.Path(f.map((p) => new THREE.Vector2(p[0], -p[1]))));
+    return new THREE.ShapeGeometry(forma).rotateX(-Math.PI / 2);
+  }
+
   function construir() {
     limpar(grpCasa); limpar(grpPlanta);
     telhados = [];
@@ -1156,6 +1999,17 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
       const g = new THREE.Group();
       g.position.set(w.a[0], 0, w.a[1]);
       g.rotation.y = -q.ang;
+      if (S.ehDivisa(w)) {
+        // a divisa é só uma faixa fina no chão; a caixa invisível em volta dá onde clicar no 3D
+        const faixa = new THREE.Mesh(new THREE.PlaneGeometry(q.L, 0.07).rotateX(-Math.PI / 2), MAT.divisa);
+        faixa.position.set(q.L / 2, 0.026, 0);
+        faixa.userData = dados;
+        g.add(faixa);
+        caixa(g, q.L, 0.06, 0.3, q.L / 2, 0.03, 0, MAT.fantasma, dados, false);
+        grpCasa.add(g);
+        cresce(w.a[0], w.a[1], 0); cresce(w.b[0], w.b[1], 0);
+        continue;
+      }
       const mat = matCor((S.CORES[w.cor] || S.CORES.branco).hex);
       const abs = m.aberturas.filter((ab) => ab.parede === w.id);
       for (const pc of S.pecasParede(q.L, w.alt, e0, e1, abs)) {
@@ -1173,26 +2027,19 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     }
 
     for (const c of d.comodos) {
-      const forma = new THREE.Shape(c.pontos.map((p) => new THREE.Vector2(p[0], -p[1])));
-      for (const f of c.furos) forma.holes.push(new THREE.Path(f.map((p) => new THREE.Vector2(p[0], -p[1]))));
-      const geo = new THREE.ShapeGeometry(forma).rotateX(-Math.PI / 2);
-      const piso = new THREE.Mesh(geo, c.coberto ? MAT.piso : MAT.patio);
+      const piso = new THREE.Mesh(geoComodo(c), c.coberto ? matCor(S.PISOS[c.piso].hex, { roughness: 0.85 }) : MAT.patio);
       piso.position.y = 0.01;
       piso.receiveShadow = true;
       piso.userData = { tipo: 'comodo', ponto: c.centro };
       grpCasa.add(piso);
     }
 
-    const cob = m.cobertura;
-    if (cob.tipo !== 'nenhuma') {
-      const cobertos = d.comodos.filter((c) => c.coberto);
-      const espMax = m.paredes.reduce((s, w) => Math.max(s, w.esp), 0.1);
-      const nosCobertos = new Set();
-      for (const c of cobertos) for (const p of c.pontos.concat(...c.furos)) nosCobertos.add(p[0] + ',' + p[1]);
-      const altas = m.paredes.filter((w) => nosCobertos.has(w.a[0] + ',' + w.a[1]) && nosCobertos.has(w.b[0] + ',' + w.b[1]));
-      const H = altas.length ? Math.max(...altas.map((w) => w.alt)) : m.padrao.alt;
+    // a mesma laje serve ao desenho e à conta de luz
+    luz.cob = S.cobertura(m, d, ClipperLib);
+    if (luz.cob) {
+      const cob = m.cobertura, H = luz.cob.H;
       const corTeto = (S.MATERIAIS[cob.mat] || S.MATERIAIS['laje-concreto']).cor;
-      for (const pg of S.poligonosCobertura(cobertos, cob.beiral + espMax / 2, ClipperLib)) {
+      for (const pg of luz.cob.poligonos) {
         const forma = new THREE.Shape(pg.contorno.map((p) => new THREE.Vector2(p[0], p[1])));
         for (const f of pg.furos) forma.holes.push(new THREE.Path(f.map((p) => new THREE.Vector2(p[0], p[1]))));
         const geo = new THREE.ExtrudeGeometry(forma, { depth: cob.esp, bevelEnabled: false }).rotateX(Math.PI / 2);
@@ -1217,17 +2064,31 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     for (const t of m.arvores) {
       const g = new THREE.Group();
       g.position.set(t.pos[0], 0, t.pos[1]);
-      const dados = { tipo: 'arvore', id: t.id };
-      const hTronco = Math.max(0.5, t.alt - t.copa * 1.2);
-      const tronco = new THREE.Mesh(new THREE.CylinderGeometry(0.1 + t.copa * 0.03, 0.14 + t.copa * 0.04, hTronco + t.copa * 0.5, 8), MAT.tronco);
-      tronco.position.y = (hTronco + t.copa * 0.5) / 2;
-      const copa = new THREE.Mesh(new THREE.IcosahedronGeometry(t.copa, 1), MAT.copa);
-      copa.scale.y = 0.85;
-      copa.position.y = t.alt - t.copa * 0.85;
+      const dados = { tipo: 'arvore', id: t.id }, f = S.formaArvore(t);
+      const tronco = new THREE.Mesh(new THREE.CylinderGeometry(f.tronco.r1, f.tronco.r0, f.tronco.alt, 8), MAT.tronco);
+      tronco.position.y = f.tronco.alt / 2;
+      const copa = new THREE.Mesh(new THREE.IcosahedronGeometry(f.copa.r, 1), MAT.copa);
+      copa.scale.y = f.copa.achat;
+      copa.position.y = f.copa.y;
       for (const o of [tronco, copa]) { o.castShadow = true; o.receiveShadow = true; o.userData = dados; g.add(o); }
       grpCasa.add(g);
       cresce(t.pos[0], t.pos[1], t.copa);
     }
+
+    // medidores de luz: uma haste com o sensor em cima. Não fazem sombra nem entram na conta de luz
+    for (const md of m.medidores) {
+      const g = new THREE.Group(), dados = { tipo: 'medidor', id: md.id };
+      g.position.set(md.pos[0], 0, md.pos[1]);
+      const peca = (geo, mat, y) => { const o = new THREE.Mesh(geo, mat); o.position.y = y; o.userData = dados; g.add(o); };
+      if (md.alt > 0.03) peca(new THREE.CylinderGeometry(0.012, 0.012, md.alt, 6), MAT.medidorCorpo, md.alt / 2);
+      peca(new THREE.CylinderGeometry(0.11, 0.11, 0.03, 24), MAT.medidorCorpo, md.alt + 0.015);
+      peca(new THREE.CylinderGeometry(0.07, 0.07, 0.034, 24), MAT.medidorSensor, md.alt + 0.017);
+      // volume invisível em volta, para o clique no 3D não precisar acertar a haste
+      peca(new THREE.CylinderGeometry(0.2, 0.2, md.alt + 0.2, 10), MAT.fantasma, (md.alt + 0.2) / 2);
+      grpCasa.add(g);
+    }
+    luz.prep = null; luz.suja = true;
+    reiniciarMapa();
 
     if (xmin === Infinity) limites = { cx: 0, cz: 0, r: 8, rc: 6, ccx: 0, ccz: 0 };
     else {
@@ -1245,8 +2106,8 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
   function construirAbertura(g, w, ab, lado) {
     const tipo = S.TIPOS_ABERTURA[ab.tipo] || S.TIPOS_ABERTURA.janela;
     const dados = { tipo: 'abertura', id: ab.id };
-    const u = ab.pos, v0 = ab.peitoril, v1 = ab.peitoril + ab.alt, f = 0.05;
-    const prof = Math.min(w.esp * 0.6, 0.09);
+    const u = ab.pos, v0 = ab.peitoril, v1 = ab.peitoril + ab.alt, f = S.CAIXILHO;
+    const prof = S.profCaixilho(w.esp);
     caixa(g, ab.larg, f, prof, u, v1 - f / 2, 0, MAT.caixilho, dados);
     if (v0 > 0.001) caixa(g, ab.larg, f, prof, u, v0 + f / 2, 0, MAT.caixilho, dados);
     caixa(g, f, ab.alt, prof, u - ab.larg / 2 + f / 2, v0 + ab.alt / 2, 0, MAT.caixilho, dados);
@@ -1258,13 +2119,12 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
       vidro.castShadow = false; vidro.receiveShadow = false;
       vidro.userData = dados;
       g.add(vidro);
-      if (ab.larg > 1.05) caixa(g, 0.04, vaoAlt, prof * 0.8, u, vaoY, 0, MAT.caixilho, dados);
+      if (ab.larg > 1.05) caixa(g, S.MONTANTE_VIDRO, vaoAlt, prof * 0.8, u, vaoY, 0, MAT.caixilho, dados);
     } else {
       caixa(g, ab.larg - 2 * f, vaoAlt, 0.04, u, vaoY, 0, MAT.folha, dados);
     }
-    if (ab.aba > 0 && lado !== 0) {
-      caixa(g, ab.larg + 0.3, 0.06, ab.aba, u, v1 + 0.06, lado * (w.esp / 2 + ab.aba / 2), MAT.brise, dados);
-    }
+    const aba = S.caixaAba(ab, w.esp, lado);
+    if (aba) caixa(g, aba.u1 - aba.u0, aba.v1 - aba.v0, aba.n1 - aba.n0, (aba.u0 + aba.u1) / 2, (aba.v0 + aba.v1) / 2, (aba.n0 + aba.n1) / 2, MAT.brise, dados);
     // marca na planta: a abertura aparece como uma faixa colorida em cima da parede
     const marca = new THREE.Mesh(new THREE.PlaneGeometry(ab.larg, w.esp * 0.55).rotateX(-Math.PI / 2), tipo.vidro ? MAT.marcaVidro : MAT.marcaPorta);
     marca.position.set(u, w.alt + 0.006, 0);
@@ -1297,6 +2157,7 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     limpar(grpSol);
     const loc = est.modelo.local, R = raioTraj(), c = new THREE.Vector3(limites.ccx, 0, limites.ccz);
     diaInfo = S.diaSolar(est.data, loc.lat, loc.lon, loc.fuso);
+    luz.diaSujo = true;
     // rosa dos ventos: círculo no chão com marcas a cada 15°
     const pts = [];
     for (let i = 0; i <= 96; i++) { const a = i / 96 * Math.PI * 2; pts.push(new THREE.Vector3(c.x + Math.cos(a) * R, 0.02, c.z + Math.sin(a) * R)); }
@@ -1361,6 +2222,7 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     return tmpA.set(a[idx]).lerp(tmpB.set(b[idx]), t).clone();
   }
 
+  const NUVENS = { limpo: 0, parcial: 0.5, encoberto: 1 }; // quanto do sol as nuvens tiram, só no desenho
   let solAgora = null;
   function atualizarSol() {
     const loc = est.modelo.local;
@@ -1376,20 +2238,26 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     const sc = sol.shadow.camera;
     sc.left = -Rs; sc.right = Rs; sc.top = Rs; sc.bottom = -Rs; sc.near = 0.5; sc.far = Rs * 3 + Rs * 12;
     sc.updateProjectionMatrix();
-    const dia = passo(-8, 6, altG), forte = passo(-0.8, 9, altG);
+    // as nuvens tiram força do sol (e das sombras) e deixam o céu mais claro e cinza
+    const dia = passo(-8, 6, altG), nuvens = NUVENS[est.ceu] || 0, forte = passo(-0.8, 9, altG) * (1 - nuvens);
     sol.intensity = 2.1 * forte;
     sol.color.set('#ffab62').lerp(tmpB.set('#fff4e4'), passo(0, 28, altG));
-    hemi.intensity = 0.2 + 0.58 * dia;
+    hemi.intensity = (0.2 + 0.58 * dia) * (1 + 0.7 * nuvens);
     hemi.color.set('#46598c').lerp(tmpB.set('#dcebff'), dia);
     hemi.groundColor.set('#26281f').lerp(tmpB.set('#8c8a6e'), dia);
     renderer.toneMappingExposure = 0.85 + 0.2 * dia;
-    ceuMat.uniforms.topo.value.copy(corCeu(altG, 1));
-    ceuMat.uniforms.horiz.value.copy(corCeu(altG, 2));
+    const topo = corCeu(altG, 1), horiz = corCeu(altG, 2), claro = 0.1 + 0.9 * dia;
+    topo.lerp(tmpB.set('#93a0aa').multiplyScalar(claro), nuvens * 0.9);
+    horiz.lerp(tmpB.set('#cfd5d9').multiplyScalar(claro), nuvens * 0.9);
+    ceuMat.uniforms.topo.value.copy(topo);
+    ceuMat.uniforms.horiz.value.copy(horiz);
     ceuMat.uniforms.solDir.value.set(d[0], d[1], d[2]);
     ceuMat.uniforms.solCor.value.set('#ffe2ad').multiplyScalar(forte);
     const R = raioTraj();
     discoSol.position.set(limites.ccx + d[0] * R, d[1] * R, limites.ccz + d[2] * R);
     discoSol.visible = altG > -1 && est.trajetoria;
+    luz.ceu = S.ceuEm(loc, est.data, est.hora, est.ceu);
+    luz.suja = true;
     atualizarInfoSol();
     pedir();
   }
@@ -1401,6 +2269,7 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     const partes = [];
     if (altG > -0.833) partes.push(`sol a <b>${fmt(altG, 0)}°</b> de altura, rumo <b>${fmt(azG, 0)}° ${S.cardeal(azG)}</b>`);
     else partes.push('<b>sol abaixo do horizonte</b>');
+    partes.push(`lá fora <b>${fmtLux(luz.ceu.horizontal)}</b>`);
     if (diaInfo.nascer != null) partes.push(`nasce <b>${fmtHora(diaInfo.nascer)}</b>`);
     if (diaInfo.por != null) partes.push(`põe <b>${fmtHora(diaInfo.por)}</b>`);
     partes.push(`meio-dia solar <b>${fmtHora(diaInfo.meio)}</b> a ${fmt(diaInfo.altitudeMaxima / RAD, 0)}°`);
@@ -1446,13 +2315,20 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
       const x = (vtmp.x + 1) / 2 * w, y = (1 - vtmp.y) / 2 * h;
       r.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%)`;
     }
+    posicionarReguas();
+  }
+
+  // nome e área de cada cômodo; com o mapa de luz pronto, também a média dele
+  function rotulosComodos() {
+    for (const c of est.der.comodos) {
+      const r = resumoDoMapa(c);
+      rotulo('comodo:' + c.centro.join(','), `${esc(c.nome)}<span>${fmt(c.area, 1)} m²</span>` + (r ? `<span>média ${fmtLux(r.media)}</span>` : ''), new THREE.Vector3(c.centro[0], 0.1, c.centro[1]), 'rot-comodo' + (r ? ' no-mapa' : ''));
+    }
+    podar('comodo:');
   }
 
   function rotulosFixos() {
-    for (const c of est.der.comodos) {
-      rotulo('comodo:' + c.centro.join(','), `${esc(c.nome)}<span>${fmt(c.area, 1)} m²</span>`, new THREE.Vector3(c.centro[0], 0.1, c.centro[1]), 'rot-comodo');
-    }
-    podar('comodo:');
+    rotulosComodos();
     const R = raioTraj(), cx = limites.ccx, cz = limites.ccz, norte = est.modelo.local.norte;
     [['N', 0], ['L', 90], ['S', 180], ['O', 270]].forEach(([n, a]) => {
       const b = (a + norte) * RAD;
@@ -1464,6 +2340,357 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
   }
   function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
+  // ---------- Medidores de luz ----------
+  // cob é a laje e prep o céu que cada medidor enxerga: só mudam com a casa. ceu é a luz do instante.
+  // mapa é o mapa de luz dos cômodos; diaSujo avisa que a data, o céu ou a casa mudaram e o que é do dia inteiro
+  // (o gráfico, as horas de sol) tem de ser refeito.
+  const luz = { cob: null, prep: null, ceu: null, leituras: new Map(), suja: true, mapa: null, diaSujo: true };
+  // pedaços do painel que mostram leituras: lista, sel e comodo mudam com a hora; dia() refaz o que é do dia
+  // inteiro e hora() move o que marca o instante
+  const camposVazios = () => ({ lista: new Map(), sel: null, comodo: null, dia: null, hora: null });
+  let campos = camposVazios();
+
+  function prepLuz() {
+    if (!luz.prep) luz.prep = S.prepararLuz(est.modelo, est.der, luz.cob);
+    return luz.prep;
+  }
+  function lugarDe(pos) {
+    const c = acharComodo(pos);
+    return c ? c.nome + (!c.coberto ? ' (descoberta)' : c.externo ? ' (coberta e aberta)' : '') : 'Ao ar livre';
+  }
+
+  function atualizarLuz() {
+    luz.suja = false;
+    const m = est.modelo;
+    luz.leituras = new Map(m.medidores.length ? S.lerLuz(prepLuz(), luz.ceu).map((l) => [l.id, l]) : []);
+    for (const md of m.medidores) {
+      const sel = est.sel && est.sel.tipo === 'medidor' && est.sel.id === md.id, total = luz.leituras.get(md.id).total;
+      rotulo('lux:' + md.id, `<em>${esc(md.nome)}</em>${fmtLux(total)}${sinalDaMeta(md, total)}`, new THREE.Vector3(md.pos[0], md.alt, md.pos[1]), 'rot-lux' + (sel ? ' sel' : ''));
+    }
+    podar('lux:');
+    if (est.fantasma && est.fantasma.tipo === 'medidor') { sondar(); rotuloSonda(); }
+    if (luz.mapa) pintarMapa();
+    preencherLeituras();
+    if (luz.diaSujo && !est.arrasto) {
+      luz.diaSujo = false;
+      if (campos.dia) campos.dia();
+    } else if (campos.hora) campos.hora();
+  }
+
+  // ✓ se a leitura alcança a meta do medidor, ↓ se fica abaixo; nada se ele não tem meta
+  function sinalDaMeta(md, total) {
+    if (!md.meta) return '';
+    return total >= md.meta ? '<i class="sinal ok">✓</i>' : '<i class="sinal baixo">↓</i>';
+  }
+
+  // a sonda: a leitura no ponto debaixo do cursor, antes de pôr o medidor
+  function sondar() {
+    const f = est.fantasma;
+    f.leitura = S.sondarLuz(prepLuz(), est.modelo, est.der, { pos: f.ponto, alt: S.ALT_MEDIDOR }, luz.ceu);
+  }
+  function rotuloSonda() {
+    const f = est.fantasma;
+    rotulo('medida:sonda', fmtLux(f.leitura.total), new THREE.Vector3(f.ponto[0], S.ALT_MEDIDOR, f.ponto[1]), 'rot-lux sonda');
+  }
+
+  function preencherLeituras() {
+    for (const [id, linha] of campos.lista) {
+      const l = luz.leituras.get(id);
+      if (l) linha.saida.innerHTML = fmtLux(l.total) + sinalDaMeta(linha.md, l.total);
+    }
+    const rc = campos.comodo;
+    if (rc) {
+      const r = resumoDoMapa(rc.c);
+      rc.media.textContent = r ? fmtLux(r.media) : 'calculando…';
+      rc.min.textContent = r ? fmtLux(r.min) : '';
+      rc.max.textContent = r ? fmtLux(r.max) : '';
+      rc.acima.textContent = r ? fmt(r.acima * 100, 0) + '% da área' : '';
+    }
+    const c = campos.sel, l = c && luz.leituras.get(c.id);
+    if (!l) return;
+    const fora = luz.ceu.horizontal;
+    c.total.textContent = fmtLux(l.total);
+    c.parte.textContent = fora >= 1 ? fmtParte(l.total / fora) + ' da luz lá de fora' : 'sem luz do dia';
+    c.sol.textContent = fmtLux(l.sol);
+    c.ceu.textContent = fmtLux(l.ceu);
+    c.refletida.textContent = fmtLux(l.refletida);
+    c.fora.textContent = fmtLux(fora);
+    c.estado.hidden = !c.md.meta;
+    if (c.md.meta) c.estado.innerHTML = sinalDaMeta(c.md, l.total) + (l.total >= c.md.meta ? 'Alcança a meta de ' : 'Abaixo da meta de ') + fmtLux(c.md.meta);
+  }
+
+  // ---------- Luz ao longo do dia ----------
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  function svg(tag, attrs, filhos) {
+    const n = document.createElementNS(SVGNS, tag);
+    for (const k in attrs || {}) n.setAttribute(k, attrs[k]);
+    for (const f of [].concat(filhos || [])) if (f != null) n.append(f);
+    return n;
+  }
+  const LIMIAR_LUX = 300; // referência quando o medidor não tem meta: o que a leitura e o trabalho pedem
+  const fmtDuracao = (h) => {
+    const min = Math.round(h * 60);
+    if (min <= 0) return 'nada';
+    return min < 60 ? min + ' min' : Math.floor(min / 60) + 'h' + (min % 60 ? String(min % 60).padStart(2, '0') : '');
+  };
+  const inicioDe = (estacao) => 'Início d' + (estacao === 'primavera' ? 'a ' : 'o ') + estacao;
+  const fmtTrecho = (t) => (t.tempo > 0 ? `, entre ${fmtHora(t.de)} e ${fmtHora(t.ate)}` : '');
+  const fmtNum = (x) => Math.round(x).toLocaleString('pt-BR');
+
+  function irParaHora(h) {
+    est.hora = Math.max(0, Math.min(23.99, h));
+    atualizarSol(); mostrarHora(); salvar();
+  }
+
+  // As leituras de um medidor ao longo do dia. A escala dos lux é logarítmica (cada linha vale dez vezes a de
+  // baixo), porque o sol direto dá cem vezes a luz de dentro: numa escala comum o resto viraria um risco no chão.
+  // aoMirar(k, ir) recebe o passo debaixo do cursor (null ao sair) e ir = true no clique.
+  function graficoDoDia(dia, leituras, meta, aoMirar) {
+    const W = 272, H = 138, esq = 47, dir = 8, topo = 8, base = 20, w = W - esq - dir, h = H - topo - base;
+    const h0 = diaInfo && diaInfo.nascer != null ? Math.max(0, Math.floor(diaInfo.nascer - 0.5)) : 0;
+    const h1 = diaInfo && diaInfo.por != null ? Math.min(24, Math.ceil(diaInfo.por + 0.5)) : 24;
+    const X = (hr) => esq + (hr - h0) / (h1 - h0) * w;
+    const Y = (lx) => topo + h - (Math.log10(Math.max(lx, 10)) - 1) / (Math.log10(200000) - 1) * h;
+    const g = svg('svg', { class: 'grafico', viewBox: `0 0 ${W} ${H}`, tabindex: '0', role: 'img', 'aria-label': 'Luz no medidor ao longo do dia, em lux. As setas do teclado mudam a hora.' });
+    for (const [lx, nome] of [[10, '10'], [100, '100'], [1000, '1 mil'], [10000, '10 mil'], [100000, '100 mil']]) {
+      g.append(svg('line', { class: lx === 10 ? 'eixo' : 'grade', x1: esq, x2: W - dir, y1: Y(lx), y2: Y(lx) }));
+      g.append(svg('text', { x: esq - 5, y: Y(lx) + 3, 'text-anchor': 'end' }, nome));
+    }
+    for (let hr = Math.ceil(h0 / 3) * 3; hr <= h1; hr += 3) g.append(svg('text', { x: X(hr), y: H - 6, 'text-anchor': 'middle' }, hr + 'h'));
+    const ks = dia.horas.map((_, k) => k).filter((k) => dia.horas[k] >= h0 - 1e-9 && dia.horas[k] <= h1 + 1e-9);
+    const pts = ks.map((k) => X(dia.horas[k]).toFixed(1) + ' ' + Y(leituras[k].total).toFixed(1));
+    const chao = topo + h;
+    g.append(svg('path', { class: 'area', d: `M${X(dia.horas[ks[0]]).toFixed(1)} ${chao} L${pts.join(' L')} L${X(dia.horas[ks[ks.length - 1]]).toFixed(1)} ${chao} Z` }));
+    g.append(svg('path', { class: 'linha', d: 'M' + pts.join(' L') }));
+    // faixa junto do eixo nas horas em que o sol bate direto no ponto
+    const meio = w / (h1 - h0) * dia.passo / 2;
+    for (const k of ks) {
+      if (leituras[k].sol > 0) g.append(svg('rect', { class: 'sol', x: (X(dia.horas[k]) - meio).toFixed(1), y: chao - 4, width: (meio * 2 + 0.3).toFixed(1), height: 4 }));
+    }
+    if (meta >= 10) {
+      g.append(svg('line', { class: 'meta', x1: esq, x2: W - dir, y1: Y(meta), y2: Y(meta) }));
+      g.append(svg('text', { x: W - dir, y: Y(meta) - 4, 'text-anchor': 'end' }, 'meta'));
+    }
+    const mira = svg('line', { class: 'mira', y1: topo, y2: chao, visibility: 'hidden' });
+    const agora = svg('line', { class: 'agora', y1: topo, y2: chao }), bola = svg('circle', { class: 'ponto', r: 4 });
+    g.append(mira, agora, bola);
+    // o cursor só precisa acertar a hora, não a linha
+    const passoEm = (e) => {
+      const r = g.getBoundingClientRect(), hr = h0 + ((e.clientX - r.left) / r.width * W - esq) / w * (h1 - h0);
+      return Math.max(ks[0], Math.min(ks[ks.length - 1], Math.round(hr / dia.passo)));
+    };
+    g.addEventListener('pointermove', (e) => {
+      const k = passoEm(e), x = X(dia.horas[k]);
+      mira.setAttribute('x1', x); mira.setAttribute('x2', x); mira.setAttribute('visibility', 'visible');
+      aoMirar(k, false);
+    });
+    g.addEventListener('pointerleave', () => { mira.setAttribute('visibility', 'hidden'); aoMirar(null, false); });
+    g.addEventListener('click', (e) => aoMirar(passoEm(e), true));
+    g.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      aoMirar(Math.round(est.hora / dia.passo) + (e.key === 'ArrowLeft' ? -1 : 1), true);
+    });
+    return {
+      el: g,
+      marcar(hora, lx) {
+        const vis = hora >= h0 && hora <= h1 ? 'visible' : 'hidden', x = X(hora);
+        agora.setAttribute('x1', x); agora.setAttribute('x2', x); agora.setAttribute('visibility', vis);
+        bola.setAttribute('cx', x); bola.setAttribute('cy', Y(lx)); bola.setAttribute('visibility', vis);
+      },
+    };
+  }
+
+  // O céu visto de um ponto, deitado como a planta: o zênite no meio e o horizonte na borda. Mostra o que tapa
+  // o céu, o que aparece pelo vidro e por onde o sol passa no dia.
+  const CORES_VISTA = { 1: '#3d4148', 2: '#7fb6ea', 3: '#cfe6fb' };
+  function vistaDoPonto(p) {
+    const N = 176, R = N / 2, cv = el('canvas', { width: N, height: N, role: 'img', 'aria-label': 'O céu visto do medidor, com o caminho do sol no dia' });
+    const ctx = cv.getContext('2d'), img = ctx.createImageData(N, N), tipos = S.vistaDoCeu(prepLuz().cena, p, N);
+    const rgb = {};
+    for (const k in CORES_VISTA) rgb[k] = [1, 3, 5].map((q) => parseInt(CORES_VISTA[k].substr(q, 2), 16));
+    for (let i = 0; i < tipos.length; i++) {
+      const c = rgb[tipos[i]];
+      if (c) { img.data[i * 4] = c[0]; img.data[i * 4 + 1] = c[1]; img.data[i * 4 + 2] = c[2]; img.data[i * 4 + 3] = 255; }
+    }
+    const xy = (d) => { const q = S.naVistaDoCeu(d); return q && [R + q[0] * R, R + q[1] * R]; };
+    const escrever = (txt, x, y) => {
+      ctx.font = '700 11px Manrope, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(29, 33, 40, 0.85)'; ctx.strokeText(txt, x, y);
+      ctx.fillStyle = '#fff'; ctx.fillText(txt, x, y);
+    };
+    return {
+      el: cv,
+      desenhar() {
+        const loc = est.modelo.local;
+        ctx.clearRect(0, 0, N, N);
+        ctx.putImageData(img, 0, 0);
+        ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        for (const alt of [30, 60]) { ctx.beginPath(); ctx.arc(R, R, (1 - alt / 90) * R, 0, Math.PI * 2); ctx.stroke(); }
+        ctx.strokeStyle = '#2b2f36'; ctx.beginPath(); ctx.arc(R, R, R - 0.5, 0, Math.PI * 2); ctx.stroke();
+        // o caminho do sol no dia e as horas cheias
+        ctx.strokeStyle = '#f29a1b'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.beginPath();
+        let aberto = false;
+        for (const t of diaInfo.trajetoria) {
+          const q = t.altitude > 0 && xy(S.direcaoSol(t.altitude, t.azimute, loc.norte));
+          if (!q) { aberto = false; continue; }
+          if (aberto) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]);
+          aberto = true;
+        }
+        ctx.stroke();
+        for (const hr of [9, 12, 15]) {
+          const s = S.posicaoSol(S.instanteLocal(est.data, hr, loc.fuso), loc.lat, loc.lon), q = s.altitude > 0 && xy(S.direcaoSol(s.altitude, s.azimute, loc.norte));
+          if (!q) continue;
+          ctx.fillStyle = '#f29a1b'; ctx.beginPath(); ctx.arc(q[0], q[1], 2.5, 0, Math.PI * 2); ctx.fill();
+          escrever(hr + 'h', q[0], q[1] - 10);
+        }
+        const b = loc.norte * RAD;
+        escrever('N', R + Math.sin(b) * (R - 10), R - Math.cos(b) * (R - 10));
+        // o sol agora, com um anel claro em volta para não sumir em cima da linha
+        const q = solAgora && solAgora.altitude > 0 && xy(S.direcaoSol(solAgora.altitude, solAgora.azimute, loc.norte));
+        if (q) {
+          ctx.beginPath(); ctx.arc(q[0], q[1], 5, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffd45a'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
+        }
+      },
+    };
+  }
+
+  // ---------- Mapa de luz ----------
+  // O piso de cada cômodo pintado com a luz a 0,75 m do chão, em sete faixas de lux. A rampa é de um matiz só,
+  // do escuro (pouca luz) ao claro, em passos iguais de claridade.
+  const LUX_FAIXAS = [50, 100, 300, 500, 1000, 5000];
+  const LUX_CORES = ['#271605', '#432808', '#613b0b', '#814f0d', '#a3640f', '#c6790f', '#e8911e'];
+  const LOG_MAPA = 5; // a textura guarda log10(lux) num byte, de 1 lx a 100 mil lx
+  const grpMapa = new THREE.Group();
+  cena.add(grpMapa);
+  // a cor de cada valor da textura; o sombreador consulta esta rampa, então as faixas têm borda nítida
+  // mesmo com o valor interpolado entre os pontos da grade
+  const rampaLux = (() => {
+    const d = new Uint8Array(256 * 4);
+    for (let k = 0; k < 256; k++) {
+      const lux = Math.pow(10, k / 255 * LOG_MAPA), cor = LUX_CORES[LUX_FAIXAS.filter((x) => lux >= x).length];
+      for (let q = 0; q < 3; q++) d[k * 4 + q] = parseInt(cor.substr(1 + q * 2, 2), 16);
+      d[k * 4 + 3] = 255;
+    }
+    const t = new THREE.DataTexture(d, 256, 1);
+    t.needsUpdate = true;
+    return t;
+  })();
+  function matMapa(tex) {
+    return new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false,
+      uniforms: { mapa: { value: tex }, rampa: { value: rampaLux } },
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      // sem as conversões de cor do three.js: as cores da rampa saem na tela como foram escolhidas
+      fragmentShader: 'uniform sampler2D mapa; uniform sampler2D rampa; varying vec2 vUv; void main() { vec4 a = texture2D(mapa, vUv); gl_FragColor = vec4(texture2D(rampa, vec2(a.r, 0.5)).rgb, a.a * 0.94); }',
+    });
+  }
+
+  // recomeça o mapa do zero: a casa mudou, ou ele acabou de ser ligado ou desligado
+  function reiniciarMapa() {
+    for (const s of luz.mapa ? luz.mapa.salas : []) { s.tex.dispose(); s.malha.material.dispose(); }
+    limpar(grpMapa);
+    luz.mapa = null;
+    if (est.mapa) {
+      const comodos = est.der.comodos, passo = comodos.reduce((t, c) => t + c.area, 0) > 110 ? 0.5 : 0.25;
+      const salas = comodos.map((c) => {
+        const grade = S.gradeDoComodo(est.modelo, c, passo), n = grade.nx * grade.nz;
+        const dados = new Uint8Array(n * 4), tex = new THREE.DataTexture(dados, grade.nx, grade.nz);
+        tex.magFilter = tex.minFilter = THREE.LinearFilter;
+        const geo = geoComodo(c), pos = geo.attributes.position, uv = geo.attributes.uv;
+        for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i) - grade.x0) / (grade.nx * passo), (pos.getZ(i) - grade.z0) / (grade.nz * passo));
+        const malha = new THREE.Mesh(geo, matMapa(tex));
+        malha.position.y = 0.02;
+        malha.visible = false;
+        grpMapa.add(malha);
+        // cada quadrinho da textura sem ponto (fora do cômodo, dentro de parede) copia o ponto mais próximo,
+        // para a cor não escurecer nas beiradas
+        const fonte = new Int32Array(n).fill(-1), fila = [];
+        grade.pontos.forEach((p, k) => { fonte[p.j * grade.nx + p.i] = k; fila.push(p.j * grade.nx + p.i); });
+        for (let q = 0; q < fila.length; q++) {
+          const t = fila[q], i = t % grade.nx, j = (t - i) / grade.nx;
+          for (const [a, b] of [[i - 1, j], [i + 1, j], [i, j - 1], [i, j + 1]]) {
+            if (a < 0 || b < 0 || a >= grade.nx || b >= grade.nz || fonte[b * grade.nx + a] >= 0) continue;
+            fonte[b * grade.nx + a] = fonte[t];
+            fila.push(b * grade.nx + a);
+          }
+        }
+        return { c, grade, dados, tex, malha, fonte, feitos: 0, pronta: false, pc: null, valores: new Float32Array(grade.pontos.length), resumo: null };
+      });
+      luz.mapa = { salas, total: salas.reduce((t, s) => t + s.grade.pontos.length, 0), feitos: 0 };
+    }
+    atualizarLegenda();
+  }
+
+  // prepara mais alguns pontos do mapa a cada quadro, um cômodo de cada vez, sem travar a tela
+  function avancarMapa() {
+    const mp = luz.mapa;
+    if (!mp || mp.feitos >= mp.total || est.arrasto) return;
+    const prep = prepLuz(), fim = performance.now() + 12;
+    for (const s of mp.salas) {
+      if (s.pronta) continue;
+      while (s.feitos < s.grade.pontos.length && performance.now() < fim) {
+        S.prepararPonto(prep.cena, s.grade.pontos[s.feitos++], S.ALT_MEDIDOR);
+        mp.feitos++;
+      }
+      if (s.feitos < s.grade.pontos.length) break;
+      s.pronta = true;
+      s.pc = S.comodoDaLuz(prep, est.modelo, est.der, s.c.centro);
+      // só o cômodo que ficou pronto pede um desenho novo: enquanto a conta anda, a tela fica parada e sobra
+      // tempo para ela
+      luz.suja = true;
+      pedir();
+    }
+    atualizarLegenda();
+  }
+
+  // a luz de cada ponto na hora escolhida vai para a textura do cômodo, e sai o resumo dele
+  function pintarMapa() {
+    const barreiras = prepLuz().cena, ceu = luz.ceu, lum = S.luminanciaDosPedacos(ceu);
+    for (const s of luz.mapa.salas) {
+      const pontos = s.grade.pontos;
+      if (!s.pronta || !pontos.length) continue;
+      const refletida = s.pc ? S.luzRefletida(barreiras, s.pc, ceu) : 0;
+      let soma = 0, min = Infinity, max = 0, acima = 0;
+      pontos.forEach((p, k) => {
+        const v = S.lerPonto(barreiras, p, ceu, lum) + refletida;
+        s.valores[k] = v;
+        soma += v; min = Math.min(min, v); max = Math.max(max, v);
+        if (v >= LIMIAR_LUX) acima++;
+      });
+      for (let t = 0; t < s.fonte.length; t++) {
+        s.dados[t * 4] = Math.max(0, Math.min(255, Math.round(Math.log10(Math.max(s.valores[s.fonte[t]], 1)) / LOG_MAPA * 255)));
+        s.dados[t * 4 + 3] = 255;
+      }
+      s.tex.needsUpdate = true;
+      s.malha.visible = true;
+      s.resumo = { media: soma / pontos.length, min, max, acima: acima / pontos.length };
+    }
+    rotulosComodos();
+  }
+  function resumoDoMapa(c) {
+    const s = luz.mapa && luz.mapa.salas.find((x) => x.c === c);
+    return s ? s.resumo : null;
+  }
+
+  // legenda: as sete cores com os lux das divisas embaixo
+  $('leg-barra').append(...LUX_CORES.map((cor) => el('i', { style: 'background:' + cor })));
+  $('leg-marcas').append(...LUX_FAIXAS.map((lx, k) => el('span', { style: `left:${((k + 1) / 7 * 100).toFixed(2)}%` }, lx >= 1000 ? lx / 1000 + ' mil' : String(lx))));
+  function atualizarLegenda() {
+    const mp = luz.mapa;
+    $('legenda').hidden = !mp;
+    $('leg-estado').textContent = mp && mp.feitos < mp.total ? `calculando ${Math.round(mp.feitos / mp.total * 100)}%` : '';
+  }
+  function alternarMapa() {
+    est.mapa = !est.mapa;
+    $('ver-mapa').setAttribute('aria-pressed', String(est.mapa));
+    reiniciarMapa();
+    rotulosComodos();
+    luz.suja = true;
+    montarPainel(); salvar(); pedir();
+  }
+
   // ---------- Modelo: aplicar mudanças e histórico ----------
   function aplicar(novo, op) {
     op = op || {};
@@ -1474,6 +2701,9 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     }
     est.modelo = S.normalizar(novo);
     est.der = S.derivar(est.modelo);
+    // área que acabou de nascer guarda o tipo com que nasceu, para não mudar sozinha depois
+    const fixado = S.fixarAreas(est.modelo, est.der);
+    if (fixado) { est.modelo = fixado; est.der = S.derivar(fixado); }
     validarSelecao();
     construir();
     salvar();
@@ -1510,6 +2740,8 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     if (sel.tipo === 'parede') return m.paredes.find((w) => w.id === sel.id) || null;
     if (sel.tipo === 'abertura') return m.aberturas.find((a) => a.id === sel.id) || null;
     if (sel.tipo === 'arvore') return m.arvores.find((t) => t.id === sel.id) || null;
+    if (sel.tipo === 'medidor') return m.medidores.find((x) => x.id === sel.id) || null;
+    if (sel.tipo === 'regua') return m.reguas.find((x) => x.id === sel.id) || null;
     if (sel.tipo === 'comodo') return acharComodo(sel.ponto);
     return null;
   }
@@ -1523,6 +2755,7 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     if (sel && est.aba !== 'selecao') { est.abaAntes = est.aba; est.aba = 'selecao'; }
     if (!sel && est.aba === 'selecao') est.aba = est.abaAntes || 'casa';
     if (mudou) montarPainel();
+    luz.suja = true; // o rótulo do medidor selecionado muda de cor
     destacar();
   }
 
@@ -1546,9 +2779,10 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
       const q = quadro(o), [e0, e1] = est.der.extensoes[o.id];
       const g = new THREE.Group();
       g.position.set(o.a[0], 0, o.a[1]); g.rotation.y = -q.ang;
-      caixa(g, q.L + e0 + e1 + 0.04, o.alt + 0.04, o.esp + 0.06, (q.L + e1 - e0) / 2, o.alt / 2, 0, mat, null, false);
+      const alt = S.ehDivisa(o) ? 0.08 : o.alt, esp = S.ehDivisa(o) ? 0.24 : o.esp;
+      caixa(g, q.L + e0 + e1 + 0.04, alt + 0.04, esp + 0.06, (q.L + e1 - e0) / 2, alt / 2, 0, mat, null, false);
       grpSobre.add(g);
-      if (mat === MAT_SEL) rotulo('medida:sel', fmt(q.L) + ' m', new THREE.Vector3((o.a[0] + o.b[0]) / 2, o.alt + 0.3, (o.a[1] + o.b[1]) / 2), 'rot-medida sel');
+      if (mat === MAT_SEL) rotulo('medida:sel', fmt(q.L) + ' m', new THREE.Vector3((o.a[0] + o.b[0]) / 2, alt + 0.3, (o.a[1] + o.b[1]) / 2), 'rot-medida sel');
     } else if (sel.tipo === 'abertura') {
       const w = m.paredes.find((x) => x.id === o.parede);
       if (!w) return;
@@ -1561,10 +2795,12 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
       const s = new THREE.Mesh(new THREE.CylinderGeometry(o.copa + 0.15, o.copa + 0.15, o.alt + 0.2, 24), mat);
       s.position.set(o.pos[0], (o.alt + 0.2) / 2, o.pos[1]);
       grpSobre.add(s);
+    } else if (sel.tipo === 'medidor') {
+      const s = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, o.alt + 0.2, 20), mat);
+      s.position.set(o.pos[0], (o.alt + 0.2) / 2, o.pos[1]);
+      grpSobre.add(s);
     } else if (sel.tipo === 'comodo') {
-      const forma = new THREE.Shape(o.pontos.map((p) => new THREE.Vector2(p[0], -p[1])));
-      for (const f of o.furos) forma.holes.push(new THREE.Path(f.map((p) => new THREE.Vector2(p[0], -p[1]))));
-      const piso = new THREE.Mesh(new THREE.ShapeGeometry(forma).rotateX(-Math.PI / 2), mat);
+      const piso = new THREE.Mesh(geoComodo(o), mat);
       piso.position.y = 0.03;
       grpSobre.add(piso);
     }
@@ -1576,7 +2812,87 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     if (est.sel) realce(est.sel, MAT_SEL);
     desenharFantasma();
     podar('medida:');
+    rotulosReguas();
     pedir();
+  }
+
+  // ---------- Réguas ----------
+  // Medidas livres. O traço vai num SVG por cima da cena, então ele e as marcas das pontas têm sempre o
+  // mesmo tamanho na tela, na planta e no 3D, e nada da casa os esconde.
+  const tracos = new Map();
+  const ehSel = (sel, tipo, id) => !!sel && sel.tipo === tipo && sel.id === id;
+  // ponto do chão em pixels da tela; null se ficou atrás da câmera
+  function naTela(p) {
+    vtmp.set(p[0], 0.02, p[1]).project(cam());
+    return vtmp.z > -1 && vtmp.z < 1 ? [(vtmp.x + 1) / 2 * canvas.clientWidth, (1 - vtmp.y) / 2 * canvas.clientHeight] : null;
+  }
+  // as réguas do modelo e a que está sendo traçada
+  function reguasNaTela() {
+    const lista = est.modelo.reguas.map((r) => ({ id: r.id, a: r.a, b: r.b, classe: ehSel(est.sel, 'regua', r.id) ? 'sel' : ehSel(est.hover, 'regua', r.id) ? 'hover' : '' }));
+    if (est.ferramenta === 'regua' && est.reguaIni && est.cursor) lista.push({ id: 'nova', a: est.reguaIni, b: est.cursor.ponto, classe: 'nova' });
+    return lista;
+  }
+  function posicionarReguas() {
+    const vivos = new Set();
+    for (const r of reguasNaTela()) {
+      let g = tracos.get(r.id);
+      if (!g) {
+        g = svg('g', {}, [svg('path', { class: 'halo' }), svg('path', { class: 'traco' })]);
+        $('reguas').append(g);
+        tracos.set(r.id, g);
+      }
+      vivos.add(r.id);
+      const A = naTela(r.a), B = naTela(r.b);
+      g.setAttribute('class', 'regua ' + r.classe);
+      g.setAttribute('visibility', A && B ? 'visible' : 'hidden');
+      if (!A || !B) continue;
+      // o traço e uma marquinha atravessada em cada ponta
+      const L = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1, nx = -(B[1] - A[1]) / L * 5, ny = (B[0] - A[0]) / L * 5;
+      const f = (x, y) => x.toFixed(1) + ' ' + y.toFixed(1);
+      const d = `M${f(A[0], A[1])} L${f(B[0], B[1])} M${f(A[0] - nx, A[1] - ny)} L${f(A[0] + nx, A[1] + ny)} M${f(B[0] - nx, B[1] - ny)} L${f(B[0] + nx, B[1] + ny)}`;
+      g.firstChild.setAttribute('d', d);
+      g.lastChild.setAttribute('d', d);
+    }
+    for (const [id, g] of tracos) if (!vivos.has(id)) { g.remove(); tracos.delete(id); }
+  }
+  function rotulosReguas() {
+    for (const r of est.modelo.reguas) {
+      rotulo('regua:' + r.id, fmt(S.dist(r.a, r.b)) + ' m', new THREE.Vector3((r.a[0] + r.b[0]) / 2, 0.02, (r.a[1] + r.b[1]) / 2), 'rot-medida' + (ehSel(est.sel, 'regua', r.id) ? ' sel' : ''));
+    }
+    podar('regua:');
+  }
+
+  // régua debaixo do ponteiro, medido em pixels da tela: pelo rótulo, por uma ponta ou pelo traço
+  function reguaSob(e) {
+    const cv = canvas.getBoundingClientRect(), p = [e.clientX - cv.left, e.clientY - cv.top];
+    let melhor = null, dmin = 7;
+    for (const r of est.modelo.reguas) {
+      const rot = rotulos.get('regua:' + r.id), q = rot && rot.el.style.display !== 'none' ? rot.el.getBoundingClientRect() : null;
+      if (q && e.clientX >= q.left - 2 && e.clientX <= q.right + 2 && e.clientY >= q.top - 2 && e.clientY <= q.bottom + 2) return { id: r.id, parte: 'rotulo' };
+      const A = naTela(r.a), B = naTela(r.b);
+      if (!A || !B) continue;
+      const d = S.projetar(p, A, B).dist;
+      if (d < dmin) { dmin = d; melhor = { id: r.id, parte: S.dist(p, A) < 11 ? 'a' : S.dist(p, B) < 11 ? 'b' : 'meio' }; }
+    }
+    return melhor;
+  }
+
+  // onde as pontas de uma régua grudam: cantos das paredes (no eixo e nas faces), faces das paredes,
+  // beiradas das aberturas, árvores, medidores e as pontas das outras réguas
+  function encaixeDaRegua(e, de, ignorar) {
+    const m = est.modelo, extras = S.cantosDasFaces(m.paredes);
+    for (const ab of m.aberturas) {
+      const w = m.paredes.find((x) => x.id === ab.parede);
+      if (!w) continue;
+      const q = quadro(w);
+      for (const s of [ab.pos - ab.larg / 2, ab.pos + ab.larg / 2]) for (const lado of [-1, 1]) {
+        extras.push([w.a[0] + q.dx * s + q.nx * lado * w.esp / 2, w.a[1] + q.dz * s + q.nz * lado * w.esp / 2]);
+      }
+    }
+    for (const t of m.arvores) extras.push(t.pos);
+    for (const md of m.medidores) extras.push(md.pos);
+    for (const r of m.reguas) if (r.id !== ignorar) extras.push(r.a, r.b);
+    return { paredes: m.paredes, raio: Math.max(unidadesPorPixel() * 12, 0.05), grade: est.grade, de, passoAngulo: 15, livre: e.shiftKey, extras, faces: true };
   }
 
   // pré-visualização da ferramenta: parede elástica, retângulo, abertura, árvore e o ponto de encaixe
@@ -1600,16 +2916,22 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
       if (L < 0.01) return;
       const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), g = new THREE.Group();
       g.position.set(a[0], 0, a[1]); g.rotation.y = -ang;
-      caixa(g, L, m.padrao.alt, m.padrao.esp, L / 2, m.padrao.alt / 2, 0, MAT_NOVA, null, false);
+      // a divisa é rasteira: uma faixa no chão em vez de uma parede em pé
+      const divisa = est.ferramenta === 'divisa', alt = divisa ? 0.08 : m.padrao.alt;
+      caixa(g, L, alt, divisa ? 0.14 : m.padrao.esp, L / 2, alt / 2, 0, MAT_NOVA, null, false);
       grpSobre.add(g);
       if (chave) {
         let txt = fmt(L) + ' m';
         if (est.digitado) txt = est.digitado.replace('.', ',') + ' m ↵';
-        rotulo('medida:' + chave, txt, new THREE.Vector3((a[0] + b[0]) / 2, m.padrao.alt + 0.35, (a[1] + b[1]) / 2), 'rot-medida');
+        rotulo('medida:' + chave, txt, new THREE.Vector3((a[0] + b[0]) / 2, alt + 0.35, (a[1] + b[1]) / 2), 'rot-medida');
       }
     };
-    if (est.ferramenta === 'parede' && est.cadeia && c) {
+    if (tracando() && est.cadeia && c) {
       paredeFantasma(est.cadeia.pontos[est.cadeia.pontos.length - 1], c.ponto, 'elastico');
+    }
+    if (est.ferramenta === 'regua' && est.reguaIni && c) {
+      const a = est.reguaIni, b = c.ponto;
+      rotulo('medida:regua', fmt(S.dist(a, b)) + ' m', new THREE.Vector3((a[0] + b[0]) / 2, 0.02, (a[1] + b[1]) / 2), 'rot-medida');
     }
     if (est.ferramenta === 'retangulo' && est.retIni && c) {
       const a = est.retIni, b = c.ponto, q = [[a[0], a[1]], [b[0], a[1]], [b[0], b[1]], [a[0], b[1]]];
@@ -1630,6 +2952,12 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
       s.scale.y = 0.85;
       s.position.set(f.ponto[0], 6 - 2.4 * 0.85, f.ponto[1]);
       grpSobre.add(s);
+    }
+    if (f && f.tipo === 'medidor') {
+      const s = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.03, 24), MAT_NOVA);
+      s.position.set(f.ponto[0], S.ALT_MEDIDOR, f.ponto[1]);
+      grpSobre.add(s);
+      rotuloSonda();
     }
   }
 
@@ -1721,27 +3049,44 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     const p = new THREE.Vector3();
     return raio(e).ray.intersectPlane(pl, p) ? [p.x, p.z] : pontoChao(e);
   }
+  // ponto num plano horizontal na altura y (o sensor de um medidor)
+  function pontoNaAltura(e, y) {
+    const p = new THREE.Vector3();
+    return raio(e).ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -y), p) ? [p.x, p.z] : null;
+  }
   function dadosDe(obj) {
     for (let o = obj; o; o = o.parent) if (o.userData && o.userData.tipo) return o.userData;
     return null;
   }
 
-  // o que está sob o ponteiro
+  // o que está sob o ponteiro. A régua, que fica por cima de tudo, ganha pelo rótulo; pelo traço ela só
+  // ganha do que é grande (o piso de um cômodo, a copa de uma árvore), para uma régua encostada numa parede
+  // não impedir de escolher a parede
   function escolher(e) {
+    const r = reguaSob(e);
+    if (r && r.parte === 'rotulo') return { tipo: 'regua', id: r.id };
+    const o = escolherObjeto(e);
+    return r && (!o || o.tipo === 'comodo' || o.tipo === 'arvore') ? { tipo: 'regua', id: r.id } : o;
+  }
+  function escolherObjeto(e) {
     const m = est.modelo;
     if (est.vista === '3d') {
       const hits = raio(e).intersectObjects([grpCasa], true);
+      let vidro = null; // um medidor visto através de um vidro ganha do vidro
       for (const h of hits) {
         const d = dadosDe(h.object);
         if (!d || d.tipo === 'teto') continue;
+        if (!vidro && d.tipo === 'abertura' && h.object.material.transparent) { vidro = d; continue; }
+        if (vidro && d.tipo !== 'medidor') break;
         if (d.tipo === 'comodo') return { tipo: 'comodo', ponto: d.ponto };
         return { tipo: d.tipo, id: d.id };
       }
-      return null;
+      return vidro ? { tipo: vidro.tipo, id: vidro.id } : null;
     }
     const p = pontoChao(e);
     if (!p) return null;
     const upp = unidadesPorPixel();
+    for (const md of m.medidores) if (S.dist(p, md.pos) <= Math.max(0.15, upp * 9)) return { tipo: 'medidor', id: md.id };
     let melhor = null, dmin = Infinity;
     for (const w of m.paredes) {
       const pr = S.projetar(p, w.a, w.b), tol = Math.max(w.esp / 2, upp * 7);
@@ -1763,9 +3108,10 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
       const hits = raio(e).intersectObjects([grpCasa], true);
       for (const h of hits) {
         const d = dadosDe(h.object);
-        if (!d || d.tipo === 'teto' || d.tipo === 'arvore') continue;
+        if (!d || d.tipo === 'teto' || d.tipo === 'arvore' || d.tipo === 'medidor') continue;
         let w = null;
         if (d.tipo === 'parede') w = m.paredes.find((x) => x.id === d.id);
+        if (w && S.ehDivisa(w)) continue; // divisa não aceita abertura
         if (d.tipo === 'abertura') { const ab = m.aberturas.find((x) => x.id === d.id); w = ab && m.paredes.find((x) => x.id === ab.parede); }
         if (!w) return null;
         const pr = S.projetar([h.point.x, h.point.z], w.a, w.b);
@@ -1778,6 +3124,7 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     const upp = unidadesPorPixel();
     let melhor = null, dmin = Infinity;
     for (const w of m.paredes) {
+      if (S.ehDivisa(w)) continue;
       const pr = S.projetar(p, w.a, w.b), tol = Math.max(w.esp, upp * 14);
       if (pr.dist <= tol && pr.dist < dmin) { dmin = pr.dist; melhor = { w, s: pr.tc * S.dist(w.a, w.b) }; }
     }
@@ -1823,6 +3170,15 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
       if (sob && sob.w.id === o.parede && Math.abs(sob.s - o.pos) <= o.larg / 2 + 0.1) return { tipo: 'abertura', id: o.id, base: S.copia(est.modelo), desloc: sob.s - o.pos };
     }
     if (s && s.tipo === 'arvore' && o && p && S.dist(p, o.pos) <= o.copa) return { tipo: 'arvore', id: o.id, base: S.copia(est.modelo), desloc: [p[0] - o.pos[0], p[1] - o.pos[1]] };
+    if (s && s.tipo === 'medidor' && o) {
+      const q = pontoNaAltura(e, o.alt);
+      if (q && S.dist(q, o.pos) <= Math.max(0.25, unidadesPorPixel() * 12)) return { tipo: 'medidor', id: o.id, base: S.copia(est.modelo), desloc: [q[0] - o.pos[0], q[1] - o.pos[1]] };
+    }
+    if (s && s.tipo === 'regua' && o && p) {
+      // pela ponta, a régua estica; pelo meio (ou pelo rótulo), anda inteira
+      const sob = reguaSob(e);
+      if (sob && sob.id === o.id) return { tipo: 'regua', id: o.id, base: S.copia(est.modelo), ponta: sob.parte === 'a' || sob.parte === 'b' ? sob.parte : null, de: p };
+    }
     if (p) {
       const n = noPerto(p);
       if (n) return { tipo: 'no', de: n.slice(), base: S.copia(est.modelo) };
@@ -1852,10 +3208,10 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     }
     est.hover = null;
     canvas.style.cursor = 'crosshair';
-    if (f === 'parede' || f === 'retangulo') {
+    if (tracando() || f === 'retangulo') {
       const p = pontoChao(e);
       if (!p) return;
-      const de = f === 'parede' && est.cadeia ? est.cadeia.pontos[est.cadeia.pontos.length - 1] : null;
+      const de = tracando() && est.cadeia ? est.cadeia.pontos[est.cadeia.pontos.length - 1] : null;
       est.cursor = S.encaixar(p, opcoesEncaixe(e, de));
       if (f === 'retangulo' && est.retIni && est.cursor.tipo !== 'no') {
         est.cursor = { ponto: [S.mm(Math.round(p[0] / est.grade) * est.grade), S.mm(Math.round(p[1] / est.grade) * est.grade)], tipo: 'grade' };
@@ -1871,6 +3227,15 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     } else if (f === 'arvore') {
       const p = pontoChao(e);
       if (p) est.fantasma = { tipo: 'arvore', ponto: [S.mm(Math.round(p[0] / est.grade) * est.grade), S.mm(Math.round(p[1] / est.grade) * est.grade)] };
+    } else if (f === 'medidor') {
+      const p = pontoChao(e);
+      if (p) {
+        est.fantasma = { tipo: 'medidor', ponto: [S.mm(Math.round(p[0] / est.grade) * est.grade), S.mm(Math.round(p[1] / est.grade) * est.grade)] };
+        sondar();
+      }
+    } else if (f === 'regua') {
+      const p = pontoChao(e);
+      if (p) est.cursor = S.encaixar(p, encaixeDaRegua(e, est.reguaIni, null));
     }
     destacar();
   }
@@ -1903,6 +3268,24 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
       const m = S.copia(a.base);
       const t = m.arvores.find((x) => x.id === a.id);
       t.pos = [S.mm(Math.round((p[0] - a.desloc[0]) / est.grade) * est.grade), S.mm(Math.round((p[1] - a.desloc[1]) / est.grade) * est.grade)];
+      est.modelo = m;
+    } else if (a.tipo === 'medidor') {
+      const m = S.copia(a.base), md = m.medidores.find((x) => x.id === a.id);
+      const p = pontoNaAltura(e, md.alt);
+      if (!p) return;
+      md.pos = [S.mm(Math.round((p[0] - a.desloc[0]) / est.grade) * est.grade), S.mm(Math.round((p[1] - a.desloc[1]) / est.grade) * est.grade)];
+      est.modelo = m;
+    } else if (a.tipo === 'regua') {
+      const p = pontoChao(e);
+      if (!p) return;
+      const m = S.copia(a.base), r = m.reguas.find((x) => x.id === a.id);
+      if (a.ponta) {
+        // a ponta que anda gruda como ao traçar, com o ângulo redondo contado a partir da outra
+        r[a.ponta] = S.encaixar(p, encaixeDaRegua(e, a.ponta === 'a' ? r.b : r.a, r.id)).ponto;
+      } else {
+        const dx = Math.round((p[0] - a.de[0]) / est.grade) * est.grade, dz = Math.round((p[1] - a.de[1]) / est.grade) * est.grade;
+        r.a = [r.a[0] + dx, r.a[1] + dz]; r.b = [r.b[0] + dx, r.b[1] + dz];
+      }
       est.modelo = m;
     }
     a.mexeu = true;
@@ -1949,11 +3332,11 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
 
   function clique(e, botao) {
     const f = est.ferramenta;
-    if (botao === 2) { terminarCadeia(); est.retIni = null; destacar(); return; }
+    if (botao === 2) { terminarCadeia(); est.retIni = null; est.reguaIni = null; destacar(); return; }
     if (botao !== 0) return;
     if (e.pointerType === 'touch') pairar(e);
     if (f === 'selecionar') { selecionar(escolher(e)); return; }
-    if (f === 'parede') {
+    if (tracando()) {
       const p = pontoChao(e);
       if (!p) return;
       const de = est.cadeia ? est.cadeia.pontos[est.cadeia.pontos.length - 1] : null;
@@ -1989,6 +3372,29 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
       m.arvores.push(t);
       aplicar(m);
       selecionar({ tipo: 'arvore', id: t.id });
+      return;
+    }
+    if (f === 'medidor') {
+      const fa = est.fantasma;
+      if (!fa || fa.tipo !== 'medidor') return;
+      const m = S.copia(est.modelo), md = S.novoMedidor(m, fa.ponto);
+      m.medidores.push(md);
+      est.fantasma = null; // a sonda sai de cima do medidor novo e volta quando o cursor andar
+      aplicar(m);
+      selecionar({ tipo: 'medidor', id: md.id });
+      return;
+    }
+    if (f === 'regua') {
+      const c = est.cursor;
+      if (!c) return;
+      if (!est.reguaIni) { est.reguaIni = c.ponto; destacar(); return; }
+      const a = est.reguaIni;
+      est.reguaIni = null;
+      if (S.dist(a, c.ponto) < 0.02) { destacar(); return; }
+      const m = S.copia(est.modelo), r = S.novaRegua(m, a, c.ponto);
+      m.reguas.push(r);
+      aplicar(m);
+      selecionar({ tipo: 'regua', id: r.id });
     }
   }
 
@@ -1998,7 +3404,7 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     const ult = est.cadeia.pontos[est.cadeia.pontos.length - 1];
     if (S.dist(ult, p) < 0.05) return;
     const m = S.copia(est.modelo);
-    m.paredes.push(S.novaParede(m, ult, p));
+    m.paredes.push(S.novaParede(m, ult, p, est.ferramenta === 'divisa' ? { tipo: 'divisa' } : null));
     est.cadeia.pontos.push(p);
     est.digitado = '';
     aplicar(m);
@@ -2007,10 +3413,12 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     destacar();
   }
   function terminarCadeia() { est.cadeia = null; est.digitado = ''; podar('medida:'); destacar(); }
+  // a parede e a divisa são traçadas do mesmo jeito, canto a canto
+  function tracando() { return est.ferramenta === 'parede' || est.ferramenta === 'divisa'; }
 
   function mudarFerramenta(f) {
     est.ferramenta = f;
-    est.cadeia = null; est.retIni = null; est.fantasma = null; est.cursor = null; est.digitado = ''; est.hover = null; est.noPerto = null;
+    est.cadeia = null; est.retIni = null; est.reguaIni = null; est.fantasma = null; est.cursor = null; est.digitado = ''; est.hover = null; est.noPerto = null;
     document.querySelectorAll('[data-ferr]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ferr === f)));
     $('dica').innerHTML = DICAS[f];
     canvas.style.cursor = f === 'selecionar' ? 'grab' : 'crosshair';
@@ -2024,13 +3432,15 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     if (s.tipo === 'parede') m.paredes = m.paredes.filter((w) => w.id !== s.id);
     if (s.tipo === 'abertura') m.aberturas = m.aberturas.filter((a) => a.id !== s.id);
     if (s.tipo === 'arvore') m.arvores = m.arvores.filter((t) => t.id !== s.id);
+    if (s.tipo === 'medidor') m.medidores = m.medidores.filter((x) => x.id !== s.id);
+    if (s.tipo === 'regua') m.reguas = m.reguas.filter((x) => x.id !== s.id);
     est.sel = null;
     if (est.aba === 'selecao') est.aba = est.abaAntes || 'casa';
     aplicar(m);
   }
 
   // ---------- Teclado ----------
-  const ATALHOS = { v: 'selecionar', p: 'parede', r: 'retangulo', j: 'janela', o: 'porta', g: 'porta-vidro', a: 'arvore' };
+  const ATALHOS = { v: 'selecionar', p: 'parede', r: 'retangulo', j: 'janela', o: 'porta', g: 'porta-vidro', a: 'arvore', m: 'medidor', d: 'regua', l: 'divisa' };
   function aoTeclar(e) {
     const alvo = e.target;
     const digitando = alvo && (alvo.tagName === 'INPUT' || alvo.tagName === 'SELECT' || alvo.tagName === 'TEXTAREA');
@@ -2039,7 +3449,7 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); if (e.shiftKey) refazer(); else desfazer(); return; }
     if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); refazer(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (est.ferramenta === 'parede' && est.cadeia) {
+    if (tracando() && est.cadeia) {
       if (/^[0-9]$/.test(e.key) || ((e.key === ',' || e.key === '.') && !/[.]/.test(est.digitado))) {
         est.digitado += e.key === ',' ? '.' : e.key; destacar(); e.preventDefault(); return;
       }
@@ -2058,7 +3468,7 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
       }
     }
     if (e.key === 'Escape') {
-      if (est.cadeia || est.retIni) { terminarCadeia(); est.retIni = null; destacar(); }
+      if (est.cadeia || est.retIni || est.reguaIni) { terminarCadeia(); est.retIni = null; est.reguaIni = null; destacar(); }
       else if (est.sel) selecionar(null);
       else if (est.ferramenta !== 'selecionar') mudarFerramenta('selecionar');
       return;
@@ -2124,9 +3534,14 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     document.querySelectorAll('[data-aba]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.aba === est.aba)));
     $('aba-selecao').hidden = !est.sel;
     conteudo.innerHTML = '';
+    campos = camposVazios();
     if (est.aba === 'selecao' && est.sel) painelSelecao();
     else if (est.aba === 'local') painelLocal();
     else painelCasa();
+    preencherLeituras();
+    // o que é do dia inteiro (o gráfico, as horas de sol) entra no próximo quadro, já com as leituras em dia
+    luz.diaSujo = true; luz.suja = true;
+    pedir();
   }
 
   function painelSelecao() {
@@ -2134,23 +3549,38 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     if (!o) { conteudo.append(el('p', { class: 'vazio' }, 'Nada selecionado.')); return; }
     if (s.tipo === 'parede') {
       const q = quadro(o);
+      const comprimento = numero('Comprimento', q.L, { min: 0.1, max: 100, passo: 0.05, un: 'm' }, (L) => {
+        const b = [o.a[0] + q.dx * L, o.a[1] + q.dz * L];
+        aplicar(S.moverNo(est.modelo, o.b, b));
+      });
+      // parede e divisa trocam de papel sem redesenhar
+      const tipo = escolha('Tipo', S.ehDivisa(o) ? 'divisa' : 'parede', [['parede', 'Parede ou muro'], ['divisa', 'Divisa (sem parede)']], (v) => mudarModelo((n) => {
+        const w = n.paredes.find((x) => x.id === o.id);
+        if (v === 'divisa') w.tipo = 'divisa'; else delete w.tipo;
+      }));
+      if (S.ehDivisa(o)) {
+        conteudo.append(grupo('Divisa', [
+          comprimento, tipo,
+          el('div', { class: 'botoes' }, [botao('Apagar divisa', apagarSelecao, 'perigo')]),
+          el('p', { class: 'nota' }, 'Uma linha que fecha uma área sem ser parede. Não barra a luz, não faz sombra e não aceita janela nem porta. Serve para dar nome e tipo ao que fica de cada lado: o corredor, o quintal, a varanda.'),
+        ]));
+        return;
+      }
       conteudo.append(grupo('Parede', [
-        numero('Comprimento', q.L, { min: 0.1, max: 100, passo: 0.05, un: 'm' }, (L) => {
-          const b = [o.a[0] + q.dx * L, o.a[1] + q.dz * L];
-          aplicar(S.moverNo(est.modelo, o.b, b));
-        }),
+        comprimento, tipo,
         numero('Espessura', o.esp * 100, { min: 5, max: 60, passo: 1, casas: 0, un: 'cm' }, (v) => mudarModelo((n) => { n.paredes.find((w) => w.id === o.id).esp = v / 100; })),
         numero('Altura', o.alt, { min: 0.3, max: 8, passo: 0.05, un: 'm' }, (v) => mudarModelo((n) => { n.paredes.find((w) => w.id === o.id).alt = v; })),
         escolha('Material', o.mat, opcoesMat('parede'), (v) => mudarModelo((n) => { n.paredes.find((w) => w.id === o.id).mat = v; })),
         escolha('Cor', o.cor, opcoesCor(), (v) => mudarModelo((n) => { n.paredes.find((w) => w.id === o.id).cor = v; })),
         el('div', { class: 'botoes' }, [botao('Apagar parede', apagarSelecao, 'perigo')]),
+        el('p', { class: 'nota' }, 'Um muro é uma parede com outra altura: mude a altura aqui, ou em Casa, Paredes novas, antes de desenhar. Ele faz sombra e tapa o céu como qualquer parede.'),
       ]));
       const mat = S.MATERIAIS[o.mat];
       if (mat) conteudo.append(grupo('Valores térmicos', [leitura([['U', fmt(mat.U, 1) + ' W/m²K'], ['Capacidade', mat.ct + ' kJ/m²K']]), el('p', { class: 'nota' }, 'Típicos e aproximados. Serão usados na etapa de calor.')]));
     } else if (s.tipo === 'abertura') {
       const tipo = S.TIPOS_ABERTURA[o.tipo], w = m.paredes.find((x) => x.id === o.parede);
       const muda = (f) => mudarModelo((n) => f(n.aberturas.find((a) => a.id === o.id)));
-      const campos = [
+      const lista = [
         escolha('Tipo', o.tipo, Object.entries(S.TIPOS_ABERTURA).map(([k, v]) => [k, v.nome]), (v) => muda((a) => {
           const t = S.TIPOS_ABERTURA[v];
           a.tipo = v; a.peitoril = t.peitoril; a.alt = t.alt;
@@ -2158,12 +3588,24 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
         numero('Largura', o.larg, { min: 0.3, max: 6, passo: 0.05, un: 'm' }, (v) => muda((a) => { a.larg = v; })),
         numero('Altura', o.alt, { min: 0.2, max: w ? w.alt : 3, passo: 0.05, un: 'm' }, (v) => muda((a) => { a.alt = v; })),
       ];
-      if (o.tipo === 'janela') campos.push(numero('Peitoril', o.peitoril, { min: 0, max: 2.5, passo: 0.05, un: 'm' }, (v) => muda((a) => { a.peitoril = v; })));
-      campos.push(numero('Aba (brise)', o.aba, { min: 0, max: 2, passo: 0.05, un: 'm' }, (v) => muda((a) => { a.aba = v; })));
-      if (tipo.vidro) campos.push(escolha('Vidro', o.vidro, opcoesMat('vidro'), (v) => muda((a) => { a.vidro = v; })));
-      campos.push(el('div', { class: 'botoes' }, [botao('Apagar ' + tipo.nome.toLowerCase(), apagarSelecao, 'perigo')]));
-      conteudo.append(grupo(tipo.nome, campos));
+      if (o.tipo === 'janela') lista.push(numero('Peitoril', o.peitoril, { min: 0, max: 2.5, passo: 0.05, un: 'm' }, (v) => muda((a) => { a.peitoril = v; })));
+      lista.push(numero('Aba (brise)', o.aba, { min: 0, max: 2, passo: 0.05, un: 'm' }, (v) => muda((a) => { a.aba = v; })));
+      if (tipo.vidro) lista.push(escolha('Vidro', o.vidro, opcoesMat('vidro'), (v) => muda((a) => { a.vidro = v; })));
+      lista.push(el('div', { class: 'botoes' }, [botao('Apagar ' + tipo.nome.toLowerCase(), apagarSelecao, 'perigo')]));
+      conteudo.append(grupo(tipo.nome, lista));
+      const vidro = tipo.vidro && S.MATERIAIS[o.vidro];
+      if (vidro) conteudo.append(grupo('Vidro', [leitura([['Luz que passa', fmt(vidro.tv * 100, 0) + '%'], ['Fator solar', fmt(vidro.fs)]]), el('p', { class: 'nota' }, 'Com a luz de frente; inclinada, passa menos. Típicos e aproximados.')]));
+      if (vidro && w && est.der.lados[w.id]) {
+        const lugarDoSol = el('div', {});
+        conteudo.append(grupo('Sol direto no vidro', [lugarDoSol, el('p', { class: 'nota' }, 'O tempo em que o sol pega pelo menos um quarto do vidro pelo lado de fora, já descontados o beiral, a aba, as árvores e o resto da casa. Serve para acertar a aba: a ideia é cortar o sol do verão e deixar o do inverno.')]));
+        campos.dia = () => {
+          const chega = S.solNoVidro(prepLuz().cena, o.id, est.der.lados[w.id]), loc = est.modelo.local;
+          const horas = (data) => fmtDuracao(S.horasDeSol(loc, data, chega, 0.25).tempo);
+          lugarDoSol.replaceChildren(leitura([['Na data escolhida', horas(est.data)]].concat(S.datasDasEstacoes(est.data.slice(0, 4), loc.lat).map((e) => [inicioDe(e.nome), horas(e.data)]))));
+        };
+      }
       const notas = [];
+      if (!tipo.vidro) notas.push('Porta comum conta fechada: não passa luz por ela.');
       if (o.aba > 0 && w && est.der.lados[w.id] === 0) notas.push('A aba só aparece em parede que tem um lado de fora (cômodo coberto de um lado só).');
       notas.push('A aba é uma laje fina em cima da abertura, do lado de fora. Ela corta o sol alto e deixa passar o baixo.');
       conteudo.append(grupo(null, notas.map((t) => el('p', { class: 'nota' }, t))));
@@ -2174,29 +3616,164 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
         numero('Raio da copa', o.copa, { min: 0.5, max: 10, passo: 0.1, un: 'm' }, (v) => muda((t) => { t.copa = Math.min(v, t.alt * 0.45); })),
         el('div', { class: 'botoes' }, [botao('Apagar árvore', apagarSelecao, 'perigo')]),
       ]));
+    } else if (s.tipo === 'medidor') {
+      painelMedidor(o);
+    } else if (s.tipo === 'regua') {
+      const L = S.dist(o.a, o.b);
+      conteudo.append(grupo('Régua', [
+        numero('Comprimento', L, { min: 0.01, max: 500, passo: 0.05, un: 'm' }, (v) => mudarModelo((n) => {
+          const r = n.reguas.find((x) => x.id === o.id);
+          r.b = [r.a[0] + (r.b[0] - r.a[0]) / L * v, r.a[1] + (r.b[1] - r.a[1]) / L * v];
+        })),
+        leitura([['Na horizontal', fmt(Math.abs(o.b[0] - o.a[0])) + ' m'], ['Na vertical', fmt(Math.abs(o.b[1] - o.a[1])) + ' m']]),
+        el('div', { class: 'botoes' }, [botao('Apagar régua', apagarSelecao, 'perigo')]),
+      ]));
+      conteudo.append(grupo(null, [
+        el('p', { class: 'nota' }, 'Arraste uma ponta para medir outra coisa, ou o meio para levar a régua inteira. Mudar o comprimento aqui estica a ponta em que a régua terminou.'),
+        el('p', { class: 'nota' }, 'As pontas grudam nos cantos e nas faces das paredes, nas beiradas das aberturas, nas árvores e nos medidores. Shift solta o encaixe. Horizontal e vertical são as do desenho da planta.'),
+      ]));
     } else if (s.tipo === 'comodo') {
       const c = o;
       const ancorar = (props) => mudarModelo((n) => {
         if (c.ancora >= 0 && n.comodos[c.ancora]) Object.assign(n.comodos[c.ancora], props, { ponto: c.centro });
-        else n.comodos.push(Object.assign({ ponto: c.centro, nome: c.nome, coberto: c.coberto }, props));
+        else n.comodos.push(Object.assign({ ponto: c.centro, nome: c.nome, coberto: c.coberto, externo: c.externo }, props));
       });
       const perim = c.pontos.reduce((s2, p, i) => s2 + S.dist(p, c.pontos[(i + 1) % c.pontos.length]), 0);
-      conteudo.append(grupo('Cômodo', [
+      const acabamentos = (cat) => Object.entries(cat).map(([k, v]) => [k, `${v.nome} (devolve ${fmt(v.ref * 100, 0)}%)`]);
+      // três tipos de área: o cômodo fechado, a área coberta que é do lado de fora e a descoberta
+      const tipo = !c.coberto ? 'aberta' : c.externo ? 'varanda' : 'comodo';
+      const SOBRE_O_TIPO = {
+        comodo: 'Tem laje e conta como o lado de dentro da casa.',
+        varanda: 'Tem laje, mas é do lado de fora da casa: uma varanda, uma garagem, um corredor coberto. A luz entra pelos lados fechados com divisa em vez de parede.',
+        aberta: 'Sem laje: quintal, corredor, pátio. As paredes e os muros em volta fazem sombra e tapam parte do céu.',
+      };
+      conteudo.append(grupo(tipo === 'comodo' ? 'Cômodo' : 'Área', [
         texto('Nome', c.nome, (v) => { if (v) ancorar({ nome: v }); }),
+        escolha('Tipo', tipo, [['comodo', 'Cômodo fechado'], ['varanda', 'Coberta e aberta (varanda)'], ['aberta', 'Descoberta (quintal, corredor)']],
+          (v) => ancorar({ coberto: v !== 'aberta', externo: v === 'varanda' })),
         leitura([['Área', fmt(c.area, 1) + ' m²'], ['Perímetro', fmt(perim, 1) + ' m']]),
-        caixinha('Coberto', c.coberto, (v) => ancorar({ coberto: v })),
-        el('p', { class: 'nota' }, 'Medidas pelo eixo das paredes. Um cômodo descoberto vira pátio: fica sem laje, e o lado de fora das paredes em volta passa a ser ele.'),
+        el('p', { class: 'nota' }, SOBRE_O_TIPO[tipo]),
+        el('p', { class: 'nota' }, 'Medidas pelo eixo das paredes. Para a área existir, o contorno tem de fechar: onde não há parede, feche com uma divisa.'),
       ]));
+      if (c.coberto) {
+        conteudo.append(grupo('Acabamento', [
+          escolha('Piso', c.piso, acabamentos(S.PISOS), (v) => ancorar({ piso: v })),
+          escolha('Teto', c.teto, acabamentos(S.TETOS), (v) => ancorar({ teto: v })),
+          el('p', { class: 'nota' }, 'Piso e teto claros devolvem mais luz e clareiam o fundo do cômodo. A cor das paredes também conta: mude em cada parede.'),
+        ]));
+      }
+      if (est.mapa) {
+        const rc = { c, media: el('span', {}), min: el('span', {}), max: el('span', {}), acima: el('span', {}) };
+        campos.comodo = rc;
+        conteudo.append(grupo('Luz no cômodo', [
+          leitura([['Média', rc.media], ['Acima de ' + LIMIAR_LUX + ' lx', rc.acima], ['Mínima', rc.min], ['Máxima', rc.max]]),
+          el('p', { class: 'nota' }, 'A 0,75 m do piso, na hora, na data e no céu escolhidos.'),
+        ]));
+      } else {
+        conteudo.append(grupo('Luz no cômodo', [
+          el('p', { class: 'nota' }, 'O mapa de luz pinta o piso com a luz de cada ponto e dá a média do cômodo.'),
+          el('div', { class: 'botoes' }, [botao('Ligar o mapa de luz', alternarMapa)]),
+        ]));
+      }
     }
+  }
+
+  function painelMedidor(o) {
+    const muda = (f) => mudarModelo((n) => f(n.medidores.find((x) => x.id === o.id)));
+    const c = { id: o.id, md: o, total: el('span', {}), parte: el('small', {}), estado: el('p', { class: 'estado', hidden: '' }), sol: el('span', {}), ceu: el('span', {}), refletida: el('span', {}), fora: el('span', {}) };
+    campos.sel = c;
+    conteudo.append(grupo('Medidor de luz', [
+      el('p', { class: 'lux-total' }, [c.total, c.parte]),
+      c.estado,
+      leitura([['Sol direto', c.sol], ['Luz do céu', c.ceu], ['Refletida', c.refletida], ['Lá fora', c.fora]]),
+      texto('Nome', o.nome, (v) => { if (v) muda((x) => { x.nome = v; }); }),
+      numero('Altura do sensor', o.alt, { min: 0, max: 5, passo: 0.05, un: 'm' }, (v) => muda((x) => { x.alt = v; })),
+      numero('Meta', o.meta, { min: 0, max: 100000, passo: 50, casas: 0, un: 'lx' }, (v) => muda((x) => { x.meta = v; })),
+      leitura([['Lugar', lugarDe(o.pos)]]),
+      el('div', { class: 'botoes' }, [botao('Apagar medidor', apagarSelecao, 'perigo')]),
+    ]));
+
+    // o dia inteiro: gráfico, leitura da hora debaixo do cursor, resumo e a tabela com os mesmos números
+    const DICA = 'Passe o cursor no gráfico para ler outra hora; clique para ir até ela.';
+    const lugarDoGrafico = el('div', {}), mira = el('p', { class: 'mira-txt' }, DICA), resumo = el('ul', { class: 'resumo' });
+    const tabela = el('details', { class: 'tabela' });
+    conteudo.append(grupo('Ao longo do dia', [lugarDoGrafico, mira, resumo, tabela]));
+    const estacoesDoSol = el('div', {});
+    conteudo.append(grupo('Sol direto no ponto', [estacoesDoSol]));
+    const p = [o.pos[0], o.alt, o.pos[1]], vista = vistaDoPonto(p), aproveitado = el('b', {});
+    const chave = (classe, cor, txt) => el('li', {}, [el('span', { class: 'chave ' + classe, style: 'background:' + cor }), txt]);
+    conteudo.append(grupo('Céu visto daqui', [
+      el('div', { class: 'vista-ceu' }, [vista.el, el('ul', { class: 'resumo' }, [
+        chave('quadro', CORES_VISTA[3], 'céu aberto'), chave('quadro', CORES_VISTA[2], 'céu pelo vidro'), chave('quadro', CORES_VISTA[1], 'tapado'),
+        chave('linha', '#f29a1b', 'caminho do sol'),
+      ])]),
+      el('p', { class: 'nota' }, ['O sensor olhando para cima, deitado como a planta: o meio é o ponto bem em cima dele e a borda, o horizonte. Ele aproveita ', aproveitado, ' da luz que o céu daria ao ar livre.']),
+    ]));
+    conteudo.append(grupo('Como ler', [
+      el('p', { class: 'nota' }, 'É a luz natural que cai num plano deitado, na altura do sensor: 0,75 m é a de uma mesa. Soma o sol direto, o céu que o ponto enxerga e uma estimativa da luz que as paredes, o piso e o teto devolvem.'),
+      el('p', { class: 'nota' }, 'Para comparar: 100 a 200 lx dão para circular e estar; ler, cozinhar e trabalhar pedem de 300 a 500 lx. Ao ar livre, um dia encoberto passa de 10.000 lx e o sol direto chega a 100.000 lx.'),
+      el('p', { class: 'nota' }, 'No gráfico, cada linha vale dez vezes a de baixo, para o sol direto e a luz de dentro caberem juntos.'),
+    ]));
+
+    let dia = null, leituras = null, grafico = null;
+    const lerPasso = (k) => {
+      if (k === null) { mira.textContent = DICA; return; }
+      const l = leituras[k];
+      mira.replaceChildren(el('b', {}, fmtHora(dia.horas[k])), ' ', el('b', {}, fmtLux(l.total)), el('br', {}), `sol ${fmtNum(l.sol)} · céu ${fmtNum(l.ceu)} · refletida ${fmtNum(l.refletida)}`);
+    };
+    campos.dia = () => {
+      const prep = prepLuz(), meu = prep.medidores.find((x) => x.id === o.id), loc = est.modelo.local;
+      if (!meu) return;
+      dia = S.luzDoDia({ cena: prep.cena, comodos: prep.comodos, medidores: [meu] }, loc, est.data, est.ceu, 1 / 6);
+      leituras = dia.medidores.get(o.id);
+      const limiar = o.meta || LIMIAR_LUX, r = S.resumoDoDia(dia, leituras, limiar);
+      grafico = graficoDoDia(dia, leituras, o.meta, (k, ir) => { if (ir) irParaHora(k * dia.passo); else lerPasso(k); });
+      lugarDoGrafico.replaceChildren(grafico.el);
+      resumo.replaceChildren(
+        el('li', {}, r.pico > 0 ? ['Pico: ', el('b', {}, fmtLux(r.pico)), ' às ' + fmtHora(r.horaPico)] : 'Sem luz do dia nesta data.'),
+        el('li', {}, [(o.meta ? 'Na meta ou acima' : 'Acima de ' + limiar + ' lx') + ': ', el('b', {}, fmtDuracao(r.acima.tempo)), fmtTrecho(r.acima)]),
+        el('li', {}, [el('span', { class: 'chave' }), 'Sol direto: ', el('b', {}, fmtDuracao(r.sol.tempo)), fmtTrecho(r.sol)]),
+      );
+      const linhas = dia.horas.map((h, k) => k).filter((k) => Number.isInteger(dia.horas[k]) && dia.fora[k] > 0);
+      tabela.replaceChildren(el('summary', {}, 'Tabela do dia'), el('table', {}, [
+        el('thead', {}, el('tr', {}, ['Hora', 'Total', 'Sol', 'Céu', 'Refletida'].map((t) => el('th', { scope: 'col' }, t)))),
+        el('tbody', {}, linhas.map((k) => el('tr', {}, [fmtHora(dia.horas[k]), leituras[k].total, leituras[k].sol, leituras[k].ceu, leituras[k].refletida].map((v) => el('td', {}, typeof v === 'number' ? fmtNum(v) : v))))),
+      ]));
+      const chega = S.solNoPonto(prep.cena, p);
+      estacoesDoSol.replaceChildren(leitura(S.datasDasEstacoes(est.data.slice(0, 4), loc.lat).map((e) => [inicioDe(e.nome), fmtDuracao(S.horasDeSol(loc, e.data, chega).tempo)])));
+      aproveitado.textContent = fmtParte(S.ceuVisivel(meu.pm));
+      campos.hora();
+    };
+    campos.hora = () => {
+      if (!grafico) return;
+      const l = luz.leituras.get(o.id);
+      grafico.marcar(est.hora, l ? l.total : 0);
+      vista.desenhar();
+    };
   }
 
   function painelCasa() {
     const m = est.modelo, d = est.der;
-    const area = d.comodos.filter((c) => c.coberto).reduce((s, c) => s + c.area, 0);
+    const fechados = d.comodos.filter((c) => c.coberto && !c.externo), soma = (lista) => fmt(lista.reduce((s, c) => s + c.area, 0), 1) + ' m²';
     conteudo.append(grupo('Resumo', [leitura([
-      ['Cômodos', String(d.comodos.length)], ['Área coberta', fmt(area, 1) + ' m²'],
-      ['Paredes', String(m.paredes.length)], ['Aberturas', String(m.aberturas.length)],
+      ['Cômodos', String(fechados.length)], ['Área dos cômodos', soma(fechados)],
+      ['Áreas abertas', String(d.comodos.length - fechados.length)], ['Área coberta', soma(d.comodos.filter((c) => c.coberto))],
+      ['Paredes', String(m.paredes.filter((w) => !S.ehDivisa(w)).length)], ['Aberturas', String(m.aberturas.length)],
     ])]));
+    const linhas = m.medidores.map((md) => {
+      const saida = el('output', {});
+      campos.lista.set(md.id, { saida, md });
+      return el('button', { type: 'button', class: 'medidor', title: 'Selecionar este medidor', onclick: () => selecionar({ tipo: 'medidor', id: md.id }) }, [el('b', {}, md.nome), el('span', {}, lugarDe(md.pos)), saida]);
+    });
+    conteudo.append(grupo('Medidores de luz', [
+      linhas.length ? el('div', { class: 'medidores' }, linhas) : el('p', { class: 'nota' }, 'Nenhum medidor ainda. Ponha um em cada ponto que interessa: a mesa, a bancada, a cama.'),
+      el('div', { class: 'botoes' }, [
+        botao('Pôr um medidor', () => mudarFerramenta('medidor')),
+        linhas.length ? botao('Exportar leituras', exportarLeituras) : null,
+        botao(est.mapa ? 'Desligar o mapa de luz' : 'Ligar o mapa de luz', alternarMapa),
+      ]),
+      linhas.length ? el('p', { class: 'nota' }, 'A exportação é uma planilha (CSV) com a luz de cada medidor de meia em meia hora, na data e no céu escolhidos.') : null,
+    ]));
     const padrao = (f) => mudarModelo((n) => f(n.padrao));
     conteudo.append(grupo('Paredes novas', [
       numero('Espessura', m.padrao.esp * 100, { min: 5, max: 60, passo: 1, casas: 0, un: 'cm' }, (v) => padrao((p) => { p.esp = v / 100; })),
@@ -2227,7 +3804,7 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
       arquivo,
       el('p', { class: 'nota' }, 'A casa fica guardada neste navegador. Desfazer (Ctrl+Z) volta qualquer passo.'),
     ]));
-    conteudo.append(grupo('O que vem depois', [el('p', { class: 'nota' }, 'Por enquanto a simulação mostra o sol e as sombras. As próximas etapas medem a luz natural em cada cômodo, o calor ao longo do dia e a ventilação pelas janelas abertas.')]));
+    conteudo.append(grupo('O que vem depois', [el('p', { class: 'nota' }, 'A simulação mostra o sol, as sombras e a luz natural, nos medidores e no mapa de luz. As próximas etapas são o calor ao longo do dia e a ventilação pelas janelas abertas.')]));
   }
 
   function painelLocal() {
@@ -2278,13 +3855,35 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     }, () => {}, { timeout: 10000 });
   }
 
-  function exportar() {
-    const blob = new Blob([JSON.stringify(est.modelo, null, 2)], { type: 'application/json' });
+  function baixar(texto, tipo, nome) {
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'casa-ao-sol.json';
+    a.href = URL.createObjectURL(new Blob([texto], { type: tipo }));
+    a.download = nome;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  function exportar() { baixar(JSON.stringify(est.modelo, null, 2), 'application/json', 'casa-ao-sol.json'); }
+
+  // planilha com a luz de cada medidor de meia em meia hora. Ponto e vírgula entre as colunas e vírgula
+  // nos decimais, que é como as planilhas em português abrem sem perguntar nada.
+  function exportarLeituras() {
+    const m = est.modelo, loc = m.local, dia = S.luzDoDia(prepLuz(), loc, est.data, est.ceu, 0.5);
+    const celula = (v) => (/[;"\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v));
+    const linhas = [
+      ['Casa ao Sol: luz natural nos medidores, em lux'],
+      ['Local', loc.cidade || '', 'latitude', fmt(loc.lat), 'longitude', fmt(loc.lon)],
+      ['Data', est.data.split('-').reverse().join('/')],
+      ['Céu', S.CEUS[est.ceu].nome],
+      [],
+      ['Hora', 'Lá fora'].concat(m.medidores.map((md) => md.nome)),
+    ];
+    // só as horas com luz, e uma de cada lado para marcar o zero
+    const claras = dia.horas.map((h, k) => k).filter((k) => dia.fora[k] > 0);
+    for (let k = Math.max(0, claras[0] - 1); k <= Math.min(dia.horas.length - 2, claras[claras.length - 1] + 1); k++) {
+      linhas.push([fmtHora(dia.horas[k]), Math.round(dia.fora[k])].concat(m.medidores.map((md) => Math.round(dia.medidores.get(md.id)[k].total))));
+    }
+    // o ﻿ na frente avisa a planilha de que o texto é UTF-8
+    baixar('﻿' + linhas.map((l) => l.map(celula).join(';')).join('\r\n') + '\r\n', 'text/csv;charset=utf-8', `casa-ao-sol-leituras-${est.data}.csv`);
   }
   function importar(arq) {
     if (!arq) return;
@@ -2304,15 +3903,10 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     $('hora-txt').textContent = fmtHora(est.hora);
   }
   function estacoes() {
-    const ano = est.data.slice(0, 4), sul = est.modelo.local.lat < 0;
-    const lista = [
-      [ano + '-03-20', sul ? 'outono' : 'primavera'], [ano + '-06-21', sul ? 'inverno' : 'verão'],
-      [ano + '-09-22', sul ? 'primavera' : 'outono'], [ano + '-12-21', sul ? 'verão' : 'inverno'],
-    ];
     const box = $('estacoes');
     box.innerHTML = '';
-    for (const [d, n] of lista) {
-      const b = el('button', { type: 'button', class: 'estacao', title: 'Início do ' + n + ' (' + d.slice(8) + '/' + d.slice(5, 7) + ')', 'aria-pressed': String(est.data === d) }, n);
+    for (const { data: d, nome: n } of S.datasDasEstacoes(est.data.slice(0, 4), est.modelo.local.lat)) {
+      const b = el('button', { type: 'button', class: 'estacao', title: inicioDe(n) + ' (' + d.slice(8) + '/' + d.slice(5, 7) + ')', 'aria-pressed': String(est.data === d) }, n);
       b.addEventListener('click', () => mudarData(d));
       box.append(b, ' ');
     }
@@ -2347,8 +3941,10 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
       atualizarSol();
       if (t - ultimoTexto > 60) { mostrarHora(); ultimoTexto = t; }
     }
+    avancarMapa();
     if (!sujo) return;
     sujo = false;
+    if (luz.suja) atualizarLuz();
     renderer.render(cena, cam());
     posicionarRotulos();
   }
@@ -2369,6 +3965,7 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     discoSol.visible = est.trajetoria && solAgora && solAgora.altitude > -RAD;
     pedir(); salvar();
   });
+  $('ver-mapa').addEventListener('click', alternarMapa);
   $('desfazer').addEventListener('click', desfazer);
   $('refazer').addEventListener('click', refazer);
   $('btn-painel').addEventListener('click', () => { document.body.classList.toggle('painel-aberto'); });
@@ -2376,6 +3973,9 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
   $('vel').addEventListener('change', (e) => { est.vel = parseFloat(e.target.value); });
   inpHora.addEventListener('input', () => { est.hora = +inpHora.value / 60; $('hora-txt').textContent = fmtHora(est.hora); atualizarSol(); salvar(); });
   inpData.addEventListener('change', () => mudarData(inpData.value));
+  const selCeu = $('ceu');
+  for (const k in S.CEUS) selCeu.append(el('option', { value: k }, S.CEUS[k].nome));
+  selCeu.addEventListener('change', () => { est.ceu = selCeu.value; luz.diaSujo = true; atualizarSol(); salvar(); });
   canvas.addEventListener('pointerdown', aoApertar, true);
   canvas.addEventListener('pointermove', aoMover);
   window.addEventListener('pointerup', aoSoltar);
@@ -2407,16 +4007,20 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
     est.modelo = S.normalizar(completar(salvo.modelo));
     if (/^\d{4}-\d{2}-\d{2}$/.test(salvo.data || '')) est.data = salvo.data;
     if (typeof salvo.hora === 'number') est.hora = salvo.hora;
+    if (S.CEUS[salvo.ceu]) est.ceu = salvo.ceu;
     if (salvo.vista === '3d' || salvo.vista === 'planta') est.vista = salvo.vista;
     if (typeof salvo.verDentro === 'boolean') est.verDentro = salvo.verDentro;
     if (typeof salvo.trajetoria === 'boolean') est.trajetoria = salvo.trajetoria;
+    if (typeof salvo.mapa === 'boolean') est.mapa = salvo.mapa;
   } else {
     est.modelo = S.exemplo();
   }
   est.der = S.derivar(est.modelo);
   $('ver-dentro').setAttribute('aria-pressed', String(est.verDentro));
   $('ver-traj').setAttribute('aria-pressed', String(est.trajetoria));
+  $('ver-mapa').setAttribute('aria-pressed', String(est.mapa));
   inpData.value = est.data;
+  selCeu.value = est.ceu;
   tamanho();
   construir();
   enquadrar();
@@ -2427,7 +4031,7 @@ if (typeof module !== 'undefined') module.exports = CasaSim;
   montarPainel();
   atualizarBotoesHist();
   requestAnimationFrame(laco);
-  window.casaAoSol = { est, S, aplicar, mudarVista, mudarFerramenta, selecionar, construirSol, atualizarSol, enquadrar, pedir, mudarData, mostrarHora, cam, canvas,
+  window.casaAoSol = { est, S, luz, aplicar, mudarVista, mudarFerramenta, selecionar, construirSol, atualizarSol, enquadrar, pedir, mudarData, mostrarHora, cam, canvas,
     paraTela: (x, y, z) => { const v = new THREE.Vector3(x, y, z).project(cam()); return [(v.x + 1) / 2 * canvas.clientWidth, (1 - v.y) / 2 * canvas.clientHeight]; } };
 })();
 </script>
