@@ -3681,7 +3681,7 @@ function atualizarLuma(dt, t){
 // Saindo de casa para uma aventura, ela deixa a bolinha lá dentro; brincando, larga a bolinha e busca na volta
 const LUMA_SITU = {
   missao: 0.5, pesos: { cava: 3, mato: 3, cenoura: 2, vaca: 2, patos: 1.5, soneca: 3, cachoeira: 1.5 },
-  carteira: 40, disco: 0.7, et: 0.8, saci: 0.7, chuva: 0.75, visita: 0.5, raio: 0.6, cafe: 0.5, tatu: 0.6, capivara: 0.6, nado: 0.5,
+  carteira: 40, disco: 0.7, et: 0.8, saci: 0.7, chuva: 0.75, visita: 0.5, raio: 0.6, cafe: 0.5, tatu: 0.6, capivara: 0.6, nado: 0.5, bicho: 0.6,
   manha: [0.03, 0.35], soneca: [30, 45], achado: { moeda: 0.5, osso: 0.3 },
 };
 const SAIDAS_LUMA = ['cava', 'mato', 'cenoura', 'vaca', 'patos', 'soneca', 'cachoeira'];
@@ -3952,6 +3952,8 @@ function gatilhosLuma(dt){
   if (tatuCavando() && !bichoMata.lumaViu){ bichoMata.lumaViu = true; if (livre() && Math.random() < LUMA_SITU.tatu) lumaSaiPara('tatu'); }
   // as capivaras deitaram na beira do lago: ela vai latir para elas
   if (capivarasDescansando() && !capivaras.lumaViu){ capivaras.lumaViu = true; if (livre() && Math.random() < LUMA_SITU.capivara) lumaSaiPara('capivara'); }
+  // o gambá fuçando o galinheiro ou a irara nas colmeias: ela vai latir
+  if (bichoParaLuma() && !bichoNovo.lumaViu){ bichoNovo.lumaViu = true; if (livre() && Math.random() < LUMA_SITU.bicho) lumaSaiPara('bicho'); }
   // o Ed foi nadar na cachoeira: às vezes ela vai atrás
   const N = nadoDe(ed);
   if (N && !N.lumaViu){ N.lumaViu = true; if (livre() && Math.random() < LUMA_SITU.nado && lumaPodeNadar()) lumaSaiPara('cachoeira'); }
@@ -4373,6 +4375,18 @@ const AVENTURAS = {
     if (L.passo === 3 && L.ta > 2.4) lumaFim();
   },
   // late para as capivaras deitadas na beira do lago; elas nem ligam (a mãe só vira a cabeça), e ela senta e desiste
+  // late para o gambá na cerca do galinheiro ou para a irara na colmeia: o gambá se finge de morto, a irara foge
+  bicho(L, dt, t, chegou){
+    const B = bichoNovo;
+    if (L.passo === 0){ if (!chegou) return; if (!bichoParaLuma()) return lumaFim(); const p = ladoDe(B.g.position.x, B.g.position.z, 1.1); if (!p || !lumaIr(p[0], p[1], LUMA_JOGO.corre)) return lumaFim(); L.passo = 1; return; }
+    if (L.passo === 1){ if (!bichoParaLuma()) return lumaFim(); if (!chegou) return; L.passo = 2; L.ta = 0; L.tLate = 0; lumaFala(FALAS_LUMA_BICHO); return; }
+    if (L.passo === 2){
+      if (B) L.angAlvo = Math.atan2(B.g.position.x - L.pos.x, B.g.position.z - L.pos.y);
+      if (L.ta < 3 && (L.tLate -= dt) <= 0){ L.tLate = 0.8; L.salto = 0.3; Som.au(); }
+      if (B && L.ta > 1.2) B.lumaLatiu = true;
+      if (L.ta > 5) lumaFim();
+    }
+  },
   capivara(L, dt, t, chegou){
     const C = capivaras;
     if (L.passo === 0){ if (!chegou) return; if (!capivarasDescansando()) return lumaFim(); const p = ladoDe(C.centro.x, C.centro.z, 1.4); if (!p || !lumaIr(p[0], p[1], LUMA_JOGO.corre)) return lumaFim(); L.passo = 1; return; }
@@ -4546,6 +4560,7 @@ function situacoesLuma(){
     s('escolta', 'Escoltar', !aposentadaNaEstrada ? 'Quando uma galinha se aposenta.' : null),
     s('tatu', 'Cavar com o tatu', !tatuCavando() ? 'Quando um tatu está cavando na beira da mata.' : null),
     s('capivara', 'Latir para as capivaras', S.canto !== 2 ? 'Precisa do terreno do canto Sul.' : !capivarasDescansando() ? 'Quando as capivaras estão deitadas na beira do lago.' : null),
+    s('bicho', 'Latir para o gambá ou a irara', !bichoParaLuma() ? 'Quando o gambá fuça o galinheiro ou a irara fuça as colmeias.' : null),
     s('cachoeira', 'Nadar na cachoeira', !cachoeiraAberta() ? 'Precisa das duas parcelas da trilha oeste.' : !disp.cachoeira ? 'Só de dia e sem chuva.' : null),
     s('cafe', 'Cafezinho', CENAS.cafezinho.podeRever() || (nivel() < 3 ? 'Libera no nível 3.' : null)),
   ];
@@ -4562,7 +4577,7 @@ function lumaChamar(id){
   if (id === 'disco'){ L.forcar = 'disco'; if (discoJogo && discoJogo.t < 0) discoJogo.prox = 0; return; }
   if (id === 'saci'){ L.forcar = 'saci'; chamarRedemoinho(); return; }
   if (id === 'carteira'){ const k = S.aluguel ? 'aluguel' : S.cartao ? 'cartao' : null; if (k) lumaSaiPara('carteira', { item0: k }); return; }
-  if (id === 'chuva' || id === 'visita' || id === 'escolta' || id === 'tatu' || id === 'capivara') lumaSaiPara(id);
+  if (id === 'chuva' || id === 'visita' || id === 'escolta' || id === 'tatu' || id === 'capivara' || id === 'bicho') lumaSaiPara(id);
 }
 // ================= disco voador: por enquanto só no catálogo de modelos (um dia ele passa pela fazenda)
 // casco prateado que gira, borda com luzes que acendem em sequência, janelinhas, domo de vidro com um ETzinho dentro
@@ -6053,6 +6068,475 @@ function sumirBichoMata(){ if (bichoMata){ scene.remove(bichoMata.g); tirarClica
 // o tatu cavando na orla (para a Luma ir cavar junto)
 const tatuCavando = () => !!bichoMata && bichoMata.tipo === 'tatu' && !!bichoMata.cavando;
 const lumaNoTatu = () => !!luma && luma.estado === 'fora' && luma.acao === 'tatu';
+// ----- os desenhos dos bichos novos (de frente para +z, como os outros bichos)
+// a coruja-buraqueira: pernas compridas e claras, peito claro barrado, costas marrons pintadas de branco, cabeça redonda sem
+// orelhas, olhos amarelos grandes e sobrancelhas brancas
+function vCorujaBuraqueira(){
+  const v = new Vox(), marrom = (x, y, z) => hash(x, y, z) < 0.2 ? 0xf2ead8 : hash(x, y + 9, z) < 0.5 ? 0x9a6e44 : 0x8a6038;
+  const peito = (x, y, z) => (y % 3 === 0) && hash(x, y, z) < 0.6 ? 0x9a6e44 : 0xf2ead8;
+  for (const l of [-1, 1]){ for (let y = 1; y <= 4; y++) v.set(l, y, 0, 0xd8c49a); v.box(l - (l < 0 ? 1 : 0), 0, 0, l + (l > 0 ? 1 : 0), 0, 2, 0x9a8a6a); }
+  v.ell(0, 8, 0, 3.4, 4, 3, (x, y, z) => z > 1.2 && Math.abs(x) < 2.6 ? peito(x, y, z) : marrom(x, y, z));
+  v.ell(0, 13, 0.3, 3.2, 2.6, 2.8, marrom);
+  v.ell(0, 6, -3.2, 2, 1.2, 1.4, marrom);
+  for (const x of [-2, -1, 1, 2]) olhoBicho(v, x, 13, 0xf5d030);
+  for (const x of [-2, 2]) olhoBicho(v, x, 13, 0x141414);
+  for (const x of [-2, -1, 1, 2]) olhoBicho(v, x, 15, 0xf6f2e6);
+  olhoBicho(v, 0, 12, 0xc8b890); olhoBicho(v, 0, 11, 0xf6f2e6);
+  return v;
+}
+// a toca dela: um montinho de terra com o buraco escuro no meio (fica no chão enquanto ela está lá)
+function vTocaCoruja(){
+  const v = new Vox();
+  for (let x = -7; x <= 7; x++) for (let z = -7; z <= 7; z++){
+    const d = Math.hypot(x, z);
+    if (d > 7) continue;
+    if (d < 2.6){ v.set(x, 0, z, 0x1e140c); continue; }
+    const h = Math.max(0, Math.round((7 - d) / 2.2));
+    for (let y = 0; y <= h; y++) v.set(x, y, z, hash(x, y, z) < 0.4 ? 0x8a6038 : 0xa47448);
+  }
+  return v;
+}
+// o morcego-das-frutas: corpo marrom, orelhas pontudas, as asas abertas de pele escura com os dedos marcados
+function vMorcego(){
+  const v = new Vox(), pelo = 0x6a4a36, asa = 0x3e2c22, dedo = 0x2a1c14;
+  v.ell(0, 4, 0, 2, 2.6, 2.2, pelo); v.ell(0, 6.6, 1.6, 1.6, 1.6, 1.6, pelo);
+  for (const l of [-1, 1]){
+    v.set(l, 8.6, 1.4, pelo); v.set(l, 9.4, 1.2, pelo);
+    olhoBicho(v, l, 7, 0x141414);
+    for (let x = 2; x <= 11; x++){ const topo = 6 - (x - 2) * 0.15, base = 2 + Math.abs(x - 7) * 0.35; for (let y = Math.round(base); y <= Math.round(topo); y++) v.set(l * x, y, 0, x % 3 === 0 ? dedo : asa); }
+  }
+  olhoBicho(v, 0, 6, 0x8a5a48);
+  return v;
+}
+// o gambá-de-orelha-branca: cinza de pelo comprido, cara branca de focinho rosa, orelhas brancas, patas pretas, rabo pelado
+// e dois filhotes nas costas
+function vGamba(){
+  const v = new Vox(), cinza = (x, y, z) => hash(x, y, z) < 0.3 ? 0xe8e6e0 : 0x8a8a86, branco = 0xf2f0ea, preto = 0x1e1a1a;
+  v.ell(0, 6, -1, 3.4, 3.4, 6, cinza);
+  v.ell(0, 7, 5.6, 2.4, 2.4, 3, branco); v.ell(0, 6.4, 8.4, 1.2, 1.1, 1.6, branco); v.set(0, 6.4, 10, 0xf2a0a8);
+  for (const l of [-1, 1]){
+    v.ell(l * 2, 9.6, 4.6, 0.9, 1.3, 0.5, 0xf6f2ee); olhoBicho(v, l * 1.2, 7.6, 0x141414);
+    for (const dz of [3.5, -4.5]) for (let y = 0; y <= 3; y++) v.set(l * 2, y, dz | 0, preto);
+  }
+  for (let i = 0; i <= 10; i++) v.ell(0, 4.5 - i * 0.25, -7 - i * 0.9, 0.8, 0.8, 0.6, i < 2 ? preto : 0xe8c8c0);
+  // os filhotes agarrados no pelo das costas
+  for (const [x, z] of [[-1.8, -0.5], [1.6, -3]]){ v.ell(x, 10, z, 1.4, 1.2, 1.8, cinza); v.ell(x, 10.4, z + 1.8, 1, 1, 1, branco); v.set(Math.round(x), 10, Math.round(z + 2.9), 0xf2a0a8); }
+  return v;
+}
+// o sapo-cururu: marrom cheio de verruga, barriga amarelada, olhos saltados em cima, as glândulas atrás dos olhos e o papo
+function vSapo(){
+  const v = new Vox(), pele = (x, y, z) => hash(x, y, z) < 0.25 ? 0x6a4a2a : 0x8a6a3a;
+  v.ell(0, 3, 0, 4, 2.6, 4.2, (x, y, z) => y < 2 ? 0xd8c070 : pele(x, y, z));
+  v.ell(0, 1.8, 3.8, 1.8, 1, 1, 0xe8d090);
+  for (const l of [-1, 1]){
+    v.ell(l * 2, 5.2, 2.4, 1, 1, 1, 0xc8a040); olhoBicho(v, l * 2, 5, 0x141414);
+    v.ell(l * 3, 5, 0, 1, 0.8, 1.4, 0x9a7a3a);
+    v.ell(l * 3.8, 1.5, -2, 1.5, 1.5, 2.5, pele); v.ell(l * 4.4, 0.4, 0.4, 1.2, 0.5, 1.2, 0x7a5a2a);
+    for (let y = 0; y <= 2; y++) v.set(l * 2.6 | 0, y, 3, pele(l, y, 3));
+  }
+  return v;
+}
+// a ariranha nadando: comprida e lisa, marrom-escura, a mancha clara no pescoço, e o rabo achatado
+function vAriranha(){
+  const v = new Vox(), pelo = (x, y, z) => hash(x, y, z) < 0.2 ? 0x4a2e1c : 0x5a3a24, claro = 0xe8dcc0;
+  v.ell(0, 4, 0, 2.6, 2.4, 8, pelo);
+  v.ell(0, 5, 9, 2.4, 2.2, 2.6, (x, y, z) => y < 4.6 && hash(x, y, z) < 0.7 ? claro : pelo(x, y, z));
+  v.ell(0, 4.6, 11.2, 1.4, 1.2, 1, pelo); v.set(0, 5, 12, 0x1a1210);
+  for (const l of [-1, 1]){ v.set(l * 2, 7, 8, pelo(l, 7, 8)); olhoBicho(v, l, 6, 0x141414); v.ell(l * 2.4, 2, 4, 0.8, 1.2, 1, pelo); }
+  for (let i = 0; i <= 8; i++) v.ell(0, 3.6 - i * 0.1, -8 - i * 0.9, 2 - i * 0.18, 0.8, 0.6, pelo);
+  return v;
+}
+// a garça-branca-grande: branca, pernas pretas compridas, pescoço em S e bico amarelo comprido
+function vGarca(){
+  const v = new Vox(), branco = (x, y, z) => hash(x, y, z) < 0.15 ? 0xe8e8e2 : 0xf8f8f4, preto = 0x2a2a2a;
+  for (const l of [-1, 1]){ for (let y = 0; y <= 12; y++) v.set(l, y, 0, preto); v.box(l, 0, 0, l, 0, 2, preto); }
+  v.ell(0, 15, -0.5, 3, 3.4, 5.5, branco);
+  for (let i = 0; i <= 10; i++){ const t = i / 10, x = 0, y = 17 + t * 8, z = 3 + Math.sin(t * Math.PI * 1.4) * 1.8; v.ell(x, y, z, 1.2, 1, 1.2, branco); }
+  v.ell(0, 26, 4.6, 1.6, 1.6, 2.2, branco);
+  for (let z = 6; z <= 12; z++) v.set(0, 26 - (z > 10 ? 1 : 0), z, 0xf0c020);
+  for (const l of [-1, 1]) olhoBicho(v, l, 27, 0xf0e040);
+  return v;
+}
+// o martim-pescador-grande: costas cinza-azuladas, peito ruivo, colar branco, topete atrás e bico comprido como punhal
+function vMartimPescador(){
+  const v = new Vox(), azul = (x, y, z) => hash(x, y, z) < 0.2 ? 0x3a6a90 : 0x4a7aa0, ruivo = 0xc0602a;
+  v.ell(0, 6, 0, 2.6, 3.2, 3, (x, y, z) => z > 1 && y < 7.5 ? ruivo : azul(x, y, z));
+  v.ell(0, 9, 0.3, 2.4, 0.8, 2.4, 0xf4f2ea);
+  v.ell(0, 11, 0.6, 2.6, 2.4, 2.8, azul);
+  for (let k = 0; k < 4; k++) v.set(0, 13 + (k > 1 ? 1 : 0), -1 - k, 0x3a6a90);
+  for (let z = 3; z <= 8; z++){ v.set(0, 11, z, 0x2a2a2a); if (z < 6) v.set(0, 10, z, 0x2a2a2a); }
+  for (const l of [-1, 1]){ olhoBicho(v, l * 1.5, 11.6, 0x141414, 0xf4f2ea); v.set(l, 2, 1, 0x2a2a2a); }
+  v.box(-1, 3, -6, 1, 4, -3, 0x3a6a90);
+  return v;
+}
+// o galho espetado na margem, onde ele pousa (fica lá enquanto ele está)
+function vGalhoMartim(){
+  const v = new Vox(), cor = (x, y, z) => hash(x, y, z) < 0.4 ? 0x6a4428 : 0x7a5232;
+  for (let y = 0; y <= 9; y++) v.set(Math.round(Math.sin(y * 0.5) * 0.6), y, 0, cor(0, y, 0));
+  for (let k = 1; k <= 4; k++) v.set(k, 5 + k, 0, cor(k, 5, 0));
+  v.set(4, 10, 0, 0x6cbf47); v.set(-1, 4, 0, 0x6cbf47);
+  return v;
+}
+// o jacaré-de-papo-amarelo tomando sol: focinho largo, de boca aberta, papo amarelo, escamas escuras nas costas e o rabo
+// com a crista
+function vJacare(){
+  const v = new Vox(), oliva = (x, y, z) => hash(x, y, z) < 0.3 ? 0x3e4e2a : 0x4a5a32, amarelo = 0xd8c060, escama = 0x2e3a22;
+  v.ell(0, 4, 0, 5, 3, 9, (x, y, z) => y < 2.6 ? amarelo : y > 6 && (z & 1) && (x & 1) ? escama : oliva(x, y, z));
+  // a cabeça: maxilar de baixo amarelo e o de cima levantado, com a boca rosa e os dentinhos
+  v.ell(0, 2.6, 13, 3.4, 1, 5, (x, y, z) => y > 2.8 ? 0xd86a6a : amarelo);
+  for (let z = 9; z <= 18; z++){ const r = 3.6 - Math.max(0, z - 13) * 0.35, y = 5 + Math.max(0, z - 11) * 0.35; for (let x = -Math.round(r); x <= Math.round(r); x++){ v.set(x, Math.round(y), z, oliva(x, y, z)); if (Math.abs(x) === Math.round(r) && z > 11 && z % 2) v.set(x, Math.round(y) - 1, z, 0xf4f2ea); } }
+  for (let z = 11; z <= 17; z++) for (let x = -2; x <= 2; x++) v.set(x, 3, z, 0xd86a6a);
+  for (const l of [-1, 1]){
+    v.ell(l * 2.2, 7, 10, 1, 1, 1, 0xa0a040); olhoBicho(v, l * 2.2, 7, 0x141414);
+    for (const dz of [5, -5]){ v.ell(l * 5.6, 1.6, dz, 2, 1.4, 2, oliva); v.ell(l * 7, 0.4, dz + 1, 1.4, 0.5, 1.6, oliva); }
+  }
+  for (let i = 0; i <= 18; i++){ const r = 3.2 - i * 0.15; v.ell(0, 3.4 - i * 0.08, -9 - i, r, Math.max(0.8, 2.4 - i * 0.08), 0.6, oliva); if (i % 2 === 0) v.set(0, Math.round(3.4 + Math.max(0.8, 2.4 - i * 0.08)), -9 - i, escama); }
+  return v;
+}
+// o sagui-de-tufo-branco sentado: pelo cinza listrado, cara escura com a mancha branca na testa, os tufos brancos das
+// orelhas e o rabo comprido listrado de preto e cinza pendurado
+function vSagui(){
+  const v = new Vox(), pelo = (x, y, z) => (y & 1) ? 0x4a4440 : 0x7a7068, escuro = 0x2e2a28;
+  v.ell(0, 6, 0, 2.6, 3.6, 2.4, pelo);
+  v.ell(0, 11, 0.6, 2.4, 2.2, 2.2, escuro);
+  v.ell(0, 10.4, 2.4, 1.4, 1.2, 0.8, 0xa08a78); olhoBicho(v, 0, 12, 0xf6f2ee);
+  for (const l of [-1, 1]){
+    v.ell(l * 3.4, 11.5, 0.2, 1.4, 1.8, 0.6, 0xf4f2ee);
+    olhoBicho(v, l, 11, 0x141414);
+    v.ell(l * 1.8, 1.6, 1.6, 1, 1.6, 1.4, pelo); v.ell(l * 2.2, 6.4, 2, 0.7, 2, 0.7, pelo);
+  }
+  for (let i = 0; i <= 16; i++) v.ell(0, 3 - i, -2.5 - Math.min(i, 3) * 0.4, 0.9, 0.6, 0.9, (i >> 1) % 2 ? 0x2a2a2a : 0xb8b0a0);
+  return v;
+}
+// a irara: comprida, corpo marrom-escuro quase preto, cabeça e pescoço mais claros, mancha amarela na garganta e o rabo
+// comprido e peludo
+function vIrara(){
+  const v = new Vox(), escuro = (x, y, z) => hash(x, y, z) < 0.2 ? 0x1e1610 : 0x2a1e18, claro = (x, y, z) => hash(x, y, z) < 0.3 ? 0x8a7458 : 0xa08a68;
+  v.ell(0, 6, -1, 3.2, 3.4, 7.5, escuro);
+  v.ell(0, 8, 6.4, 2.8, 2.8, 3.4, claro); v.ell(0, 7.4, 9.6, 1.4, 1.3, 1.2, claro); v.set(0, 7.6, 11, 0x141010);
+  v.ell(0, 5.4, 6.6, 1.4, 0.9, 1.2, 0xe8c040);
+  for (const l of [-1, 1]){
+    v.ell(l * 2, 10.6, 5.4, 0.8, 0.8, 0.5, claro); olhoBicho(v, l * 1.2, 8.6, 0x141414);
+    for (const dz of [4, -5]) for (let y = 0; y <= 3; y++) v.set(l * 2, y, dz, 0x1a120e);
+  }
+  for (let i = 0; i <= 9; i++) v.ell(0, 6.5 + i * 0.12, -8.5 - i * 0.9, 1.6, 1.6, 0.8, escuro);
+  return v;
+}
+// a seriema: pernas compridas avermelhadas, corpo cinza-pardo listradinho, rabo comprido com a faixa escura, o topete de penas
+// em cima do bico vermelho e a pele azul em volta do olho
+function vSeriema(){
+  const v = new Vox(), parda = (x, y, z) => hash(x, y, z) < 0.25 ? 0x9a8a6a : 0xb0a080, perna = 0xe07a3a;
+  for (const l of [-1, 1]){ for (let y = 0; y <= 12; y++) v.set(l, y, 0, perna); v.box(l, 0, 0, l, 0, 2, perna); }
+  v.ell(0, 15, 0, 3.2, 3.6, 5.6, parda);
+  for (let z = -5; z >= -12; z--) v.box(-1, 14, z, 1, 15, z, z < -9 && z > -12 ? 0x3a3020 : z === -12 ? 0xf2ead8 : 0xa09070);
+  for (let i = 0; i <= 8; i++){ const t = i / 8; v.ell(0, 17 + t * 6, 3 + t * 1.2, 1.4, 1, 1.4, parda); }
+  v.ell(0, 24, 3.8, 2, 2, 2.4, parda);
+  for (let z = 6; z <= 8; z++) v.set(0, 24 - (z === 8 ? 1 : 0), z, 0xd8342a);
+  for (let y = 25; y <= 28; y++) v.set(0, y, 5 + (y > 26 ? 1 : 0), 0x9a8a6a);
+  for (const l of [-1, 1]){ olhoBicho(v, l * 1.4, 24.6, 0x5ab0e0); olhoBicho(v, l * 1.4, 24.6, 0x141414); }
+  return v;
+}
+// o veado-catingueiro: pequeno, marrom-avermelhado, pernas finas, focinho escuro, orelhas grandes, os chifrinhos de ponta
+// e a mancha branca debaixo do rabo
+function vVeado(){
+  const v = new Vox(), pelo = (x, y, z) => hash(x, y, z) < 0.25 ? 0x904e2c : 0xa0623a, perna = 0x8a522c;
+  v.ell(0, 11, 0, 3.2, 3.4, 6.5, pelo);
+  v.ell(0, 15, 6, 1.8, 3, 2, pelo); v.ell(0, 17, 8.4, 2, 2, 3, pelo); v.ell(0, 16.4, 11, 1.2, 1.2, 1, 0x3a2a20);
+  for (const l of [-1, 1]){
+    v.ell(l * 2.2, 19.6, 7, 0.8, 1.6, 0.5, pelo); olhoBicho(v, l * 1.4, 17.6, 0x141414);
+    for (let y = 20; y <= 22; y++) v.set(l, y, 8, 0x8a6a4a);
+    for (const dz of [4, -4]){ for (let y = 1; y <= 8; y++) v.set(l * 2, y, dz, perna); v.set(l * 2, 0, dz, 0x2a1e18); }
+  }
+  v.ell(0, 12, -6.6, 1.2, 1.2, 0.6, 0xf6f2ee);
+  return v;
+}
+// o pica-pau-de-cabeça-amarela agarrado num tronco: cabeça amarela com topete, a risca vermelha da bochecha, corpo preto
+// barrado de amarelo e o rabo duro apoiado no tronco (de frente para +z, que fica virado para o tronco)
+function vPicaPau(){
+  const v = new Vox(), corpo = (x, y, z) => (y % 3 === 0) && hash(x, y, z) < 0.7 ? 0xe8c030 : 0x1e1a14, amarelo = 0xf0cc30;
+  v.ell(0, 6, 0, 2.2, 4, 2, corpo);
+  v.ell(0, 11, 0.6, 2.2, 2.2, 2.2, amarelo);
+  for (let y = 12; y <= 14; y++) v.set(0, y, -1 - (y - 12), amarelo);
+  for (let z = 2; z <= 5; z++) v.set(0, 10.6 | 0, z, 0xd8d0b0);
+  for (const l of [-1, 1]){ v.set(l * 2, 10, 1, 0xd8342a); v.set(l * 2, 10, 2, 0xd8342a); olhoBicho(v, l * 1.2, 11.6, 0x141414); v.set(l, 3, 2, 0x5a5048); }
+  v.box(-1, 0, -2, 1, 2, -1, 0x1e1a14);
+  return v;
+}
+// ================= mais bichos (o Lucas pediu): uma segunda leva, com o mesmo jeito dos bichos da mata (um de cada vez,
+// sorteado pelo peso, só onde dá para ver na tela, some nas cenas, nada no save), mas espalhada pela fazenda. De noite: a
+// coruja-buraqueira sai da toca e gira a cabeça; os morcegos-das-frutas rodeiam uma árvore do pomar; o gambá com os
+// filhotes nas costas fuça a cerca do galinheiro e se finge de morto (quando a Luma late, ou sozinho); o coro de sapos
+// coaxa na beira do lago, mais depois da chuva. Na água, de dia: as ariranhas nadam no lago da cachoeira e comem peixe; a
+// garça pesca parada no raso do lago; o martim-pescador pousa num galho da margem e mergulha; o jacaré-de-papo-amarelo sai
+// da água e toma sol de boca aberta. De dia: os saguis pulam de árvore em árvore no pomar e beliscam fruta; a irara fuça as
+// colmeias atrás de mel e foge das abelhas (ou da Luma); a seriema sai na orla e canta; o veado-catingueiro pasta na orla
+// e foge pulando se o Ed chega perto; o pica-pau martela o tronco de uma árvore da beira da mata
+const BICHOS_NOVOS = { primeira: [20, 50], intervalo: [35, 90],
+  pesos: { coruja: 3, morcegos: 3, gamba: 2.5, sapos: 3, ariranha: 2, garca: 2.5, martim: 2, jacare: 1.5, saguis: 2.5, irara: 1.5, seriema: 2, veado: 1.5, picapau: 2 },
+  noite: ['coruja', 'morcegos', 'gamba', 'sapos'],
+  // depois da chuva os sapos aparecem bem mais (o peso vezes sapoChuva) por chuvaRecente ms
+  chuvaRecente: 12 * 60000, sapoChuva: 4,
+  // quando o veado foge do Ed; quanto tempo o gambá fica de morto; até quando os dois esperam a Luma
+  fogeEd: 2.6, finge: 6, esperaLuma: 18 };
+Object.assign(BICHOS_MATA.modelos, {
+  coruja: [() => vCorujaBuraqueira(), 1 / 26], morcegos: [() => vMorcego(), 1 / 34], gamba: [() => vGamba(), 1 / 24], sapos: [() => vSapo(), 1 / 26],
+  ariranha: [() => vAriranha(), 1 / 26], garca: [() => vGarca(), 1 / 34], martim: [() => vMartimPescador(), 1 / 26], jacare: [() => vJacare(), 1 / 30],
+  saguis: [() => vSagui(), 1 / 28], irara: [() => vIrara(), 1 / 24], seriema: [() => vSeriema(), 1 / 32], veado: [() => vVeado(), 1 / 28], picapau: [() => vPicaPau(), 1 / 22] });
+Object.assign(BICHOS_MATA.bando, {
+  morcegos: [[0, 0, 0], [0.32, 0.12, -0.2, 0.9], [-0.3, -0.08, -0.25, 0.85], [0.08, 0.22, 0.3, 0.8]],
+  sapos: [[0, 0, 0], [0.36, 0, 0.16, 0.8], [-0.32, 0, 0.12, 0.9], [0.1, 0, -0.34, 0.7]],
+  ariranha: [[0, 0, 0], [-0.42, 0, -0.32, 0.9], [0.4, 0, -0.52, 0.85]],
+  saguis: [[0, 0, 0], [0.26, -0.08, -0.14, 0.9], [-0.24, 0.04, -0.1, 0.85]] });
+Object.assign(BICHOS_MATA.anda, { gamba: [8, 0.02], irara: [12, 0.03], seriema: [7, 0.03], veado: [8, 0.025], jacare: [3, 0.008] });
+// o que fica no chão enquanto o bicho está lá: a toca da coruja e o galho do martim-pescador
+const BASES_BICHO = { coruja: [vTocaCoruja, 1 / 26], martim: [vGalhoMartim, 1 / 26] };
+// o som de cada um quando fala
+const SOM_BICHO = {
+  coruja: () => { Som.tom(440, 0.22, 'sine', 0.03, 400); Som.tom(400, 0.3, 'sine', 0.03, 360, 0.3); },
+  morcegos: () => { Som.tom(2600, 0.05, 'square', 0.01, 3000); Som.tom(2800, 0.05, 'square', 0.01, 3200, 0.1); },
+  gamba: () => Som.tom(180, 0.4, 'sawtooth', 0.012, 120),
+  sapos: () => Som.tom(110, 0.3, 'sawtooth', 0.02, 90),
+  ariranha: () => { Som.tom(1200, 0.1, 'square', 0.012, 1500); Som.tom(1300, 0.1, 'square', 0.012, 1000, 0.12); },
+  garca: () => Som.tom(260, 0.3, 'sawtooth', 0.015, 200),
+  martim: () => { for (let k = 0; k < 4; k++) Som.tom(2000, 0.04, 'square', 0.012, 1700, k * 0.06); },
+  jacare: () => Som.tom(70, 0.7, 'sawtooth', 0.025, 55),
+  saguis: () => Som.tom(2200, 0.18, 'sine', 0.015, 2600),
+  irara: () => Som.tom(700, 0.15, 'square', 0.012, 500),
+  seriema: () => { for (let k = 0; k < 6; k++) Som.tom(900 - k * 40, 0.1, 'square', 0.014, 1100 - k * 40, k * 0.14); },
+  veado: () => Som.tom(520, 0.18, 'sawtooth', 0.015, 380),
+  picapau: () => { for (let k = 0; k < 5; k++) Som.tom(1500 - k * 60, 0.08, 'square', 0.012, 1100, k * 0.11); },
+};
+let bichoNovo = null, proxBichoNovo = null;
+const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+const direitaTela = () => V3(Math.cos(cam.az), 0, -Math.sin(cam.az)), paraCamera = () => V3(Math.sin(cam.az), 0, Math.cos(cam.az));
+const chuvaRecente = () => chovendo() || (!!S.chuvaAte && Date.now() - S.chuvaAte < BICHOS_NOVOS.chuvaRecente);
+// as árvores do pomar plantadas que aparecem na tela: o ponto na copa, puxado um pouco para a câmera (para não sumir nas folhas)
+function arvoresPomarNaTela(){
+  const l = [];
+  (S.pomar || []).forEach((d, i) => {
+    if (!d || !blocoComprado(blocoDoSlot(i))) return;
+    const [x, z] = POMAR_SLOTS[i], p = V3(x + 0.5, FRUTIFERAS[d.tipo].alta ? 1.45 : 1.15, z + 0.5).addScaledVector(paraCamera(), 0.32);
+    if (naTelaBicho(p)) l.push({ i, p, fruta: !!d.pronto });
+  });
+  return l;
+}
+// as colmeias prontas ou trabalhando que aparecem na tela
+const colmeiasNaTela = () => (S.colmeias || []).map((d, i) => d && colmeiaAberta(i) ? V3(COLMEIA_SLOTS[i][0] + 0.5, 0, COLMEIA_SLOTS[i][1] + 0.5) : null).filter(p => p && naTelaBicho(p));
+// a beira do lago da fazenda: o chão (puxado para a água), a água logo em frente, a de dois ladrilhos e para onde olha a água.
+// Com lonje, só a beirada do lado de lá da água (mais acima na tela), como as capivaras, onde nada tampa o bicho
+function beirasLago(longe){
+  const l = [];
+  for (const zs in LAGO){
+    const z = +zs, [a, b] = LAGO[zs];
+    for (let x = a - 1; x <= b + 1; x++) for (const dz of [-1, 0, 1]){
+      const cx = x, cz = z + dz;
+      if (!andavel(cx, cz) || tipo(cx, cz) === 'ponte') continue;
+      for (const [ex, ez] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){
+        if (tipo(cx + ex, cz + ez) !== 'lago') continue;
+        const chao = V3(cx + 0.5 + ex * 0.3, 0, cz + 0.5 + ez * 0.3), agua = V3(cx + ex + 0.5, 0, cz + ez + 0.5);
+        if (!naTelaBicho(chao)) continue;
+        if (longe && !(tela(agua).y > tela(chao).y + 8)) continue;
+        const fundo = tipo(cx + ex * 2, cz + ez * 2) === 'lago' ? V3(cx + ex * 2 + 0.5, 0, cz + ez * 2 + 0.5) : null;
+        l.push({ chao, agua, fundo, ang: Math.atan2(ex, ez) });
+      }
+    }
+  }
+  return l;
+}
+// uma coluna da orla da mata que aparece na tela e dá para andar larg ladrilhos para o lado
+function colunaOrla(larg){
+  const d = Math.random() < 0.5 ? 1 : -1, xs = [];
+  for (let x = 1; x < COL_CURVA - 5; x++) if (naTelaBicho(V3(x + 0.5, 0, Z_MATA - 1.5)) && naTelaBicho(V3(x + 0.5 + d * larg, 0, Z_MATA - 1.5))) xs.push(x + 0.5);
+  return xs.length ? { x: sorteia(xs), d } : null;
+}
+function podeVirNovo(k){
+  const noite = periodo().id === 'noite', N = BICHOS_NOVOS;
+  if (N.noite.includes(k) !== noite) return false;
+  if (k === 'garca' || k === 'martim' || k === 'jacare' || k === 'sapos') return S.canto === 2;
+  if (k === 'ariranha') return cachoeiraAberta();
+  if (k === 'morcegos' || k === 'saguis') return (S.pomar || []).some(Boolean);
+  if (k === 'irara') return (S.colmeias || []).some(Boolean);
+  return true;
+}
+function sorteiaNovo(){
+  const P = BICHOS_NOVOS.pesos, l = Object.keys(P).filter(podeVirNovo), peso = k => P[k] * (k === 'sapos' && chuvaRecente() ? BICHOS_NOVOS.sapoChuva : 1);
+  if (!l.length) return null;
+  let r = Math.random() * l.reduce((s, k) => s + peso(k), 0);
+  for (const k of l){ r -= peso(k); if (r <= 0) return k; }
+  return l[l.length - 1];
+}
+// o caminho de cada um (os mesmos pontos de caminhoBicho) e, se tem, a base que fica no chão
+function caminhoNovo(k){
+  const dir = direitaTela(), lado = Math.random() < 0.5 ? 1 : -1;
+  const voando = (c, para, extra) => [{ p: c.clone().addScaledVector(dir, -8 * lado).add(V3(0, 4, 0)), voa: true }, { p: c, dur: 3, para, voa: true, ...extra }, { p: c.clone().addScaledVector(dir, 8 * lado).add(V3(0, 4.5, 0)), dur: 3, voa: true }];
+  switch (k){
+    case 'coruja': {
+      // na orla, perto da mata: sai da toca, fica um tempão girando a cabeça e entra de novo
+      const c = colunaOrla(1); if (!c) return null;
+      const H = V3(c.x, 0, Z_MATA - 1.9); if (!andavel(Math.floor(H.x), Math.floor(H.z))) return null;
+      return { pts: [{ p: H.clone().setY(-0.5) }, { p: H, dur: 1.4, para: rnd(16, 24), gira: true, fala: 'Uh-uh!' }, { p: H.clone().setY(-0.5), dur: 1.4 }], base: H, semOnda: true };
+    }
+    case 'morcegos': {
+      // rodeiam uma árvore do pomar, param para morder uma fruta e vão embora
+      const A = arvoresPomarNaTela(); if (!A.length) return null;
+      const a = sorteia(A.filter(q => q.fruta).length ? A.filter(q => q.fruta) : A), c = a.p.clone().add(V3(0, 0.35, 0)), pts = [{ p: c.clone().addScaledVector(dir, -7 * lado).add(V3(0, 2.5, 0)), plana: true }];
+      for (let i = 0; i < 7; i++){ const ang = i / 7 * Math.PI * 2 * lado; pts.push({ p: c.clone().add(V3(Math.cos(ang) * 0.75, Math.sin(i) * 0.12, Math.sin(ang) * 0.75)), dur: i ? 0.55 : 2.4, plana: true }); }
+      pts.push({ p: a.p.clone().add(V3(0, 0.12, 0)), dur: 0.6, plana: true, para: rnd(2.5, 4), fala: a.fruta ? 'Nhac!' : 'Iiic!' });
+      for (let i = 0; i < 4; i++){ const ang = i / 4 * Math.PI * 2 * lado; pts.push({ p: c.clone().add(V3(Math.cos(ang) * 0.8, 0.1, Math.sin(ang) * 0.8)), dur: 0.55, plana: true }); }
+      pts.push({ p: c.clone().addScaledVector(dir, 7 * lado).add(V3(0, 3, 0)), dur: 2.4, plana: true });
+      return { pts };
+    }
+    case 'gamba': {
+      // fuça a cerca do galinheiro (ou a orla, se o galinheiro não está na tela), para e se finge de morto, e vai embora
+      // ao longo da cerca de um dos galinheiros: tenta os dois sentidos e algumas distâncias da cerca
+      for (const G of [POUSO_GALO.galinheiro, POUSO_GALO.galinheiro2]){
+        const F = V3(G.fora[0] + 0.5, 0, G.fora[1] + 0.5), fora = V3(G.fora[0] - G.dentro[0], 0, G.fora[1] - G.dentro[1]), ao = V3(fora.z, 0, -fora.x);
+        if (!naTelaBicho(F)) continue;
+        for (const sent of [lado, -lado]) for (const af of [0.2, 0.6, 1, 1.4]){
+          const q = (dx, dz) => F.clone().addScaledVector(ao, dx * sent).addScaledVector(fora, af + dz);
+          const pts = [q(-3.6, 0.4), q(-0.6, 0), q(1.8, 0.2), q(4.6, 0.6)];
+          if (pts.every(p => andavel(Math.floor(p.x), Math.floor(p.z))))
+            return { pts: [{ p: pts[0] }, { p: pts[1], dur: 4.5, para: 9, fareja: true, finge: true }, { p: pts[2], dur: 2.6, para: 2, fareja: true }, { p: pts[3], dur: 4 }] };
+        }
+      }
+      const c = colunaOrla(3.5); if (!c) return null;
+      const m = Z_MATA + 0.9;
+      return { pts: [{ p: V3(c.x, 0, m) }, { p: V3(c.x + c.d * 0.6, 0, Z_MATA - 1.4), dur: 4, para: 9, fareja: true, finge: true }, { p: V3(c.x + c.d * 3, 0, Z_MATA - 1.6), dur: 3.5, para: 1 }, { p: V3(c.x + c.d * 3.6, 0, m), dur: 3 }] };
+    }
+    case 'sapos': {
+      // pulam da água para a beira, coaxam um tempão e voltam para a água
+      const lf = beirasLago(true), l = lf.length ? lf : beirasLago(false); if (!l.length) return null;
+      const b = sorteia(l), agua = b.agua.clone().lerp(b.chao, 0.35).setY(-0.22);
+      return { pts: [{ p: agua }, { p: b.chao, dur: 0.7, pula: 0.22, para: rnd(18, 26), coaxa: true, fala: 'Croac!', olha: b.ang + Math.PI }, { p: agua.clone(), dur: 0.7, pula: 0.22 }, { p: agua.clone().setY(-0.45), dur: 0.8 }] };
+    }
+    case 'ariranha': {
+      // as ariranhas surgem na água do lago da cachoeira, nadam até outra beira, comem um peixe e afundam
+      const l = beirasCachoeira().filter(b => b.agua && naTelaBicho(b.agua)); if (!l.length) return null;
+      const a = sorteia(l), outras = l.filter(b => b !== a && b.agua.distanceTo(a.agua) > 1.2), b = outras.length ? sorteia(outras) : a;
+      const sup = p => p.clone().setY(-0.3), fundo = p => p.clone().setY(-0.75), nado = (p, q) => Math.max(1.5, p.distanceTo(q) / 0.6);
+      return { pts: [{ p: fundo(a.agua) }, { p: sup(a.agua), dur: 1.2 }, { p: sup(b.agua), dur: nado(a.agua, b.agua), para: rnd(6, 9), fala: 'Iiik! (achou um peixe)', come: true }, { p: sup(a.agua), dur: nado(a.agua, b.agua) }, { p: fundo(a.agua), dur: 1.2 }] };
+    }
+    case 'garca': {
+      // chega voando, pesca parada no raso e vai embora
+      const p = pousoFlamingos(1); if (!p) return null;
+      return { pts: voando(p[0].clone().setY(-0.26), rnd(12, 18), { bica: true }) };
+    }
+    case 'martim': {
+      // pousa no galho da margem, olha a água, mergulha de ponta duas vezes e vai embora
+      const l = beirasLago(false); if (!l.length) return null;
+      const b = sorteia(l), base = b.chao.clone().lerp(b.agua, 0.12), P = base.clone().setY(10 / 26), agua = b.agua.clone().lerp(b.chao, 0.2).setY(-0.16);
+      return { pts: [{ p: P.clone().addScaledVector(dir, -8 * lado).add(V3(0, 4, 0)), voa: true }, { p: P, dur: 3, voa: true, para: rnd(4, 6), olha: b.ang },
+        { p: agua, dur: 0.35 }, { p: P.clone(), dur: 0.6, para: rnd(4, 6), olha: b.ang, fala: 'Peguei um peixinho!' }, { p: agua.clone(), dur: 0.35 }, { p: P.clone(), dur: 0.6, para: rnd(3, 4), olha: b.ang },
+        { p: P.clone().addScaledVector(dir, 8 * lado).add(V3(0, 4.5, 0)), dur: 3, voa: true }], base };
+    }
+    case 'jacare': {
+      // sai da água na beirada do lado de lá, toma sol de boca aberta um tempão e volta
+      const l = beirasLago(true).filter(b => b.fundo); if (!l.length) return null;
+      const b = sorteia(l), longe = b.fundo.clone().setY(-0.32), beira = b.agua.clone().setY(-0.26), chao = b.chao.clone().lerp(b.agua, -0.4);
+      if (!andavel(Math.floor(chao.x), Math.floor(chao.z))) chao.copy(b.chao);
+      return { pts: [{ p: longe.clone().setY(-0.7) }, { p: longe, dur: 1.6 }, { p: beira, dur: 3.5 }, { p: chao, dur: 2.4, para: rnd(26, 36), olha: b.ang + Math.PI, fala: '(toma sol de boca aberta)' },
+        { p: beira.clone(), dur: 2.2 }, { p: longe.clone(), dur: 3.5 }, { p: longe.clone().setY(-0.7), dur: 1.6 }] };
+    }
+    case 'saguis': {
+      // chegam pulando, beliscam fruta numa árvore do pomar, pulam para outra e vão embora pulando
+      const A = arvoresPomarNaTela(); if (!A.length) return null;
+      const a = sorteia(A), outras = A.filter(q => q !== a && q.p.distanceTo(a.p) < 4.5), b = outras.length ? sorteia(outras) : null;
+      const pts = [{ p: a.p.clone().addScaledVector(dir, -5 * lado) }, { p: a.p, dur: 1.6, pula: true, para: rnd(5, 8), fala: a.fruta ? 'Tsii! (belisca uma fruta)' : 'Tsii-tsii!' }];
+      if (b) pts.push({ p: b.p, dur: 1.2, pula: true, para: rnd(4, 6), fala: b.fruta ? 'Nhac!' : null });
+      pts.push({ p: (b || a).p.clone().addScaledVector(dir, 5 * lado), dur: 1.6, pula: true });
+      return { pts };
+    }
+    case 'irara': {
+      // vem até uma colmeia, fuça atrás de mel e foge das abelhas (ou da Luma)
+      const C = colmeiasNaTela(); if (!C.length) return null;
+      const c = sorteia(C), frente = c.clone().addScaledVector(paraCamera(), 0.6), de = frente.clone().addScaledVector(dir, -4 * lado), vai = frente.clone().addScaledVector(dir, 4.5 * lado);
+      return { pts: [{ p: de }, { p: frente, dur: 3.5, para: 12, fareja: true, abelhas: true, olha: Math.atan2(c.x - frente.x, c.z - frente.z) }, { p: vai, dur: 1.5 }] };
+    }
+    case 'seriema': {
+      const c = colunaOrla(3.5); if (!c) return null;
+      const m = Z_MATA + 0.9;
+      return { pts: [{ p: V3(c.x, 0, m) }, { p: V3(c.x + c.d * 0.8, 0, Z_MATA - 1.5), dur: 2.2, para: rnd(5, 7), canta: true, fala: 'Kiá-kiá-kiá-kiá!' }, { p: V3(c.x + c.d * 3, 0, Z_MATA - 1.7), dur: 2.8, para: 1.2 }, { p: V3(c.x + c.d * 3.6, 0, m), dur: 2.2 }] };
+    }
+    case 'veado': {
+      const c = colunaOrla(3); if (!c) return null;
+      const m = Z_MATA + 0.9;
+      return { pts: [{ p: V3(c.x, 0, m) }, { p: V3(c.x + c.d * 0.6, 0, Z_MATA - 1.5), dur: 3, para: rnd(8, 12), fareja: true }, { p: V3(c.x + c.d * 2.4, 0, Z_MATA - 1.7), dur: 3.4, para: rnd(5, 8), fareja: true }, { p: V3(c.x + c.d * 3, 0, m), dur: 2.4 }], mata: m };
+    }
+    case 'picapau': {
+      // num tronco das árvores da beira, de lado para a câmera, martelando
+      const copas = copasDaBeira().filter(naTelaBicho); if (!copas.length) return null;
+      const c = sorteia(copas), T = V3(c.x, 0.28, c.z), P = T.clone().addScaledVector(dir, 0.13 * lado);
+      return { pts: voando(P, rnd(10, 15), { martela: true, olha: Math.atan2(-dir.x * lado, -dir.z * lado) }) };
+    }
+  }
+  return null;
+}
+function soltarBichoNovo(k){
+  k = k || sorteiaNovo();
+  if (!k) return false;
+  const c = caminhoNovo(k);
+  if (!c || !c.pts) return false;
+  const B = bichoNovo = criarBicho(k, c.pts);
+  B.semOnda = !!c.semOnda; B.mata = c.mata; B.falaPorPonto = true;
+  if (c.base && BASES_BICHO[k]){ const [fn, esc] = BASES_BICHO[k]; B.base = malha(geo('baseBicho' + k, () => fn().build(esc, { origin: [0.5, 0, 0.5], jitter: 0.02 }))); B.base.position.copy(c.base).setY(0); B.base.rotation.y = cam.az; scene.add(B.base); }
+  return true;
+}
+function sumirBichoNovo(){
+  const B = bichoNovo;
+  if (B){ scene.remove(B.g); tirarClicavel(B.g); if (B.base) scene.remove(B.base); bichoNovo = null; }
+  proxBichoNovo = rnd(...BICHOS_NOVOS.intervalo);
+}
+// a Luma vai latir para o gambá ou para a irara (aventura 'bicho')
+const bichoParaLuma = () => !!bichoNovo && (bichoNovo.tipo === 'gamba' || bichoNovo.tipo === 'irara') && !!bichoNovo.esperando && !bichoNovo.reagiu;
+const lumaNoBicho = () => !!luma && luma.estado === 'fora' && luma.acao === 'bicho';
+function atualizarBichosNovos(dt, t){
+  if (proxBichoNovo == null) proxBichoNovo = rnd(...BICHOS_NOVOS.primeira);
+  const B = bichoNovo;
+  if (!B){
+    if (!cine && S.viuCineInicio){ proxBichoNovo -= dt; if (proxBichoNovo <= 0 && !soltarBichoNovo()) proxBichoNovo = rnd(10, 25); }
+    return;
+  }
+  if (cine){ sumirBichoNovo(); return; }
+  const N = BICHOS_NOVOS, P = B.pts[B.i];
+  // o gambá de morto: deitado de lado, de língua de fora, uns segundos; depois levanta e segue
+  if (B.fingindo > 0){
+    B.fingindo -= dt;
+    const k = Math.min(1, (N.finge - B.fingindo) * 3, B.fingindo * 2);
+    B.m.rotation.set(0, 0, k * 1.45); B.g.position.y = P.p.y + k * 0.1;
+    if (B.fingindo <= 0){ B.m.rotation.set(0, 0, 0); B.tt = P.dur + P.para; falar(B, '(levanta e sai de fininho)', 2); }
+    return;
+  }
+  // parado no lugar de esperar a Luma (o gambá na cerca, a irara na colmeia)
+  const parado = !!P && B.tt > P.dur && (P.finge || P.abelhas);
+  B.esperando = parado;
+  if (parado && !B.reagiu){
+    const q = B.tt - P.dur, vemLuma = lumaNoBicho() && (B.esperou || 0) < N.esperaLuma;
+    if (vemLuma){ B.esperou = (B.esperou || 0) + dt; B.tt = Math.min(B.tt, P.dur + P.para - 0.3); }
+    // a reação: com a Luma latindo, ou sozinho (o gambá depois de um tempo, ou com o Ed perto; a irara quando as abelhas acham ela)
+    const edPertoB = ed.g.visible && Math.hypot(ed.pos.x - B.g.position.x, ed.pos.y - B.g.position.z) < N.fogeEd;
+    if (B.lumaLatiu || (!vemLuma && (edPertoB || q > (P.finge ? 5 : 6)))){
+      B.reagiu = true;
+      if (P.finge){ B.fingindo = N.finge; falar(B, '(finge de morto)', 2.4); SOM_BICHO.gamba(); if (ed.g.visible && ed.estado === 'parado' && Math.hypot(ed.pos.x - B.g.position.x, ed.pos.y - B.g.position.z) < 9) setTimeout(() => edFala(FALAS_ED_GAMBA), 1500); }
+      else { falar(B, 'Ai! Abelha!', 1.8); SOM_BICHO.irara(); B.tt = P.dur + P.para; B.pts[B.i + 1].dur = 1.2; }
+      return;
+    }
+  }
+  // o veado foge pulando se o Ed chega perto
+  if (B.tipo === 'veado' && !B.fugiu && ed.g.visible && Math.hypot(ed.pos.x - B.g.position.x, ed.pos.y - B.g.position.z) < N.fogeEd){
+    B.fugiu = true; SOM_BICHO.veado(); falar(B, '(foge pulando)', 1.6);
+    const g = B.g.position, dentro = V3(g.x + rnd(-0.5, 0.5), 0, B.mata);
+    B.pts = [{ p: g.clone() }, { p: g.clone().lerp(dentro, 0.5), dur: 0.5, pula: 0.35 }, { p: dentro, dur: 0.5, pula: 0.35 }]; B.i = 1; B.tt = 0;
+  }
+  // a irara com as abelhas em volta
+  if (P && P.abelhas && B.tt > P.dur + 2 && (B.tAb = (B.tAb || 0) - dt) <= 0){ B.tAb = 0.12; const g = B.g.position; particula(g.x + rnd(-0.4, 0.4), rnd(0.3, 0.8), g.z + rnd(-0.4, 0.4), 0xf2c335, 0.4); }
+  if (passoBicho(B, dt, t)) sumirBichoNovo();
+}
+const FALAS_LUMA_BICHO = ['Au! Au! (quem tá aí?)', 'Au au au! (sai daqui!)', 'Grrr... au! (é da fazenda!)', 'Au! (fareja e late)', 'Auuu! (bicho estranho!)', 'Au au! (pula pra frente e pra trás)', 'Au! (protege as galinhas)',
+  'Au au! (esse mel é do Ed!)', 'Rrr... (rosna baixinho)', 'Au! (late com o rabinho em pé)', 'Au au au au! (alarme!)', 'Au? (cheiro diferente)', 'Au! (fica de orelha em pé)', 'Au au! (vai embora, vai!)', 'Au! (late valente)',
+  'Au! (chama o Ed)', 'Auuu! (quem manda aqui sou eu!)', 'Au au! (dá a volta e late de novo)', 'Au! (patinha da frente levantada)', 'Au! Au! (guarda da fazenda!)', 'Au au! (corre em volta)'];
+const FALAS_ED_GAMBA = ['Hehe, o gambá se fingiu de morto!', 'Calma, Luma, ele só está fingindo!', 'Olha os filhotinhos nas costas dele!', 'O gambá é teatral, hein?', 'Ele levanta já já, pode deixar.', 'Que susto, gambazinho!', 'O gambá come bicho que atrapalha a horta. Deixa ele!',
+  'Luma, ele é do bem!', 'Gambá esperto, esse!', 'Ninguém aqui quer te pegar, gambá!', 'Olha que ator!', 'Ele vai embora sozinho, Luma.', 'Ai, os filhotes seguraram firme!', 'Que gambá dramático!', 'Pode levantar, gambá, ninguém viu!',
+  'Ele faz isso pra se proteger.', 'Hehe, deitou de lado e tudo!', 'Gambá de novela!', 'Bom trabalho, Luma, ele vai embora.', 'Vai com calma, gambazinho!', 'Ele finge muito bem!'];
 // ================= o Curupira (nível 28): o guardião da floresta. Na cena ele surge num redemoinho de folhas na beira da
 // mata e agradece o cuidado do Ed com os bichos e as árvores. Depois aparece de vez em quando: sai da floresta, anda
 // um pouco pela orla deixando pegadas ao contrário, fala e volta sumindo nas folhas. Nada disso mexe no save
@@ -6170,6 +6654,8 @@ function passoBicho(B, dt, t){
   B.tt += dt;
   const de = B.pts[B.i - 1].p, g = B.g, m = B.m, borb = B.tipo === 'borboletas';
   for (const q of B.ms) q.rotation.set(0, 0, 0);
+  // os morcegos batem as asas o tempo todo (a malha inteira estica e encolhe em x, como as borboletas)
+  if (B.tipo === 'morcegos') B.ms.forEach((q, i) => { q.scale.x = (BICHOS_MATA.bando.morcegos[i][3] || 1) * (0.3 + 0.7 * Math.abs(Math.sin(t * 15 + i * 1.3))); });
   // as borboletas batem as asas o tempo todo, cada uma no seu ritmo (mais devagar paradas no ar)
   if (borb) B.ms.forEach((q, i) => { q.scale.x = 0.3 + 0.7 * Math.abs(Math.sin(t * (B.tt < P.dur ? 13 : 8) + i * 1.7)); });
   if (B.tt < P.dur){
@@ -6178,11 +6664,13 @@ function passoBicho(B, dt, t){
     const dx = P.p.x - de.x, dz = P.p.z - de.z;
     if (Math.hypot(dx, dz) > 0.05) g.rotation.y = anguloPerto(g.rotation.y, Math.atan2(dx, dz), Math.min(1, dt * 8));
     if (P.voa){ g.position.y += Math.sin(k * Math.PI) * 0.8 + Math.sin(t * 18) * 0.05; g.rotation.z = Math.sin(t * 18) * 0.12; }
-    else if (P.pula) g.position.y += Math.sin(k * Math.PI) * 0.6;
+    // planando (os morcegos): o caminho reto, balançando um pouquinho
+    else if (P.plana){ g.position.y += Math.sin(t * 9) * 0.04; g.rotation.z = Math.sin(t * 5) * 0.2; }
+    else if (P.pula) g.position.y += Math.sin(k * Math.PI) * (P.pula === true ? 0.6 : P.pula);
     else if (borb) g.position.y += Math.sin(t * 3) * 0.12;
     else if (BM.anda[B.tipo]){ const [r, h] = BM.anda[B.tipo]; g.position.y += Math.abs(Math.sin(t * r)) * h; }
     else if (B.tipo === 'cobra') g.rotation.y += Math.sin(t * 7) * 0.012;
-    if (g.position.y < -0.1 && (B.tOnda = (B.tOnda || 0) - dt) <= 0){ B.tOnda = 0.35; soltarOnda(g.position.x, g.position.z, true); }
+    if (!B.semOnda && g.position.y < -0.1 && (B.tOnda = (B.tOnda || 0) - dt) <= 0){ B.tOnda = 0.35; soltarOnda(g.position.x, g.position.z, true); }
   } else {
     // parado: vira para a câmera e se mexe um pouquinho
     const q = B.tt - P.dur;
@@ -6193,6 +6681,9 @@ function passoBicho(B, dt, t){
       g.rotation.y = anguloPerto(g.rotation.y, cam.az + Math.PI / 2, Math.min(1, dt * 3));
       m.rotation.x = 0.28 + Math.sin(q * 16) * 0.06;
       if ((B.tPo = (B.tPo || 0) - dt) <= 0){ B.tPo = 0.12; const a = g.rotation.y; particula(g.position.x + Math.sin(a) * 0.28, 0.06, g.position.z + Math.cos(a) * 0.28, [0x8a5c3a, 0xa47448, 0x6e472c][(Math.random() * 3) | 0], 0.55); }
+    } else if (P.gira){
+      // a coruja gira a cabeça (o corpo todo, de tão rápido) para um lado e para o outro, e volta para a câmera
+      const k = Math.floor(q / 1.8) % 4; g.rotation.y = anguloPerto(g.rotation.y, cam.az + [0, 1.4, 0, -1.4][k], Math.min(1, dt * 9));
     } else if (P.olha != null) g.rotation.y = anguloPerto(g.rotation.y, P.olha, Math.min(1, dt * 5));
     else if (P.para) g.rotation.y = anguloPerto(g.rotation.y, cam.az + Math.sin(q * 0.9) * 0.5, Math.min(1, dt * 3));
     // bebendo: abaixa a cabeça até a água, dá umas lambidas e às vezes faz uma ondinha na frente do focinho
@@ -6200,11 +6691,28 @@ function passoBicho(B, dt, t){
       m.rotation.x = Math.min(1, q * 2) * 0.3 + (q > 0.5 ? Math.sin(q * 6) * 0.05 : 0);
       if (q > 0.6 && g.position.y < 0.05 && (B.tOnda = (B.tOnda || 0) - dt) <= 0){ B.tOnda = 1.1; const a = g.rotation.y; soltarOnda(g.position.x + Math.sin(a) * 0.32, g.position.z + Math.cos(a) * 0.32); }
     }
-    if (g.position.y < -0.1 && (B.tOnda = (B.tOnda || 0) - dt) <= 0){ B.tOnda = 0.9; soltarOnda(g.position.x, g.position.z); }
+    if (!B.semOnda && g.position.y < -0.1 && (B.tOnda = (B.tOnda || 0) - dt) <= 0){ B.tOnda = 0.9; soltarOnda(g.position.x, g.position.z); }
     if (B.tipo === 'tucano' || B.tipo === 'papagaio' || B.tipo === 'arara') g.position.y += Math.max(0, Math.sin(q * 5)) * 0.03;
     if (borb) g.position.y += Math.sin(q * 2) * 0.08;
     if (B.tipo === 'preguica') m.rotation.z = Math.sin(q * 0.5) * 0.08;
     if (P.fareja) m.rotation.x = 0.1 + Math.sin(q * 3) * 0.05;
+    // os sapos dão pulinhos no lugar e coaxam, cada um no seu ritmo
+    if (P.coaxa){
+      B.ms.forEach((o, i) => { const c = (q * 0.9 + i * 0.37) % 1.6; o.position.y = c < 0.25 ? Math.sin(c / 0.25 * Math.PI) * 0.05 : 0; });
+      if ((B.tCoaxa = (B.tCoaxa || 0) - dt) <= 0){ B.tCoaxa = rnd(0.45, 1); Som.tom(rnd(95, 135), 0.22, 'sawtooth', 0.01, 85); }
+    }
+    // a garça dá a bicada no raso de tempos em tempos
+    if (P.bica){
+      const c = (q % 2.6) / 2.6; m.rotation.x = c > 0.7 ? Math.sin((c - 0.7) / 0.3 * Math.PI) * 0.75 : 0;
+      if (c > 0.8 && !B.picou){ B.picou = true; const a = g.rotation.y; soltarOnda(g.position.x + Math.sin(a) * 0.45, g.position.z + Math.cos(a) * 0.45); }
+      if (c < 0.5) B.picou = false;
+    }
+    // o pica-pau martela em rajadas, com o toc-toc
+    if (P.martela && q % 1.7 < 0.7){ m.rotation.x = Math.sin(q * 40) * 0.2; if ((B.tToc = (B.tToc || 0) - dt) <= 0){ B.tToc = 0.09; Som.tom(1400, 0.025, 'square', 0.012, 800); } }
+    // a seriema joga a cabeça para trás para cantar
+    if (P.canta && q > 1.2 && q < 3.4) m.rotation.x = -0.45 + Math.sin(q * 12) * 0.08;
+    // as ariranhas boiando enquanto comem
+    if (P.come) g.position.y += Math.sin(q * 3) * 0.02;
     // no bando que não é de borboletas, os outros abaixam a cabeça junto, cada um num ritmo
     if (!borb) B.ms.forEach((o, i) => { if (i) o.rotation.x = m.rotation.x * (0.85 + 0.15 * Math.sin(q * 2 + i * 1.9)); });
     // a cutia às vezes deixa uma castanha para a fazenda
@@ -6214,7 +6722,8 @@ function passoBicho(B, dt, t){
     }
     if (P.fala && !B.falou && q > 1.5){
       B.falou = true; falar(B, P.fala, 2);
-      if (B.tipo === 'bugio') Som.tom(150, 0.8, 'sawtooth', 0.02, 230);
+      if (SOM_BICHO[B.tipo]) SOM_BICHO[B.tipo]();
+      else if (B.tipo === 'bugio') Som.tom(150, 0.8, 'sawtooth', 0.02, 230);
       else if (B.tipo === 'onca') Som.tom(95, 0.9, 'sawtooth', 0.025, 70);
       else if (B.tipo === 'mico') Som.tom(1700, 0.12, 'square', 0.015, 2200);
       else if (B.tipo === 'porcoRio') Som.tom(130, 0.35, 'sawtooth', 0.02, 95);
@@ -6223,7 +6732,7 @@ function passoBicho(B, dt, t){
     }
     // o tatu espera a Luma terminar de cavar junto (até um limite)
     const segura = P.cava && lumaNoTatu() && !B.lumaCavou && q < BM.esperaLuma;
-    if (!segura && q >= (P.para || 0)){ B.i++; B.tt = 0; B.cavando = false; if (B.i >= B.pts.length) return true; }
+    if (!segura && q >= (P.para || 0)){ B.i++; B.tt = 0; B.cavando = false; if (B.falaPorPonto) B.falou = false; if (B.i >= B.pts.length) return true; }
   }
   return false;
 }
@@ -11796,10 +12305,10 @@ function atualizarRecanto(dt, t){
   }
 }
 // ----- o tempo: as caixas e as toras como as colmeias (prontas com o jogo fechado); as câmeras tiram fotos até o cartão encher
-const ESPECIES_FOTO = [...BICHOS_MATA.tipos.filter(k => k !== 'borboletas'), 'porcoRio', 'loboGuara', 'harpia', 'ourico'];
+const ESPECIES_FOTO = [...BICHOS_MATA.tipos.filter(k => k !== 'borboletas'), 'porcoRio', 'loboGuara', 'harpia', 'ourico', 'gamba', 'irara', 'veado', 'morcegos', 'picapau'];
 // os de fora da beira da mata: o porco-do-rio só vem à cachoeira; os três raros só aparecem nas câmeras
-const PESO_FOTO = { porcoRio: 1, loboGuara: 0.35, harpia: 0.25, ourico: 0.5 };
-const RAROS_FOTO = ['loboGuara', 'harpia', 'ourico'], NOTURNOS = ['tatu', 'jaguatirica', 'onca', 'loboGuara', 'ourico', 'anta', 'porcoRio'], DIURNOS = ['tucano', 'papagaio', 'arara', 'mico', 'bugio'];
+const PESO_FOTO = { porcoRio: 1, loboGuara: 0.35, harpia: 0.25, ourico: 0.5, gamba: 1.2, irara: 0.8, veado: 1, morcegos: 1, picapau: 1 };
+const RAROS_FOTO = ['loboGuara', 'harpia', 'ourico'], NOTURNOS = ['tatu', 'jaguatirica', 'onca', 'loboGuara', 'ourico', 'anta', 'porcoRio', 'gamba', 'morcegos'], DIURNOS = ['tucano', 'papagaio', 'arara', 'mico', 'bugio', 'picapau', 'irara'];
 function sortearFoto(){
   const noite = Math.random() < 0.45;
   const peso = k => (PESO_FOTO[k] != null ? PESO_FOTO[k] : BICHOS_MATA.pesos[k] || 1) * (noite ? (NOTURNOS.includes(k) ? 2.2 : DIURNOS.includes(k) ? 0.15 : 0.7) : (NOTURNOS.includes(k) ? 0.5 : 1));
@@ -19289,6 +19798,71 @@ const FICHAS_BICHOS = {
     vive: 'Nas florestas úmidas e beiras de rio da África Central e Ocidental. Anda em bandos e fuça o chão atrás de raízes, frutas e bichinhos. Na natureza, não vive no Brasil.',
     fazenda: 'Um bando aparece de vez em quando para beber água na cachoeira da floresta.',
     curio: 'Gosta de água e nada bem, daí o nome de porco-do-rio.' },
+  coruja: { nome: 'Coruja-buraqueira', cient: 'Athene cunicularia', modelo: () => vCorujaBuraqueira(),
+    oque: 'Uma corujinha de pernas compridas, olhos amarelos e sobrancelhas brancas. Ao contrário da maioria das corujas, mora num buraco no chão.',
+    vive: 'Em campos, pastos, cerrado e até gramados de cidade, das Américas inteiras. Cava a própria toca ou aproveita a de um tatu. Caça insetos, pequenos roedores e lagartixas, de dia e de noite.',
+    fazenda: 'De noite ela sai da toca na orla da mata, fica um tempão de guarda girando a cabeça e volta para o buraco.',
+    curio: 'Gira a cabeça bem para trás porque os olhos não mexem dentro da cabeça. Quando se assusta, balança o corpo para cima e para baixo, como se fizesse reverência.' },
+  morcegos: { nome: 'Morcego-das-frutas', cient: 'Artibeus lituratus', modelo: () => vMorcego(),
+    oque: 'Um morcego grande, que come frutas, como figo, embaúba e goiaba. Tem riscas claras na cara e não tem rabo.',
+    vive: 'Em matas e cidades de quase todo o Brasil. Passa o dia pendurado em folhas e galhos e sai de noite atrás de árvores com fruta madura.',
+    fazenda: 'De noite um bandinho rodeia uma árvore do pomar, morde uma fruta e vai embora.',
+    curio: 'Come a fruta voando ou num galho perto e solta as sementes longe dali. Por isso é um dos bichos que mais replantam a floresta.' },
+  gamba: { nome: 'Gambá-de-orelha-branca', cient: 'Didelphis albiventris', modelo: () => vGamba(),
+    oque: 'Um marsupial, parente do canguru: os filhotes nascem miudinhos, crescem na bolsa da mãe e depois andam agarrados nas costas dela. Não é o gambá fedido da América do Norte.',
+    vive: 'Em quase todo o Brasil, no mato, no cerrado e nas cidades. Sai de noite e come de tudo: insetos, frutas, ovos, minhocas e até cobras.',
+    fazenda: 'De noite ele fuça a cerca do galinheiro com os filhotes nas costas. Quando a Luma late ou o Ed chega perto, ele se finge de morto e depois sai de fininho.',
+    curio: 'Resiste ao veneno de muitas cobras, inclusive da jararaca, e ajuda a controlar cobras e carrapatos perto das casas.' },
+  sapos: { nome: 'Sapo-cururu', cient: 'Rhinella diptycha', modelo: () => vSapo(),
+    oque: 'Um sapo grandão, de pele cheia de verrugas e duas glândulas atrás dos olhos que soltam um leite venenoso quando ele é apertado.',
+    vive: 'No cerrado, na caatinga e na mata atlântica, perto de lagos e brejos. Passa o dia escondido e sai de noite para comer insetos.',
+    fazenda: 'De noite, um coro de sapos pula da água para a beira do lago e coaxa um tempão. Depois da chuva eles aparecem bem mais.',
+    curio: 'Os machos coaxam para chamar as fêmeas, e a chuva é o sinal de que tem poça para os girinos. Um sapo come muito inseto e é amigo da horta.' },
+  ariranha: { nome: 'Ariranha', cient: 'Pteronura brasiliensis', modelo: () => vAriranha(),
+    oque: 'A maior lontra do mundo: pode passar de um metro e meio com o rabo. Tem pelo marrom bem liso, pés de nadadeira e o rabo achatado como um remo.',
+    vive: 'Em rios e lagos da Amazônia e do Pantanal, em grupos de família. Come peixe, segurando com as patas da frente, e faz bastante barulho para conversar.',
+    fazenda: 'De dia uma família surge no lago da cachoeira, nada até a outra beira, come um peixe e mergulha.',
+    curio: 'A mancha clara do pescoço é diferente em cada uma, como uma impressão digital. Está ameaçada de extinção.' },
+  garca: { nome: 'Garça-branca-grande', cient: 'Ardea alba', modelo: () => vGarca(),
+    oque: 'Uma ave toda branca, de quase um metro, com pernas pretas compridas, pescoço em S e bico amarelo.',
+    vive: 'Em lagos, rios, brejos e mangues do mundo quase todo. Pesca parada no raso, esperando o peixe passar, e dá a bicada num instante.',
+    fazenda: 'De dia ela pousa no raso do lago, pesca um tempo e vai embora voando.',
+    curio: 'As penas compridas das costas, que ela ganha na época de namoro, quase acabaram com a espécie no século 19: eram usadas para enfeitar chapéus.' },
+  martim: { nome: 'Martim-pescador-grande', cient: 'Megaceryle torquata', modelo: () => vMartimPescador(),
+    oque: 'O maior martim-pescador do Brasil: costas cinza-azuladas, peito ruivo, colar branco, topete e bico comprido como um punhal.',
+    vive: 'Na beira de rios e lagos de quase todas as Américas. Faz o ninho num túnel que cava no barranco.',
+    fazenda: 'De dia ele pousa num galho na margem do lago, mergulha de ponta e volta com um peixinho no bico.',
+    curio: 'Mergulha de cabeça e de olhos protegidos por uma pelinha, e bate o peixe no galho antes de engolir.' },
+  jacare: { nome: 'Jacaré-de-papo-amarelo', cient: 'Caiman latirostris', modelo: () => vJacare(),
+    oque: 'Um jacaré de focinho largo e curto. O papo fica amarelado na época de reprodução.',
+    vive: 'Em brejos, lagos e rios do leste da América do Sul, da Bahia ao Rio Grande do Sul, até em lagoas de cidade.',
+    fazenda: 'De dia ele sai da água na beira do lago e toma sol de boca aberta. O Jaca diz que é primo dele.',
+    curio: 'Abre a boca no sol para se refrescar, como um cachorro com a língua de fora. E a temperatura do ninho é que decide se os filhotes nascem machos ou fêmeas.' },
+  saguis: { nome: 'Sagui-de-tufo-branco', cient: 'Callithrix jacchus', modelo: () => vSagui(),
+    oque: 'Um macaquinho do tamanho de um esquilo, com tufos brancos nas orelhas e o rabo listrado de preto e cinza.',
+    vive: 'É do Nordeste, mas hoje vive solto em matas e cidades do Sudeste também. Anda em bandos e come frutas, insetos e a goma que tira das árvores.',
+    fazenda: 'De dia um bando pula de árvore em árvore no pomar, belisca uma fruta e vai embora pulando.',
+    curio: 'Quase sempre nascem gêmeos, e o pai e os irmãos mais velhos ajudam a carregar os filhotes.' },
+  irara: { nome: 'Irara', cient: 'Eira barbara', modelo: () => vIrara(),
+    oque: 'Parente da lontra e do furão: corpo comprido e escuro, cabeça mais clara e uma mancha amarela no pescoço.',
+    vive: 'Nas matas do México à Argentina. Sobe em árvore muito bem e come frutas, ovos, bichinhos e, mais que tudo, mel.',
+    fazenda: 'De dia ela fuça as colmeias atrás de mel e foge quando as abelhas acham ela ou quando a Luma late.',
+    curio: 'O nome vem do tupi e quer dizer algo como "comedora de mel".' },
+  seriema: { nome: 'Seriema', cient: 'Cariama cristata', modelo: () => vSeriema(),
+    oque: 'Uma ave alta, de pernas avermelhadas, bico vermelho, topete de penas na testa e pele azul em volta dos olhos.',
+    vive: 'No cerrado, nos campos e nos pastos do centro e do leste da América do Sul. Prefere correr a voar.',
+    fazenda: 'De dia ela sai na orla da mata, para e canta alto, e volta para o mato.',
+    curio: 'O canto dela se ouve de muito longe. Ela pega cobras e lagartos e bate a presa no chão antes de comer.' },
+  veado: { nome: 'Veado-catingueiro', cient: 'Subulo gouazoubira', modelo: () => vVeado(),
+    oque: 'Um veado pequeno e acinzentado-avermelhado. O macho tem dois chifrinhos sem galhos, que caem e nascem de novo todo ano.',
+    vive: 'No cerrado, na caatinga e nas beiras de mata de boa parte da América do Sul. Anda sozinho e é muito arisco.',
+    fazenda: 'Ele sai da mata, pasta na orla e volta. Se o Ed chega perto, foge pulando.',
+    curio: 'Quando se assusta, levanta o rabo e mostra a mancha branca de baixo, como um aviso para os outros veados.' },
+  picapau: { nome: 'Pica-pau-de-cabeça-amarela', cient: 'Celeus flavescens', modelo: () => vPicaPau(),
+    oque: 'Um pica-pau de cabeça e topete amarelos, corpo preto barrado de amarelo e, no macho, uma risca vermelha na bochecha.',
+    vive: 'Na mata atlântica, no cerrado e na caatinga. Come formigas, cupins, larvas e frutas, e faz o ninho num buraco que cava no tronco.',
+    fazenda: 'De dia ele pousa no tronco de uma árvore da beira da mata e martela um tempão.',
+    curio: 'O rabo duro serve de apoio no tronco, e a língua é tão comprida que fica enrolada por dentro da cabeça.' },
   capivara: { nome: 'Capivara', cient: 'Hydrochoerus hydrochaeris', modelo: () => vCapivara(),
     oque: 'O maior roedor do mundo: um adulto pode passar de 60 quilos. Tem pernas curtas, pelo marrom e uma pele entre os dedos que ajuda a nadar.',
     vive: 'Na beira de rios, lagos e banhados de quase toda a América do Sul a leste dos Andes, até em lagos de cidade. Vive em grupos e passa boa parte do dia na água ou deitada perto dela.',
@@ -34007,7 +34581,7 @@ function quadro(agoraP){
   atualizarLuma(dt, t);
   atualizarDisco(dt, t);
   Musica.atualizar();
-  atualizarBichosMata(dt, t);
+  atualizarBichosMata(dt, t); atualizarBichosNovos(dt, t);
   atualizarVisitaCachoeira(dt, t); atualizarCachoeira(dt, t);
   atualizarRelogioFoguete(dt);
   atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t); atualizarRecanto(dt, t); passoAcharEd(dt); atualizarFeiraAgro(dt, t); atualizarFestival(dt, t); if ((tickEstufa -= dt) <= 0){ tickEstufa = 1; atualizarEstufa(); conferirAniversario(); } atualizarAniversario(dt, t); atualizarPipas(dt, t); atualizarTrem(dt, t); atualizarPier(dt, t); atualizarEngenho(dt, t); atualizarBloco(dt, t); atualizarBaseFoguete(); atualizarGincana(dt, t); atualizarRave(dt, t); atualizarNoites(dt, t);
@@ -34283,7 +34857,9 @@ async function iniciar(){
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
   window.__fazenda = { feira: ganchoFeira(), resgate: ganchoResgate(), planeta: { PLANETA, viagem: () => viagem, obj: () => S.planeta, vis: () => PLANETA_VIS, foguete: () => FOG_VIS, feira: () => abrirFeiraPlaneta(cine), trocar: trocarNoPlaneta, motivo: motivoViagem }, bloco: { BLOCO, estado: () => bloco, sair: sairBloco, entrar: entrarNoBloco, acabar: acabarBloco, motivo: motivoBloco }, engenho: { CANAVIAL, vis: () => CANAVIAL_VIS, colher: colherCanavial, estagio: estagioCanavial }, pier: { PIER, PEIXES, obj: () => S.peixes, vis: () => PIER_VIS, racao: jogarRacaoPeixes, lixo: tirarLixoLago, caderno: abrirCadernoPeixes }, aniversario: { ANIV, obj: () => S.aniversario, vis: () => anivVis, montar: montarAniversario, desmontar: desmontarAniversario, parabens: comecarParabens, conferir: conferirAniversario, agendar: agendarAniversario }, trem: { TREM, TRILHO, vis: () => TREM_VIS, passear: passearDeTrem, grupo: novoGrupoTrem, partir: partirTrem, parada: PARADA_TREM }, pipas: { PIPAS, obj: () => festaPipas, jogo: () => jogoPipa, montar: montarPipas, desmontar: desmontarPipas, jogar: comecarJogoPipa, toque: toquePipa, motivo: motivoPipas }, estufa: { ESTUFA, obj: () => estufa(), plantar: plantarEstufa, colher: colherEstufa, vis: () => ESTUFA_VIS, posVaso: posVasoEstufa }, nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: (id, extra) => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, Object.assign(l, extra)) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => n.g.getWorldPosition(new THREE.Vector3()).toArray()) }, encerrar: () => encerrarArteNano(), prox: () => arteNanoProx, chapeu: () => chapeuFora, visita: { chamar: () => chamarBeto(), despedir: () => despedirBeto(), estado: () => caminhaoE.estado, caminhao: () => caminhao } }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, VINHETAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
-    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, flamingos: { soltar: soltarFlamingos, obj: () => flamingos, pousos: pousoFlamingos, sumir: sumirFlamingos, FLAMINGOS, avancar: seg => { const t0 = performance.now() / 1000; for (let i = 0; i < Math.round(seg / 0.05); i++) atualizarFlamingos(0.05, t0 + i * 0.05); } }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { circulo: { forcar: () => { discoJogo.forcarCirculo = true; discoJogo.prox = 0; }, fazer: fazerCirculo, lote: loteParaCirculo, grupo: () => grupoCirculo, soltar: soltarGrupoCirculo, CIRCULO }, sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, puxar: () => { discoJogo.forcarPuxar = true; discoJogo.prox = 0; }, puxao: () => puxao, obj: () => discoJogo, abducao: () => abducao, presente: { soltar: presenteEt, obj: () => caixaEt, abrir: abrirCaixaEt }, visita: { forcar: () => { discoJogo.forcarVisita = true; discoJogo.prox = 0; }, obj: () => etVisita, itens: itensEt, trocar: trocarEt, pedido: pedidoEt, temDisco: temDiscoJardim, VISITA_ET } }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
+    galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosNovos: { BICHOS_NOVOS, soltar: soltarBichoNovo, obj: () => bichoNovo, sumir: sumirBichoNovo, prox: () => proxBichoNovo, beiras: beirasLago, arvores: arvoresPomarNaTela, colmeias: colmeiasNaTela, sorteia: sorteiaNovo,
+      lugares: () => { const zs = Object.keys(LAGO).map(Number), zl = zs[zs.length >> 1]; return { orla: [Math.min(COL_CURVA - 8, 20), Z_MATA - 1.5], lago: [(LAGO[zl][0] + LAGO[zl][1]) / 2, zl], pomar: POMAR_SLOTS[0], galinheiro: POUSO_GALO.galinheiro.fora, cachoeira: VISITA_CACHOEIRA.centro, colmeia: COLMEIA_SLOTS[(S.colmeias || []).findIndex(Boolean)] || COLMEIA_SLOTS[0] }; } },
+    bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, flamingos: { soltar: soltarFlamingos, obj: () => flamingos, pousos: pousoFlamingos, sumir: sumirFlamingos, FLAMINGOS, avancar: seg => { const t0 = performance.now() / 1000; for (let i = 0; i < Math.round(seg / 0.05); i++) atualizarFlamingos(0.05, t0 + i * 0.05); } }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { circulo: { forcar: () => { discoJogo.forcarCirculo = true; discoJogo.prox = 0; }, fazer: fazerCirculo, lote: loteParaCirculo, grupo: () => grupoCirculo, soltar: soltarGrupoCirculo, CIRCULO }, sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, puxar: () => { discoJogo.forcarPuxar = true; discoJogo.prox = 0; }, puxao: () => puxao, obj: () => discoJogo, abducao: () => abducao, presente: { soltar: presenteEt, obj: () => caixaEt, abrir: abrirCaixaEt }, visita: { forcar: () => { discoJogo.forcarVisita = true; discoJogo.prox = 0; }, obj: () => etVisita, itens: itensEt, trocar: trocarEt, pedido: pedidoEt, temDisco: temDiscoJardim, VISITA_ET } }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(AMPLIACAO).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     visitaPresa: VISITA_PRESA, pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
     trator: () => trator, TRATOR, filaTipos: () => fila.map(t => t.tipo), checar: (t, a, q) => checar(t, a, q), enfileirarTrator: (lote, acao, semente) => enfileirar('trator', { k: 'trator', lote }, { acao, semente }), tratorVis: () => tratorVis,
@@ -36432,7 +37008,7 @@ function catalogoModelos(){
       p.g.userData.anima(0, 0);
       return p.g;
     } }] }] },
-    { nome: 'Bichos', itens: [um('Galinha', vGalinha), um('Galinha aposentada', vGalinhaAposentada), um('Galo', vGalo), um('Pintinho', vPintinho), um('Pato', vPato), um('Curupira', vCurupira), um('Vaca', vVaca), um('Vaca de volta do espaço', () => vVaca(true)), varios('Porcos do spa', sementesVitrineSpa().map(i => [descricaoPorcoSpa(tracosPorcoSpa(i)), () => vPorcoSpaInteiro(i)])), varios('Porco do spa sujo de lama', [0, 5, 9, 14].map(i => [descricaoPorcoSpa(tracosPorcoSpa(i)), () => vPorcoSpaInteiro(i, true)])), um('Minhoca', vMinhoca), um('Bugio', vBugio), um('Jaguatirica', vJaguatirica), um('Tucano', vTucano), um('Papagaio', vPapagaio), um('Cobra-coral', vCobraCoral), um('Cutia', vCutia), um('Tatu', vTatu), varios('Porco-do-rio-vermelho', [['Um', vPorcoRio], ['Bando', vBandoPorcoRio]]), varios('Quati', [['Um', vQuati], ['O bando', vBandoQuati]]), um('Tamanduá-bandeira', vTamandua), um('Anta', vAnta), um('Jabuti', vJabuti), um('Onça-pintada', vOnca), um('Lobo-guará', vLoboGuara), um('Harpia', vHarpia), um('Ouriço-cacheiro', vOurico), varios('Preguiça', [['No tronco', () => vPreguica()], ['Na copa', () => vPreguica(true)]]), varios('Arara-vermelha', [['Uma', vArara], ['O casal', vCasalArara]]), um('Mico-leão-dourado', vMicoLeao), um('Borboletas-azuis', vBorboletas), um('Beija-flor', vBeijaFlor), um('Capivara', vCapivara), um('Flamingo', () => vFlamingo('pe')), um('Flamingo comendo', () => vFlamingo('come')), um('Flamingo voando', () => { const v = vFlamingo('voo'), a = vAsaFlamingo(); for (const e of a.m.values()){ v.set(e.x + 3, e.y + 5, e.z, e.c); v.set(-e.x - 3, e.y + 5, e.z, e.c); } return v; })] },
+    { nome: 'Bichos', itens: [um('Galinha', vGalinha), um('Galinha aposentada', vGalinhaAposentada), um('Galo', vGalo), um('Pintinho', vPintinho), um('Pato', vPato), um('Curupira', vCurupira), um('Vaca', vVaca), um('Vaca de volta do espaço', () => vVaca(true)), varios('Porcos do spa', sementesVitrineSpa().map(i => [descricaoPorcoSpa(tracosPorcoSpa(i)), () => vPorcoSpaInteiro(i)])), varios('Porco do spa sujo de lama', [0, 5, 9, 14].map(i => [descricaoPorcoSpa(tracosPorcoSpa(i)), () => vPorcoSpaInteiro(i, true)])), um('Minhoca', vMinhoca), um('Bugio', vBugio), um('Jaguatirica', vJaguatirica), um('Tucano', vTucano), um('Papagaio', vPapagaio), um('Cobra-coral', vCobraCoral), um('Cutia', vCutia), um('Tatu', vTatu), varios('Porco-do-rio-vermelho', [['Um', vPorcoRio], ['Bando', vBandoPorcoRio]]), varios('Quati', [['Um', vQuati], ['O bando', vBandoQuati]]), um('Tamanduá-bandeira', vTamandua), um('Anta', vAnta), um('Jabuti', vJabuti), um('Onça-pintada', vOnca), um('Lobo-guará', vLoboGuara), um('Harpia', vHarpia), um('Ouriço-cacheiro', vOurico), varios('Preguiça', [['No tronco', () => vPreguica()], ['Na copa', () => vPreguica(true)]]), varios('Arara-vermelha', [['Uma', vArara], ['O casal', vCasalArara]]), um('Mico-leão-dourado', vMicoLeao), um('Borboletas-azuis', vBorboletas), um('Beija-flor', vBeijaFlor), varios('Coruja-buraqueira', [['A coruja', vCorujaBuraqueira], ['A toca', vTocaCoruja]]), um('Morcego-das-frutas', vMorcego), um('Gambá com filhotes', vGamba), um('Sapo-cururu', vSapo), um('Ariranha', vAriranha), um('Garça-branca', vGarca), varios('Martim-pescador', [['O martim', vMartimPescador], ['O galho', vGalhoMartim]]), um('Jacaré-de-papo-amarelo', vJacare), um('Sagui-de-tufo-branco', vSagui), um('Irara', vIrara), um('Seriema', vSeriema), um('Veado-catingueiro', vVeado), um('Pica-pau-de-cabeça-amarela', vPicaPau), um('Capivara', vCapivara), um('Flamingo', () => vFlamingo('pe')), um('Flamingo comendo', () => vFlamingo('come')), um('Flamingo voando', () => { const v = vFlamingo('voo'), a = vAsaFlamingo(); for (const e of a.m.values()){ v.set(e.x + 3, e.y + 5, e.z, e.c); v.set(-e.x - 3, e.y + 5, e.z, e.c); } return v; })] },
     { nome: 'Canteiros', itens: [...Object.keys(CULTURAS).map(k => { const C = CULTURAS[k]; return varios(C.nome, [['Semente', () => vPlanta(k, 0)], ['Muda', () => vPlanta(k, 1)], ['Crescendo', () => vPlanta(k, 2)], ['Pronta', () => vPlanta(k, 3)], ...produto(uso(C.produto || k))], 3); }), um('Mato', vMato), varios('Solo', [['Seco', () => vSolo(false, false)], ['Molhado', () => vSolo(true, false)], ['Adubado', () => vSolo(false, true)]])] },
     { nome: 'Pomar', itens: Object.keys(FRUTIFERAS).map(k => { uso(k); return varios(FRUTIFERAS[k].nome, [['Com fruta', () => vFrutifera(k, true)], ['Sem fruta', () => vFrutifera(k, false)], ...produto(uso(FRUTIFERAS[k].fruta))]); }) },
     { nome: 'Floresta', itens: [varios('Matagal', [['Capim alto', () => vMatagal(0)], ['Moita', () => vMatagal(1)], ['Capim e pedra', () => vMatagal(2)], ['Tronco caído', () => vMatagal(3)]]), ...Object.keys(NATIVAS).map(k => { uso(k); return varios(NATIVAS[k].nome, [['Com fruto', () => vNativa(k, true)], ['Sem fruto', () => vNativa(k, false)], ...produto(uso(NATIVAS[k].produto))]); }), varios('Mata', [[ 'Copa redonda', () => vCopa(0)], ['Copa alta', () => vCopa(1)], ['Copa larga', () => vCopa(2)]])] },
