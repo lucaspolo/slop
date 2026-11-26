@@ -954,7 +954,7 @@ const COR = {
 };
 
 // ================= dados do jogo
-const W = 74, H = 72;
+const W = 80, H = 72;
 // ================= zonas do mapa
 // O mapa é dividido em zonas, cada uma um retângulo (x, z é o canto de cima, w e h o tamanho). Tudo o que fica dentro de
 // uma zona (construções, terrenos, cercados, pomar, enfeites fixos, os lugares das cenas) é escrito em coordenadas locais,
@@ -977,6 +977,7 @@ const ZONAS = {
   resort:       { x: 56, z: 35, w: 18, h: 13 },
   spa:          { x: 31, z: 61, w: 23, h: 11 },  // encostado na estrada, a dois ladrilhos da borda de baixo (o Lucas pediu)
   festa:        { x: 54, z: 49, w: 20, h: 23 },  // o campo do ArraiEd, no canto de baixo
+  base:         { x: 74, z: 6,  w: 6,  h: 20 },  // a área nova (mapa 12: o mapa cresceu 6 ladrilhos para a direita), com a base do foguete
 };
 const zx = (id, x) => ZONAS[id].x + x, zz = (id, z) => ZONAS[id].z + z;
 const zp = (id, x, z) => [ZONAS[id].x + x, ZONAS[id].z + z];
@@ -1336,6 +1337,14 @@ const OBRAS = {
     vestir: m => vestirEstufa(m),
     menu(r){ menuEstufa(r); },
   },
+  baseFoguete: { nome: 'Base do foguete', de: 'da', artigo: 'a', nivel: 80, predio: 'baseFoguete', icone: 'fogueteBolinha', andaimeAlto: 36,
+    etapas: [{ preco: 5000000, minutos: 40, xp: 30000 }],
+    desc: 'A plataforma de lançamento na área nova, com a torre de serviço e o foguete da fazenda. Uma vez por dia, o Ed viaja ao planeta Bolinha, a terra dos ETzinhos, e troca produtos da fazenda na feira de lá.',
+    pronto: 'Toque na base e escolha "Viajar ao planeta Bolinha".',
+    modelo: () => vBaseFoguete(),
+    aoTerminar: () => atualizarBaseFoguete(),
+    menu(r){ menuBaseFoguete(r); },
+  },
   pier: { nome: 'Píer dos peixinhos', de: 'do', nivel: 74, predio: 'pier', icone: 'peixe', andaimeAlto: 6,
     etapas: [{ preco: 900000, minutos: 20, xp: 9000 }],
     desc: 'Um píer de madeira entrando no lago. Do píer o Ed dá ração para os peixinhos, e o Hud fotografa cada espécie para o caderno dos peixes; com a rede, o Ed tira o lixo que aparece boiando. Ninguém pesca: os peixes são amiguinhos.',
@@ -1568,6 +1577,8 @@ const PREDIOS = [
   naZona('lago', { id:'pier',       nome:'Píer dos peixinhos',  x0:4, z0:2, x1:4, z1:4, porta:[4, 5], obra: 'pier' }),
   // o engenho do Sr. Mofi (nível 76): ao lado do lago, abaixo do trilho do trem, de frente para a câmera (mapa 10)
   { id:'engenho', nome:'Engenho do Sr. Mofi', x0:65, z0:27, x1:67, z1:28, porta:[66, 29], fab:'engenho' },
+  // a base do foguete (nível 80), na área nova
+  naZona('base', { id:'baseFoguete', nome:'Base do foguete', x0:2, z0:6, x1:4, z1:8, porta:[3, 9], obra: 'baseFoguete' }),
   naZona('pomar', { id:'estacao',    nome:'Estação do trem',     x0:23, z0:17, x1:26, z1:18, porta:[24, 16], obra: 'trem' }),
   naZona('pomar', { id:'estufa',     nome:'Estufa do Maurinho',  x0:23, z0:2, x1:27, z1:5, porta:[25, 1], obra: 'estufa', ry: Math.PI }),
   // as quadras da fazenda (o Lucas pediu): o gramado inteiro entre a descida, a rua de baixo e o spa; a entrada dá para a
@@ -1669,6 +1680,9 @@ function montarMapa(){
   for (let z = Z_CAMINHO; z < Z_CERCA; z++) setT(X_PORTEIRA, z, 'caminho');
   for (let x = zx('sede', 4); x <= W - 1; x++) setT(x, Z_CAMINHO, 'caminho');
   setT(...PREDIO.poco.porta, 'caminho');
+  // da porta da base do foguete (nível 80) até o caminho de cima, pela beirada da área nova
+  for (let z = Z_CAMINHO + 1; z <= PREDIO.baseFoguete.porta[1]; z++) setT(zx('base', 0), z, 'caminho');
+  for (let x = zx('base', 1); x <= PREDIO.baseFoguete.porta[0]; x++) setT(x, PREDIO.baseFoguete.porta[1], 'caminho');
   // da porta da estufa (nível 66) até o caminho de cima
   for (let z = Z_CAMINHO + 1; z <= PREDIO.estufa.porta[1]; z++) setT(PREDIO.estufa.porta[0], z, 'caminho');
   // do caminho da porteira até a porteira do galinheiro e a do curral
@@ -9665,6 +9679,387 @@ function menuTrem(r){
   r.estado = T.ed ? 'O Ed está passeando de trem!' : T.estado === 'andando' ? `O trem está dando a volta com ${T.grupo ? T.grupo.gente.length + ' visitantes' : 'passageiros'}.` : T.grupo ? 'Tem visitantes chegando para o passeio.' : `O trem está na estação. Os próximos visitantes chegam em ${tempo(Math.max(0, T.prox))}. Cada passagem custa ${reais(TREM.bilhete)}.`;
   r.itens.push({ rotulo: 'Passear de trem', sub: T.estado !== 'parado' || T.grupo ? 'o trem está ocupado' : livre ? 'o Ed dá uma volta no trilho' : 'quando o Ed estiver livre', icone: 'trem', off: !livre || T.estado !== 'parado' || !!T.grupo || T.ed, fn: passearDeTrem });
 }
+// ================= Base do foguete e viagem ao planeta Bolinha (o Lucas pediu: nível 80, a base em x 76 a 78, z 12 a 14, na
+// área nova, que fez o mapa crescer 6 ladrilhos para a direita no mapa 12). A base é uma obra do Maurinho (OBRAS.baseFoguete):
+// a plataforma com a torre de serviço e a casinha de controle; o foguete (vFogueteBolinha) é uma malha à parte, em pé no meio
+// (FOG_VIS), para poder voar. Pelo menu da base (uma viagem por dia), a cena `planeta`: o Ed embarca, contagem, decolagem, um
+// clarão, e o foguete pousa no planeta Bolinha, a terra dos ETzinhos, montado longe do mapa (PLANETA.centro) com o céu escuro
+// de estrelas (ceuEspaco). Lá, a feira dos ETzinhos (abrirFeiraPlaneta): cristais por um produto da fazenda (dinheiro), uma
+// lembrança do planeta por outro (enfeite que não tem na loja, LEMBRANCAS_PLANETA) e o lanche espacial (XP). Fechando a feira,
+// o Ed volta e o foguete pousa de novo na base. S.planeta: { viagens, dia, feitas: { cristais, lembranca, lanche } }
+const PLANETA = { nivel: 80, centro: [W + 60, 20], pouso: [-2.3, -2.3], ed: [2.1, 2.1], feira: [0.6, 0.6], vao: 2.15, alto: 9, vista: 9, maxQ: 30, maxBarato: 300, xpViagem: 0.1,
+  cristais: { valor: 14000, paga: 3 }, lembranca: { valor: 9000 }, lanche: 0.15, ets: [[-0.6, 2.5], [2.6, -0.4], [-2.7, -0.2], [0.1, -2.7]] };
+const LEMBRANCAS_PLANETA = ['cristalBolinha', 'plantaBolinha', 'casinhaEt'];
+const BARRACAS_PLANETA = [
+  { id: 'cristais', nome: 'Cristais do ETzinho', cor: 0x8fe0ff },
+  { id: 'lembranca', nome: 'Lembranças do planeta', cor: 0xc79cff },
+  { id: 'lanche', nome: 'Lanche espacial', cor: 0x9fe870 },
+];
+const planeta = () => S.planeta || (S.planeta = { viagens: 0, dia: -1, feitas: {} });
+// a plataforma de lançamento (cubinhos de 1/8, 3 x 3 ladrilhos): o chão de concreto com a faixa zebrada, o fosso das chamas no
+// meio, a torre de serviço vermelha treliçada no canto de trás com o braço até o foguete, e a casinha de controle na frente
+function vBaseFoguete(){
+  const v = new Vox(), verm = 0xd8302a;
+  v.box(0, 0, 0, 23, 1, 23, (x, y, z) => (x <= 1 || x >= 22 || z <= 1 || z >= 22) ? ((((x + z) >> 1) & 1) ? 0xf2c33b : 0x2a2a30) : hash(x, y, z) < 0.4 ? 0xb9b4aa : 0xc8c3b8);
+  v.box(8, 1, 8, 15, 1, 15, (x, y, z) => (x === 8 || x === 15 || z === 8 || z === 15) ? 0x6a6a72 : 0x3a3a42);
+  for (const [x, z] of [[2, 2], [6, 2], [2, 6], [6, 6]]) v.box(x, 2, z, x, 34, z, verm);
+  for (let y = 4; y <= 34; y += 5){ v.box(2, y, 2, 6, y, 2, verm); v.box(2, y, 6, 6, y, 6, verm); v.box(2, y, 2, 2, y, 6, verm); v.box(6, y, 2, 6, y, 6, verm); }
+  for (let y = 4; y < 34; y += 5) for (let k = 1; k <= 3; k++){ v.set(2 + k, y + k, 6, 0xf6f1e4); v.set(6, y + k, 2 + k, 0xf6f1e4); }
+  v.box(1, 35, 1, 7, 35, 7, 0x9a9aa4); v.set(4, 36, 4, 0xffd34d);
+  v.box(7, 24, 4, 9, 24, 4, 0x9a9aa4); v.box(7, 28, 4, 9, 28, 4, 0x9a9aa4);
+  // a casinha de controle: paredes brancas, o janelão azul virado para o foguete e a antena
+  v.box(16, 2, 17, 21, 7, 21, (x, y, z) => y === 7 ? 0x9a9aa4 : (z === 17 && y >= 4 && y <= 6 && x >= 17 && x <= 20) || (x === 16 && y >= 4 && y <= 6 && z >= 18 && z <= 20) ? 0x9fc8e0 : 0xf6f1e4);
+  v.box(19, 2, 21, 20, 5, 21, 0x7a5232); v.box(20, 8, 19, 20, 11, 19, 0x9a9aa4); v.set(20, 12, 19, verm);
+  return v;
+}
+// o foguete da viagem (cubinhos de 1/16, em pé, a frente em +z): o corpo branco com as faixas vermelha e rosa, duas janelas
+// redondas azuis, o bico vermelho, quatro aletas vermelhas e o bocal cinza. Só a casca, para ficar leve
+function vFogueteBolinha(){
+  const v = new Vox(), R = 7, verm = 0xd8302a;
+  for (let y = 4; y <= 56; y++){
+    const r = y <= 40 ? R : R * Math.sqrt(Math.max(0, 1 - ((y - 40) / 17) ** 2));
+    for (let x = -R; x <= R; x++) for (let z = -R; z <= R; z++){
+      const d = Math.hypot(x, z); if (d > r + 0.3 || (d < r - 1.6 && y < 56)) continue;
+      const jan = [26, 35].some(c => z > 0 && Math.hypot(x, y - c) <= 2.4) && d >= r - 0.6;
+      v.set(x, y, z, jan ? (Math.hypot(x, y - 26) <= 1.2 || Math.hypot(x, y - 35) <= 1.2 ? 0x9fe0ff : 0x3a8ad8) : y > 43 ? verm : (y >= 17 && y <= 19) ? verm : (y === 31) ? 0xff8fb0 : 0xf6f6f2);
+    }
+  }
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (let k = R; k <= R + 5; k++) for (let y = 2; y <= 16 - (k - R) * 2; y++) v.set(dx * k, y, dz * k, verm);
+  for (let y = 0; y <= 4; y++){ const r = 3 + (4 - y) * 0.4; for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++) if (Math.hypot(x, z) <= r && Math.hypot(x, z) >= r - 1.2) v.set(x, y, z, 0x7c7c86); }
+  return v;
+}
+// o planeta Bolinha (cubinhos de 1/8): roxo como a bolinha da Luma, com a costura clarinha em curva e umas crateras; o alto é
+// plano (onde todo mundo fica) e o resto só a casca. O topo fica em y 11 cubinhos
+const CRATERAS_BOLINHA = [[-22, 14, 4], [24, -16, 5], [10, 28, 3], [-30, -10, 3], [28, 18, 4]];
+function vPlanetaBolinha(){
+  const v = new Vox(), R = 44, RY = 18, B = CL.bola, B2 = CL.bola2;
+  const cor = (x, y, z) => {
+    if (Math.abs(Math.hypot(x - 32, z + 6) - 30) < 1.7 || Math.abs(Math.hypot(x + 32, z - 6) - 30) < 1.7) return B2;
+    for (const [cx, cz, r] of CRATERAS_BOLINHA){ const d = Math.hypot(x - cx, z - cz); if (d <= r) return d > r - 1 ? 0xa774e8 : 0x6a3ab0; }
+    return hash(x, y, z) < 0.3 ? 0x8448cc : B;
+  };
+  for (let y = -8; y <= 10; y++){
+    const r = R * Math.sqrt(1 - (y / RY) ** 2), rIn = r - 3;
+    for (let x = -R; x <= R; x++) for (let z = -R; z <= R; z++){ const d = Math.hypot(x, z); if (d > r || (y < 10 && d < rIn)) continue; v.set(x, y, z, cor(x, y, z)); }
+  }
+  return v;
+}
+// a casinha dos ETzinhos (cubinhos de 1/16): a base redonda lilás, o domo de vidro, a portinha redonda e a antena de bolinha
+function vCasaEt(){
+  const v = new Vox();
+  for (let x = -9; x <= 9; x++) for (let z = -9; z <= 9; z++){ const d = Math.hypot(x, z); if (d > 9.4) continue; for (let y = 0; y <= 5; y++) if (d > 8 || y === 0) v.set(x, y, z, y === 3 ? 0x8fe0ff : 0xc9b2ea); }
+  v.ell(0, 6, 0, 9, 9, 9, (x, y, z) => hash(x, y, z) < 0.2 ? 0xbfe9ff : 0xa6dcf2, (x, y) => y >= 6);
+  for (let y = 1; y <= 5; y++) for (let x = -2; x <= 2; x++) if (Math.hypot(x, y - 3) <= 2.4) v.set(x, y, 9, 0x6a3ab0);
+  v.box(0, 15, 0, 0, 19, 0, 0x9a9aa4); v.ell(0, 20, 0, 1.5, 1.5, 1.5, 0xff8fb0);
+  return v;
+}
+// um planetinha boiando por perto (cubinhos de 1/16): a bola de uma cor, com ou sem anel
+function vPlanetinha(cor, cor2, anel){
+  const v = new Vox();
+  v.ell(0, 0, 0, 7, 7, 7, (x, y, z) => ((y + 7) >> 2) % 2 ? cor : cor2);
+  if (anel) for (let x = -13; x <= 13; x++) for (let z = -13; z <= 13; z++){ const d = Math.hypot(x, z); if (d >= 9.5 && d <= 12.5) v.set(x, 0, z, d > 11 ? 0xf2e6c2 : 0xd8c49a); }
+  return v;
+}
+// as lembranças do planeta, enfeites que não têm na loja (cubinhos de 1/16, em volta do meio do ladrilho)
+function vCristalBolinha(){
+  const v = new Vox();
+  v.ell(0, 0, 0, 6, 2, 5, 0x8448cc, (x, y) => y >= 0);
+  for (const [x, z, h, c] of [[0, 0, 13, 0xd6b8ff], [-3, 2, 8, 0xc79cff], [3, -1, 9, 0xff9fe0], [2, 3, 6, 0x9fe0ff], [-2, -3, 7, 0xd6b8ff]])
+    for (let y = 1; y <= h; y++){ const r = y > h - 3 ? 0 : 1; v.box(x - r, y, z - r, x + r, y, z + r, y % 3 ? c : 0xf4ecff); }
+  return v;
+}
+function vPlantaBolinha(){
+  const v = new Vox();
+  v.ell(0, 0, 0, 4, 2, 4, 0x6a4a2c, (x, y) => y >= 0);
+  for (const [x, z, h] of [[0, 0, 14], [-3, 1, 9], [3, -1, 11]]){
+    for (let y = 1; y <= h; y++) v.set(x + Math.round(Math.sin(y / 3) * 0.8), y, z, 0x5fbf6a);
+    const bx = x + Math.round(Math.sin(h / 3) * 0.8); v.ell(bx, h + 2, z, 2.4, 2.4, 2.4, (xx, y, zz) => Math.abs(y - (h + 2) - (xx - bx) * 0.6) < 0.6 ? CL.bola2 : CL.bola);
+  }
+  for (const [x, z] of [[-1, 2], [2, 1], [1, -2]]) v.box(x, 1, z, x + 1, 2, z, 0x7ad08a);
+  return v;
+}
+function vCasinhaEt(){
+  const v = new Vox();
+  for (let x = -5; x <= 5; x++) for (let z = -5; z <= 5; z++){ const d = Math.hypot(x, z); if (d <= 5.4) for (let y = 0; y <= 3; y++) v.set(x, y, z, y === 2 ? 0x8fe0ff : 0xc9b2ea); }
+  v.ell(0, 4, 0, 5, 5, 5, 0xa6dcf2, (x, y) => y >= 4);
+  for (let y = 1; y <= 3; y++) v.set(0, y, 5, 0x6a3ab0);
+  v.box(0, 9, 0, 0, 11, 0, 0x9a9aa4); v.set(0, 12, 0, 0xff8fb0);
+  return v;
+}
+// ----- o foguete na base, o céu do espaço e o clarão
+const FOG_VIS = { m: null };
+let ceuEspaco = false;
+const centroBase = () => centroPredio(PREDIO.baseFoguete);
+function atualizarBaseFoguete(){
+  if (!S || !obraConcluida('baseFoguete') || obraEmAndamento('baseFoguete')){ if (FOG_VIS.m) FOG_VIS.m.visible = false; return; }
+  if (!FOG_VIS.m){
+    FOG_VIS.m = malha(geo('fogueteBolinha', () => vFogueteBolinha().build(1 / 16, { origin: [0.5, 0, 0.5] }))); scene.add(FOG_VIS.m);
+    FOG_VIS.m.traverse(o => { o.userData.alvo = { k: 'predio', p: PREDIO.baseFoguete }; }); pickaveis.push(FOG_VIS.m);
+  }
+  if (!viagem){ const [cx, cz] = centroBase(); FOG_VIS.m.visible = true; FOG_VIS.m.position.set(cx, 2 / 8, cz); FOG_VIS.m.rotation.set(0, 0, 0); }
+}
+let claraoEl = null;
+function clarao(k){
+  if (!claraoEl){ claraoEl = document.createElement('div'); claraoEl.style.cssText = 'position:fixed;inset:0;background:#fffdf4;pointer-events:none;z-index:40;opacity:0'; document.body.appendChild(claraoEl); }
+  claraoEl.style.opacity = String(clamp(k, 0, 1));
+}
+// o céu do espaço: escuro, com as estrelas acesas; o atualizarCiclo não mexe no fundo enquanto ceuEspaco
+function ligarCeuEspaco(sim){
+  ceuEspaco = sim; ceuAplicado = '';
+  if (sim){ document.body.style.background = 'linear-gradient(180deg,#0b0820,#2a1650)'; if (typeof desenharEstrelas === 'function') desenharEstrelas(); $('estrelas').style.opacity = '1'; opEstrelas = ''; }
+}
+// ----- o planeta, montado uma vez e escondido fora da viagem
+const PLANETA_VIS = { g: null, ets: [], planetinhas: [], luz: null };
+const noPlaneta = (u, w) => [PLANETA.centro[0] + u, PLANETA.centro[1] + w];
+function montarPlaneta(){
+  const V = PLANETA_VIS; if (V.g) return V;
+  const g = new THREE.Group(), s16 = 1 / 16, A = Math.PI / 4, [cx, cz] = PLANETA.centro, mm = (k, f, s) => malha(geo(k, () => f().build(s, { origin: [0.5, 0, 0.5], jitter: 0.02 })));
+  const chao = mm('planetaBolinha', vPlanetaBolinha, 1 / 8); chao.position.set(cx, -11 / 8, cz); g.add(chao);
+  // o pouso do foguete: um disco cinza com a faixa amarela
+  const pv = new Vox(); for (let x = -14; x <= 14; x++) for (let z = -14; z <= 14; z++){ const d = Math.hypot(x, z); if (d <= 14) pv.set(x, 0, z, Math.abs(d - 11) < 1 ? 0xf2c33b : 0x9a9aa4); }
+  const pouso = malha(geo('pousoPlaneta', () => pv.build(s16, { origin: [0.5, 0, 0.5] }))); pouso.position.set(...[cx + PLANETA.pouso[0], -0.04, cz + PLANETA.pouso[1]]); g.add(pouso);
+  for (const [u, w, ry] of [[-2.8, 1.0, 0.9], [1.0, -2.8, -0.3]]){ const c = mm('casaEt', vCasaEt, s16); c.position.set(cx + u, 0, cz + w); c.rotation.y = ry; g.add(c); }
+  // as barracas da feira, numa fileira de frente para a câmera, com o ETzinho em cima do balcão
+  V.ets = [];
+  BARRACAS_PLANETA.forEach((B, i) => {
+    const t = i - 1, u = PLANETA.feira[0] + t * PLANETA.vao / Math.SQRT2, w = PLANETA.feira[1] - t * PLANETA.vao / Math.SQRT2;
+    const b = mm('barracaEt' + B.id, () => vBarracaEt(B.cor), s16); b.position.set(cx + u, 0, cz + w); b.rotation.y = A; g.add(b);
+    const q = new THREE.Group(); q.add(malha(geo('etAndando', () => vDiscoEt().build(VISITA_ET.tam, { origin: [0.5, 0, 0.5] })))); q.position.set(cx + u + 0.15, 9 / 16, cz + w + 0.15); q.rotation.y = A; g.add(q);
+    V.ets.push({ nome: 'et', g: q, x: q.position.x, z: q.position.z, y0: 9 / 16, pulo: 0, fase: rnd(0, 6), topo(){ return new THREE.Vector3(this.x, this.y0 + 0.75, this.z); } });
+  });
+  // os ETzinhos passeando pela praça
+  for (const [u, w] of PLANETA.ets){
+    const q = new THREE.Group(); q.add(malha(geo('etAndando', () => vDiscoEt().build(VISITA_ET.tam, { origin: [0.5, 0, 0.5] })))); q.position.set(cx + u, 0, cz + w); q.rotation.y = Math.atan2(PLANETA.ed[0] - u, PLANETA.ed[1] - w); g.add(q);
+    V.ets.push({ nome: 'et', g: q, x: q.position.x, z: q.position.z, y0: 0, pulo: 0, fase: rnd(0, 6), passeia: true, topo(){ return new THREE.Vector3(this.x, this.y0 + 0.75, this.z); } });
+  }
+  // os planetinhas boiando em volta, mais baixos que o chão
+  V.planetinhas = [];
+  for (const [u, y, w, c1, c2, anel] of [[-6.5, -1.5, 2.5, 0xf2a65a, 0xf6c98a, true], [3, -2.5, -6.5, 0x7ac0e8, 0xa6dcf2, false], [6.5, -3.5, 4.5, 0x9fe870, 0xc9f2a8, false]]){
+    const m = mm('planetinha' + c1, () => vPlanetinha(c1, c2, anel), s16); m.position.set(cx + u, y, cz + w); m.rotation.z = anel ? 0.35 : 0; g.add(m); V.planetinhas.push(m);
+  }
+  g.visible = false; scene.add(g); V.g = g;
+  return V;
+}
+// ----- a viagem
+let viagem = null;
+const FALAS_PLANETA_OI = ['Bip bip! (bem-vindo ao planeta Bolinha!)', 'Bop! (o terráqueo da fazenda chegou!)', 'Bip! (acena com as duas antenas)', 'Bi-bip! (que foguete bonito!)', 'Bip bop! (aqui todo mundo é amigo)',
+  'Bip! (dá pulinhos de alegria)', 'Bop bop! (trouxe coisas da fazenda?)', 'Bip! (o planeta é redondinho, cuidado na beirada)', 'Bi-bip! (a feira já abriu!)', 'Bip bip bop! (a vaquinha de férias mandou um oi)',
+  'Bip! (aperta a mão do Ed com a antena)', 'Bop! (aqui a gravidade é fofinha)', 'Bip bip! (primeira vez no espaço?)', 'Bi-bip! (pode chamar de casa)', 'Bip! (o céu daqui é estrelado de dia)',
+  'Bop bip! (olha o planetinha de anel ali!)', 'Bip! (dá uma voltinha no domo)', 'Bip bop! (chegou bem na hora do lanche)', 'Bi-bip-bop! (viva a Fazenda Joli Pig!)', 'Bip! (que bom que você veio!)'];
+const FALAS_PLANETA_ED = ['Aooooa! Eu tô no espaço!', 'Que planeta mais fofo! Parece a bolinha da Luma!', 'Oi, ETzinhos! Vim de visita!', 'Uau, dá pra ver um monte de planetinha daqui!', 'Que pouso! Nem senti o tranco.',
+  'Isso aqui é melhor que a Missão NANO!', 'Trouxe coisa boa da fazenda pra trocar!', 'Nossa, como é leve andar aqui!', 'Olha só a casinha de domo deles!', 'Quando eu contar pro Beto, ele não vai acreditar!',
+  'Que céu estrelado, e ainda é de dia lá em casa!', 'Será que tem vaquinha de férias por aqui?', 'Primeiro porquinho no planeta Bolinha!', 'Que roxinho bonito esse chão!', 'Bip bip pra vocês também!',
+  'Já quero voltar outro dia!', 'Será que eles gostam de leite?', 'Aqui até o silêncio é diferente.', 'Que viagem! Meu rabicó tá todo arrepiado!', 'Vim conhecer a feira de vocês!'];
+const FALAS_PLANETA_TCHAU = ['Bip bip! (volte sempre!)', 'Bop! (manda um oi pras vaquinhas)', 'Bip! (boa viagem, terráqueo!)', 'Bi-bip! (até a próxima feira!)', 'Bip bop! (leva um beijo pra Luma)',
+  'Bip! (acena até o foguete sumir)', 'Bop bop! (cuidado com os cometas)', 'Bip! (amanhã tem mais)', 'Bi-bip! (foi um prazer)', 'Bip bip bop! (lembranças pra família!)',
+  'Bip! (já tá com saudade)', 'Bop! (traz mais coisa boa da fazenda)', 'Bip bip! (o planeta fica te esperando)', 'Bi-bip! (dá pulinhos de tchau)', 'Bip! (tchau, tchau!)',
+  'Bop bip! (aperta o cinto!)', 'Bip! (vai com cuidado na decolagem)', 'Bi-bip-bop! (viva a Fazenda Joli Pig!)', 'Bip! (até logo, amigo!)', 'Bop! (volte quando quiser)'];
+const motivoViagem = () => !obraConcluida('baseFoguete') ? 'Precisa da base do foguete pronta.' : nivel() < PLANETA.nivel ? `A viagem ao planeta Bolinha vem no nível ${PLANETA.nivel}.`
+  : planeta().dia === diaAtual() ? 'O foguete está reabastecendo: dá para viajar de novo amanhã.' : null;
+function sortearTrocasPlaneta(){
+  // sorteia entre os produtos que valem o bastante (a quantidade não passa de PLANETA.maxQ) e que sobram no celeiro na
+  // quantidade pedida; sem nenhum assim, o que mais sobra em valor, numa quantidade maior (até PLANETA.maxBarato) ou no que tiver
+  const sep = separadoPedidos(), M = PLANETA.maxQ, todos = produtosLiberados().filter(k => PRODUTOS[k] && PRODUTOS[k].venda > 0);
+  const q = (k, valor, max = M) => clamp(Math.round(valor / PRODUTOS[k].venda), 2, max);
+  const pega = (valor, fora) => {
+    const ok = todos.filter(k => k !== fora && PRODUTOS[k].venda * M >= valor && sobraDe(k, sep) >= q(k, valor));
+    if (ok.length){ const k = sorteia(ok); return [k, q(k, valor)]; }
+    const k = todos.filter(k => k !== fora).sort((x, y) => sobraDe(y, sep) * PRODUTOS[y].venda - sobraDe(x, sep) * PRODUTOS[x].venda)[0] || 'leite';
+    return [k, Math.max(2, Math.min(q(k, valor, PLANETA.maxBarato), sobraDe(k, sep)))];
+  };
+  const A = pega(PLANETA.cristais.valor), Bq = pega(PLANETA.lembranca.valor, A[0]);
+  const P = planeta(), ja = LEMBRANCAS_PLANETA.filter(k => ((S.guardados && S.guardados[k]) || 0) + S.enfeites.filter(e => e.tipo === k).length > 0);
+  const falta = LEMBRANCAS_PLANETA.filter(k => !ja.includes(k));
+  return { cristais: A, lembranca: Bq, da: falta.length ? falta[0] : LEMBRANCAS_PLANETA[(P.viagens || 0) % LEMBRANCAS_PLANETA.length] };
+}
+function abrirFeiraPlaneta(c){
+  const V = viagem; if (!V) return;
+  const P = planeta(), f = P.feitas || (P.feitas = {}), sep = separadoPedidos(), T = V.trocas;
+  const cartao = (B, txt, botao, off, ic) => `<div class="cartao"><div class="cab"><img src="${icone(ic)}" alt=""><div><h4>${esc(B.nome)}</h4></div></div><div class="info">${txt}</div><div class="botoes"><button class="botao mini rosa" data-planeta="${B.id}" type="button"${off ? ' disabled' : ''}>${esc(botao)}</button></div></div>`;
+  const [pa, qa] = T.cristais, [pb, qb] = T.lembranca, En = ENFEITES[T.da], paga = PLANETA.cristais.paga * qa * PRODUTOS[pa].venda;
+  const tem = p => sobraDe(p, sep);
+  let h = `<div class="janela-corpo"><p>Os ETzinhos trocam coisas do espaço por produtos da fazenda. Cada barraca faz uma troca por viagem.</p><div class="grade">`;
+  h += cartao(BARRACAS_PLANETA[0], f.cristais ? 'Troca feita! Bip!' : `O ETzinho quer ${esc(nomeProdutoQ(pa, qa))} e paga ${reais(paga)} em cristais, que valem dinheiro na Terra. Você tem ${tem(pa)} sobrando.`, f.cristais ? 'Feito' : 'Trocar', f.cristais || tem(pa) < qa, pa);
+  h += cartao(BARRACAS_PLANETA[1], f.lembranca ? 'Troca feita! Bip!' : `O ETzinho quer ${esc(nomeProdutoQ(pb, qb))} e dá ${En.art === 'a' ? 'uma' : 'um'} ${esc(En.nome[0].toLowerCase() + En.nome.slice(1))}, enfeite que não tem na loja. Você tem ${tem(pb)} sobrando.`, f.lembranca ? 'Feito' : 'Trocar', f.lembranca || tem(pb) < qb, T.da);
+  h += cartao(BARRACAS_PLANETA[2], f.lanche ? 'O Ed já lanchou. Que delícia!' : 'Geleia de estrela com pão de nuvem, de graça para o visitante. O Ed prova e ganha XP.', f.lanche ? 'Feito' : 'Provar', f.lanche, 'geleiaEstrela');
+  h += `</div><div class="botoes" style="margin-top:12px"><button class="botao rosa" data-fechar type="button">Voltar para a fazenda</button></div></div>`;
+  abrirJanela(topo('fogueteBolinha', 'Feira do planeta Bolinha', `viagem ${P.viagens || 1} · troque produtos da fazenda`, 'azul') + h, () => voltarDoPlaneta(c));
+  $('janela').querySelectorAll('[data-planeta]').forEach(b => b.addEventListener('click', () => { Som.clique(); if (trocarNoPlaneta(b.dataset.planeta)) abrirFeiraPlaneta(c); }));
+}
+function trocarNoPlaneta(id){
+  const V = viagem, P = planeta(), f = P.feitas || (P.feitas = {}), sep = separadoPedidos(); if (!V || f[id]) return false;
+  const i = BARRACAS_PLANETA.findIndex(B => B.id === id), E = PLANETA_VIS.ets[i], alvo = E.topo();
+  if (id === 'lanche'){
+    f.lanche = true; ganharXP(Math.max(50, Math.round(xpDeUmNivel() * PLANETA.lanche)), alvo);
+    const fl = sorteia(['Hum! Geleia de estrela tem gosto de framboesa!', 'Que pão de nuvem fofinho!', 'Delícia espacial!', 'Vou pedir a receita pro Patrinho!']); falar(ed, fl, tempoDeLeitura(fl));
+  } else {
+    const [p, q] = V.trocas[id];
+    if (sobraDe(p, sep) < q){ aviso(`Faltam ${PRODUTOS[p].plural} sobrando para a troca (os separados para os pedidos ficam guardados)`, 'ruim'); Som.erro(); return false; }
+    S.celeiro[p] -= q; if (!S.celeiro[p]) delete S.celeiro[p];
+    f[id] = true;
+    if (id === 'cristais'){ const paga = PLANETA.cristais.paga * q * PRODUTOS[p].venda; S.dinheiro += paga; flutuar(alvo, '+' + reais(paga), 'bom'); chipPulsa('chipDinheiro'); }
+    else { if (!S.guardados) S.guardados = {}; S.guardados[V.trocas.da] = (S.guardados[V.trocas.da] || 0) + 1; flutuar(alvo, ENFEITES[V.trocas.da].nome, '', V.trocas.da);
+      aviso(`${ENFEITES[V.trocas.da].nome} veio do planeta Bolinha! Está guardado na loja, em Enfeites.`, '', 4.5); }
+    falarEt(E, FALAS_ET_TROCA);
+  }
+  E.pulo = 0.5; Som.moeda(); hud(); salvar();
+  return true;
+}
+function voltarDoPlaneta(c){
+  const V = viagem; if (!V || !cine || cine !== c || c.passo !== 'pb-feira') return;
+  c.passo = 'pb-tchau'; c.t = 0;
+  const E = PLANETA_VIS.ets[0]; falarEt(E, FALAS_PLANETA_TCHAU);
+  const [px, pz] = noPlaneta(...PLANETA.pouso);
+  ed.ir([[px + 0.55, pz + 0.55]], () => { ed.g.visible = false; for (let i = 0; i < 10; i++) particula(px + 0.4, 0.2, pz + 0.4, [0xffffff, 0xd6b8ff][i % 2], 0.9); c.passo = 'pb-volta'; c.t = 0; c.fum = 0; });
+}
+// o foguete voando: sobe acelerando a partir de (x, y0, z), com fogo e fumaça embaixo
+function voarFoguete(c, x, y0, z, dt){
+  const y = y0 + 0.5 * 3.2 * c.t * c.t; FOG_VIS.m.position.set(x + (c.t < 0.8 ? Math.sin(c.t * 50) * 0.015 : 0), y, z);
+  if ((c.fum -= dt) <= 0){ c.fum = 0.05; for (let i = 0; i < 3; i++) particula(x + rnd(-0.35, 0.35), y + 0.05, z + rnd(-0.35, 0.35), [0xffffff, 0xe8e2d8, 0xffb347][i], 0.2); }
+  return y;
+}
+function irParaPlaneta(){
+  const V = montarPlaneta(); V.g.visible = true; ligarCeuEspaco(true);
+  if (!V.luz){ V.luz = new THREE.HemisphereLight(0xe8dcff, 0x40205a, 0.2 + LUZ.noite * 0.6); scene.add(V.luz); }
+  const [px, pz] = noPlaneta(...PLANETA.pouso); FOG_VIS.m.position.set(px, PLANETA.alto, pz);
+  const [cx, cz] = PLANETA.centro; cam.alvo.set(cx + 0.4, 0.4, cz + 0.4); cam.vista = (telaEstreita() ? 1.5 : 1) * PLANETA.vista;
+  for (const E of V.ets) E.pulo = 0.5;
+}
+function voltarParaFazenda(){
+  const V = PLANETA_VIS; if (V.g) V.g.visible = false;
+  if (V.luz){ scene.remove(V.luz); V.luz = null; }
+  ligarCeuEspaco(false);
+  const [cx, cz] = centroBase(); FOG_VIS.m.position.set(cx, PLANETA.alto, cz);
+  cam.alvo.set(cx, 0.6, cz + 0.4); cam.vista = (telaEstreita() ? 1.5 : 1) * 5.6;
+}
+// devolve tudo ao normal (pulando no meio também): o céu, o planeta, o foguete na base e o Ed na porta
+function limparViagem(){
+  const P = PLANETA_VIS; if (P.g) P.g.visible = false; if (P.luz){ scene.remove(P.luz); P.luz = null; }
+  if (ceuEspaco) ligarCeuEspaco(false);
+  clarao(0);
+  if (viagem && viagem.fora){ const [x, z] = PREDIO.baseFoguete.porta; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; ed.colocar(x + 0.5, z + 0.5); }
+  ed.g.visible = true;
+  if (viagem && $('janela').querySelector('[data-planeta]')){ aoFecharJanela = null; fecharJanela(); }
+  viagem = null; atualizarBaseFoguete();
+}
+// o menu da base: viajar, e quantas viagens já foram
+function menuBaseFoguete(r){
+  if (!obraConcluida('baseFoguete')){ if (!r.estado) r.estado = OBRAS.baseFoguete.desc; return; }
+  const P = planeta(), m = motivoViagem();
+  r.estado = `O foguete da fazenda, pronto para ir ao planeta Bolinha. ${P.viagens ? `Já ${P.viagens > 1 ? `foram ${P.viagens} viagens` : 'foi uma viagem'}.` : 'Ainda não viajou.'}`;
+  r.itens.push({ rotulo: 'Viajar ao planeta Bolinha', sub: m || 'a feira dos ETzinhos · uma viagem por dia', icone: 'fogueteBolinha', off: !!m, fn: () => { fecharMenu(); pedirCena('planeta'); } });
+}
+const CENA_PLANETA = {
+  flag: 'viuPlaneta', nivel: () => PLANETA.nivel, sempre: true, repete: true, musica: 'planeta', icone: 'fogueteBolinha', botao: 'Viajar',
+  titulo: 'Viagem ao planeta Bolinha', desc: 'O Ed embarca no foguete da base, vai até o planeta dos ETzinhos e troca produtos da fazenda na feira de lá.',
+  trancada: `acontece a partir do nível ${PLANETA.nivel}, com a base do foguete pronta`,
+  pronta: () => false,
+  podeRever: () => motivoViagem(),
+  get falas(){ return viagem ? viagem.falas : []; },
+  foco(c){
+    const [bx, bz] = obraConcluida('baseFoguete') ? centroBase() : [0, 0], [cx, cz] = PLANETA.centro;
+    if (c.passo === 'pb-indo' && Math.hypot(ed.pos.x - bx, ed.pos.y - bz) > 3.5) return new THREE.Vector3(ed.pos.x, 0.4, ed.pos.y);
+    if (c.passo === 'pb-decola') return new THREE.Vector3(bx, Math.max(0.6, FOG_VIS.m.position.y * 0.8), bz + 0.4);
+    if (c.passo === 'pb-volta') return new THREE.Vector3(cx + PLANETA.pouso[0], Math.max(0.4, FOG_VIS.m.position.y * 0.8), cz + PLANETA.pouso[1] + 0.4);
+    if (viagem && viagem.fora && c.passo !== 'pb-chega') return new THREE.Vector3(cx + 0.4, 0.4, cz + 0.4);
+    return new THREE.Vector3(bx, 0.6, bz + 0.4);
+  },
+  vista: c => (telaEstreita() ? 1.5 : 1) * (c.passo === 'pb-decola' || c.passo === 'pb-volta' ? 7 : viagem && viagem.fora && c.passo !== 'pb-chega' ? PLANETA.vista : 5.6),
+  cameraRapida: c => c.passo === 'pb-decola' || c.passo === 'pb-volta' || c.passo === 'pb-indo',
+  iniciar(c){
+    atualizarBaseFoguete();
+    const [x, z] = PREDIO.baseFoguete.porta;
+    viagem = { fora: false, trocas: sortearTrocasPlaneta(),
+      falas: [['et', 'ETzinho', variar(FALAS_PLANETA_OI)], ['ed', 'Ed', variar(FALAS_PLANETA_ED)], ['et', 'ETzinho', 'Bip bop! (aponta as barracas da feira)'], ['ed', 'Ed', 'Vamos ver o que tem na feira do planeta Bolinha!']] };
+    const P = planeta(); P.dia = diaAtual(); P.feitas = {}; P.viagens = (P.viagens || 0) + 1; salvar();
+    ed.trab = null; ed.ferramenta(null);
+    andarAte(ed, x + 0.5, z + 0.5, () => { c.edOk = true; });
+    return 'pb-indo';
+  },
+  // o planeta gira os planetinhas e os ETzinhos pulam e balançam
+  ambiente(dt){
+    const V = PLANETA_VIS; if (!V.g || !V.g.visible) return;
+    for (const m of V.planetinhas) m.rotation.y += dt * 0.3;
+    for (const E of V.ets){
+      E.fase += dt * 3; if (E.pulo > 0) E.pulo = Math.max(0, E.pulo - dt);
+      const pulo = E.pulo > 0 ? Math.sin((1 - E.pulo / 0.5) * Math.PI) * 0.25 : 0;
+      E.g.position.y = E.y0 + pulo + Math.abs(Math.sin(E.fase)) * 0.03; E.g.rotation.z = Math.sin(E.fase * 0.7) * 0.08;
+      if (E.passeia && Math.random() < dt * 0.25) E.pulo = 0.5;
+    }
+  },
+  trecho(c, dt){
+    const V = viagem, [bx, bz] = centroBase(), [px, pz] = noPlaneta(...PLANETA.pouso), ease = k => k * k * (3 - 2 * k);
+    switch (c.passo){
+      // o Ed vai até a porta da base (sem caminho, aparece lá) e entra no foguete
+      case 'pb-indo': {
+        if (!c.edOk && c.t > 25){ const [x, z] = PREDIO.baseFoguete.porta; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; ed.colocar(x + 0.5, z + 0.5); c.edOk = true; }
+        if (c.edOk && ed.estado === 'parado' && !c.ini){
+          c.ini = true; ed.ir([[bx, bz + 0.75]], () => { ed.g.visible = false; V.fora = true; for (let i = 0; i < 10; i++) particula(bx, 0.3, bz + 0.6, [0xffffff, 0xf2c33b][i % 2], 0.9); c.passo = 'pb-conta'; c.t = 0; c.n = -1; });
+        }
+        break;
+      }
+      // a contagem: 3, 2, 1 e já
+      case 'pb-conta': {
+        const n = Math.floor(c.t / 0.85);
+        if (n !== c.n && n <= 3){ c.n = n; flutuar(new THREE.Vector3(bx, 4.3, bz), n < 3 ? String(3 - n) : 'Já!', n < 3 ? '' : 'bom'); Som.tom(n < 3 ? 660 : 990, 0.12, 'square', 0.03, n < 3 ? 660 : 1320); }
+        if (c.t >= 3.3){ c.passo = 'pb-decola'; c.t = 0; c.fum = 0; Som.disco(); }
+        break;
+      }
+      // decola e some no alto num clarão; do outro lado do clarão, o planeta
+      case 'pb-decola': {
+        voarFoguete(c, bx, 2 / 8, bz, dt);
+        if (c.t > 2.2) clarao((c.t - 2.2) / 0.5);
+        if (c.t >= 2.8){ irParaPlaneta(); c.passo = 'pb-pousa'; c.t = 0; c.fum = 0; }
+        break;
+      }
+      // o foguete desce devagar no pouso do planeta; o Ed desce e vai até a frente da feira
+      case 'pb-pousa': {
+        clarao(1 - c.t / 0.7);
+        const k = Math.min(1, c.t / 3), y = PLANETA.alto * (1 - ease(k));
+        FOG_VIS.m.position.set(px, y, pz);
+        if ((c.fum -= dt) <= 0 && k < 1){ c.fum = 0.06; particula(px + rnd(-0.3, 0.3), y + 0.05, pz + rnd(-0.3, 0.3), [0xffb347, 0xffffff][Math.random() < 0.5 ? 0 : 1], 0.2); }
+        if (k >= 1 && !c.desceu){
+          c.desceu = true; S.viuPlaneta = true;
+          for (let i = 0; i < 18; i++) particula(px + rnd(-0.6, 0.6), 0.1, pz + rnd(-0.6, 0.6), [0xd6b8ff, 0xffffff][i % 2], 0.6);
+          ed.g.visible = true; ed.colocar(px + 0.55, pz + 0.55); ed.estado = 'parado';
+          const [ex, ez] = noPlaneta(...PLANETA.ed);
+          ed.ir([[ex, ez]], () => { const [fx, fz] = noPlaneta(...PLANETA.feira); virarNaCena(ed, fx, fz); for (const E of PLANETA_VIS.ets) E.pulo = 0.5; c.passo = 'dialogo'; mostrarFalaCine(0); });
+        }
+        break;
+      }
+      case 'pb-feira': case 'pb-tchau': break;
+      // volta: decola do planeta, o clarão, e pousa na base
+      case 'pb-volta': {
+        voarFoguete(c, px, 0, pz, dt);
+        if (c.t > 2) clarao((c.t - 2) / 0.5);
+        if (c.t >= 2.6){ voltarParaFazenda(); c.passo = 'pb-chega'; c.t = 0; c.fum = 0; c.desceu = false; }
+        break;
+      }
+      case 'pb-chega': {
+        clarao(1 - c.t / 0.7);
+        const k = Math.min(1, c.t / 3), y = 2 / 8 + (PLANETA.alto - 2 / 8) * (1 - ease(k));
+        FOG_VIS.m.position.set(bx, y, bz);
+        if ((c.fum -= dt) <= 0 && k < 1){ c.fum = 0.06; particula(bx + rnd(-0.3, 0.3), y + 0.05, bz + rnd(-0.3, 0.3), [0xffb347, 0xffffff][Math.random() < 0.5 ? 0 : 1], 0.2); }
+        if (k >= 1 && !c.desceu){
+          c.desceu = true; for (let i = 0; i < 18; i++) particula(bx + rnd(-0.8, 0.8), 0.2, bz + rnd(-0.8, 0.8), [0xe8e2d8, 0xffffff][i % 2], 0.6);
+          ed.g.visible = true; ed.colocar(bx, bz + 0.75); ed.estado = 'parado';
+          const [x, z] = PREDIO.baseFoguete.porta;
+          ed.ir([[x + 0.5, z + 0.5]], () => {
+            V.fora = false; virarNaCena(ed, bx, bz + 3);
+            if (!V.premio){ V.premio = true; ganharXP(Math.max(100, Math.round(xpDeUmNivel() * PLANETA.xpViagem)), ed.topo()); }
+            const f = sorteia(['Que viagem! Já tô com saudade dos ETzinhos.', 'Lar, doce lar! Mas o planeta Bolinha é lindo.', 'Pousou certinho! Amanhã tem mais.', 'Aooooa! Fui ao espaço e voltei!']); falar(ed, f, tempoDeLeitura(f));
+            c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az;
+          });
+        }
+        break;
+      }
+    }
+  },
+  fimDasFalas(c){ $('cineDialogo').hidden = true; c.passo = 'pb-feira'; c.t = 0; abrirFeiraPlaneta(c); },
+  pular(){ ed.trab = null; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; },
+  fim(){ limparViagem(); salvar(); },
+  restaurar(){ limparViagem(); salvar(); },
+};
 // ================= Bloco de Carnaval (o Lucas pediu: nível 78, pelo percurso que ele desenhou no mapa dos níveis 62 a 80: a
 // estrada, da porteira (30, 26) até o fim do mapa (30, 70)). Em BLOCO.chance das tardes, numa hora sorteada, o trio elétrico
 // da Summer Cachohits (a Luma de DJ, como na rave) desce a estrada devagar, com as caixas de som piscando, e o bloco vem
@@ -18362,6 +18757,9 @@ const VI = {
   chocolateria(){ return vChocolateria(); }, chocobarra(){ return vFabBarras(); },
   oficina(){ return vOficina(); },
   estufa(){ return vEstufa(); },
+  fogueteBolinha(){ return vFogueteBolinha(); }, baseFoguete(){ return vBaseFoguete(); },
+  geleiaEstrela(){ const v = new Vox(); v.box(-4, 0, -4, 4, 8, 4, (x, y) => y >= 7 ? 0xfdf8ef : 0x8b4fd6); v.box(-5, 9, -5, 5, 10, 5, 0xf2c33b); for (const [x, z] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) v.set(x, 11, z, 0xffd34d); return v; },
+  cristalBolinha(){ return vCristalBolinha(); }, plantaBolinha(){ return vPlantaBolinha(); }, casinhaEt(){ return vCasinhaEt(); },
   engenho(){ return vEngenho(); },
   cana(){ const v = new Vox(); for (const [x, z] of [[-2, 0], [0, -1], [2, 0], [-1, 2], [1, 2]]) v.box(x, 0, z, x, 14, z, (xx, y) => y % 4 === 0 ? 0x6a8a2a : 0x9acd32); v.box(-3, 6, -2, 3, 7, 3, 0xc0a060); return v; },
   rapadura(){ const v = new Vox(); v.box(-4, 0, -3, 4, 4, 3, (x, y) => y === 4 ? 0x9a5a2a : 0x8a4a22); return v; },
@@ -18647,6 +19045,11 @@ const TEMAS = {
     { tipo: 'triangle', vol: 0.055, notas: 'G2:.5 r:.5 D3:.5 r:.5 G2:.5 r:.5 D3:.5 r:.5 C3:.5 r:.5 G2:.5 r:.5 D3:.5 r:.5 A2:.5 r:.5 D3:.5 r:.5 A2:.5 r:.5 D3:.5 r:.5 A2:.5 r:.5 G2:.5 r:.5 D3:.5 r:.5 G2:.5 r:.5 D3:.5 r:.5' },
     { tipo: 'sawtooth', vol: 0.008, leg: 0.4, notas: 'r:.5 B3:.5 r:.5 B3:.5 r:.5 B3:.5 r:.5 B3:.5 r:.5 E4:.5 r:.5 E4:.5 r:.5 F#4:.5 r:.5 F#4:.5 r:.5 C4:.5 r:.5 C4:.5 r:.5 C4:.5 r:.5 C4:.5 r:.5 D4:.5 r:.5 C4:.5 r:.5 B3:.5 r:.5 B3:.5' },
     { tipo: 'x', vol: 0.045, notas: 'x:.25 x:.25 r:.25 x:.25 x:.5 x:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.5 x:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.5 x:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.5 x:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.5 x:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.5 x:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.5 x:.25 x:.25 x:.25 x:.25 r:.25 x:.25 x:.5 x:.25 x:.25' } ] },
+  // Viagem ao planeta Bolinha: sonhadora, em mi menor (mi menor, dó, lá menor, si), com o arpejo de computador e o baixo comprido
+  planeta: { bpm: 96, ganho: 1.1, loop: true, faixas: [
+    { tipo: 'sine', vol: 0.035, leg: 0.9, notas: 'E5:1 G5:.5 B5:.5 A5:1 G5:1 E5:1 G5:.5 C6:.5 B5:1 G5:1 A5:1 E5:.5 C5:.5 E5:2 F#5:1 D#5:1 B4:2' },
+    { tipo: 'square', vol: 0.01, leg: 0.4, notas: 'E4:.5 B4:.5 G4:.5 B4:.5 E4:.5 B4:.5 G4:.5 B4:.5 C4:.5 G4:.5 E4:.5 G4:.5 C4:.5 G4:.5 E4:.5 G4:.5 A3:.5 E4:.5 C4:.5 E4:.5 A3:.5 E4:.5 C4:.5 E4:.5 B3:.5 F#4:.5 D#4:.5 F#4:.5 B3:.5 F#4:.5 D#4:.5 F#4:.5' },
+    { tipo: 'triangle', vol: 0.05, notas: 'E2:2 E2:2 C2:2 C2:2 A1:2 A1:2 B1:2 B1:2' } ] },
   // Um cafezinho: caixinha de música de fim de tarde, baixinha
   cafezinho: { bpm: 80, ganho: 1.3, loop: true, faixas: [
     { tipo: 'sine', vol: 0.03, leg: 0.6, notas: 'E5:.5 G5:.5 C6:.5 G5:.5 D5:.5 G5:.5 B5:.5 G5:.5 C5:.5 E5:.5 A5:.5 E5:.5 F5:.5 A5:.5 C6:.5 A5:.5' },
@@ -19131,7 +19534,7 @@ const geo = (chave, fn) => GEO[chave] || (GEO[chave] = fn());
 const CHAVE_SALVO = 'fazendaJoliPig.v1';
 let S = null;
 function estadoNovo(){
-  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedidos: [], versao: 5, mapa: 11, feito: [], dicas: true, alimentador: {}, coletor: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], pomarBlocos: [], colmeias: [], enfeites: [], guardados: {}, parcelas: [], mata: [], trufas: [], maca: null, macaAte: 0, anotado: false, som: true, nAnimal: 0, vendeu: 0, viuCineInicio: false, salvoEm: Date.now() };
+  const s = { dinheiro: 80, xp: 0, bolsa: { cenoura: 6 }, racao: 6, celeiro: {}, lotes: [false, false, true, false, false, false], campo: {}, animais: [], pedidos: [], versao: 5, mapa: 12, feito: [], dicas: true, alimentador: {}, coletor: {}, irrigador: {}, melhorias: {}, fabricas: {}, pomar: [], pomarBlocos: [], colmeias: [], enfeites: [], guardados: {}, parcelas: [], mata: [], trufas: [], maca: null, macaAte: 0, anotado: false, som: true, nAnimal: 0, vendeu: 0, viuCineInicio: false, salvoEm: Date.now() };
   const l = LOTES[2];
   for (let x = l.x; x < l.x + 4; x++) for (let z = l.z; z < l.z + 4; z++) s.campo[x + ',' + z] = { e: 'grama' };
   for (const [dx, dz] of [[2, 2], [3, 2], [2, 3], [3, 3]]) s.campo[(l.x + dx) + ',' + (l.z + dz)] = { e: 'arado' };
@@ -19178,6 +19581,7 @@ function migrar(){
   if (!(S.mapa >= 9)) migrarMapa9();
   if (!(S.mapa >= 10)) migrarMapa10();
   if (!(S.mapa >= 11)) migrarMapa11();
+  if (!(S.mapa >= 12)) migrarMapa12();
   // a sexta parcela da mata virou a cachoeira: quem já tinha comprado recebe o dinheiro de volta (as árvores dela saem)
   // (antes do mapa 4, que trouxe parcelas novas no lugar dela na lista)
   if (!(S.mapa >= 4)){
@@ -19312,6 +19716,9 @@ function migrarMapa10(){ S.mapa = 10; mapa10Migrado = true; }
 // o mapa 11 (o Lucas pediu): a casa e o poço andam um ladrilho para a direita, e o galpão do trator vai para o canto da sede, em pé
 let mapa11Migrado = false;
 function migrarMapa11(){ S.mapa = 11; mapa11Migrado = true; }
+// o mapa 12: o mapa cresceu 6 ladrilhos para a direita (a área nova, com o lugar da base do foguete do nível 80)
+let mapa12Migrado = false;
+function migrarMapa12(){ S.mapa = 12; mapa12Migrado = true; }
 // depois de migrar o save, ao abrir: enfeite que caiu fora de um gramado livre volta para a loja, e trufa ou maçã que
 // não ficou ao lado de uma árvore some (nasce outra depois)
 // o enfeite que não está num gramado livre volta para a loja; devolve quantos voltaram
@@ -19367,6 +19774,7 @@ function conferirMapaNovo(){
   if (zonasMigradas) partes.push('ela dobrou de tamanho, com as construções mais espaçadas e sete parcelas novas na mata');
   if (mapa5Migrado) partes.push('a horta ganhou espaço para mais três terrenos e os cercados ficaram maiores' + (S.obrasFeitas && S.obrasFeitas.spa ? ', e o spa desceu para perto da beira do mapa' : ''));
   if (mapa6Migrado) partes.push('as fábricas e a composteira ficaram mais perto umas das outras, e no fim da pista surgiram o heliporto e a garagem dos aviões, com o teco-teco');
+  if (mapa12Migrado) partes.push('ela cresceu para a direita, com uma área nova atrás do pomar, onde vai ficar a base do foguete do nível 80');
   if (mapa11Migrado) partes.push('a casa e o poço andaram um pouquinho para a direita, e o galpão do trator foi para o canto, do lado da casa');
   if (mapa10Migrado) partes.push('ao lado do lago ficou o lugar do engenho do Sr. Mofi, que chega no nível 76');
   if (mapa9Migrado) partes.push('no fundo do pomar ficou o lugar da estufa do Maurinho, que chega no nível 66');
@@ -24498,6 +24906,7 @@ function limparCafe(){
 let cine = null, cineLivreEm = 0, cenaPedida = null, feiraCine = null;
 const CENAS = {
   gincana: CENA_GINCANA,
+  planeta: CENA_PLANETA,
   inicio: {
     flag: 'viuCineInicio', nivel: () => 1, musica: 'inicio', falas: FALAS_INICIO, icone: 'beto',
     titulo: 'A fazenda é sua', desc: 'O Ed chega à fazenda com o Beto.',
@@ -27148,7 +27557,7 @@ const CENAS = {
   },
 };
 // a ordem da história; uma cena que ainda não existe em CENAS fica de fora
-const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'patrinho', 'lucia', 'pelucio', 'minhocas', 'picoca', 'mata', 'festa', 'curupira', 'jato', 'dani', 'maurinho', 'abducao', 'puxao', 'aposentadoria', 'nanar', 'cafezinho', 'foguete', 'resort', 'spaFamilia', 'campeonato', 'arraied', 'kevin', 'gincana', 'chuva', 'volta', 'resgateSaida'];
+const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'patrinho', 'lucia', 'pelucio', 'minhocas', 'picoca', 'mata', 'festa', 'curupira', 'jato', 'dani', 'maurinho', 'abducao', 'puxao', 'aposentadoria', 'nanar', 'cafezinho', 'foguete', 'resort', 'spaFamilia', 'campeonato', 'arraied', 'kevin', 'gincana', 'chuva', 'volta', 'resgateSaida', 'planeta'];
 const ordemCenas = () => ORDEM_CENAS.filter(id => CENAS[id]);
 // uma cena começa sozinha quando ainda não foi vista e está pronta (pelo nível, ou pela regra própria dela)
 const cenaPronta = id => { const C = CENAS[id]; return (!S[C.flag] || C.repete) && (C.pronta ? C.pronta() : nivel() >= C.nivel()); };
@@ -27262,6 +27671,8 @@ function atualizarCine(dt){
     case 'kv-indo': case 'kv-espreita': case 'kv-ri': case 'kv-sai': cena.trecho(c, dt); break;
     // a gincana da roça
     case 'gi-indo': case 'gi-prova': case 'gi-podio': case 'gi-sai': cena.trecho(c, dt); break;
+    // a viagem ao planeta Bolinha
+    case 'pb-indo': case 'pb-conta': case 'pb-decola': case 'pb-pousa': case 'pb-feira': case 'pb-tchau': case 'pb-volta': case 'pb-chega': cena.trecho(c, dt); break;
     // cena do Curupira
     case 'cu-indo': case 'cu-surge': case 'cu-some': cena.trecho(c, dt); break;
     case 'mostra': cena.mostra(c); break;
@@ -27828,6 +28239,10 @@ const ENFEITES = {
   pedraLunar:   { nome: 'Pedra lunar', art: 'a', encomenda: true, preco: 9000, xp: 8, desc: 'Uma pedra cheia de crateras, com cristais lilás, trazida da Lua. Só na noite dos ETs.' },
   foguetinho:   { nome: 'Foguetinho de jardim', art: 'o', encomenda: true, preco: 15000, xp: 12, desc: 'Um foguetinho vermelho e branco, de janelinha azul, pronto para decolar. Só na noite dos ETs.' },
   discoJardim:  { nome: 'Disco voador de jardim', art: 'o', encomenda: true, xp: 0, desc: 'Um disquinho com o ETzinho no domo, girando com as luzes piscando. Só na troca com o ETzinho.' },
+  // as lembranças do planeta Bolinha: só na feira de lá (LEMBRANCAS_PLANETA)
+  cristalBolinha: { nome: 'Cristal do planeta Bolinha', art: 'o', encomenda: true, preco: 20000, xp: 15, desc: 'Cristais lilás, rosa e azul, que brilham de noite. Só na feira do planeta Bolinha.' },
+  plantaBolinha: { nome: 'Planta-bolinha', art: 'a', encomenda: true, preco: 20000, xp: 15, desc: 'Uma planta do espaço com bolinhas roxas na ponta, iguaizinhas à bolinha da Luma. Só na feira do planeta Bolinha.' },
+  casinhaEt:    { nome: 'Casinha de ETzinho', art: 'a', encomenda: true, preco: 20000, xp: 15, desc: 'Uma casinha de domo, igual às do planeta Bolinha, com antena de bolinha. Só na feira do planeta Bolinha.' },
 };
 const RAIO_ESPANTALHO = 3;
 const ENF_VIS = {};
@@ -27887,7 +28302,8 @@ function montarEnfeite(e){
     cavalinho: vCavalinhoBase, gangorra: vGangorraBase, giraGira: vGiraBase, balancoParque: vBalancoParqueBase, escorregador: vEscorregador,
     malasViagem: () => noMeio(vMalasViagem()), placaViagem: () => noMeio(vPlacaViagem()), globoViagem: () => noMeio(vGloboBase()), discoJardim: () => noMeio(vDiscoJardimBase()),
     ipeAmarelo: vIpeAmarelo, jabuticabeira: vJabuticabeira, painelSolar: vPainelSolar,
-    cogumeloLunar: () => noMeio(vCogumeloLunar()), pedraLunar: () => noMeio(vPedraLunar()), foguetinho: () => noMeio(vFoguetinhoJardim()) };
+    cogumeloLunar: () => noMeio(vCogumeloLunar()), pedraLunar: () => noMeio(vPedraLunar()), foguetinho: () => noMeio(vFoguetinhoJardim()),
+    cristalBolinha: () => noMeio(vCristalBolinha()), plantaBolinha: () => noMeio(vPlantaBolinha()), casinhaEt: () => noMeio(vCasinhaEt()) };
   const escala = e.tipo === 'estatua' ? 1 / 40 : 1 / 16;
   let m;
   // a topiaria e a estátua da família: a base numa escala e a forma escolhida (e.forma) na escala do desenho dela
@@ -27899,6 +28315,7 @@ function montarEnfeite(e){
   if (e.tipo === 'painelSolar'){ const h = haloLuz(0xfff1a8, 0.7); h.position.set(0, 12 / 16, 7.5 / 16); m.add(h); }
   // o cogumelo lunar também brilha de noite
   if (e.tipo === 'cogumeloLunar'){ const h = haloLuz(0x8fe0ff, 0.8); h.position.set(0, 7 / 16, 0); m.add(h); }
+  if (e.tipo === 'cristalBolinha'){ const h = haloLuz(0xd6b8ff, 0.8); h.position.set(0, 8 / 16, 0); m.add(h); }
   // a sombra do ponteiro do relógio de sol, girando em volta do meio do mostrador (atualizarEnfeites)
   if (e.tipo === 'relogioSol'){
     const piv = new THREE.Object3D(), sombra = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.004, 0.36), new THREE.MeshBasicMaterial({ color: 0x2a1e16, transparent: true, opacity: 0.55, depthWrite: false }));
@@ -29251,9 +29668,9 @@ function atualizarCiclo(dt){
   luzesPontuais();
   // céu do fundo e estrelas (só mexe no CSS quando a cor muda de verdade)
   const css = `linear-gradient(180deg,#${LUZ.ceu1.getHexString()},#${LUZ.ceu2.getHexString()})`;
-  if (css !== ceuAplicado && !document.body.classList.contains('primeira-pessoa')){ ceuAplicado = css; document.body.style.background = css; }
+  if (css !== ceuAplicado && !ceuEspaco && !document.body.classList.contains('primeira-pessoa')){ ceuAplicado = css; document.body.style.background = css; }
   if (n > 0.02 && estrelasFeitas !== innerWidth * 10000 + innerHeight) desenharEstrelas();
-  const opE = n.toFixed(2); if (opE !== opEstrelas){ opEstrelas = opE; $('estrelas').style.opacity = opE; }
+  const opE = n.toFixed(2); if (opE !== opEstrelas && !ceuEspaco){ opEstrelas = opE; $('estrelas').style.opacity = opE; }
   const q = periodo();
   // quanto do período já passou e quanto falta para o próximo (o relógio só anda com o jogo aberto); à noite, a conta
   // vai até a hora de nanar, e no sono o chip mostra Zzz
@@ -29308,6 +29725,7 @@ function atualizarClima(dt){
     gotas.material.opacity = lerp(gotas.material.opacity, ch ? C.opacidade : 0, Math.min(1, dt * 2));
     if (!ch && gotas.material.opacity < 0.02){ scene.remove(gotas); gotas.geometry.dispose(); gotas = null; }
   }
+  if (gotas) gotas.visible = !ceuEspaco; // no planeta Bolinha não chove
 }
 // a chuva atrapalhava a vista (o Lucas pediu menos): eram 1600 quadradinhos azuis bem opacos; agora são menos pingos, em
 // risquinhos finos e claros, meio transparentes, e a luz escurece menos
@@ -33592,7 +34010,7 @@ function quadro(agoraP){
   atualizarBichosMata(dt, t);
   atualizarVisitaCachoeira(dt, t); atualizarCachoeira(dt, t);
   atualizarRelogioFoguete(dt);
-  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t); atualizarRecanto(dt, t); passoAcharEd(dt); atualizarFeiraAgro(dt, t); atualizarFestival(dt, t); if ((tickEstufa -= dt) <= 0){ tickEstufa = 1; atualizarEstufa(); conferirAniversario(); } atualizarAniversario(dt, t); atualizarPipas(dt, t); atualizarTrem(dt, t); atualizarPier(dt, t); atualizarEngenho(dt, t); atualizarBloco(dt, t); atualizarGincana(dt, t); atualizarRave(dt, t); atualizarNoites(dt, t);
+  atualizarCapivaras(dt, t); atualizarFlamingos(dt, t); atualizarQuadras(dt, t); atualizarRecanto(dt, t); passoAcharEd(dt); atualizarFeiraAgro(dt, t); atualizarFestival(dt, t); if ((tickEstufa -= dt) <= 0){ tickEstufa = 1; atualizarEstufa(); conferirAniversario(); } atualizarAniversario(dt, t); atualizarPipas(dt, t); atualizarTrem(dt, t); atualizarPier(dt, t); atualizarEngenho(dt, t); atualizarBloco(dt, t); atualizarBaseFoguete(); atualizarGincana(dt, t); atualizarRave(dt, t); atualizarNoites(dt, t);
   atualizarBeijaFlor(dt, t);
   atualizarCurupira(dt, t);
   atualizarArteKevin(dt, t);
@@ -33770,7 +34188,7 @@ async function iniciar(){
   construirChao();
   construirCenario();
   montarMata(); montarCachoeira();
-  if (mapaMigrado || zonasMigradas || mapa5Migrado || mapa6Migrado || mapa7Migrado || mapa8Migrado || mapa9Migrado || mapa10Migrado || mapa11Migrado) conferirMapaNovo(); else if (hortaMigrada) conferirHorta();
+  if (mapaMigrado || zonasMigradas || mapa5Migrado || mapa6Migrado || mapa7Migrado || mapa8Migrado || mapa9Migrado || mapa10Migrado || mapa11Migrado || mapa12Migrado) conferirMapaNovo(); else if (hortaMigrada) conferirHorta();
   if (!Array.isArray(S.parcelas)) S.parcelas = []; if (!Array.isArray(S.mata)) S.mata = [];
   PARCELAS.forEach((_, p) => { if (parcelaComprada(p)) abrirParcela(p); });
   if (abrirRecanto()) montarAbelhasJatai();
@@ -33864,7 +34282,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { feira: ganchoFeira(), resgate: ganchoResgate(), bloco: { BLOCO, estado: () => bloco, sair: sairBloco, entrar: entrarNoBloco, acabar: acabarBloco, motivo: motivoBloco }, engenho: { CANAVIAL, vis: () => CANAVIAL_VIS, colher: colherCanavial, estagio: estagioCanavial }, pier: { PIER, PEIXES, obj: () => S.peixes, vis: () => PIER_VIS, racao: jogarRacaoPeixes, lixo: tirarLixoLago, caderno: abrirCadernoPeixes }, aniversario: { ANIV, obj: () => S.aniversario, vis: () => anivVis, montar: montarAniversario, desmontar: desmontarAniversario, parabens: comecarParabens, conferir: conferirAniversario, agendar: agendarAniversario }, trem: { TREM, TRILHO, vis: () => TREM_VIS, passear: passearDeTrem, grupo: novoGrupoTrem, partir: partirTrem, parada: PARADA_TREM }, pipas: { PIPAS, obj: () => festaPipas, jogo: () => jogoPipa, montar: montarPipas, desmontar: desmontarPipas, jogar: comecarJogoPipa, toque: toquePipa, motivo: motivoPipas }, estufa: { ESTUFA, obj: () => estufa(), plantar: plantarEstufa, colher: colherEstufa, vis: () => ESTUFA_VIS, posVaso: posVasoEstufa }, nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: (id, extra) => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, Object.assign(l, extra)) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => n.g.getWorldPosition(new THREE.Vector3()).toArray()) }, encerrar: () => encerrarArteNano(), prox: () => arteNanoProx, chapeu: () => chapeuFora, visita: { chamar: () => chamarBeto(), despedir: () => despedirBeto(), estado: () => caminhaoE.estado, caminhao: () => caminhao } }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, VINHETAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
+  window.__fazenda = { feira: ganchoFeira(), resgate: ganchoResgate(), planeta: { PLANETA, viagem: () => viagem, obj: () => S.planeta, vis: () => PLANETA_VIS, foguete: () => FOG_VIS, feira: () => abrirFeiraPlaneta(cine), trocar: trocarNoPlaneta, motivo: motivoViagem }, bloco: { BLOCO, estado: () => bloco, sair: sairBloco, entrar: entrarNoBloco, acabar: acabarBloco, motivo: motivoBloco }, engenho: { CANAVIAL, vis: () => CANAVIAL_VIS, colher: colherCanavial, estagio: estagioCanavial }, pier: { PIER, PEIXES, obj: () => S.peixes, vis: () => PIER_VIS, racao: jogarRacaoPeixes, lixo: tirarLixoLago, caderno: abrirCadernoPeixes }, aniversario: { ANIV, obj: () => S.aniversario, vis: () => anivVis, montar: montarAniversario, desmontar: desmontarAniversario, parabens: comecarParabens, conferir: conferirAniversario, agendar: agendarAniversario }, trem: { TREM, TRILHO, vis: () => TREM_VIS, passear: passearDeTrem, grupo: novoGrupoTrem, partir: partirTrem, parada: PARADA_TREM }, pipas: { PIPAS, obj: () => festaPipas, jogo: () => jogoPipa, montar: montarPipas, desmontar: desmontarPipas, jogar: comecarJogoPipa, toque: toquePipa, motivo: motivoPipas }, estufa: { ESTUFA, obj: () => estufa(), plantar: plantarEstufa, colher: colherEstufa, vis: () => ESTUFA_VIS, posVaso: posVasoEstufa }, nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: (id, extra) => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, Object.assign(l, extra)) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => n.g.getWorldPosition(new THREE.Vector3()).toArray()) }, encerrar: () => encerrarArteNano(), prox: () => arteNanoProx, chapeu: () => chapeuFora, visita: { chamar: () => chamarBeto(), despedir: () => despedirBeto(), estado: () => caminhaoE.estado, caminhao: () => caminhao } }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, VINHETAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
     galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, flamingos: { soltar: soltarFlamingos, obj: () => flamingos, pousos: pousoFlamingos, sumir: sumirFlamingos, FLAMINGOS, avancar: seg => { const t0 = performance.now() / 1000; for (let i = 0; i < Math.round(seg / 0.05); i++) atualizarFlamingos(0.05, t0 + i * 0.05); } }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { circulo: { forcar: () => { discoJogo.forcarCirculo = true; discoJogo.prox = 0; }, fazer: fazerCirculo, lote: loteParaCirculo, grupo: () => grupoCirculo, soltar: soltarGrupoCirculo, CIRCULO }, sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, puxar: () => { discoJogo.forcarPuxar = true; discoJogo.prox = 0; }, puxao: () => puxao, obj: () => discoJogo, abducao: () => abducao, presente: { soltar: presenteEt, obj: () => caixaEt, abrir: abrirCaixaEt }, visita: { forcar: () => { discoJogo.forcarVisita = true; discoJogo.prox = 0; }, obj: () => etVisita, itens: itensEt, trocar: trocarEt, pedido: pedidoEt, temDisco: temDiscoJardim, VISITA_ET } }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
       precos: () => ({ arrendamento: ARRENDAMENTO.preco, galinheiro2: CERCADOS.galinheiro2.preco, curral2: CERCADOS.curral2.preco, patos: CERCADOS.patos.preco, fab: Object.values(AMPLIACAO).map(f => f.preco), reforma1: Object.values(PRECO_REFORMA).reduce((t, v) => t + v[0], 0) }) },
     visitaPresa: VISITA_PRESA, pernoite: { PERNOITE, partir: partirDoPernoite, cafe: cafeDoMilton, fimDaVisita: () => { milton.pontos = []; milton.aoChegar = null; milton.estado = 'parado'; const pt = voo.modelo === 'jato' ? portaJato() : [PISTA.para + 0.9, PISTA.y + 0.35]; milton.colocar(...pt); fimDaVisita(pt); } }, hangarVelho: () => hangarVelho,
@@ -36062,6 +36480,7 @@ function catalogoModelos(){
       g.userData.anima = (dt, t) => { ch.scale.set(1 + Math.sin(t * 13) * 0.08, 1 + Math.sin(t * 9) * 0.15, 1 + Math.cos(t * 11) * 0.08); };
       return g;
     } }] }, varios('Barraca dos ETs', [['Rosa', () => vBarracaEt(0xff3ea5)], ['Azul', () => vBarracaEt(0x3ad0ff)], ['Verde', () => vBarracaEt(0x8fd06a)]]), um('Cogumelo lunar', vCogumeloLunar), um('Pedra lunar', vPedraLunar), um('Foguetinho de jardim', vFoguetinhoJardim)] },
+    { nome: 'Planeta Bolinha', itens: [um('Base do foguete', vBaseFoguete), um('Foguete', vFogueteBolinha), um('Casinha dos ETzinhos', vCasaEt), varios('Lembrança', [['Cristal', vCristalBolinha], ['Planta-bolinha', vPlantaBolinha], ['Casinha de ETzinho', vCasinhaEt]]), varios('Planetinha', [['Com anel', () => vPlanetinha(0xf2a65a, 0xf6c98a, true)], ['Azul', () => vPlanetinha(0x7ac0e8, 0xa6dcf2, false)]])] },
     { nome: 'Bloco de Carnaval', itens: [um('Trio elétrico', vTrioEletrico)] },
     { nome: 'Engenho do Sr. Mofi', itens: [um('Engenho', vEngenho), varios('Canavial', [0, 1, 2, 3].map(e => [['Plantado', 'Crescendo', 'Quase', 'Pronto'][e], () => vCanavial(e)]))] },
     { nome: 'Píer dos peixinhos', itens: [um('Píer', vPier), varios('Peixe', [...PEIXES, MASCOTE_PEIXE].map(F => [F.nome, () => vPeixe(F.cor, F.cor2)])), varios('Lixo do lago', Object.keys(LIXOS_LAGO).map(k => [k, () => vLixoLago(k)]))] },
