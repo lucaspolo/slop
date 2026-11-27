@@ -7792,10 +7792,16 @@ function arrumarEspacoEventos(){
   if (volta.length) setTimeout(() => aviso(`${mudou ? 'O espaço de eventos foi para o canto da fazenda.' : 'O campo do ArraiEd virou o espaço de eventos da fazenda.'} ${volta.length > 1 ? volta.length + ' enfeites que estavam lá voltaram' : 'Um enfeite que estava lá voltou'} para a loja, em Enfeites.`, 'grande', 7), 2500);
   salvar();
 }
+// quando vem a próxima feira, sem nenhuma marcada: espera o nível novo, o intervalo ou os dois
+function textoProximaFeiraAgro(){
+  const dd = diaLiberaFeiraAgro() - diaAtual(), dias = dd > 1 ? `daqui a ${dd} dias` : 'amanhã';
+  if (feiraAgro().feitas.includes(nivel())) return `A próxima feira vem quando o Ed subir de nível${dd > 1 ? `, e não antes de ${dd} dias` : ''}.`;
+  return dd > 1 ? `A próxima feira é ${dias}.` : 'A próxima feira é marcada logo.';
+}
 function itensEspaco(){
   const r = { titulo: 'Espaço de eventos', icone: 'festa', itens: [] }, F = feiraAgro();
   const prox = F.marcada ? (feiraAgroAberta() ? 'acontecendo agora, até o fim da tarde' : feiraAgroHoje() ? (S.relogio < FEIRA_AGRO.abre ? 'hoje, daqui a pouco' : 'encerrada por hoje') : 'amanhã') : null;
-  r.estado = `Aqui acontecem o ArraiEd, a Feira Agronômica Sustentável (uma vez por nível, durante um dia) e, de dia, de vez em quando, a rave da DJ Summer Cachohits.${prox ? ` Feira: ${prox}.` : ' A próxima feira vem quando o Ed subir de nível.'}${rave ? ' A Summer Cachohits está tocando agora!' : ''}${textoNoitesPortal()}`;
+  r.estado = `Aqui acontecem o ArraiEd, a Feira Agronômica Sustentável (uma vez por nível, com pelo menos ${FEIRA_AGRO.intervalo} dias entre uma e outra) e, de dia, de vez em quando, a rave da DJ Summer Cachohits.${prox ? ` Feira: ${prox}.` : ' ' + textoProximaFeiraAgro()}${rave ? ' A Summer Cachohits está tocando agora!' : ''}${textoNoitesPortal()}`;
   if (noite) noiteItens(noite, r);
   festivalNoPortal(r); gincanaNoPortal(r); pipasNoPortal(r); aniversarioNoPortal(r);
   if (F.marcada){
@@ -7866,8 +7872,8 @@ function vPainelSolar(){
   v.box(7, 10, 15, 8, 10, 15, 0x8a8f96); v.box(7, 11, 15, 8, 12, 15, 0xfff1a8);
   return v;
 }
-// ================= a Feira Agronômica Sustentável (o Lucas pediu): uma vez por nível, a partir do arrendamento do terreno
-// novo, ela fica marcada para o dia seguinte (agendarFeiraAgro, ao subir de nível e ao abrir o jogo) e acontece no espaço de
+// ================= a Feira Agronômica Sustentável (o Lucas pediu): uma vez por nível, com pelo menos FEIRA_AGRO.intervalo dias
+// entre uma e outra, a partir do arrendamento do terreno novo, ela fica marcada para o dia seguinte (agendarFeiraAgro, ao subir de nível e ao abrir o jogo) e acontece no espaço de
 // eventos de FEIRA_AGRO.abre até o fim da tarde (fecha). Produtores da região expõem nas barracas (PRODUTORES_AGRO) e vendem o
 // que fazem: o Ed tem a dele, com o Beto tomando conta, que vende sozinha a sobra que o jogador escolhe, com FEIRA_AGRO.bonus
 // no preço; os outros vendem enfeites que não tem na loja e coisas para a fazenda. À tarde (juri), os jurados anunciam o
@@ -7875,7 +7881,9 @@ function vPainelSolar(){
 // que sobrou na barraca volta para o celeiro. Estado em S.feiraAgro; o resto (barracas, gente) só na memória
 // abre assim que o Ed acorda (NANAR.acorda é 0,03; NANAR fica mais abaixo no arquivo)
 const NANAR_ACORDA_AGRO = 0.03;
-const FEIRA_AGRO = { abre: NANAR_ACORDA_AGRO, juri: 0.48, fecha: 0.66, bonus: 1.25, venda: [9, 15], xpItem: 0.0015, gente: 44, some: 4, rivais: 4,
+// intervalo: dias da fazenda do dia de uma feira até o da próxima (o Lucas achou a feira frequente demais: nos níveis altos um
+// nível passa em um ou dois dias da fazenda, e a feira de um nível alcançado durante a outra vinha logo no dia seguinte)
+const FEIRA_AGRO = { abre: NANAR_ACORDA_AGRO, juri: 0.48, fecha: 0.66, intervalo: 5, bonus: 1.25, venda: [9, 15], xpItem: 0.0015, gente: 44, some: 4, rivais: 4,
   premios: [{ nome: 'ouro', cor: 0xf2c335, din: 250, xp: 0.1 }, { nome: 'prata', cor: 0xd8dde2, din: 150, xp: 0.06 }, { nome: 'bronze', cor: 0xd08a4a, din: 80, xp: 0.03 }], mencao: 0.01,
   palco: zp('festa', 11, 15.6), juiz: 49, edConcurso: zp('festa', 11, 13.3), compra: 0.85 };
 // as barracas (zona festa), em quarteirões dos dois lados do caminho do portal, com corredores entre as fileiras (o Lucas
@@ -7943,11 +7951,17 @@ const feiraAgroAberta = () => feiraAgroHoje() && (S.relogio || 0) >= FEIRA_AGRO.
 const xpDoNivel = () => XP_BASE_FEIRA() / FEIRA_DIA.xp;
 const barracaEdAgro = () => FEIRA_AGRO_VIS.barracas.find(b => b.P.id === 'ed');
 const FEIRA_AGRO_VIS = { montada: false, g: null, barracas: [], gente: [], fora: 0, venda: 0, conferir: 0, trofeu: null };
-// marca a feira do nível de agora para amanhã, se ainda não teve
+// o primeiro dia em que pode haver feira de novo: FEIRA_AGRO.intervalo dias depois do dia da última (S.feiraAgro.ultimaDia)
+const diaLiberaFeiraAgro = () => { const F = feiraAgro(); return F.ultimaDia == null ? -Infinity : F.ultimaDia + FEIRA_AGRO.intervalo; };
+// marca a feira do nível de agora para amanhã, se ainda não teve e se a última já ficou longe. Chamada ao subir de nível, ao
+// abrir o jogo e, sem feira marcada, a cada segundo (conferirFeiraAgro), para marcar quando o intervalo acaba
 function agendarFeiraAgro(){
   if (!espacoAberto() || nivel() < ARRENDAMENTO.nivel) return;
   const F = feiraAgro();
   if (F.marcada || F.feitas.includes(nivel())) return;
+  // save de antes do intervalo que já teve feira: o intervalo conta a partir de agora
+  if (F.ultimaDia == null && F.vezes){ F.ultimaDia = diaAtual(); salvar(); }
+  if (diaAtual() + 1 < diaLiberaFeiraAgro()) return;
   let dia = diaAtual() + 1; while (festivalNoDia(dia) || aniversarioNoDia(dia)) dia++;
   F.marcada = { nivel: nivel(), dia, montou: false };
   salvar();
@@ -7956,7 +7970,7 @@ function agendarFeiraAgro(){
 // a cada segundo: abre, vende, chama o concurso e fecha; a feira perdida (o jogo fechado no dia) passa para o próximo dia
 function conferirFeiraAgro(dt){
   const F = feiraAgro(), V = FEIRA_AGRO_VIS;
-  if (!F.marcada) return;
+  if (!F.marcada){ agendarFeiraAgro(); return; }
   const rel = S.relogio || 0, passou = diaAtual() > F.marcada.dia || (feiraAgroHoje() && rel >= FEIRA_AGRO.fecha);
   if (passou){
     if (F.marcada.montou) encerrarFeiraAgro();
@@ -8194,7 +8208,7 @@ function encerrarFeiraAgro(){
   const sobra = Object.values(F.banca).reduce((a, b) => a + b, 0);
   devolverBancaAgro();
   if (F.marcada && F.marcada.montou){
-    F.feitas.push(F.marcada.nivel); F.vezes = (F.vezes || 0) + 1;
+    F.feitas.push(F.marcada.nivel); F.vezes = (F.vezes || 0) + 1; F.ultimaDia = diaAtual();
     const txt = `A Feira Agronômica acabou! A barraca do Ed vendeu ${contagem(F.vendidos || 0, 'item', 'itens')} e rendeu ${reais(F.ganho || 0)}.${sobra ? ' O que sobrou voltou para o celeiro.' : ''}`;
     setTimeout(() => aviso(txt, 'grande', 6), 800);
   }
