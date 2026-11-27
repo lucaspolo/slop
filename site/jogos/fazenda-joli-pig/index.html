@@ -397,6 +397,8 @@ body.feira-proto #jogo > :not(canvas){display:none}
 .dialogo .quem.dani{color:#4f8f3a}
 .dialogo .quem.curupira{color:#d8542a}
 .dialogo .quem.agronoma{color:#3f7a3a}
+.dialogo .quem.popo{color:#2a5ea8}
+.dialogo .quem.popi{color:#d8689a}
 .dialogo .quem.maurinho{color:#8a5a36}
 .dialogo .quem.todos{color:#e0408a}
 .dialogo .quem.galinha{color:#c2477a}
@@ -3201,6 +3203,51 @@ function criarMotoPopo(){
   popo.update(0, 0); popi.update(0, 0);
   return { g, moto, popo, popi };
 }
+// ================= a visita do Popo e da Popi (o Lucas pediu, nível 52): chegam de motinha pela estrada, sentam com o Ed
+// para um cafezinho na mesa da frente de casa (o mesmo sistema do cafezinho: a Popi no banquinho da esquerda, o do Hud, e o
+// Popo no do convidado), prometem voltar um dia para ajudar e partem de novo na moto. motoPopo é a moto com os dois
+// sentados; popoAPe e popiAPe são os dois a pé
+// a moto para um pouco depois da porteira (paraDepois), para o arco não tampar
+const VISITA_POPO = { nivel: 52, chegada: 4.5, partida: 4.2, paraDepois: 1.3 };
+let motoPopo = null, popoAPe = null, popiAPe = null;
+const FALAS_CINE_POPO = [
+  ['ed', 'Ed', 'Popo! Popi! Que surpresa boa!'],
+  ['popi', 'Popi', 'Oi, maninho! Viemos de motinha, sentindo o vento no focinho.'],
+  ['popo', 'Popo', 'Ouvimos falar que a Fazenda Joli Pig está enorme. Tivemos que ver com os próprios olhos!'],
+  ['ed', 'Ed', 'Vem, vem! Acabei de passar um cafezinho.', 'pp-mesa'],
+  ['popo', 'Popo', 'Hum! Esse café é daqui mesmo?'],
+  ['ed', 'Ed', 'Da fazenda! O Pelúcio leva para a Joli Coffee.', null, 'come'],
+  ['popi', 'Popi', 'Que orgulho do nosso irmãozinho!'],
+  ['ed', 'Ed', 'Nosso? Espera... vocês dois são meus irmãos, mas não são irmãos um do outro?'],
+  ['popo', 'Popo', 'Exatamente.'],
+  ['popi', 'Popi', 'Nem tente entender, maninho. (risos)', null, 'ri'],
+  ['ed', 'Ed', 'Esse mundo é muito doido! (risos)', null, 'ri'],
+  ['popo', 'Popo', 'Olha, Ed, essa fazenda dá trabalho, hein?'],
+  ['popi', 'Popi', 'A gente resolveu: um dia vamos voltar para te ajudar.'],
+  ['popo', 'Popo', 'Eu cuido do que for pesado e a Popi cuida do que precisa de capricho.'],
+  ['popi', 'Popi', 'E você cuida do café!'],
+  ['ed', 'Ed', 'Combinado! Vou guardar duas canecas para vocês.', 'pp-volta'],
+  ['popi', 'Popi', 'Tchau, maninho! Até breve!'],
+  ['popo', 'Popo', 'Segura as pontas que a gente volta!'],
+];
+function montarVisitaPopo(){
+  motoPopo = criarMotoPopo(); motoPopo.g.visible = false; scene.add(motoPopo.g);
+  // o coraçãozinho que sobe em cima dos dois na partida
+  const v = new Vox();
+  for (let x = -4; x <= 4; x++) for (let y = -4; y <= 3; y++){ const a = Math.hypot(x + 2, y - 1.2) <= 2.3 || Math.hypot(x - 2, y - 1.2) <= 2.3 || (y <= 1 && Math.abs(x) <= y + 4); if (a) for (let z = -1; z <= 1; z++) v.set(x, y, z, Math.abs(x + 2) + Math.abs(y - 2) < 2 ? 0xff9ac0 : 0xe0408a); }
+  motoPopo.coracao = malha(v.build(1 / 60, { origin: [0.5, 0, 0.5] })); motoPopo.coracao.visible = false; motoPopo.coracao.position.set(-0.1, 0.95, 0.3); motoPopo.g.add(motoPopo.coracao);
+  popoAPe = new Porco(COR.popo, COR.popoBolso, 'popo', MODELO_POPO); popiAPe = new Porco(COR.popi, COR.popiBolso, 'popi', MODELO_POPI);
+  for (const p of [popoAPe, popiAPe]){ pickaveis.splice(pickaveis.indexOf(p.g), 1); p.g.scale.setScalar(ESCALA_POPO); p.vel = 2.4; p.g.visible = false; scene.add(p.g); }
+}
+function limparVisitaPopo(){
+  if (cafe) limparCafe();
+  const M = motoPopo; M.g.visible = false; M.coracao.visible = false; M.g.position.y = 0; M.g.rotation.x = 0;
+  M.popo.g.visible = M.popi.g.visible = true; M.popi.aceno = 0;
+  for (const p of [popoAPe, popiAPe]){ p.g.visible = false; p.pontos = []; p.aoChegar = null; p.estado = 'parado'; p.sentado = 0; p.pulo = 0; p.aceno = 0; p.ferramenta(null); }
+  ed.aceno = 0;
+}
+// o barulhinho do motor da motinha
+const motorPopo = c => { if ((c.tMotor = (c.tMotor || 0) - 1 / 60) <= 0){ c.tMotor = 0.11; Som.tom(rnd(85, 105), 0.1, 'sawtooth', 0.012, 120); } };
 // cores: [lataria, lataria escura, branco], como no Joli Market (o caminhãozinho amarelo do Ed, CAMINHAO_ED)
 function vCaminhao(cafe, cores){
   const v = new Vox();
@@ -19594,6 +19641,11 @@ const TEMAS = {
     { tipo: 'sawtooth', vol: 0.022, leg: 0.7, notas: 'r:.5 A2:.5 r:.5 A2:.5 r:.5 A2:.5 r:.5 A2:.5 r:.5 F2:.5 r:.5 F2:.5 r:.5 F2:.5 r:.5 F2:.5 r:.5 C3:.5 r:.5 C3:.5 r:.5 C3:.5 r:.5 C3:.5 r:.5 G2:.5 r:.5 G2:.5 r:.5 G2:.5 r:.5 G2:.5' },
     { tipo: 'square', vol: 0.011, leg: 0.5, notas: 'A4:.5 C5:.5 E5:.5 A5:.5 E5:.5 C5:.5 A4:.5 C5:.5 F4:.5 A4:.5 C5:.5 F5:.5 C5:.5 A4:.5 F4:.5 A4:.5 C5:.5 E5:.5 G5:.5 C6:.5 G5:.5 E5:.5 C5:.5 E5:.5 G4:.5 B4:.5 D5:.5 G5:.5 D5:.5 B4:.5 G4:.5 B4:.5' },
     { tipo: 'x', vol: 0.045, notas: 'r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5' } ] },
+  // a visita do Popo e da Popi: passeio de moto no domingo, em sol maior, com o baixo andando e o chimbal no contratempo
+  popo: { bpm: 138, ganho: 0.85, loop: true, faixas: [
+    { tipo: 'square', vol: 0.016, leg: 0.6, notas: 'G4:.5 B4:.5 D5:.5 B4:.5 G4:1 r:1 A4:.5 C5:.5 E5:.5 C5:.5 A4:1 r:1 D5:.5 D5:.5 E5:.5 D5:.5 B4:1 G4:1 A4:.5 B4:.5 A4:.5 F#4:.5 D4:2 G4:.5 B4:.5 D5:.5 G5:.5 E5:1 D5:1 C5:.5 E5:.5 D5:.5 C5:.5 B4:1 A4:1 B4:.5 D5:.5 C5:.5 A4:.5 F#4:1 A4:1 G4:3 r:1' },
+    { tipo: 'triangle', vol: 0.05, leg: 0.8, notas: 'G2:1 B2:1 D3:1 B2:1 A2:1 C3:1 E3:1 C3:1 G2:1 B2:1 D3:1 B2:1 D2:1 F#2:1 A2:1 F#2:1 G2:1 B2:1 E3:1 D3:1 C3:1 E3:1 D3:1 A2:1 D2:1 F#2:1 A2:1 D3:1 G2:1 D3:1 G2:2' },
+    { tipo: 'x', vol: 0.03, notas: 'r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5 r:.5 x:.5' } ] },
   mataFesta: { bpm: 128, ganho: 0.66, loop: true, faixas: [
     { tipo: 'sine', vol: 0.04, notas: 'F5:.5 A5:.5 C6:.5 A5:.5 G5:.5 Bb5:.5 A5:1 F5:.5 G5:.5 A5:.5 F5:.5 E5:.5 G5:.5 F5:1' },
     { tipo: 'square', vol: 0.016, leg: 0.5, notas: 'F2:.75 F2:.25 C3:.5 F2:.5 F2:.75 F2:.25 C3:.5 F2:.5 C3:.75 C3:.25 G2:.5 C3:.5 F2:.75 F2:.25 C3:.5 F2:.5' },
@@ -24965,6 +25017,7 @@ function construirPersonagens(){
   garupa.colocar(-0.56, 0); garupa.ang = garupa.angAlvo = Math.PI / 2; garupa.sentado = garupa.sentarEm(0.84); garupa.g.visible = false;
   caminhaoBistro.add(garupa.g);
   maurinhoObra = new Porco(0, 0, 'maurinhoObra', MODELO_MAURINHO_OCULOS); maurinhoObra.g.visible = false; maurinhoObra.ferramenta('prancheta'); scene.add(maurinhoObra.g);
+  montarVisitaPopo();
   caminhao = caminhaoMarket;
   acenderFarois(caminhaoMarket); acenderFarois(caminhaoCafe); acenderFarois(caminhaoBistro, { um: true, h: 0.4, comp: 2 });
 }
@@ -25443,7 +25496,7 @@ function montarCafe(){
   // na mesa de piquenique, a mesinha não aparece: o prato e a caneca ficam em cima dela (o tampo dela é 9/16)
   if (!cafe.piquenique) g.add(malha(geo('cafeMesa', () => vMesaCafe().build(1 / 19))));
   const topo = cafe.piquenique ? 9 / 16 : CAFE_TOPO;
-  for (const q of ['ed', plano.hud ? 'hud' : null, plano.conv || plano.dani ? 'conv' : null]){
+  for (const q of ['ed', plano.hud || plano.popo ? 'hud' : null, plano.conv || plano.dani || plano.popo ? 'conv' : null]){
     if (!q) continue;
     const b = malha(geo('cafeBanco', () => vBancoCafe().build(1 / 19))); b.position.set(CAFE_ASSENTO[q][0], 0, CAFE_ASSENTO[q][1]); g.add(b);
   }
@@ -28055,6 +28108,126 @@ const CENAS = {
     },
     restaurar(){ limparNanar(); if (!hudAtivo() && irmaoHud.g.visible) limparHud(); if (!daniAtivo() && irmaoDani.g.visible) limparDani(); },
   },
+  // a visita do Popo e da Popi (veja VISITA_POPO): a moto chega pela estrada, os dois descem e encontram o Ed no portão,
+  // vão para a mesa do cafezinho, conversam, voltam para a moto e partem com um coraçãozinho em cima
+  popo: {
+    flag: 'viuCinePopo', nivel: () => VISITA_POPO.nivel, musica: 'popo', icone: 'popo', falas: FALAS_CINE_POPO,
+    titulo: 'A visita do Popo e da Popi', desc: 'Os irmãos mais velhos chegam de motinha para um cafezinho com o Ed.',
+    trancada: `acontece no nível ${VISITA_POPO.nivel}, de dia`,
+    pronta: () => nivel() >= VISITA_POPO.nivel && periodo().id !== 'noite' && voo.estado === 'fora' && !!lugarCafe(),
+    podeRever: () => (voo.estado !== 'fora' ? 'Dá para rever quando o Milton decolar.' : !lugarCafe() ? 'Falta um cantinho livre na frente da casa para a mesa do café.' : null),
+    foco(c){
+      const M = motoPopo.g.position;
+      if (c.passo === 'pp-chega' || c.passo === 'pp-parte') return new THREE.Vector3(c.passo === 'pp-parte' ? Math.min(M.x, PARADA + 3) : Math.max(M.x, PARADA - 3), 0.35, (Z_ESTRADA + Z_CERCA) / 2 - 0.3);
+      if (cafe && cafe.mesaOn && c.mesa) return new THREE.Vector3(cafe.cx - 0.05, 0.5, cafe.cz - 0.1);
+      if (c.mesa) return new THREE.Vector3(ed.pos.x, 0.4, ed.pos.y);
+      return new THREE.Vector3(PARADA + 0.1, 0.35, Z_CERCA - 0.4);
+    },
+    vista: c => (telaEstreita() ? 7 : (c.passo === 'pp-chega' || c.passo === 'pp-parte' ? 5.4 : 4.8)),
+    ambiente(dt){
+      if (cafe) ambienteCafe(dt);
+      const M = motoPopo, t = performance.now() / 1000;
+      if (M.g.visible){ M.popo.update(dt, t); M.popi.update(dt, t); }
+    },
+    aoFalar(f){
+      if (f[4] === 'come' && cafe) comerCafe();
+      if (f[4] === 'ri') for (const p of [ed, popoAPe, popiAPe]) p.pulo = 0.35;
+    },
+    iniciar(c){
+      caminhaoE.estado = 'cine';
+      cam.azAlvo = azPerto(Math.PI / 4);
+      const M = motoPopo; M.g.visible = true; M.coracao.visible = false; naEstrada(M.g, -5); M.popo.g.visible = M.popi.g.visible = true; M.popi.aceno = 0;
+      // a mesa do cafezinho fica pronta, mas só aparece quando eles chegam nela
+      const [lx, lz, piquenique] = lugarCafe() || CAFE_LUGARES[0];
+      cafe = { cx: lx, cz: lz, piquenique: !!piquenique, mesaOn: false, plano: { hud: false, dani: false, conv: null, popo: true, comida: 'bolo', luma: !!luma && Math.random() < LUMA_SITU.cafe, pernoite: false }, rel: 0, nasce: 0, agenda: [], gole: 3, vap: 0, comeu: false, encolhe: false, t0: Date.now() };
+      montarCafe();
+      // o Ed vai até o portão
+      c.edAlvo = [PARADA + 0.2, Z_CERCA - 1.9];
+      const pts = caminhoCafe(ed.pos.x, ed.pos.y, ...c.edAlvo);
+      ed.trab = null; ed.ferramenta(null);
+      if (pts.length) ed.ir([...pts, c.edAlvo], () => ed.olhar(PARADA, Z_ESTRADA)); else { ed.colocar(...c.edAlvo); ed.olhar(PARADA, Z_ESTRADA); }
+      Som.buzina();
+      return 'pp-chega';
+    },
+    trecho(c, dt){
+      const M = motoPopo, seat = q => cafeXZ(...CAFE_ASSENTO[q]);
+      switch (c.passo){
+        // a moto vem pela estrada, tremendo um pouco, com a Popi acenando
+        case 'pp-chega': {
+          const e = 1 - Math.pow(1 - Math.min(1, c.t / VISITA_POPO.chegada), 3);
+          naEstrada(M.g, lerp(-5, PARADA + VISITA_POPO.paraDepois, e)); M.g.position.y = Math.abs(Math.sin(c.t * 16)) * 0.01; M.popi.aceno = 1; motorPopo(c);
+          if (c.t >= VISITA_POPO.chegada){ M.g.position.y = 0; M.popi.aceno = 0; Som.buzina(); c.passo = 'pp-desce'; c.t = 0; c.ini = false; }
+          break;
+        }
+        // descem da moto e vão até o Ed, no portão
+        case 'pp-desce': {
+          if (!c.ini){
+            c.ini = true; c.chegou = 0;
+            const x = M.g.position.x;
+            M.popo.g.visible = M.popi.g.visible = false;
+            for (const p of [popoAPe, popiAPe]){ p.g.visible = true; p.estado = 'parado'; p.pontos = []; p.sentado = 0; }
+            popoAPe.colocar(x - 0.15, Z_ESTRADA - 0.45); popiAPe.colocar(x - 0.15, Z_ESTRADA + 0.55);
+            popoAPe.pulo = popiAPe.pulo = 0.35;
+            const ate = [[PARADA, Z_CERCA + 0.4], [PARADA, Z_CERCA - 0.4]];
+            popoAPe.ir([[x - 0.15, Z_CERCA + 0.85], [PARADA, Z_CERCA + 0.85], ...ate, [PARADA + 0.55, Z_CERCA - 1.05]], () => { c.chegou++; popoAPe.olhar(...c.edAlvo); });
+            popiAPe.ir([[x - 0.95, Z_ESTRADA + 0.55], [x - 0.95, Z_ESTRADA - 0.4], [PARADA, Z_CERCA + 0.85], ...ate, [PARADA - 0.15, Z_CERCA - 1.1]], () => { c.chegou++; popiAPe.olhar(...c.edAlvo); });
+          }
+          if (c.chegou >= 2 && ed.estado === 'parado'){
+            virarNaCena(ed, PARADA + 0.2, Z_CERCA - 1.05); virarNaCena(popoAPe, ...c.edAlvo); virarNaCena(popiAPe, ...c.edAlvo);
+            ed.pulo = 0.45; Som.oinc(); c.passo = 'dialogo'; mostrarFalaCine(0);
+          }
+          break;
+        }
+        // os três vão para a mesa do cafezinho: a mesa surge quando o Ed chega perto, e cada um senta no seu banquinho
+        case 'pp-mesa': {
+          if (!c.ini){
+            c.ini = true; c.mesa = true; c.chegou = 0;
+            const vai = (p, q) => { const [sx, sz] = seat(q); p.ir([...caminhoCafe(p.pos.x, p.pos.y, sx, sz), [sx, sz]], () => { c.chegou++; }); };
+            vai(ed, 'ed'); vai(popiAPe, 'hud'); vai(popoAPe, 'conv');
+          }
+          if (!cafe.mesaOn && Math.hypot(ed.pos.x - seat('ed')[0], ed.pos.y - seat('ed')[1]) < 3){ cafe.mesaOn = true; cafe.tMesa = cafe.rel; pufCafe(); }
+          if (cafe.mesaOn && c.chegou >= 3 && cafe.rel - cafe.tMesa > 1.2){
+            sentarCafe(ed, 'ed'); sentarCafe(popiAPe, 'hud'); sentarCafe(popoAPe, 'conv');
+            popoAPe.ferramenta('caneca'); popiAPe.ferramenta('caneca');
+            c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1);
+          }
+          break;
+        }
+        // levantam, a mesa some e os dois voltam para a moto; o Ed vai até o portão se despedir
+        case 'pp-volta': {
+          if (!c.ini){
+            c.ini = true; c.chegou = 0; c.puf = false;
+            for (const p of [ed, popoAPe, popiAPe]){ p.sentado = 0; p.pulo = 0.3; p.ferramenta(null); }
+            const volta = (p, fim) => p.ir([...caminhoCafe(p.pos.x, p.pos.y, PARADA, Z_CERCA - 0.4), [PARADA, Z_CERCA - 0.4], [PARADA, Z_CERCA + 0.4], ...fim], () => { p.g.visible = false; c.chegou++; });
+            const mx = M.g.position.x;
+            volta(popoAPe, [[PARADA, Z_CERCA + 0.85], [mx - 0.15, Z_ESTRADA - 0.45]]);
+            volta(popiAPe, [[PARADA, Z_CERCA + 0.85], [mx - 0.95, Z_ESTRADA - 0.4], [mx - 0.95, Z_ESTRADA + 0.55]]);
+            ed.ir([...caminhoCafe(ed.pos.x, ed.pos.y, ...c.edAlvo), c.edAlvo], () => ed.olhar(PARADA, Z_ESTRADA));
+          }
+          if (!c.puf && c.t > 0.8){ c.puf = true; cafe.encolhe = true; pufCafe(); }
+          if (c.t > 1.4) c.mesa = false;
+          // quem chega na moto aparece sentado nela
+          M.popo.g.visible = !popoAPe.g.visible; M.popi.g.visible = !popiAPe.g.visible;
+          if (c.chegou >= 2 && ed.estado === 'parado'){ virarNaCena(ed, PARADA, Z_ESTRADA); M.popi.aceno = 1.5; ed.aceno = 1.5; c.passo = 'dialogo'; mostrarFalaCine(c.linha + 1); }
+          break;
+        }
+        // a partida: o coraçãozinho, a buzina e a moto some pela estrada, com a Popi acenando
+        case 'pp-parte': {
+          if (!c.ini){ c.ini = true; M.coracao.visible = true; Som.buzina(); ed.aceno = 3; }
+          M.popi.aceno = 1; motorPopo(c);
+          M.coracao.position.y = 0.95 + Math.sin(c.t * 3) * 0.05; M.coracao.rotation.y = c.t * 2;
+          const e = Math.pow(Math.min(1, c.t / VISITA_POPO.partida), 2);
+          naEstrada(M.g, lerp(PARADA + VISITA_POPO.paraDepois, FIM_ESTRADA, e)); M.g.position.y = Math.abs(Math.sin(c.t * 16)) * 0.01;
+          if (c.t >= VISITA_POPO.partida){ M.g.visible = false; c.passo = 'voltando-camera'; c.t = 0; $('cine').classList.remove('on'); cam.azAlvo = c.cam0.az; }
+          break;
+        }
+      }
+    },
+    fimDasFalas(c){ $('cineDialogo').hidden = true; c.passo = 'pp-parte'; c.t = 0; c.ini = false; },
+    pular(){ ed.trab = null; ed.pontos = []; ed.aoChegar = null; ed.estado = 'parado'; limparVisitaPopo(); },
+    fim(){ limparVisitaPopo(); S.viuCinePopo = true; aviso('O Popo e a Popi prometeram voltar um dia para ajudar na fazenda!', 'grande', 4.5); },
+    restaurar(){ limparVisitaPopo(); },
+  },
   cafezinho: {
     flag: 'viuCafezinho', nivel: () => 3, musica: 'cafezinho', repete: true, icone: 'caneca',
     get falas(){ return cafe ? cafe.falas : []; },
@@ -28193,7 +28366,7 @@ const CENAS = {
   },
 };
 // a ordem da história; uma cena que ainda não existe em CENAS fica de fora
-const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'patrinho', 'lucia', 'pelucio', 'minhocas', 'picoca', 'mata', 'festa', 'curupira', 'jato', 'dani', 'maurinho', 'abducao', 'puxao', 'aposentadoria', 'nanar', 'cafezinho', 'foguete', 'resort', 'spaFamilia', 'campeonato', 'arraied', 'kevin', 'gincana', 'chuva', 'volta', 'resgateSaida', 'planeta'];
+const ORDEM_CENAS = ['inicio', 'milton', 'jaca', 'hud', 'patrinho', 'lucia', 'pelucio', 'minhocas', 'picoca', 'mata', 'festa', 'curupira', 'jato', 'dani', 'maurinho', 'abducao', 'puxao', 'aposentadoria', 'nanar', 'cafezinho', 'foguete', 'resort', 'spaFamilia', 'campeonato', 'arraied', 'kevin', 'popo', 'gincana', 'chuva', 'volta', 'resgateSaida', 'planeta'];
 const ordemCenas = () => ORDEM_CENAS.filter(id => CENAS[id]);
 // uma cena começa sozinha quando ainda não foi vista e está pronta (pelo nível, ou pela regra própria dela)
 const cenaPronta = id => { const C = CENAS[id]; return (!S[C.flag] || C.repete) && (C.pronta ? C.pronta() : nivel() >= C.nivel()); };
@@ -28305,6 +28478,8 @@ function atualizarCine(dt){
     case 'd-indo': case 'd-chega': case 'd-sai': cena.trecho(c, dt); break;
     // cena do Kevin
     case 'kv-indo': case 'kv-espreita': case 'kv-ri': case 'kv-sai': cena.trecho(c, dt); break;
+    // a visita do Popo e da Popi
+    case 'pp-chega': case 'pp-desce': case 'pp-mesa': case 'pp-volta': case 'pp-parte': cena.trecho(c, dt); break;
     // a gincana da roça
     case 'gi-indo': case 'gi-prova': case 'gi-podio': case 'gi-sai': cena.trecho(c, dt); break;
     // a viagem ao planeta Bolinha
@@ -34660,6 +34835,8 @@ function quadro(agoraP){
   if (kevin.g.visible) kevin.update(dt, t);
   if (patrinho.g.visible) patrinho.update(dt, t);
   if (maurinho.g.visible) maurinho.update(dt, t);
+  if (popoAPe.g.visible) popoAPe.update(dt, t);
+  if (popiAPe.g.visible) popiAPe.update(dt, t);
   if (saci.g.visible) saci.update(dt, t);
   atualizarPiloto(dt, t);
   atualizarObra(dt, t);
