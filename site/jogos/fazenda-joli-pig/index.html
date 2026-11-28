@@ -15595,6 +15595,183 @@ const ARTES_NANO = {
     limpar(){ devolverChapeu(); },
   },
 };
+// ================= a Lúcia pela fazenda (o Lucas pediu mais interações dela). Como as artes das nanos, mas com ela: de vez
+// em quando, depois da cena dela, ela aparece perto de onde a câmera olha, faz alguma coisa e vai embora. É enfeite: o que não
+// diz o contrário não vai para o save, e os tempos ficam na memória (ARTE_LUCIA). Uma por vez, a mesma não repete em seguida,
+// e nunca junto com a visita do aluguel (as duas são a mesma Lúcia). Cada arte de ARTES_LUCIA tem pode() (devolve o lugar),
+// iniciar, passo (true quando acabou) e limpar; a Lúcia é luciaDaArte (o desenho dela, sem juntas: ela anda dando pulinhos,
+// luVai) e as nanos que vierem junto são as de nanoDaArte. Para testar: __fazenda.luciaArte.forcar('vistoria')
+const ARTE_LUCIA = { primeira: [60, 120], intervalo: [120, 240], tenta: 20, perto: 7, vel: 0.5, max: 70 };
+let arteLucia = null, arteLuciaProx = rnd(...ARTE_LUCIA.primeira), arteLuciaUlt = null;
+// a Lúcia da arte: brota do chão como as nanos (cresce) e some nele no fim; o balão segue a posição dela no mundo
+function luciaDaArte(A, x, z){
+  const g = new THREE.Group(); g.add(malha(geo('lucia', () => vLucia().build(LUCIA.escala, { origin: [0.5, 0, 0.5], jitter: 0.02 }))));
+  g.position.set(x, 0, z); g.scale.setScalar(0.01); scene.add(g);
+  const n = { g, cresce: 0, escala: 1, fase: rnd(0, 6), lu: true };
+  n.fala = { g, nome: 'lucia', topo: () => g.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.45, 0)) };
+  A.nanos.push(n); A.lu = n; return n;
+}
+const falarLucia = (A, lista, rep) => { const f = rep ? variarF(lista, rep) : variar(lista); falar(A.lu.fala, f, tempoDeLeitura(f)); return f; };
+// ela anda aos pulinhos até o ponto; devolve true quando chega
+function luVai(n, x, z, dt, vel = ARTE_LUCIA.vel){
+  const g = n.g, dx = x - g.position.x, dz = z - g.position.z, d = Math.hypot(dx, dz), p = vel * dt;
+  n.fase += dt * (vel > 0.6 ? 18 : 14);
+  if (d <= p){ g.position.x = x; g.position.z = z; g.position.y = n.chao || 0; return true; }
+  g.position.x += dx / d * p; g.position.z += dz / d * p; g.rotation.y = Math.atan2(dx, dz);
+  g.position.y = (n.chao || 0) + Math.abs(Math.sin(n.fase)) * 0.014;
+  return false;
+}
+const olharArte = (n, x, z) => { n.g.rotation.y = Math.atan2(x - n.g.position.x, z - n.g.position.z); };
+// some no mato (a arte acaba quando todo mundo sumiu)
+function luFoge(n, dt){
+  if (!n.saida) n.saida = bordaArte(n.g.position.x, n.g.position.z, 1.5);
+  if (!n.some && (n.lu ? luVai(n, n.saida[0], n.saida[1], dt, 0.6) : nanoVai(n, n.saida[0], n.saida[1], dt, 0.7))) n.some = true;
+  return n.some && n.cresce <= 0;
+}
+// a prancheta da vistoria: a tábua com o prendedor e a folha com umas linhas escritas (escala da Lúcia, a frente para +z)
+function vPrancheta(){
+  const v = new Vox();
+  v.box(-9, 0, 0, 9, 24, 0, 0x9a6a3a);
+  v.box(-7, 2, 1, 7, 20, 1, 0xfdfbf4);
+  for (const y of [5, 8, 11, 14]) v.box(-5, y, 1, y === 14 ? 1 : 5, y, 1, 0x6a7ab8);
+  v.box(-4, 21, 1, 4, 24, 1, 0xb8b8c0);
+  return v;
+}
+// um objeto que a Lúcia segura (a prancheta, o megafone, a folha): vai no grupo dela
+function naMaoLucia(A, vox, chave, pos, rot){
+  const m = malha(geo(chave, () => vox().build(LUCIA.escala, { origin: [0.5, 0, 0.5] })));
+  m.position.set(...pos); if (rot) m.rotation.set(...rot); A.lu.g.add(m); return m;
+}
+function iniciarArteLucia(id, lugar){
+  const def = ARTES_LUCIA[id], A = Object.assign({ id, def, t: 0, ft: 0, nanos: [], objs: [], fase: 'vem' }, lugar);
+  arteLucia = A; arteLuciaUlt = id; def.iniciar(A);
+  return A;
+}
+function encerrarArteLucia(){
+  const A = arteLucia; arteLucia = null; arteLuciaProx = rnd(...ARTE_LUCIA.intervalo);
+  if (!A) return;
+  try { if (A.def.limpar) A.def.limpar(A); } catch (e){ console.error(e); }
+  for (const o of [...A.nanos.map(n => n.g), ...A.objs]) if (o.parent) o.parent.remove(o);
+  for (let i = FALAS.length - 1; i >= 0; i--) if (A.nanos.some(n => n.fala === FALAS[i].quem)){ FALAS[i].el.remove(); FALAS.splice(i, 1); }
+}
+function atualizarArteLucia(dt, t){
+  const A = arteLucia;
+  if (A){
+    if (cine || lucia){ encerrarArteLucia(); return; }
+    A.t += dt; A.ft += dt;
+    for (const n of A.nanos){
+      if (n.some) n.cresce = Math.max(0, n.cresce - dt * 4); else if (n.cresce < 1) n.cresce = Math.min(1, n.cresce + dt * 4);
+      n.g.scale.setScalar(Math.max(0.01, n.cresce) * n.escala);
+    }
+    let fim;
+    try { fim = A.def.passo(A, dt, t) || A.t > (A.def.max || ARTE_LUCIA.max); } catch (e){ console.error(e); fim = true; }
+    if (fim) encerrarArteLucia();
+    return;
+  }
+  if (!S.viuCineLucia || cine || lucia || !ed.g.visible || vistaEd) return;
+  if ((arteLuciaProx -= dt) > 0) return;
+  arteLuciaProx = ARTE_LUCIA.tenta;
+  // as que dependem da hora (a chuva, as estrelas) passam na frente quando dá
+  const ids = Object.keys(ARTES_LUCIA).filter(id => id !== arteLuciaUlt && ARTES_LUCIA[id].auto !== false).sort((a, b) => (ARTES_LUCIA[b].prioridade || 0) - (ARTES_LUCIA[a].prioridade || 0) || Math.random() - 0.5);
+  for (const id of ids){ const lugar = ARTES_LUCIA[id].pode(); if (lugar){ iniciarArteLucia(id, lugar); return; } }
+}
+// ---- vistoria da comandante: com a prancheta, ela para em dois ou três lugares perto da câmera e comenta o que vê de verdade
+// (um canteiro maduro, com sede ou com mato, um bicho com fome, uma fábrica parada ou trabalhando, o lago), anotando
+const LU_VIST_MADURO = ['Canteiro de {c} no ponto! Pode colher, tomada!', 'Esse canteiro de {c} já passou da hora!', 'Anotado: {c} no ponto, esperando o Ed.', 'Olha esse canteiro de {c}! Nota dez de cor.', 'Colheita atrasada no canteiro de {c}. Anotando...', 'Tudo prontinho aqui no canteiro de {c}! Quem vai colher?',
+  'Isso aqui tá pedindo cesta, tomada!', 'Se demorar mais, esse canteiro de {c} foge sozinho.', 'Canteiro de {c}: aprovado e no ponto.', 'Que canteiro de {c} mais bonito. Dá até fome.', 'Relatório: {c} no ponto, Ed distraído.', 'Ponto de colheita: atingido!', 'Esse canteiro de {c} tá pedindo pra ser colhido.',
+  'Anota aí: colher o canteiro de {c} hoje!', 'Daria um banquete no hostel, esse canteiro de {c}.', 'Colheita pronta! Isso é que é trabalho.', 'Colhe logo, antes que as nanos colham!', 'Fiscalização aprova: canteiro de {c} perfeito.', 'Esse canteiro merece medalha.', 'Hum, cheirinho de {c} no ponto.', 'Tá tudo pronto aqui, só falta o Ed!'];
+const LU_VIST_CUIDADO = ['Esse canteiro de {c} tá com sede ou com mato! Cadê o Ed?', 'Ei, tomada! O canteiro de {c} precisa de cuidado aqui.', 'Canteiro de {c}: reprovado até alguém cuidar.', 'Coitadinho desse canteiro de {c}, tá pedindo socorro.', 'Anotando: canteiro carente de atenção.', 'Isso não vai crescer sozinho, viu?',
+  'Precisa de uma mãozinha aqui, Ed!', 'Ai, ai, ai. Que descuido com o canteiro de {c}.', 'Vou mandar um memorando pro Ed.', 'Regador, enxada, alguma coisa! Rápido!', 'Esse canteiro de {c} tá triste. Dá pra ver daqui.', 'Ponto de atenção: canteiro de {c}.', 'Se eu fosse uma planta daqui, já tinha reclamado.', 'Anotado em vermelho: cuidar do canteiro de {c}!',
+  'Isso aqui precisa de amor e de água.', 'Fiscalização preocupada com o canteiro de {c}.', 'Até uma nano faria melhor. Brincadeira, Ed.', 'Socorro botânico necessário!', 'Uma plantinha precisando de ajuda aqui!', 'Ed! O canteiro de {c} chamou você.', 'Mato e sede não combinam com fazenda bonita!'];
+const LU_VIST_CRESCE = ['Canteiro de {c} crescendo bonito. Nota oito.', 'Tá vindo! O canteiro de {c} tá quase lá.', 'Canteiro de {c}: em andamento.', 'Crescendo direitinho, aprovado.', 'Hum, falta um pouquinho ainda nesse canteiro de {c}.', 'Anotado: {c} crescendo no ritmo certo.', 'Que verdinho bonito.', 'Paciência, tomada. O canteiro de {c} tá chegando lá.',
+  'Esse canteiro de {c} vai dar muito!', 'Tudo nos conformes por aqui.', 'Canteiro bem cuidado. Parabéns ao responsável.', 'Esse canteiro de {c} cresce mais rápido que as nanos.', 'Fiscalização satisfeita com o canteiro de {c}.', 'Daqui a pouco tá no ponto.', 'Nota boa para esse canteiro.', 'Crescendo! Dá pra ouvir, se ficar quietinha.',
+  'Anotando: nada a reclamar aqui.', 'Que capricho nesse canteiro.', 'Canteiro de {c} de parabéns. O Ed também.', 'Mais uns dias e é festa.', 'Lindo! Vou contar pros hóspedes.'];
+const LU_VIST_VAZIO = ['Canteiro vazio? Planta alguma coisa aí!', 'Terra parada não dá colheita nenhuma, viu?', 'Anotado: canteiro esperando semente.', 'Que desperdício de terra boa!', 'Aqui cabia uma plantação inteira.', 'Canteiro desocupado. Aluga pras nanos?', 'Sugestão da comandante: plantar morango.',
+  'Isso aqui tá pedindo semente!', 'Um canteiro triste e vazio.', 'Anota: preencher esse canteiro.', 'Terra sem nada plantado? Hum.', 'Vou plantar uma nano aqui. Brincadeira.', 'Canteiro em férias, pelo visto.', 'Daria pra fazer um campo de futebol nano.', 'Relatório: espaço livre pra plantio.',
+  'Que tal uma abóbora aqui, Ed?', 'Canteiro vazio, comandante preocupada.', 'Semente, por favor!', 'Esse canteiro tá de folga?', 'Plantar é bom, tomada!', 'Terra boa assim merece semente.'];
+const LU_VIST_FOME = ['Bicho com fome aqui: {c}! Cadê a ração?', 'Anotado: {c} reclamando de barriga vazia.', 'Ei, tomada! Tem {c} com fome.', 'Essa cara aí é de quem quer comer.', 'Bicho com fome não produz, viu?', 'Ração, urgente, pro cercado!', 'Coitadinho do bicho, barriguinha roncando.',
+  'Fiscalização: {c} sem almoço!', 'O bicho pediu pra eu reclamar com você.', 'Anota em vermelho: alimentar o cercado.', 'Ouvi a barriga roncar daqui!', 'Que fome, hein?', 'Alguém traz ração pra cá!', 'Greve de fome no cercado. Sem querer.', 'Relatório: fome no cercado.',
+  'Assim vão comer a cerca!', 'Ed, esse bicho merece um banquete.', 'Comida pro cercado, já!', 'Vou deixar um bilhete: dar ração.', 'Até eu fiquei com fome olhando.', 'Socorro! Bicho com fome!'];
+const LU_VIST_BICHO = ['Bicho feliz e gordinho. Aprovado.', 'Que bicho mais simpático!', 'Anotado: cercado bem cuidado.', 'Oi! Tudo bem por aí?', 'Essa cara é de bicho feliz.', 'Bicharada em ordem. Nota nove.', 'Fiscalização aprova o pasto.', 'Ele me cumprimentou! Educado.', 'Que vida boa tem esse bicho.',
+  'Cercado limpinho, bichos felizes.', 'Anota: {c} saudável e contente.', 'Hum, esse bicho é maior que o hostel inteiro.', 'Que fofura.', 'Nada a declarar. Tá tudo ótimo.', 'Mais tranquilo que eu, esse bicho.', 'Relatório: bicho feliz, Ed bom.', 'Ei, não me pisa, tá?',
+  'Pasto aprovado pela comandante.', 'Que cheirinho de fazenda.', 'Posou pra foto!', 'Tudo em paz no cercado.'];
+const LU_VIST_FAB = ['{C}: trabalhando a todo vapor!', 'Anotado: {c} produzindo.', 'Que barulhinho bom de máquina!', 'Aqui não para! Aprovado.', 'Isso é que é produtividade.', 'Fiscalização aprova: {c}.', 'Hum, que cheiro bom vindo daqui.', 'Indústria da fazenda funcionando!',
+  'Mais ocupado que eu, esse lugar.', 'Linha de produção em ordem.', 'Relatório: {c} em atividade.', 'Que fábrica caprichada.', 'Vou encomendar alguma coisa pro hostel.', 'Trabalho bonito por aqui.', 'Nota dez: {c}.', 'Que capricho nessa produção.',
+  'Isso vai render um bom dinheiro.', 'Tudo funcionando! Que orgulho.', 'Anota aí: {c} produzindo bem.', 'Barulho de progresso!', 'Tá saindo coisa boa daí.'];
+const LU_VIST_PARADA = ['{C} sem trabalho? Produz alguma coisa aí!', 'Anotado: {c} de férias.', 'Máquina parada não dá dinheiro, tomada!', 'Tá todo mundo cochilando aqui?', 'Ei, ninguém trabalhando aqui!', 'Fiscalização: {c} sem pedido.', 'Que silêncio nessa fábrica.', 'Sugestão: botar essa fábrica pra trabalhar.',
+  'Anota em vermelho: fábrica parada.', 'Vamos acordar essa máquina?', 'Tanta máquina e nada saindo!', 'Relatório: {c} esperando pedido.', 'Isso aqui podia estar produzindo.', 'Até a máquina tá entediada.', 'Ed, essa fábrica sente sua falta.',
+  'Hum, fábrica de enfeite agora?', 'Pede alguma coisa aqui, Ed!', 'Até a fábrica quer trabalhar.', 'Vazia e quietinha. Que desperdício.', 'Produzir é preciso, tomada!', 'Folga hoje, é?'];
+const LU_VIST_LAGO = ['Que lago bonito! Dá pra navegar.', 'Anotado: água limpinha.', 'Vou trazer as nanos pra nadar aqui.', 'Um oceano inteiro! Pra gente, pelo menos.', 'Que reflexo lindo.', 'Fiscalização aprova o lago.', 'Será que tem peixe grande aí?', 'Hum, cheirinho de água fresca.',
+  'Lago em ordem. Patos felizes.', 'Daria uma piscina pro hostel.', 'Anota: lago perfeito pra pescaria.', 'Não chego perto, que eu não sei nadar direito.', 'Que vista! Vou pendurar uma foto no saguão.', 'Relatório: lago lindo.', 'Água boa, fazenda feliz.', 'Os peixes me olharam feio.',
+  'Isso aqui é melhor que praia.', 'Nota dez pra natureza.', 'Ui, que friozinho vem da água.', 'Lago aprovado! E molhado.', 'Um dia eu atravesso isso de barquinho.'];
+const LU_VIST_FIM = ['Relatório pronto! Nota... oito e meio.', 'Vistoria concluída. Vou mandar o relatório.', 'Tudo anotado. Até a próxima vistoria!', 'Fiscalização encerrada! Tchau, tomada!', 'Anotei tudo! O Ed vai ler, né?', 'Vistoria feita. Agora, um chá no hostel.',
+  'Relatório: fazenda aprovada, com ressalvas.', 'Pronto! Missão de vistoria cumprida.', 'Vou deixar o relatório na porta da casa.', 'Ufa, fazenda grande cansa as perninhas.', 'Nota final: muito bom!', 'Anotações feitas, comandante satisfeita.', 'Até logo! Continuem trabalhando!',
+  'Vistoria concluída com sucesso.', 'Fazenda bonita. Mas tem coisa pra melhorar!', 'Próxima vistoria sem aviso, hein!', 'Relatório guardado. Fui!', 'Tô de olho, tomada!', 'Tudo registrado na prancheta.', 'Volto amanhã pra conferir!', 'Fim da inspeção. Que fazenda!'];
+const LU_VIST_ED = ['A Lúcia tá fazendo vistoria na fazenda?', 'Olha a comandante com a prancheta!', 'Tô sendo fiscalizado? Que medo.', 'Que nota será que eu tiro?', 'Ela anota tudo, hein!', 'Vistoria surpresa da Lúcia!', 'Será que eu passo na fiscalização?', 'Ih, lá vem relatório.', 'A Lúcia virou fiscal agora!',
+  'Pode anotar, tá tudo em ordem! Eu acho.', 'Fiscal de cinco centímetros, mas exigente.', 'Ela leva o trabalho a sério!', 'Espero que ela não veja o mato.', 'Prancheta e tudo! Profissional.', 'Comandante na área!', 'Ela tá inspecionando a fazenda inteira?', 'Que olhar crítico, hein.',
+  'Vou caprichar mais, pode deixar.', 'A Lúcia anotou alguma coisa sobre mim?', 'Fiscalização do Nano Hostel, olha só.', 'Lá vai ela de prancheta na mão.'];
+// os lugares da vistoria perto da câmera, cada um com o comentário que cabe: um canteiro do terreno (pelo que mais tem nele),
+// um bicho, uma fábrica e o lago
+function lugaresVistoria(){
+  const L = [], perto = (x, z) => pertoDaCamera(x, z, ARTE_LUCIA.perto);
+  LOTES.forEach((l, i) => {
+    if (!loteAberto(i) || !perto(l.x + 2, l.z + 2)) return;
+    const c = { maduro: 0, cuidado: 0, cresce: 0, vazio: 0 }, cult = {};
+    for (let dx = 0; dx < 4; dx++) for (let dz = 0; dz < 4; dz++){
+      const t = campo(l.x + dx, l.z + dz); if (!t) continue;
+      if (t.e !== 'plantado'){ c.vazio++; continue; }
+      cult[t.c] = (cult[t.c] || 0) + 1;
+      if (t.p) c.cuidado++; else if (t.prog >= 1) c.maduro++; else c.cresce++;
+    }
+    const k = Object.keys(cult).sort((a, b) => cult[b] - cult[a])[0], nome = k ? CULTURAS[k].nome.toLowerCase() : 'semente';
+    const tipo = c.cuidado ? 'cuidado' : c.maduro ? 'maduro' : c.cresce ? 'cresce' : 'vazio';
+    L.push({ x: l.x + 2, z: l.z + 4.25, olha: [l.x + 2, l.z + 2], lista: { maduro: LU_VIST_MADURO, cuidado: LU_VIST_CUIDADO, cresce: LU_VIST_CRESCE, vazio: LU_VIST_VAZIO }[tipo], rep: { c: nome } });
+  });
+  for (const a of ANI){
+    if (!perto(a.pos.x, a.pos.y) || a.nado) continue;
+    L.push({ bicho: a, x: a.pos.x, z: a.pos.y + 0.7, olha: [a.pos.x, a.pos.y], lista: a.d.e === 'fome' ? LU_VIST_FOME : LU_VIST_BICHO, rep: { c: ANIMAIS[a.d.tipo].nome.toLowerCase() } });
+  }
+  for (const id in FABRICAS){
+    const P = PREDIO[id]; if (!P || !estFab(id).feita) continue;
+    const cx = (P.x0 + P.x1 + 1) / 2, cz = (P.z0 + P.z1 + 1) / 2; if (!perto(cx, cz)) continue;
+    L.push({ x: P.porta[0] + 0.5, z: P.porta[1] + 0.6, olha: [cx, cz], lista: estFab(id).fila.length ? LU_VIST_FAB : LU_VIST_PARADA, rep: { c: FABRICAS[id].nome.toLowerCase() } });
+  }
+  for (const zz in LAGO){ const [a, b] = LAGO[zz], z = +zz; for (let x = a; x <= b; x += 3){ if (!perto(x + 0.5, z + 0.5)) continue; for (const dz of [1, -1]){ const t = tipo(x, z + dz); if (t && t !== 'lago' && t !== 'cerca' && t !== 'predio'){ L.push({ lago: true, x: x + 0.5, z: z + 0.5 + dz * 0.95, olha: [x + 0.5, z + 0.5], lista: LU_VIST_LAGO, rep: {} }); break; } } } }
+  // um bicho por cercado e um ponto de lago, no máximo, para variar
+  const vistos = new Set();
+  return L.filter(o => { const k = o.lago ? 'lago' : o.bicho ? 'b' + o.bicho.d.tipo : o.x + ',' + o.z; if (vistos.has(k)) return false; vistos.add(k); return true; });
+}
+const ARTES_LUCIA = {
+  vistoria: {
+    pode(){
+      if (periodo().id === 'noite' || chovendo()) return null;
+      const L = lugaresVistoria().sort(() => Math.random() - 0.5).slice(0, 3);
+      if (L.length < 2) return null;
+      // a ordem da visita: do mais perto do centro da câmera para o lado
+      L.sort((a, b) => Math.hypot(a.x - cam.alvo.x, a.z - cam.alvo.z) - Math.hypot(b.x - cam.alvo.x, b.z - cam.alvo.z));
+      return { paradas: L, x: L[0].x, z: L[0].z };
+    },
+    iniciar(A){
+      const [x, z] = bordaArte(A.x, A.z, 1.4); luciaDaArte(A, x, z);
+      A.prancheta = naMaoLucia(A, vPrancheta, 'prancheta', [0, 0.13, 0.07], [-0.35, 0, 0]);
+      A.i = 0;
+    },
+    passo(A, dt, t){
+      const n = A.lu;
+      if (A.fase === 'vem'){
+        const P = A.paradas[A.i];
+        if (luVai(n, P.x, P.z, dt)){ A.fase = 'anota'; A.ft = 0; olharArte(n, ...P.olha); falarLucia(A, P.lista, P.rep); Som.pop(); }
+      } else if (A.fase === 'anota'){
+        // olha e escreve na prancheta (a prancheta balança como se ela escrevesse)
+        A.prancheta.rotation.z = Math.sin(t * 22) * 0.08;
+        if (A.ft > 1.2 && !A.edViu){ A.edViu = true; reageEd(LU_VIST_ED, n.g.position.x, n.g.position.z); }
+        if (A.ft > 3.4){ A.prancheta.rotation.z = 0; A.i++; A.ft = 0; if (A.i < A.paradas.length) A.fase = 'vem'; else { A.fase = 'fim'; falarLucia(A, LU_VIST_FIM); } }
+      } else if (A.fase === 'fim'){ if (A.ft > 2.2) A.fase = 'foge'; }
+      else return luFoge(n, dt);
+      return false;
+    },
+  },
+};
 // ================= guardião da mata e trilha ecológica: modelos
 // o fogo: brasas embaixo e labaredas de vermelho a amarelo; fase muda as pontas, para tremer
 function vFogo(fase = 0){
@@ -35547,6 +35724,7 @@ function quadro(agoraP){
   atualizarCaminhao(dt);
   for (const a of ANI) a.update(dt, t);
   atualizarArteNano(dt, t);
+  atualizarArteLucia(dt, t);
   atualizarOndas(dt);
   atualizarGalos(dt, t);
   for (const b of BOLHAS){ b.position.y = b.userData.base + Math.sin(t * 3 + (b.userData.fase || 0)) * 0.04; }
@@ -35784,7 +35962,7 @@ async function iniciar(){
   requestAnimationFrame(quadro);
   // num jogo novo a cena inicial começa sozinha e a ajuda de começo abre no fim dela
   if (!novo && fora > 60) setTimeout(() => aviso('A fazenda continuou crescendo enquanto você estava fora!'), 400);
-  window.__fazenda = { mapaDebug: { tipo, andavel, W, H, ZONAS }, feira: ganchoFeira(), resgate: ganchoResgate(), planeta: { PLANETA, viagem: () => viagem, obj: () => S.planeta, vis: () => PLANETA_VIS, foguete: () => FOG_VIS, feira: () => abrirFeiraPlaneta(cine), trocar: trocarNoPlaneta, motivo: motivoViagem }, bloco: { BLOCO, estado: () => bloco, sair: sairBloco, entrar: entrarNoBloco, acabar: acabarBloco, motivo: motivoBloco }, engenho: { CANAVIAL, vis: () => CANAVIAL_VIS, colher: colherCanavial, estagio: estagioCanavial }, pier: { PIER, PEIXES, obj: () => S.peixes, vis: () => PIER_VIS, racao: jogarRacaoPeixes, lixo: tirarLixoLago, caderno: abrirCadernoPeixes }, aniversario: { ANIV, obj: () => S.aniversario, vis: () => anivVis, montar: montarAniversario, desmontar: desmontarAniversario, parabens: comecarParabens, conferir: conferirAniversario, agendar: agendarAniversario }, trem: { TREM, TRILHO, vis: () => TREM_VIS, passear: passearDeTrem, grupo: novoGrupoTrem, partir: partirTrem, parada: PARADA_TREM }, pipas: { PIPAS, obj: () => festaPipas, jogo: () => jogoPipa, montar: montarPipas, desmontar: desmontarPipas, jogar: comecarJogoPipa, toque: toquePipa, motivo: motivoPipas }, estufa: { ESTUFA, obj: () => estufa(), plantar: plantarEstufa, colher: colherEstufa, vis: () => ESTUFA_VIS, posVaso: posVasoEstufa }, nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: (id, extra) => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, Object.assign(l, extra)) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => n.g.getWorldPosition(new THREE.Vector3()).toArray()) }, encerrar: () => encerrarArteNano(), prox: () => arteNanoProx, chapeu: () => chapeuFora, visita: { chamar: () => chamarBeto(), despedir: () => despedirBeto(), estado: () => caminhaoE.estado, caminhao: () => caminhao } }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, VINHETAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
+  window.__fazenda = { mapaDebug: { tipo, andavel, W, H, ZONAS }, feira: ganchoFeira(), resgate: ganchoResgate(), planeta: { PLANETA, viagem: () => viagem, obj: () => S.planeta, vis: () => PLANETA_VIS, foguete: () => FOG_VIS, feira: () => abrirFeiraPlaneta(cine), trocar: trocarNoPlaneta, motivo: motivoViagem }, bloco: { BLOCO, estado: () => bloco, sair: sairBloco, entrar: entrarNoBloco, acabar: acabarBloco, motivo: motivoBloco }, engenho: { CANAVIAL, vis: () => CANAVIAL_VIS, colher: colherCanavial, estagio: estagioCanavial }, pier: { PIER, PEIXES, obj: () => S.peixes, vis: () => PIER_VIS, racao: jogarRacaoPeixes, lixo: tirarLixoLago, caderno: abrirCadernoPeixes }, aniversario: { ANIV, obj: () => S.aniversario, vis: () => anivVis, montar: montarAniversario, desmontar: desmontarAniversario, parabens: comecarParabens, conferir: conferirAniversario, agendar: agendarAniversario }, trem: { TREM, TRILHO, vis: () => TREM_VIS, passear: passearDeTrem, grupo: novoGrupoTrem, partir: partirTrem, parada: PARADA_TREM }, pipas: { PIPAS, obj: () => festaPipas, jogo: () => jogoPipa, montar: montarPipas, desmontar: desmontarPipas, jogar: comecarJogoPipa, toque: toquePipa, motivo: motivoPipas }, estufa: { ESTUFA, obj: () => estufa(), plantar: plantarEstufa, colher: colherEstufa, vis: () => ESTUFA_VIS, posVaso: posVasoEstufa }, luciaArte: { artes: ARTES_LUCIA, estado: () => arteLucia, forcar: (id, extra) => { if (arteLucia) encerrarArteLucia(); const l = ARTES_LUCIA[id].pode(); return l ? !!iniciarArteLucia(id, Object.assign(l, extra)) : false; } }, nanoArt: { rig: nanoRig, pose: poseNano, cena: () => scene, artes: ARTES_NANO, forcar: (id, extra) => { if (arteNano) encerrarArteNano(); const l = ARTES_NANO[id].pode(); return l ? !!iniciarArteNano(id, Object.assign(l, extra)) : false; }, estado: () => arteNano && { id: arteNano.id, fase: arteNano.fase, t: arteNano.t, x: arteNano.x, z: arteNano.z, nanos: arteNano.nanos.map(n => n.g.getWorldPosition(new THREE.Vector3()).toArray()) }, encerrar: () => encerrarArteNano(), prox: () => arteNanoProx, chapeu: () => chapeuFora, visita: { chamar: () => chamarBeto(), despedir: () => despedirBeto(), estado: () => caminhaoE.estado, caminhao: () => caminhao } }, flores: { rendColmeia, floresDaColmeia, floresComAbelha, itensColmeia, ABELHAS, COLMEIA_SLOTS, FLOR_COLMEIA, itensEnfeite }, reservaPedidos, separadoPedidos, aCaminhoDasFabricas, receitaQueFaz, estFab, RECEITAS, lucia: { visita: visitaDaLucia, obj: () => lucia, pegar: pegarAluguel }, musica: { TEMAS, VINHETAS, Musica }, itensDoAlvo: itensDoAlvoBase, canto: { arrendar: arrendarCanto, itens: itensCanto, tirar: executarTirarCerca }, cercados: { comprar: comprarCercado, itens: itensCercadoLote, em: cercadoEm, pasto: PASTO_CERCADO, tipo: (x, z) => tipo(x, z), andavel: (x, z) => andavel(x, z), rota: (a, b, c, d) => rota(a, b, c, d), animais: () => ANI.map(a => ({ tipo: a.d.tipo, c: a.d.c || 0, x: a.pos.x, z: a.pos.y })), comprarAnimal: (tp, c) => comprarAnimal(tp, c), max: tp => maxAnimais(tp), cap: (tp, c) => capCercado(tp, c), comprarPomar: b => comprarPomarLote(b), pomarLote: b => itensPomarLote(b), placas: () => Object.keys(PLACA_CERCADO), beirada: (x, z) => ladrilhoDeBeirada(x, z), livre: (x, z) => livreParaEnfeite(x, z), galos: () => GALOS },
     galo: { obj: id => GALOS[id], passo: (G, t) => atualizarGalo(G, 0, t || 0), cantar: (id, f) => galoCantar(GALOS[id], f), alarme: m => galoAlarme(m), fugir: id => fugirGalo(id ? GALOS[id] : null), tocar: id => tocarGalo(id), forcarCiume: () => { forcarCiume = true; }, forcarPintinho: () => { forcarPintinho = true; }, proxFujao: v => { proxFujao = v; }, lugar: id => lugarDoEdNoGalo(GALOS[id]), simular: () => simularAnimais(), bicho: id => ANI.find(a => a.d.id === id), PINTINHO, GALO_JOGO, ed: () => ed, luma: () => luma }, objetivos: objetivosPorNivel, matagal: MATAGAL, transito: { soltar: soltarVeiculo, obj: () => carroRua, lista: () => TRAFEGO, espera: () => transitoEspera, saudacao: saudacaoDoEd }, redemoinho: { iniciar: iniciarRedemoinho, obj: () => rd, saci: () => saci, mesh: () => rdMesh, espera: () => rdEspera }, abrirCreditos, nano: () => nanoHostel, mataCine: () => mataCine, bichosNovos: { BICHOS_NOVOS, soltar: soltarBichoNovo, obj: () => bichoNovo, sumir: sumirBichoNovo, prox: () => proxBichoNovo, beiras: beirasLago, arvores: arvoresPomarNaTela, colmeias: colmeiasNaTela, sorteia: sorteiaNovo,
       lugares: () => { const zs = Object.keys(LAGO).map(Number), zl = zs[zs.length >> 1]; return { orla: [Math.min(COL_CURVA - 8, 20), Z_MATA - 1.5], lago: [(LAGO[zl][0] + LAGO[zl][1]) / 2, zl], pomar: POMAR_SLOTS[0], galinheiro: POUSO_GALO.galinheiro.fora, cachoeira: VISITA_CACHOEIRA.centro, colmeia: COLMEIA_SLOTS[(S.colmeias || []).findIndex(Boolean)] || COLMEIA_SLOTS[0] }; } },
     bichosMata: { soltar: soltarBichoMata, obj: () => bichoMata, prox: () => proxBichoMata, copas: copasDaBeira, BICHOS_MATA, sorteia: sorteiaBicho, cavando: tatuCavando, capivaras: { soltar: soltarCapivaras, obj: () => capivaras, descansando: capivarasDescansando, beiras: beirasCapivara, CAPIVARAS }, flamingos: { soltar: soltarFlamingos, obj: () => flamingos, pousos: pousoFlamingos, sumir: sumirFlamingos, FLAMINGOS, avancar: seg => { const t0 = performance.now() / 1000; for (let i = 0; i < Math.round(seg / 0.05); i++) atualizarFlamingos(0.05, t0 + i * 0.05); } }, beijaFlor: { soltar: soltarBeijaFlor, obj: () => beijaFlor, BEIJA_FLOR }, cachoeira: { soltar: soltarVisitaCachoeira, obj: () => visitaCachoeira, beiras: beirasCachoeira, CACHOEIRA, nados, NADO, nadar: A => { const X = A === 'dani' ? AJUDA.dani : AJUDA.hud, c = NADO.chance; X.esperaNado = 0; NADO.chance = 1; const r = nadarAjudante(X, X.p(), 0.016); NADO.chance = c; return r; }, aberta: cachoeiraAberta } }, disco: { circulo: { forcar: () => { discoJogo.forcarCirculo = true; discoJogo.prox = 0; }, fazer: fazerCirculo, lote: loteParaCirculo, grupo: () => grupoCirculo, soltar: soltarGrupoCirculo, CIRCULO }, sinal: { comecar: comecarSinal, obj: () => sinal, tocar: tocarSinal, pode: podeSinal, itens: itensDisco, SINAL }, persegue: () => { discoJogo.forcarPersegue = true; discoJogo.prox = 0; }, faxina: () => { discoJogo.forcarFaxina = true; discoJogo.prox = 0; }, mato: () => matoParaFaxina(), passar: () => { discoJogo.prox = 0; }, abduzir: () => { discoJogo.forcarAbducao = true; discoJogo.prox = 0; }, puxar: () => { discoJogo.forcarPuxar = true; discoJogo.prox = 0; }, puxao: () => puxao, obj: () => discoJogo, abducao: () => abducao, presente: { soltar: presenteEt, obj: () => caixaEt, abrir: abrirCaixaEt }, visita: { forcar: () => { discoJogo.forcarVisita = true; discoJogo.prox = 0; }, obj: () => etVisita, itens: itensEt, trocar: trocarEt, pedido: pedidoEt, temDisco: temDiscoJardim, VISITA_ET } }, mataProdutos: { preco, aceitaDe, presenteMilton, gerarPedido, travaReceita, itensFabrica, abrirBeto, simularFabricas }, guardiao: { criar: criarOcorrencia, enfileirar, fila: () => fila, checar, obj: () => ocorrencia, saude: saudeMata, estado: estadoMata, prox: v => { proxOcorrencia = v; } }, trilha: { chamar: chamarVisitantes, grupo: () => grupoTrilha, construir: construirMirante, mini: () => miniMirante, nanos: () => nanoHostel }, Musica, relogio: { get: () => S.relogio, set: x => { S.relogio = x; }, periodo, LUZ }, minutosDeRacao, PACOTES_RACAO, hud, TEMAS, VINHETAS, econ: { mesada: () => ({ hud: precoHud(), dani: precoDani() }), gerarPedido, PRODUTOS, vender, ofertaDoDia, valorVenda, cheiosDe, demandaVisita, FREGUESIA,
