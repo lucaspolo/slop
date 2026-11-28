@@ -15741,6 +15741,16 @@ function lugaresVistoria(){
   const vistos = new Set();
   return L.filter(o => { const k = o.lago ? 'lago' : o.bicho ? 'b' + o.bicho.d.tipo : o.x + ',' + o.z; if (vistos.has(k)) return false; vistos.add(k); return true; });
 }
+// ---- carona na Luma: com a Luma brincando lá fora perto da câmera, a Lúcia sobe nas costas dela e a Luma sai correndo pela
+// grama enquanto ela dá ordens no megafone; quando a Luma para, ela desce tonta, rodando, e vai embora cambaleando
+const LU_LUMA_ORDENS = ['Esquerda, Luma! Esquerda!', 'Direita! A outra direita!', 'Mais rápido, Luma!', 'Freia! Freia! Não, continua!', 'Vira! Vira!', 'Atenção, fazenda: Luma passando!', 'Abram caminho para a comandante!', 'Galopa, Luma, galopa!', 'Rumo ao horizonte!', 'Cuidado com o canteiro!',
+  'Isso, Luma! Que cachorra obediente!', 'Agora em círculos!', 'Velocidade de foguete!', 'Uhuuu! Segura, Lúcia!', 'Luma, você tá indo pro lado errado!', 'Para a frente, marchando!', 'Olha a curva! Olha a curva!', 'Quem precisa de metrô?', 'Desvia da galinha!', 'Mais devagar! Não, mais rápido!', 'A comandante está no comando! Mais ou menos.'];
+const LU_LUMA_TONTA = ['Tô vendo três Lumas...', 'A fazenda tá girando ou sou eu?', 'Ui... que tontura boa.', 'Onde fica o hostel mesmo?', 'De novo! Mas daqui a pouco.', 'Meu laço foi pra onde?', 'Acho que deixei meu estômago lá atrás.', 'Que passeio! Ai, minha cabeça.', 'Comandante... tontinha.',
+  'Alguém segura o chão, por favor.', 'Nota dez pra Luma. Nota dois pro meu equilíbrio.', 'Uau... estrelinhas de dia.', 'Vou precisar de um chá.', 'Tudo rodando, tudo lindo.', 'A Luma corre mais que foguete!', 'Eita, cadê meu megafone? Ah, tá aqui.', 'Andar em linha reta agora é difícil.',
+  'Próxima carona, com cinto!', 'Isso foi melhor que montanha-russa.', 'Ufa! Chão firme. Ou quase.', 'Tchau, Luma... ops, cadê a Luma?'];
+const LU_LUMA_ED = ['A Lúcia montou na Luma!', 'Olha a comandante de cavaleira!', 'Luma, vai devagar com a Lúcia!', 'Isso é passeio ou corrida?', 'A Lúcia dando ordem até pra cachorra!', 'Que dupla, essas duas!', 'Segura firme, Lúcia!', 'A Luma tá adorando a passageira.', 'Lúcia, a Luma não entende megafone!',
+  'Lá vão elas! Abram caminho!', 'Cuidado com os canteiros, hein!', 'Que cena! Alguém fotografa!', 'A Luma virou o táxi do hostel.', 'Tá mandando bem, Lúcia!', 'Isso vai acabar em tontura.', 'Luma, obedece a comandante!', 'Que velocidade!', 'Ela nem segura no pelo, que coragem.',
+  'Volta inteira, hein, Lúcia!', 'Passeio de primeira classe.', 'Eu nunca consegui fazer a Luma obedecer assim.'];
 const ARTES_LUCIA = {
   vistoria: {
     pode(){
@@ -15770,6 +15780,55 @@ const ARTES_LUCIA = {
       else return luFoge(n, dt);
       return false;
     },
+  },
+  luma: {
+    pode(){
+      if (!lumaLivre() || !luma.g.visible || !pertoDaCamera(luma.pos.x, luma.pos.y, ARTE_LUCIA.perto)) return null;
+      return { x: luma.pos.x, z: luma.pos.y };
+    },
+    iniciar(A){
+      const L = luma; L.acao = 'nanos'; L.pontos = []; L.ta = 0; L.angAlvo = L.ang;
+      const [x, z] = bordaArte(L.pos.x, L.pos.y, 1.1); luciaDaArte(A, x, z);
+      A.mega = malha(geo('fgMegafone', () => vMegafone().build(NANO.sNano / 2, { origin: [0.5, 0, 0.5], jitter: 0.02 })));
+      A.mega.position.set(...LUCIA.megafone.map(v => v * LUCIA.escala)); A.lu.g.add(A.mega);
+      A.centro = [L.pos.x, L.pos.y];
+    },
+    passo(A, dt, t){
+      const L = luma, n = A.lu, g = n.g;
+      // a Luma foi chamada para outra coisa: a Lúcia desce e vai embora
+      if (L.estado !== 'fora' || L.acao !== 'nanos' || !L.g.visible){ if (g.parent !== scene){ const w = g.getWorldPosition(new THREE.Vector3()); g.parent.remove(g); scene.add(g); g.position.copy(w); } n.some = true; return n.cresce <= 0; }
+      const late = (lista = FALAS_LUMA_MONTA) => { Som.au(); const f = variar(lista); falar(L, f, tempoDeLeitura(f)); };
+      if (A.fase === 'vem'){
+        // a Luma espera parada (se virasse para ela, as costas fugiriam)
+        if (luVai(n, L.pos.x - Math.sin(L.ang) * 0.3, L.pos.y - Math.cos(L.ang) * 0.3, dt, 0.55)){ A.fase = 'sobe'; A.ft = 0; A.de = g.position.clone(); falarLucia(A, ['Luma! Carona!', 'Abaixa, Luma, que eu subo!', 'Luma, preciso de uma carona!', 'Comandante embarcando!', 'Segura, Luma, que lá vou eu!']); }
+        if (A.t > 14) A.fase = 'foge';
+      } else if (A.fase === 'sobe'){
+        const para = L.g.position.clone().add(new THREE.Vector3(0, LUMA_COSTAS, 0)), k = Math.min(1, A.ft / 0.45);
+        g.position.lerpVectors(A.de, para, k); g.position.y += Math.sin(k * Math.PI) * 0.25;
+        if (k >= 1){ L.g.add(g); g.position.set(0, LUMA_COSTAS, -0.04); g.rotation.set(0, 0, 0); A.fase = 'passeia'; A.ft = 0; A.tVolta = 0; A.tOrdem = 0.8; late(); reageEd(LU_LUMA_ED, L.pos.x, L.pos.y); L.vel = 2.1; }
+      } else if (A.fase === 'passeia'){
+        // a Luma corre em zigue-zague pela grama e a Lúcia grita as ordens, com o megafone apontado para a frente
+        g.position.set(0, LUMA_COSTAS + Math.abs(Math.sin(t * 11)) * 0.018, -0.04); g.rotation.set(0, 0, Math.sin(t * 7) * 0.12);
+        L.L.rabo.rotation.z = Math.sin(t * 18) * 0.5;
+        if (!L.pontos.length && (A.tVolta -= dt) <= 0){ A.tVolta = rnd(0.1, 0.4); const a = rnd(0, Math.PI * 2), x = A.centro[0] + Math.sin(a) * rnd(0.8, 1.7), z = A.centro[1] + Math.cos(a) * rnd(0.8, 1.7); if (chaoLuma(Math.floor(x), Math.floor(z))) lumaIr(x, z, 2.1); }
+        if ((A.tOrdem -= dt) <= 0){ A.tOrdem = rnd(1.8, 2.6); falar(n.fala, variar(LU_LUMA_ORDENS), 1.7); Som.tom(700, 0.06, 'square', 0.015); }
+        if (A.ft > 3.5 && !A.latiu){ A.latiu = true; late(); }
+        if (A.ft > 10 && !L.pontos.length){
+          const w = g.getWorldPosition(new THREE.Vector3()); L.g.remove(g); scene.add(g); g.position.copy(w); g.rotation.set(0, L.ang + Math.PI / 2, 0);
+          A.fase = 'desce'; A.ft = 0; A.de = w; A.para = new THREE.Vector3(L.pos.x + Math.cos(L.ang) * 0.45, 0, L.pos.y - Math.sin(L.ang) * 0.45); L.vel = LUMA_JOGO.vel;
+        }
+      } else if (A.fase === 'desce'){
+        const k = Math.min(1, A.ft / 0.45); g.position.lerpVectors(A.de, A.para, k); g.position.y += Math.sin(k * Math.PI) * 0.2;
+        if (k >= 1){ A.fase = 'tonta'; A.ft = 0; poeira(g.position.x, g.position.z); falarLucia(A, LU_LUMA_TONTA); late(); }
+      } else if (A.fase === 'tonta'){
+        // roda devagar, balançando, com estrelinhas em volta da cabeça
+        g.rotation.y += dt * 2.6; g.rotation.z = Math.sin(t * 5) * 0.18; g.position.x += Math.sin(t * 3) * dt * 0.08;
+        if (Math.random() < dt * 8){ const a = t * 6 + rnd(0, 6), q = faisca(g.position.x + Math.cos(a) * 0.12, 0.36, g.position.z + Math.sin(a) * 0.12, 0xffe066); q.v.set(0, 0.1, 0); q.g = 0; q.vida = 0.5; }
+        if (A.ft > 3){ g.rotation.z = 0; A.fase = 'foge'; }
+      } else return luFoge(n, dt);
+      return false;
+    },
+    limpar(){ const L = luma; if (L && L.acao === 'nanos' && L.estado === 'fora'){ L.vel = LUMA_JOGO.vel; L.acao = 'buscar'; L.ta = 0; if (!lumaAteBola()) lumaVoltar(); } },
   },
 };
 // ================= guardião da mata e trilha ecológica: modelos
