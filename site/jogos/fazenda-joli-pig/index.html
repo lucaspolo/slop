@@ -16037,6 +16037,18 @@ function constelacaoArte(A, cx, cy, cz){
 }
 // acende e apaga devagar (k de 0 a 1 e de volta)
 function brilhoConstelacao(g, k){ g.traverse(o => { if (o.material) o.material.opacity = o.isLine ? k * 0.8 : k; }); }
+// ---- dia de chuva: com chuva, ela atravessa perto da câmera aos pulinhos, com uma folha de guarda-chuva, e uma nano vem
+// atrás de tampinha na cabeça. No meio do caminho ela para, sacode a folha e reclama da chuva (o foguete de garrafa encheu
+// de água, o hostel pingando); a nano responde e as duas seguem até o outro lado
+const LU_CHUVA = ['Choveu dentro do foguete! Agora ele é um aquário.', 'O foguete de garrafa encheu de água até a tampa!', 'Minha pantufa virou piscina.', 'Essa chuva não tem hora pra acabar?', 'O telhado do hostel tá pingando de novo!',
+  'Folha de bananeira: o melhor guarda-chuva nano.', 'Se continuar assim, o foguete vai sair navegando.', 'Molhou meu laço! Logo o laço!', 'Tomada, sua fazenda virou um lago!', 'Cada gota dessa é um balde pra uma nano!',
+  'O NANO-1 virou barco. Missão cancelada.', 'Quem deixou a tampa do foguete aberta?!', 'Vou ter que secar o foguete com secador.', 'Hoje ninguém lança nada. Só se for de submarino.', 'Pelo menos as plantas estão felizes.',
+  'Pisei numa poça do tamanho do hostel!', 'Meu cabelo vai ficar armado o dia inteiro.', 'Chuva boa pra horta, ruim pra cabelo nano.', 'Fechem as janelinhas do hostel!', 'O foguete tá cheio. Vou fazer suco de chuva.', 'Esse céu tá chorando demais hoje.'];
+const NANO_CHUVA = ['Espera, Lúcia!', 'Minha tampinha tá vazando!', 'Que gota gigante!', 'Splash! Pisei na poça!', 'A tampinha é a melhor!', 'Tô ensopada!', 'Brr, que frio!', 'Vamos correr!', 'Eu gosto de chuva!', 'Achei uma minhoca!',
+  'Atchim!', 'A gente podia brincar na poça!', 'Divide a folha comigo?', 'Choveu no meu biscoito!', 'Pula a poça! Pula!', 'Olha o trovão!', 'Minhas pantufas fazem squish!', 'Bora pro hostel!', 'Tem um sapinho ali!', 'Uiii, escorreguei!', 'Pelo menos a horta tá feliz!'];
+const LU_CHUVA_ED = ['A Lúcia de guarda-chuva de folha!', 'Cuidado com as poças, Lúcia!', 'Até as nanos se viram na chuva.', 'Tampinha de chapéu, essa é boa.', 'Corre pro hostel, Lúcia!', 'Que chuvarada, hein?', 'Folha de guarda-chuva, que esperta!',
+  'Não vão se resfriar!', 'O foguete encheu de água? Hahaha!', 'Chuva boa pra horta, pelo menos.', 'Lúcia, quer um guarda-chuva de verdade?', 'Coitadas, ensopadas!', 'Que dupla mais molhadinha.', 'Pulando poça, olha só.',
+  'Elas não perdem a pose nem na chuva.', 'Vou fazer um chocolate quente pra elas.', 'Cuidado pra não sair boiando!', 'Até a chuva fica mais divertida com elas.', 'Corre, corre!', 'Hostel com goteira? Vou ver isso.', 'Que dia pra passear!'];
 const ENC_LUCIA = { milton: { p: () => milton, pares: LU_ENC_MILTON }, pelucio: { p: () => pelucio, pares: LU_ENC_PELUCIO }, hud: { p: () => irmaoHud, pares: LU_ENC_HUD }, dani: { p: () => irmaoDani, pares: LU_ENC_DANI } };
 // quem pode receber a visita: no chão, sem estar sentado, montado ou no balanço
 const livreParaLucia = P => !!P && P.g.visible && !P.alt && !P.sentado && !P.montado && !P.giro && ['parado', 'trabalhando', 'andando'].includes(P.estado);
@@ -16409,6 +16421,54 @@ const ARTES_LUCIA = {
       return false;
     },
     limpar(){ esconderKevinLucia(); },
+  },
+  chuva: {
+    prioridade: 1,
+    pode(){
+      if (!chovendo()) return null;
+      // atravessa de um lado ao outro da câmera, num lugar andável
+      for (let i = 0; i < 20; i++){
+        const a = rnd(0, Math.PI * 2), r = 2.2, de = [cam.alvo.x + Math.sin(a) * r, cam.alvo.z + Math.cos(a) * r], ate = [cam.alvo.x - Math.sin(a) * r, cam.alvo.z - Math.cos(a) * r];
+        if (![de, ate].every(([x, z]) => x > 0.5 && z > 0.5 && x < W - 0.5 && z < H - 0.5 && !naAgua(x, z))) continue;
+        let ok = true; for (let k = 0; k <= 8 && ok; k++){ const x = lerp(de[0], ate[0], k / 8), z = lerp(de[1], ate[1], k / 8); if (naAgua(x, z) || !andavel(Math.floor(x), Math.floor(z))) ok = false; }
+        if (ok) return { x: cam.alvo.x, z: cam.alvo.z, de, ate };
+      }
+      return null;
+    },
+    iniciar(A){
+      luciaDaArte(A, ...A.de);
+      // a folha de guarda-chuva, de cabeça para baixo em cima dela
+      A.folha = new THREE.Group(); const fm = malha(geo('folhaBarco', () => vFolhaBarco().build(NANO.sNano, { origin: [0.5, 0, 0.5] }))); fm.rotation.x = Math.PI; A.folha.add(fm);
+      // atravessada de ombro a ombro: de frente para a câmera ela fica larga e baixinha, e não cobre o rosto
+      A.folha.rotation.y = Math.PI / 2; A.folha.position.y = 0.35; A.lu.g.add(A.folha);
+      const lado = Math.atan2(A.ate[0] - A.de[0], A.ate[1] - A.de[1]);
+      A.n = nanoDaArte(A, A.de[0] - Math.sin(lado) * 0.5, A.de[1] - Math.cos(lado) * 0.5);
+      A.tampa = malha(geo('tampinha', () => vTampinha().build(NANO.sNano, { origin: [0.5, 0, 0.5] }))); A.tampa.rotation.x = Math.PI; A.tampa.position.y = 0.37; A.n.g.add(A.tampa);
+      A.meio = [lerp(A.de[0], A.ate[0], 0.5), lerp(A.de[1], A.ate[1], 0.5)];
+    },
+    passo(A, dt, t){
+      const lu = A.lu, n = A.n, atras = (x, z) => { const d = Math.atan2(A.ate[0] - A.de[0], A.ate[1] - A.de[1]); return [x - Math.sin(d) * 0.4, z - Math.cos(d) * 0.4]; };
+      // respingos nos pulinhos
+      if (Math.random() < dt * 6) particula(lu.g.position.x + rnd(-0.06, 0.06), 0.03, lu.g.position.z + rnd(-0.06, 0.06), 0x8fd0f0, 0.6);
+      if (A.fase === 'vem'){
+        const ok = luVai(lu, ...A.meio, dt, 0.55); nanoVai(n, ...atras(...A.meio), dt, 0.5);
+        if (ok){ A.fase = 'reclama'; A.ft = 0; olharArte(lu, camera.position.x, camera.position.z); }
+      } else if (A.fase === 'reclama'){
+        // sacode a folha (gotas caindo) e reclama; a nano chega e responde
+        const sac = A.ft < 1 ? Math.sin(A.ft * 30) * 0.25 : 0; A.folha.rotation.x = sac;
+        if (A.ft < 1 && Math.random() < dt * 25) particula(lu.g.position.x + rnd(-0.12, 0.12), 0.32, lu.g.position.z + rnd(-0.12, 0.12), 0x8fd0f0, -0.4);
+        if (nanoVai(n, ...atras(...A.meio), dt, 0.5)){ poseNano(n.rig, dt, 'parado'); olharArte(n, lu.g.position.x, lu.g.position.z); }
+        if (A.ft > 1 && !A.falou){ A.falou = true; const f = falarLucia(A, LU_CHUVA); A.tf = tempoDeLeitura(f); reageEd(LU_CHUVA_ED, A.meio[0], A.meio[1]); }
+        if (A.falou && !A.nf && A.ft > 1.2 + A.tf){ A.nf = true; falarNano(n, NANO_CHUVA); }
+        if (A.nf && A.ft > 3.6 + A.tf){ A.fase = 'vai'; A.ft = 0; }
+      } else if (A.fase === 'vai'){
+        // segue até o outro lado e some
+        if (!lu.some && luVai(lu, ...A.ate, dt, 0.6)) lu.some = true;
+        if (!n.some && nanoVai(n, ...A.ate, dt, 0.55)) n.some = true;
+        return lu.some && n.some && lu.cresce <= 0 && n.cresce <= 0;
+      }
+      return false;
+    },
   },
   estrelas: {
     prioridade: 1,
