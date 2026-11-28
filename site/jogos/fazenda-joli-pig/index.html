@@ -13686,6 +13686,65 @@ function entregarPedidoHostel(){
   const f = variar(FALAS_ED_HOSTEL); falar(ed, f, tempoDeLeitura(f));
   hud(); salvar();
 }
+// ================= o aniversário da Lúcia (o Lucas pediu mais coisas da Lúcia): a cada LUCIA_ANIV.cada dias do jogo, as
+// nanos enchem balões e penduram uma faixa na frente do celeiro (o dia inteiro) e, com o hostel perto da câmera, fazem a festa (a arte
+// 'aniversario'). Nesse dia o Ed pode levar um bolo de fubá do celeiro até o hostel (tarefa 'boloLucia'): ela sai para
+// receber, as nanos cantam e ele ganha XP e uma fala só dele. O dia em que ele levou fica no save (S.anivLuciaBolo)
+const LUCIA_ANIV = { cada: 12, resto: 5, xp: 40, perto: [14, 6.2], baloes: [[-0.42, 0.18, 0xe0408a], [-0.3, 0.42, 0xf2c335], [0.38, 0.3, 0x6fa8dc], [0.5, 0.05, 0x6cbf52], [-0.55, -0.12, 0xb06fdc]] };
+const anivLuciaHoje = () => !!S && !!S.viuCineLucia && diaAtual() % LUCIA_ANIV.cada === LUCIA_ANIV.resto;
+const FALAS_ED_ANIV_LUCIA = ['Parabéns, Lúcia! Trouxe um bolo de fubá pra você!', 'Feliz aniversário, dona do hostel!', 'Lúcia, esse bolo é seu. Dá pra todo o hostel!', 'Parabéns, comandante! Muitos foguetes retos pra você!',
+  'Feliz aniversário, Lúcia! Pode me chamar de tomada o dia inteiro hoje.', 'Um bolo inteiro pra uma nano! Vai durar um ano.', 'Parabéns, Lúcia! A melhor inquilina da fazenda.', 'Feliz aniversário! Assopra a velinha!',
+  'Lúcia, o bolo é do tamanho do hostel, mas é de coração.', 'Parabéns! Que venham muitos aluguéis em dia!', 'Feliz aniversário, Lúcia! Obrigado por animar a fazenda.', 'Trouxe bolo de fubá, o preferido das nanos!',
+  'Parabéns, Lúcia! Faz um pedido bem grande.', 'Feliz aniversário pra nano mais arteira!', 'Lúcia, hoje é dia de festa no hostel!', 'Parabéns! Esse bolo saiu quentinho da padaria.', 'Feliz aniversário! Guarda um pedaço pra Luma.',
+  'Parabéns, Lúcia! Você merece o bolo inteiro.', 'Feliz aniversário, dona Lúcia!', 'Parabéns! Pode deixar que o Kevin não assusta ninguém hoje.', 'Lúcia, feliz aniversário! A fazenda é mais feliz com você.'];
+let anivLuciaVis = null, anivLuciaVisDia = null, festaLuciaDia = -1;
+// os enfeites: balões em volta do hostel e a faixa num varalzinho, virados para a câmera de sempre
+function montarAnivLucia(){
+  anivLuciaVisDia = anivLuciaHoje() ? diaAtual() : -1;
+  if (anivLuciaVis){ scene.remove(anivLuciaVis); const k = pickaveis.indexOf(anivLuciaVis); if (k >= 0) pickaveis.splice(k, 1); anivLuciaVis = null; }
+  if (anivLuciaVisDia < 0) return;
+  const g = new THREE.Group(), [lx, lz] = lugarFestaLucia();
+  g.position.set(lx + 0.5, 0, lz + 0.5); anivLuciaVis = g;
+  const linha = new THREE.LineBasicMaterial({ color: 0xffffff });
+  for (const [x, z, cor] of LUCIA_ANIV.baloes){
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), new THREE.MeshLambertMaterial({ color: cor })); b.scale.y = 1.2; b.position.set(x, 0.42 + (x + z) * 0.05, z); g.add(b);
+    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 0, z), b.position.clone().add(new THREE.Vector3(0, -0.06, 0))]), linha));
+  }
+  // a faixa entre dois palitos, na frente do hostel do lado da câmera
+  const faixa = new THREE.Group(); faixa.position.set(0.05, 0, -0.2); faixa.rotation.y = Math.PI / 4; g.add(faixa);
+  const madeira = new THREE.MeshLambertMaterial({ color: 0xd9bf8c });
+  for (const x of [-0.3, 0.3]){ const pe = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.34, 0.018), madeira); pe.position.set(x, 0.17, 0); faixa.add(pe); }
+  const pl = placaDeTexto(texturaTexto([['PARABÉNS, LÚCIA!', 1, '#e0408a']], 256, 48, '#fff6d8', '#f2c335'), 0.6, 0.11); pl.position.set(0, 0.27, 0.012); faixa.add(pl);
+  g.traverse(o => { o.userData.alvo = { k: 'anivLucia', x: lx, z: lz }; });
+  scene.add(g); pickaveis.push(g);
+}
+// o hostel fica atrás do celeiro, escondido da câmera de sempre: a festa e a faixa ficam num gramado livre perto da frente do
+// celeiro (o mais perto de LUCIA_ANIV.perto), onde dá para ver; o Ed entrega o bolo no ladrilho da frente (no da festa, a faixa
+// ficava na frente dele)
+function lugarFestaLucia(){
+  const [px, pz] = LUCIA_ANIV.perto; let melhor = null, dm = Infinity;
+  for (let z = 5; z <= 9; z++) for (let x = 9; x <= 18; x++){ if (!andavel(x, z) || !livreParaEnfeite(x, z)) continue; const d = Math.hypot(x + 0.5 - px, z + 0.5 - pz); if (d < dm){ dm = d; melhor = [x, z]; } }
+  return melhor || [13, 6];
+}
+function itensAnivLucia(r){
+  if (!anivLuciaHoje()) return r;
+  r.estado = 'Hoje é aniversário da Lúcia! As nanos encheram balões e penduraram uma faixa na frente do celeiro.';
+  if (S.anivLuciaBolo === diaAtual()){ r.estado += ' O Ed já levou o bolo.'; return r; }
+  const tf = fila.find(t => t.tipo === 'boloLucia');
+  if (tf){ r.estado += ' O bolo está na fila do Ed.'; r.itens.push({ rotulo: 'Cancelar', icone: 'ed', fn: () => cancelar(tf) }); return r; }
+  const tem = (S.celeiro.bolo || 0) > 0;
+  r.itens.push({ rotulo: 'Levar um bolo para a Lúcia', sub: tem ? `um bolo de fubá do celeiro · +${LUCIA_ANIV.xp} xp` : 'precisa de um bolo de fubá no celeiro (padaria)', icone: 'bolo', off: !tem, fn: () => { const [x, z] = lugarFestaLucia(), zf = andavel(x, z + 1) ? z + 1 : z; enfileirar('boloLucia', { k: 'anivLucia', x, z: zf }); } });
+  return r;
+}
+function entregarBoloLucia(){
+  if (!anivLuciaHoje() || S.anivLuciaBolo === diaAtual()) return;
+  S.anivLuciaBolo = diaAtual();
+  ganharXP(LUCIA_ANIV.xp, ed.topo()); Som.moeda();
+  const f = variar(FALAS_ED_ANIV_LUCIA); falar(ed, f, tempoDeLeitura(f));
+  // ela sai para receber (a arte 'parabens'), se nada estiver no caminho
+  if (!cine && !lucia){ if (arteLucia) encerrarArteLucia(); iniciarArteLucia('parabens', { x: ed.pos.x, z: ed.pos.y, ed: [ed.pos.x, ed.pos.y] }); }
+  hud(); salvar();
+}
 // ================= a missão das nanos: o lugar de cada um atrás do celeiro, os tempos e o relógio do próximo lançamento
 // (S.fogueteEspera, em segundos de jogo aberto, guardado no save). Para quem abre o jogo já no nível 35 sem nunca ter visto,
 // ela vem logo na abertura (abertura); quem chega no 35 jogando vê a primeira num sorteio de primeira (minutos); depois,
@@ -14805,7 +14864,8 @@ function criarNanoHostel(){
 }
 function itensNanoHostel(){
   const n = nanoHostel ? nanoHostel.hospedes : 0;
-  return { titulo: 'Nano Hostel', icone: 'nanoHostel', estado: `Um hostel para as nano pessoas, que têm 5 cm de altura. ${n ? `${n} ${n > 1 ? 'nanos hospedados' : 'nano hospedado'} agora.` : 'Está vazio agora.'}`, itens: [] };
+  const r = { titulo: 'Nano Hostel', icone: 'nanoHostel', estado: `Um hostel para as nano pessoas, que têm 5 cm de altura. ${n ? `${n} ${n > 1 ? 'nanos hospedados' : 'nano hospedado'} agora.` : 'Está vazio agora.'}`, itens: [] };
+  return itensAnivLucia(r);
 }
 // um nano andando por uma lista de pontos; sobe da escada do metrô ou desce por ela, ou sai e entra pela porta
 function novoNano(pts, opc){
@@ -15778,6 +15838,7 @@ function encerrarArteLucia(){
   for (let i = FALAS.length - 1; i >= 0; i--) if (A.nanos.some(n => n.fala === FALAS[i].quem)){ FALAS[i].el.remove(); FALAS.splice(i, 1); }
 }
 function atualizarArteLucia(dt, t){
+  if (anivLuciaVisDia !== (anivLuciaHoje() ? diaAtual() : -1)) montarAnivLucia();
   const A = arteLucia;
   if (A){
     if (cine || lucia){ encerrarArteLucia(); return; }
@@ -16049,6 +16110,29 @@ const NANO_CHUVA = ['Espera, Lúcia!', 'Minha tampinha tá vazando!', 'Que gota 
 const LU_CHUVA_ED = ['A Lúcia de guarda-chuva de folha!', 'Cuidado com as poças, Lúcia!', 'Até as nanos se viram na chuva.', 'Tampinha de chapéu, essa é boa.', 'Corre pro hostel, Lúcia!', 'Que chuvarada, hein?', 'Folha de guarda-chuva, que esperta!',
   'Não vão se resfriar!', 'O foguete encheu de água? Hahaha!', 'Chuva boa pra horta, pelo menos.', 'Lúcia, quer um guarda-chuva de verdade?', 'Coitadas, ensopadas!', 'Que dupla mais molhadinha.', 'Pulando poça, olha só.',
   'Elas não perdem a pose nem na chuva.', 'Vou fazer um chocolate quente pra elas.', 'Cuidado pra não sair boiando!', 'Até a chuva fica mais divertida com elas.', 'Corre, corre!', 'Hostel com goteira? Vou ver isso.', 'Que dia pra passear!'];
+// ---- aniversário da Lúcia (LUCIA_ANIV): no dia, com o hostel perto da câmera, uma vez, ela sai de chapéu de festa e quatro
+// nanos dançam em roda em volta dela, com confete ('aniversario'). Quando o Ed leva o bolo, ela e três nanos vêm receber:
+// as nanos cantam, ela assopra a velinha, agradece, e as nanos levam o bolo na cabeça para o hostel ('parabens')
+const LU_ANIV = ['Hoje é meu aniversário! Festa no hostel!', 'Mais um ano de nano arteira!', 'Obrigada, nanos! Que enfeite lindo!', 'Quantos anos? Segredo de nano!', 'Hoje eu não cobro aluguel de ninguém! Brincadeira.', 'Balões! Faixa! Eu amo vocês!',
+  'Aniversário da comandante! Todo mundo dançando!', 'Hoje o foguete pode até sair torto que eu nem ligo!', 'Que festa! Que festa!', 'Meu chapéu de festa é o mais bonito da fazenda.', 'Parabéns pra mim! Hihi!', 'Hoje é dia de bolo, mesmo que seja uma migalha!',
+  'Obrigada, equipe! Melhor aniversário!', 'Dança, nanos, dança!', 'Hoje quem manda no megafone é a aniversariante!', 'Um ano a mais e nenhum centímetro a mais!', 'Que lindo! Até a faixa tem glitter!', 'Mais um ano de Nano Hostel!',
+  'Tomada! Hoje é meu aniversário, viu?', 'Vou fazer um pedido: um foguete que voe reto!', 'Viva eu! Viva as nanos!'];
+const NANO_ANIV = ['Parabéns pra você!', 'Nesta data querida!', 'Muitas felicidades!', 'Muitos anos de vida!', 'É pique, é pique!', 'É hora, é hora!', 'Rá-tim-bum! Lúcia!', 'Viva a Lúcia!', 'Feliz aniversário!', 'Parabéns, comandante!',
+  'Assopra! Assopra!', 'Faz um pedido!', 'Que festa linda!', 'Eu fiz o balão azul!', 'Eu escrevi a faixa!', 'Bolo! Bolo! Bolo!', 'Uhuuu, festa!', 'Discurso! Discurso!', 'Viva a dona do hostel!', 'Parabéns da equipe nano!', 'Hip hip, hurra!'];
+const LU_ANIV_ED = ['É o aniversário da Lúcia!', 'Olha a festa no hostel!', 'Parabéns, Lúcia!', 'Que balões mais pequenininhos!', 'Festa nano, que fofura.', 'Preciso arrumar um presente pra ela.', 'Será que ela gosta de bolo de fubá?',
+  'As nanos capricharam nos enfeites.', 'Que alegria no hostel hoje!', 'Feliz aniversário, Lúcia!', 'A faixa até tem glitter!', 'Que roda mais animada!', 'Quantos anos será que ela fez?', 'Vou levar um bolo pra ela.',
+  'Até o celeiro está em festa.', 'Lúcia de chapéu de festa, que graça.', 'Parabéns pra você, nesta data querida!', 'As nanos dançam melhor que eu.', 'Que festa bonita!', 'Hoje ninguém trabalha no hostel.', 'Viva a Lúcia!'];
+const LU_ANIV_BOLO = ['Um bolo pra mim?! Obrigada, tomada!', 'Que bolo enorme! Dá pro hostel inteiro por um ano!', 'Tomada, você lembrou! Que lindo!', 'Bolo de fubá! Meu preferido!', 'Obrigada! Vou guardar um pedaço pra Luma.',
+  'Melhor presente! Nanos, chamem todo mundo!', 'Tomada, você é o melhor senhorio do mundo!', 'Ai, que emoção! Obrigada!', 'Esse bolo tem cheirinho de festa!', 'Vou dividir com todas as nanos. Sobra pra semana inteira!', 'Que surpresa boa!',
+  'Obrigada, tomada! Pedi um foguete reto e ganhei bolo.', 'Bolo do tamanho de um prédio nano!', 'Nunca ganhei um bolo tão grande!', 'Você é demais, tomada!', 'Nanos, ao ataque! Quer dizer, ao bolo!', 'Obrigada! Assoprei e fiz o pedido.',
+  'Que bolo lindo! Tem até velinha!', 'Esse aniversário vai pro livro do hostel!', 'Obrigada! Prometo pagar o aluguel em dia. Como sempre.', 'Tomada, que fofura! Obrigada!'];
+// o bolo de fubá redondo, com furo no meio, calda e a velinha acesa (na escala do hostel)
+function vBoloLucia(){
+  const v = new Vox();
+  for (let x = -5; x <= 5; x++) for (let z = -5; z <= 5; z++){ const d = Math.hypot(x, z); if (d > 5.4 || d < 1.5) continue; v.box(x, 0, z, x, 3, z, 0xe8b850); if (d > 4.6 || (x + z) % 3 === 0) v.set(x, 4, z, 0xfff3d8); }
+  v.box(3, 4, 0, 3, 7, 0, 0xe0408a); v.set(3, 8, 0, 0xffb020);
+  return v;
+}
 const ENC_LUCIA = { milton: { p: () => milton, pares: LU_ENC_MILTON }, pelucio: { p: () => pelucio, pares: LU_ENC_PELUCIO }, hud: { p: () => irmaoHud, pares: LU_ENC_HUD }, dani: { p: () => irmaoDani, pares: LU_ENC_DANI } };
 // quem pode receber a visita: no chão, sem estar sentado, montado ou no balanço
 const livreParaLucia = P => !!P && P.g.visible && !P.alt && !P.sentado && !P.montado && !P.giro && ['parado', 'trabalhando', 'andando'].includes(P.estado);
@@ -16421,6 +16505,92 @@ const ARTES_LUCIA = {
       return false;
     },
     limpar(){ esconderKevinLucia(); },
+  },
+  aniversario: {
+    prioridade: 2,
+    pode(){
+      const [lx, lz] = lugarFestaLucia();
+      if (!anivLuciaHoje() || festaLuciaDia === diaAtual() || periodo().id === 'noite' || chovendo() || lucia || !pertoDaCamera(lx + 0.5, lz + 0.5, ARTE_LUCIA.perto + 2)) return null;
+      return { x: lx + 0.5, z: lz + 0.6 };
+    },
+    iniciar(A){
+      festaLuciaDia = diaAtual();
+      const [x, z] = bordaArte(A.x, A.z, 1.2); luciaDaArte(A, x, z);
+      A.cone = malha(geo('fgCone', () => vConeFesta().build(NANO.s, { origin: [0.5, 0, 0.5], jitter: 0.02 }))); A.cone.scale.setScalar(0.45); A.cone.position.set(0, 0.255, -0.01); A.lu.g.add(A.cone);
+      A.roda = []; for (let i = 0; i < 4; i++){ const [nx, nz] = bordaArte(A.x, A.z, 1.3); A.roda.push(nanoDaArte(A, nx, nz)); }
+      A.giro = 0;
+    },
+    passo(A, dt, t){
+      const lu = A.lu, R = 0.3, lugar = i => [A.x + Math.sin(A.giro + i * Math.PI / 2) * R, A.z + Math.cos(A.giro + i * Math.PI / 2) * R];
+      if (A.fase === 'vem'){
+        let ok = luVai(lu, A.x, A.z, dt) ? 1 : 0;
+        A.roda.forEach((n, i) => { if (nanoVai(n, ...lugar(i), dt, 0.55)) ok++; else return; poseNano(n.rig, dt, 'parado'); olharArte(n, A.x, A.z); });
+        if (ok === 5 || A.t > 14){ A.fase = 'festa'; A.ft = 0; A.tf = 0.3; A.cantou = 0; olharArte(lu, camera.position.x, camera.position.z); reageEd(LU_ANIV_ED, A.x, A.z); }
+      } else if (A.fase === 'festa'){
+        // a roda gira aos pulinhos em volta dela; confete de vez em quando
+        A.giro += dt * 0.9;
+        A.roda.forEach((n, i) => { const [x, z] = lugar(i); n.g.position.set(x, Math.abs(Math.sin(t * 7 + i)) * 0.05, z); olharArte(n, A.x, A.z); poseNano(n.rig, dt, 'pula'); });
+        lu.g.position.y = Math.abs(Math.sin(t * 5)) * 0.03;
+        if (Math.random() < dt * 8) particula(A.x + rnd(-0.4, 0.4), rnd(0.3, 0.6), A.z + rnd(-0.4, 0.4), sorteia([0xe0408a, 0xf2c335, 0x6fa8dc, 0x6cbf52]), 0.5);
+        if ((A.tf -= dt) <= 0){
+          if (A.cantou % 2 === 0) { const f = falarLucia(A, LU_ANIV); A.tf = tempoDeLeitura(f) + 0.3; }
+          else { falarNano(A.roda[A.cantou % 4], NANO_ANIV); A.tf = 2.4; }
+          A.cantou++;
+        }
+        if (A.ft > 16){ A.fase = 'sai'; lu.g.position.y = 0; }
+      } else {
+        let ok = 0; for (const n of A.nanos) if (n.lu ? luFoge(n, dt) : nanoFoge(n, dt)) ok++;
+        return ok === A.nanos.length;
+      }
+      return false;
+    },
+  },
+  parabens: {
+    auto: false,
+    pode(){ return null; },
+    iniciar(A){
+      // o bolo fica no chão entre o Ed e o hostel; ela e três nanos vêm receber
+      const [ex, ez] = A.ed, a = Math.atan2(camera.position.x - ex, camera.position.z - ez) + 1.1;
+      A.bolo = [ex + Math.sin(a) * 0.42, ez + Math.cos(a) * 0.42]; A.frente = [ex + Math.sin(a) * 0.7, ez + Math.cos(a) * 0.7];
+      A.boloM = objetoArte(A, malha(geo('boloLucia', () => vBoloLucia().build(NANO.s, { origin: [0.5, 0, 0.5] })))); A.boloM.position.set(A.bolo[0], 0, A.bolo[1]);
+      Som.pop();
+      const [x, z] = bordaArte(A.frente[0], A.frente[1], 1.1); luciaDaArte(A, x, z);
+      A.cone = malha(geo('fgCone', () => vConeFesta().build(NANO.s, { origin: [0.5, 0, 0.5], jitter: 0.02 }))); A.cone.scale.setScalar(0.45); A.cone.position.set(0, 0.255, -0.01); A.lu.g.add(A.cone);
+      A.trio = []; for (let i = 0; i < 3; i++){ const [nx, nz] = bordaArte(A.frente[0], A.frente[1], 1.2); A.trio.push(nanoDaArte(A, nx, nz)); }
+    },
+    passo(A, dt, t){
+      const lu = A.lu, [bx, bz] = A.bolo, em = (i, r) => { const a = Math.atan2(A.frente[0] - bx, A.frente[1] - bz) + (i - 1) * 0.9; return [bx + Math.sin(a) * r, bz + Math.cos(a) * r]; };
+      if (A.fase === 'vem'){
+        let ok = luVai(lu, ...em(1, 0.3), dt, 0.6) ? 1 : 0;
+        A.trio.forEach((n, i) => { if (nanoVai(n, ...em(i === 1 ? 3 : i, 0.32), dt, 0.55)){ ok++; olharArte(n, bx, bz); poseNano(n.rig, dt, 'parado'); } });
+        if (ok === 4 || A.t > 14){ A.fase = 'canta'; A.ft = 0; A.verso = 0; A.tv = 0; olharArte(lu, bx, bz); }
+      } else if (A.fase === 'canta'){
+        // as nanos cantam o parabéns em três versos; ela assopra a velinha
+        A.trio.forEach((n, i) => { poseNano(n.rig, dt, 'acena'); n.g.position.y = Math.abs(Math.sin(t * 6 + i)) * 0.03; });
+        if ((A.tv -= dt) <= 0 && A.verso < 3){ falar(A.trio[A.verso].fala, NANO_ANIV[A.verso], 2.2); A.verso++; A.tv = 2.3; }
+        if (A.verso >= 3 && A.tv <= 0 && !A.soprou){
+          A.soprou = true; Som.tom(500, 0.3, 'sine', 0.03, 200);
+          // a velinha apaga: troca o bolo pelo sem chama e solta a fumacinha
+          A.boloM.geometry = geo('boloLuciaApagado', () => { const v = vBoloLucia(); v.set(3, 8, 0, 0x6b6b6b); return v.build(NANO.s, { origin: [0.5, 0, 0.5] }); });
+          for (let i = 0; i < 6; i++) particula(bx + 0.075, 0.24, bz, 0xdddddd, 0.6);
+          A.tObr = 0.8;
+        }
+        if (A.soprou && (A.tObr -= dt) <= 0 && !A.agradeceu){
+          A.agradeceu = true; olharArte(lu, ...A.ed); const f = falarLucia(A, LU_ANIV_BOLO); A.tf = tempoDeLeitura(f);
+          for (let i = 0; i < 16; i++) particula(bx + rnd(-0.3, 0.3), rnd(0.3, 0.6), bz + rnd(-0.3, 0.3), sorteia([0xe0408a, 0xf2c335, 0x6fa8dc, 0x6cbf52]), 0.7);
+          Som.moeda(); A.ft = 0;
+        }
+        if (A.agradeceu && A.ft > A.tf + 0.4){ A.fase = 'leva'; A.ft = 0; A.saida = bordaArte(bx, bz, 1.6); }
+      } else if (A.fase === 'leva'){
+        // as três levam o bolo na cabeça e somem; ela vai atrás
+        const meio = new THREE.Vector3();
+        A.trio.forEach((n, i) => { const [sx, sz] = A.saida, d = (i - 1) * 0.16; if (nanoVai(n, sx + d, sz, dt, 0.35, 'carrega')) n.some = true; meio.add(n.g.position); });
+        meio.multiplyScalar(1 / 3); A.boloM.position.set(meio.x, 0.33, meio.z); A.boloM.scale.setScalar(Math.max(0.01, A.trio[0].cresce));
+        const luFoi = luFoge(lu, dt);
+        return luFoi && A.trio.every(n => n.some && n.cresce <= 0);
+      }
+      return false;
+    },
   },
   chuva: {
     prioridade: 1,
@@ -33496,13 +33666,13 @@ function itensHud(){
 const fila = [];
 // o nome de uma tarefa: o da ação, ou um próprio dela (as atividades do spa: alvo.rotulo)
 const nomeAcao = t => (t.alvo && t.alvo.rotulo) || NOMES_ACAO[t.tipo];
-const NOMES_ACAO = { ingressos:'Recolher os ingressos do planetário', entregarEt:'Levar a encomenda dos ETs', observar:'Olhar pela luneta grande', spa:'Banho de lama', desejo:'Fazer um pedido', museu:'Visitar o museu', subirMirante:'Subir no mirante', estrelas:'Olhar as estrelas', trator:'Sair com o trator', carinhoGalo:'Carinho no galo', pegarGalo:'Pegar o galo', soltarGalo:'Devolver o galo', apagarFogo:'Apagar o fogo', recolherLixo:'Recolher o lixo', tirarGalho:'Tirar o galho', pegarAluguel:'Pegar o aluguel', entregarHostel:'Entregar o pedido do hostel', lerCartao:'Ler o cartão-postal', tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', abrirPresente:'Abrir o presente', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa', nadar:'Nadar na cachoeira', balancar:'Brincar no balanço', parquinho:'Brincar no parquinho', passeio:'Passeio de avião' };
-const DUR = { ingressos: 0.8, entregarEt: 1.2, spa: 0.3, desejo: 1.4, museu: 0.5, subirMirante: 0.2, estrelas: 4.5, carinhoGalo: 2.4, pegarGalo: 0.5, soltarGalo: 0.7, apagarFogo: 2.2, recolherLixo: 0.8, tirarGalho: 2.4, pegarAluguel: 0.6, entregarHostel: 0.8, lerCartao: 0.6, tirarCerca: 2.4, colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, abrirPresente: 0.2, coletarMata: 1.0, cavarTrufa: 1.6, nadar: 0.2, balancar: 0.2, parquinho: 0.2, passeio: 0.2, coletarJatai: 1.2, colherCogumelo: 1.0, instalarCamera: 2.2, buscarFotos: 1.6 };
-const FERR = { ingressos: null, entregarEt: null, spa: null, desejo: null, museu: null, subirMirante: null, estrelas: null, carinhoGalo: 'carinho', pegarGalo: null, soltarGalo: 'soltar', apagarFogo: 'regador', recolherLixo: 'cesta', tirarGalho: null, pegarAluguel: null, entregarHostel: 'cesta', lerCartao: null, tirarCerca: 'enxada', colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', abrirPresente: null, coletarMata: 'cesta', cavarTrufa: 'enxada', nadar: null, balancar: null, parquinho: null, passeio: null, coletarJatai: 'cesta', colherCogumelo: 'cesta', instalarCamera: 'armadilha', buscarFotos: 'camera' };
+const NOMES_ACAO = { ingressos:'Recolher os ingressos do planetário', entregarEt:'Levar a encomenda dos ETs', observar:'Olhar pela luneta grande', spa:'Banho de lama', desejo:'Fazer um pedido', museu:'Visitar o museu', subirMirante:'Subir no mirante', estrelas:'Olhar as estrelas', trator:'Sair com o trator', carinhoGalo:'Carinho no galo', pegarGalo:'Pegar o galo', soltarGalo:'Devolver o galo', apagarFogo:'Apagar o fogo', recolherLixo:'Recolher o lixo', tirarGalho:'Tirar o galho', pegarAluguel:'Pegar o aluguel', entregarHostel:'Entregar o pedido do hostel', boloLucia:'Levar o bolo da Lúcia', lerCartao:'Ler o cartão-postal', tirarCerca:'Tirar a cerca', colherFruta:'Colher frutas', coletarMel:'Coletar mel', produzir:'Produzir', recolher:'Recolher', arar:'Arar', plantar:'Plantar', regar:'Regar', capinar:'Tirar o mato', colher:'Colher', alimentar:'Alimentar', coletar:'Coletar', arrancar:'Arrancar', esvaziar:'Esvaziar a caixa', adubar:'Adubar', andar:'Andar', recolherAdubo:'Recolher adubo', darComida:'Dar comida', comerMaca:'Comer a maçã', abrirPresente:'Abrir o presente', coletarMata:'Coletar', cavarTrufa:'Cavar a trufa', nadar:'Nadar na cachoeira', balancar:'Brincar no balanço', parquinho:'Brincar no parquinho', passeio:'Passeio de avião' };
+const DUR = { ingressos: 0.8, entregarEt: 1.2, spa: 0.3, desejo: 1.4, museu: 0.5, subirMirante: 0.2, estrelas: 4.5, carinhoGalo: 2.4, pegarGalo: 0.5, soltarGalo: 0.7, apagarFogo: 2.2, recolherLixo: 0.8, tirarGalho: 2.4, pegarAluguel: 0.6, entregarHostel: 0.8, boloLucia: 1.0, lerCartao: 0.6, tirarCerca: 2.4, colherFruta: 1.0, coletarMel: 1.0, produzir: 1.0, recolher: 0.8, arar: 1.1, plantar: 0.7, regar: 1.0, capinar: 0.9, colher: 0.7, alimentar: 0.9, coletar: 0.6, arrancar: 0.8, esvaziar: 0.8, adubar: 0.8, andar: 0, recolherAdubo: 0.9, darComida: 0.9, comerMaca: 1.2, abrirPresente: 0.2, coletarMata: 1.0, cavarTrufa: 1.6, nadar: 0.2, balancar: 0.2, parquinho: 0.2, passeio: 0.2, coletarJatai: 1.2, colherCogumelo: 1.0, instalarCamera: 2.2, buscarFotos: 1.6 };
+const FERR = { ingressos: null, entregarEt: null, spa: null, desejo: null, museu: null, subirMirante: null, estrelas: null, carinhoGalo: 'carinho', pegarGalo: null, soltarGalo: 'soltar', apagarFogo: 'regador', recolherLixo: 'cesta', tirarGalho: null, pegarAluguel: null, entregarHostel: 'cesta', boloLucia: null, lerCartao: null, tirarCerca: 'enxada', colherFruta: 'cesta', coletarMel: 'cesta', produzir: 'saco', recolher: 'cesta', arar: 'enxada', plantar: null, regar: 'regador', capinar: null, colher: 'cesta', alimentar: 'saco', coletar: 'cesta', arrancar: null, esvaziar: 'cesta', adubar: 'saco', andar: null, recolherAdubo: 'cesta', darComida: 'saco', comerMaca: 'maca', abrirPresente: null, coletarMata: 'cesta', cavarTrufa: 'enxada', nadar: null, balancar: null, parquinho: null, passeio: null, coletarJatai: 'cesta', colherCogumelo: 'cesta', instalarCamera: 'armadilha', buscarFotos: 'camera' };
 const mesmoAlvo = (a, b) => a.k === b.k && (a.k === 'animal' ? a.a === b.a : a.x === b.x && a.z === b.z);
-function reservado(alvo){ if (alvo.k === 'bilheteria') return fila.some(t => t.tipo === 'ingressos'); if (alvo.k === 'pouso') return fila.some(t => t.tipo === 'entregarEt'); if (alvo.k === 'torre') return fila.some(t => t.tipo === 'observar'); if (alvo.k === 'passeio') return fila.some(t => t.tipo === 'passeio'); if (alvo.k === 'brinquedo') return fila.some(t => t.tipo === 'parquinho'); if (alvo.k === 'balanco') return fila.some(t => t.tipo === 'balancar'); if (alvo.k === 'cachoeira') return fila.some(t => t.tipo === 'nadar'); if (alvo.k === 'spa') return fila.some(t => t.tipo === 'spa'); if (alvo.k === 'poco') return fila.some(t => t.tipo === 'desejo'); if (alvo.k === 'museu') return fila.some(t => t.tipo === 'museu'); if (alvo.k === 'luneta') return fila.some(t => t.tipo === 'estrelas'); if (alvo.k === 'mirante') return fila.some(t => t.tipo === 'subirMirante'); if (alvo.k === 'trator') return fila.some(t => t.tipo === 'trator' && t.alvo.lote === alvo.lote); if (alvo.k === 'galo') return fila.some(t => t.alvo.k === 'galo' && t.alvo.id === alvo.id); if (alvo.k === 'ocorrencia') return fila.some(t => t.alvo.k === 'ocorrencia' && t.alvo.id === alvo.id && t.alvo.j === alvo.j); if (alvo.k === 'aluguel') return fila.some(t => t.tipo === 'pegarAluguel'); if (alvo.k === 'bilheteHostel') return fila.some(t => t.tipo === 'entregarHostel'); if (alvo.k === 'cartao') return fila.some(t => t.tipo === 'lerCartao'); if (alvo.k === 'cercaCanto') return fila.some(t => t.tipo === 'tirarCerca'); if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'caixaEt') return fila.some(t => t.tipo === 'abrirPresente'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata' || alvo.k === 'recanto') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
+function reservado(alvo){ if (alvo.k === 'bilheteria') return fila.some(t => t.tipo === 'ingressos'); if (alvo.k === 'pouso') return fila.some(t => t.tipo === 'entregarEt'); if (alvo.k === 'torre') return fila.some(t => t.tipo === 'observar'); if (alvo.k === 'passeio') return fila.some(t => t.tipo === 'passeio'); if (alvo.k === 'brinquedo') return fila.some(t => t.tipo === 'parquinho'); if (alvo.k === 'balanco') return fila.some(t => t.tipo === 'balancar'); if (alvo.k === 'cachoeira') return fila.some(t => t.tipo === 'nadar'); if (alvo.k === 'spa') return fila.some(t => t.tipo === 'spa'); if (alvo.k === 'poco') return fila.some(t => t.tipo === 'desejo'); if (alvo.k === 'museu') return fila.some(t => t.tipo === 'museu'); if (alvo.k === 'luneta') return fila.some(t => t.tipo === 'estrelas'); if (alvo.k === 'mirante') return fila.some(t => t.tipo === 'subirMirante'); if (alvo.k === 'trator') return fila.some(t => t.tipo === 'trator' && t.alvo.lote === alvo.lote); if (alvo.k === 'galo') return fila.some(t => t.alvo.k === 'galo' && t.alvo.id === alvo.id); if (alvo.k === 'ocorrencia') return fila.some(t => t.alvo.k === 'ocorrencia' && t.alvo.id === alvo.id && t.alvo.j === alvo.j); if (alvo.k === 'aluguel') return fila.some(t => t.tipo === 'pegarAluguel'); if (alvo.k === 'bilheteHostel') return fila.some(t => t.tipo === 'entregarHostel'); if (alvo.k === 'anivLucia') return fila.some(t => t.tipo === 'boloLucia'); if (alvo.k === 'cartao') return fila.some(t => t.tipo === 'lerCartao'); if (alvo.k === 'cercaCanto') return fila.some(t => t.tipo === 'tirarCerca'); if (alvo.k === 'trufa') return fila.some(t => t.tipo === 'cavarTrufa' && t.alvo.x === alvo.x && t.alvo.z === alvo.z); if (alvo.k === 'maca') return fila.some(t => t.tipo === 'comerMaca'); if (alvo.k === 'caixaEt') return fila.some(t => t.tipo === 'abrirPresente'); if (alvo.k === 'composteira') return false; if (alvo.k === 'coletor') return fila.some(t => t.tipo === 'esvaziar' && t.alvo.tp === alvo.tp); if (alvo.k === 'fabrica') return false; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata' || alvo.k === 'recanto') return !!visSlot(alvo).res; return alvo.k === 'animal' ? !!alvo.a.res : !!(VIS[chave(alvo.x, alvo.z)] && VIS[chave(alvo.x, alvo.z)].res); }
 const visSlot = alvo => { const L = alvo.k === 'pomar' ? POMAR_VIS : alvo.k === 'mata' ? MATA_VIS : alvo.k === 'recanto' ? RECANTO_VIS.slots : COLMEIA_VIS; return L[alvo.i] || (L[alvo.i] = {}); };
-function setReserva(alvo, v){ if (alvo.k === 'bilheteria' || alvo.k === 'pouso' || alvo.k === 'torre' || alvo.k === 'passeio' || alvo.k === 'balanco' || alvo.k === 'brinquedo' || alvo.k === 'cachoeira' || alvo.k === 'trator' || alvo.k === 'luneta' || alvo.k === 'mirante' || alvo.k === 'museu' || alvo.k === 'poco' || alvo.k === 'spa') return; if (alvo.k === 'galo'){ if (GALOS[alvo.id]) GALOS[alvo.id].res = v; return; } if (alvo.k === 'ocorrencia' || alvo.k === 'aluguel' || alvo.k === 'bilheteHostel' || alvo.k === 'cartao' || alvo.k === 'cercaCanto' || alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'caixaEt' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata' || alvo.k === 'recanto'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
+function setReserva(alvo, v){ if (alvo.k === 'bilheteria' || alvo.k === 'pouso' || alvo.k === 'torre' || alvo.k === 'passeio' || alvo.k === 'balanco' || alvo.k === 'brinquedo' || alvo.k === 'cachoeira' || alvo.k === 'trator' || alvo.k === 'luneta' || alvo.k === 'mirante' || alvo.k === 'museu' || alvo.k === 'poco' || alvo.k === 'spa') return; if (alvo.k === 'galo'){ if (GALOS[alvo.id]) GALOS[alvo.id].res = v; return; } if (alvo.k === 'ocorrencia' || alvo.k === 'aluguel' || alvo.k === 'bilheteHostel' || alvo.k === 'anivLucia' || alvo.k === 'cartao' || alvo.k === 'cercaCanto' || alvo.k === 'trufa' || alvo.k === 'maca' || alvo.k === 'caixaEt' || alvo.k === 'fabrica' || alvo.k === 'coletor' || alvo.k === 'composteira') return; if (alvo.k === 'pomar' || alvo.k === 'colmeia' || alvo.k === 'mata' || alvo.k === 'recanto'){ visSlot(alvo).res = v; return; } if (alvo.k === 'animal') alvo.a.res = v; else { const k = chave(alvo.x, alvo.z); (VIS[k] || (VIS[k] = { cs: '', cp: '' })).res = v; } }
 // diz se a ação vale para o alvo; devolve o custo ou um motivo
 function checar(tipoA, alvo, param){
   if (alvo.k === 'galo'){
@@ -33517,6 +33687,10 @@ function checar(tipoA, alvo, param){
   if (alvo.k === 'trator') return checarTrator(tipoA, alvo, param);
   if (alvo.k === 'cercaCanto') return { ok: tipoA === 'tirarCerca' && S.canto === 1, custo: {} };
   if (alvo.k === 'aluguel') return { ok: tipoA === 'pegarAluguel' && !!S.aluguel, custo: {} };
+  if (alvo.k === 'anivLucia'){
+    if (tipoA !== 'boloLucia' || !anivLuciaHoje() || S.anivLuciaBolo === diaAtual()) return { ok: false };
+    return (S.celeiro.bolo || 0) > 0 ? { ok: true, custo: { itens: { bolo: 1 } } } : { ok: false, motivo: 'Falta um bolo de fubá no celeiro' };
+  }
   if (alvo.k === 'bilheteHostel'){
     const P = S.pedidoHostel; if (tipoA !== 'entregarHostel' || !P) return { ok: false };
     const sep = separadoPedidos(), falta = Object.entries(P.itens).filter(([p, q]) => sobraDe(p, sep) < q);
@@ -34013,6 +34187,7 @@ function executar(tarefa){
   if (alvo.k === 'cercaCanto'){ executarTirarCerca(); return; }
   if (alvo.k === 'aluguel'){ pegarAluguel(); return; }
   if (alvo.k === 'bilheteHostel'){ entregarPedidoHostel(); return; }
+  if (alvo.k === 'anivLucia'){ entregarBoloLucia(); return; }
   if (alvo.k === 'cartao'){ lerCartao(); return; }
   if (alvo.k === 'luneta'){ olharEstrelas(); return; }
   if (alvo.k === 'museu'){ visitarMuseu(); return; }
@@ -35034,6 +35209,7 @@ function itensDoAlvoBase(alvo){
   if (alvo.k === 'canto') return itensCanto();
   if (alvo.k === 'aluguel') return itensAluguel();
   if (alvo.k === 'bilheteHostel') return itensBilheteHostel();
+  if (alvo.k === 'anivLucia') return itensAnivLucia({ titulo: 'Aniversário da Lúcia', icone: 'lucia', itens: [] });
   if (alvo.k === 'cartao') return itensCartao();
   if (alvo.k === 'mata') return itensNativa(alvo.i);
   if (alvo.k === 'ocorrencia') return itensOcorrencia(alvo);
