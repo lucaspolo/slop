@@ -1635,7 +1635,9 @@ const PARCELAS = [
   parcela(2, 2, { nivel: 60, preco: 500000, frente: 6, arvores: ['guaranazeiro', 'cupuacuzeiro', 'seringueira', 'guaranazeiro', 'cupuacuzeiro', 'seringueira'] }),
   parcela(1, 4, { nivel: 60, preco: 500000, frente: 7, arvores: ['cupuacuzeiro', 'castanheira', 'cacaueiro', 'cupuacuzeiro', 'castanheira', 'cacaueiro'] }),
   parcela(2, 3, { nivel: 60, preco: 500000, frente: 8, arvores: ['acaizeiro', 'guaranazeiro', 'castanheira', 'acaizeiro', 'guaranazeiro', 'castanheira'] }),
-  parcela(2, 4, { nivel: 60, preco: 500000, frente: 10, arvores: ['seringueira', 'castanheira', 'cupuacuzeiro', 'seringueira', 'castanheira', 'cupuacuzeiro'] }),
+  // a parcela 12 (o Lucas pediu) é de shiitake e mel de jataí, como o recanto: no lugar das nativas, três lugares de caixa
+  // de jataí e três de tora (RECANTO_SLOTS com parcela), comprados à parte como os do recanto
+  parcela(2, 4, { nivel: 60, preco: 500000, frente: 10, arvores: [], recanto: ['caixa', 'tora', 'tora', 'caixa', 'caixa', 'tora'] }),
 ];
 // a sexta parcela (nível 46, R$ 160 mil) existiu por um tempo; quem comprou recebe o dinheiro de volta (migrar)
 const PARCELA_SEXTA = { preco: 160000 }, PARCELAS_MAPA3 = 5;
@@ -12249,14 +12251,28 @@ const RECANTO_SLOTS = [['caixa', 3, 31], ['caixa', 5, 31], ['camera', 3, 33], ['
   ['tora', 3, 37], ['camera', 5, 37], ['camera', 3, 39], ['tora', 5, 39], ['camera', 8, 28]].map(([tipo, lx, lz]) => {
   const [x, z] = zp('mata', lx, lz), beira = lz === 28;
   return { tipo, x, z, pe: beira ? [x, z + 1] : [zx('mata', 4), z], lado: beira ? [0, 1] : [Math.sign(zx('mata', 4) - x), 0] };
-});
+}).concat(PARCELAS.flatMap((P, p) => (P.recanto || []).map((tipo, k) => {
+  // os das parcelas de shiitake e jataí: nos lugares das nativas, dos dois lados da trilha da parcela (vêm depois, para os
+  // índices de S.recanto dos lugares do recanto não mudarem)
+  const z = P.z0 + 1 + (k >> 1) * 2, x = P.col + (k % 2 ? 1 : -1);
+  return { tipo, x, z, pe: [P.col, z], lado: [Math.sign(P.col - x), 0], parcela: p };
+})));
 // sem árvore de enfeite: a trilha, a volta dela e os lugares
 const RECANTO_ESCONDE = new Set();
 for (const [x, z] of RECANTO_TRILHA) for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if (x + dx >= 0 && z + dz < H) RECANTO_ESCONDE.add((x + dx) + ',' + (z + dz));
-for (const s of RECANTO_SLOTS) RECANTO_ESCONDE.add(s.x + ',' + s.z);
+for (const s of RECANTO_SLOTS) if (s.parcela == null) RECANTO_ESCONDE.add(s.x + ',' + s.z);
 const RECANTO_VIS = { aberto: false, arvores: [], slots: [], trilha: null, dia: null, noite: null, abelhas: [], flashes: [] };
 const recantoAberto = () => !!S && nivel() >= RECANTO.nivel && parcelaComprada(RECANTO.parcela);
-const recantoTem = tipo => RECANTO_SLOTS.some((s, i) => s.tipo === tipo && S.recanto && S.recanto[i]);
+// o lugar está aberto: os do recanto com ele aberto; os de uma parcela de shiitake e jataí, com a parcela comprada
+const slotRecantoAberto = i => { const s = RECANTO_SLOTS[i]; return s.parcela == null ? RECANTO_VIS.aberto : !!S && nivel() >= RECANTO.nivel && parcelaComprada(s.parcela); };
+const recantoTem = tipo => RECANTO_SLOTS.some((s, i) => s.tipo === tipo && S.recanto && S.recanto[i] && slotRecantoAberto(i));
+// abre os lugares de uma parcela de shiitake e jataí (ao comprar e ao abrir o jogo)
+function abrirRecantoParcela(p){
+  if (!PARCELAS[p].recanto) return;
+  if (!Array.isArray(S.recanto)) S.recanto = [];
+  RECANTO_SLOTS.forEach((s, i) => { if (s.parcela === p) montarSlotRecanto(i); });
+  montarAbelhasJatai();
+}
 const NOME_RECANTO = { caixa: 'Caixa de abelha jataí', tora: 'Tora de shiitake', camera: 'Câmera da mata' };
 function abrirRecanto(){
   if (RECANTO_VIS.aberto || !recantoAberto()) return false;
@@ -12348,7 +12364,7 @@ function ledRecanto(){
 }
 const MODELOS_RECANTO = { caixaJatai: vCaixaJatai, cameraTrap: vCameraTrap, fitaRecanto: vFitaRecanto };
 function montarSlotRecanto(i){
-  if (!RECANTO_VIS.aberto) return;
+  if (!slotRecantoAberto(i)) return;
   const s = RECANTO_SLOTS[i], d = S.recanto[i], V = RECANTO_VIS.slots[i] || (RECANTO_VIS.slots[i] = {});
   if (V.g){ scene.remove(V.g); const k = pickaveis.indexOf(V.g); if (k >= 0) pickaveis.splice(k, 1); }
   const g = new THREE.Group(), ang = Math.atan2(s.lado[0], s.lado[1]);
@@ -12377,7 +12393,7 @@ function montarAbelhasJatai(){
   RECANTO_VIS.abelhas.length = 0;
   const mat = RECANTO_VIS.matAbelha || (RECANTO_VIS.matAbelha = new THREE.MeshLambertMaterial({ color: 0xe8b830 }));
   RECANTO_SLOTS.forEach((s, i) => {
-    if (s.tipo !== 'caixa' || !S.recanto[i]) return;
+    if (s.tipo !== 'caixa' || !S.recanto || !S.recanto[i] || !slotRecantoAberto(i)) return;
     const [dx, dz] = s.lado, x = s.x + 0.5 + dx * 0.62, z = s.z + 0.5 + dz * 0.62;
     for (let k = 0; k < 4; k++){ const m = new THREE.Mesh(geoPart, mat); m.scale.setScalar(0.32); scene.add(m); RECANTO_VIS.abelhas.push({ m, x, z, fase: rnd(0, 6), raio: rnd(0.08, 0.22), vel: rnd(3, 5) }); }
   });
@@ -12424,7 +12440,7 @@ function montarBrilhoRecanto(){
   RECANTO_VIS.tufos = n;
 }
 function atualizarRecanto(dt, t){
-  if (!RECANTO_VIS.aberto) return;
+  if (!RECANTO_VIS.aberto && !RECANTO_VIS.abelhas.length && !RECANTO_VIS.flashes.length) return;
   const noite = LUZ.noite > BRILHO_RECANTO.noite;
   if (RECANTO_VIS.noite){ RECANTO_VIS.noite.visible = noite; RECANTO_VIS.dia.visible = !noite; }
   for (const V of RECANTO_VIS.slots) if (V && V.led) V.led.visible = Math.floor(t * 1.6 + V.g.position.x) % 3 === 0;
@@ -12449,10 +12465,10 @@ function sortearFoto(){
 }
 const intervaloCamera = () => rnd(...RECANTO.camera.intervalo) * 60000;
 function simularRecanto(){
-  if (!RECANTO_VIS.aberto) return;
+  if (!Array.isArray(S.recanto)) return;
   const agora = Date.now();
   RECANTO_SLOTS.forEach((s, i) => {
-    const d = S.recanto[i]; if (!d) return;
+    const d = S.recanto[i]; if (!d || !slotRecantoAberto(i)) return;
     if (s.tipo !== 'camera'){ if (!d.pronto && agora >= d.fim){ d.pronto = true; montarSlotRecanto(i); } return; }
     if (!d.inst) return;
     let novas = 0;
@@ -12470,7 +12486,7 @@ function simularRecanto(){
 // ----- comprar, os menus e as tarefas
 function comprarRecanto(i){
   const s = RECANTO_SLOTS[i], P = RECANTO[s.tipo];
-  if (S.recanto[i] || !RECANTO_VIS.aberto) return;
+  if (!slotRecantoAberto(i) || S.recanto[i]) return;
   if (S.dinheiro < P.preco){ aviso('Dinheiro insuficiente', 'ruim'); Som.erro(); return; }
   gastar(P.preco); chipPulsa('chipDinheiro'); Som.moeda();
   if (s.tipo === 'camera'){
@@ -12528,17 +12544,17 @@ function itensRecanto(i){
 const TAREFA_RECANTO = { caixa: 'coletarJatai', tora: 'colherCogumelo' };
 function checarRecanto(tipoA, alvo){
   const s = RECANTO_SLOTS[alvo.i], d = S.recanto && S.recanto[alvo.i];
-  if (!RECANTO_VIS.aberto || !d) return { ok: false };
-  if (galhoFecha(RECANTO.parcela)) return { ok: false, motivo: 'Um galho caído fecha a trilha. Tire ele primeiro.' };
+  if (!slotRecantoAberto(alvo.i) || !d) return { ok: false };
+  if (galhoFecha(s.parcela != null ? s.parcela : RECANTO.parcela)) return { ok: false, motivo: 'Um galho caído fecha a trilha. Tire ele primeiro.' };
   if (s.tipo === 'camera') return { ok: (tipoA === 'instalarCamera' && !d.inst) || (tipoA === 'buscarFotos' && d.inst && d.fotos.length > 0), custo: {} };
   return { ok: tipoA === TAREFA_RECANTO[s.tipo] && d.pronto, custo: {} };
 }
 // o que cada um pode fazer lá: colher (todos) e, só o Hud, instalar as câmeras e buscar as fotos
 function alvosRecanto(A){
   const out = [];
-  if (!RECANTO_VIS.aberto || galhoFecha(RECANTO.parcela)) return out;
+  if (!Array.isArray(S.recanto)) return out;
   RECANTO_SLOTS.forEach((s, i) => {
-    const d = S.recanto[i], alvo = { k: 'recanto', i }; if (!d || reservado(alvo)) return;
+    const d = S.recanto[i], alvo = { k: 'recanto', i }; if (!d || reservado(alvo) || !slotRecantoAberto(i) || galhoFecha(s.parcela != null ? s.parcela : RECANTO.parcela)) return;
     const [px, pz] = s.pe;
     if (s.tipo === 'camera'){ if (A === AJUDA.hud) { if (!d.inst) out.push(['instalarCamera', alvo, px + 0.5, pz + 0.5]); else if (d.fotos.length) out.push(['buscarFotos', alvo, px + 0.5, pz + 0.5]); } }
     else if (d.pronto) out.push([TAREFA_RECANTO[s.tipo], alvo, px + 0.5, pz + 0.5]);
@@ -21880,6 +21896,7 @@ function abrirParcela(p){
   MATA_CORREDOR[p].visible = false;
   montarTrilha(p);
   MATA_SLOTS.forEach((s, i) => { if (s.p === p){ if (!S.mata[i]) S.mata[i] = { pronto: true }; montarNativa(i); } });
+  abrirRecantoParcela(p);
 }
 function montarPlacasMata(){
   PARCELAS.forEach((P, p) => {
@@ -21962,6 +21979,11 @@ function itensNativa(i){
 }
 function itensParcela(p){
   const P = PARCELAS[p], motivo = motivoParcela(p), tem = [...new Set(P.arvores)].map(t => NATIVAS[t].nome.toLowerCase()).join(', ');
+  if (P.recanto){
+    const nc = P.recanto.filter(t => t === 'caixa').length, nt = P.recanto.length - nc;
+    return { titulo: 'Mata à venda', icone: 'mata', estado: `Parcela ${p + 1} da floresta nativa, de shiitake e mel de jataí: na sombra úmida dela cabem ${contagem(nc, 'caixa', 'caixas')} de abelha jataí presas nos troncos e ${contagem(nt, 'tora', 'toras')} de shiitake, compradas à parte.`,
+      itens: [{ rotulo: 'Comprar a parcela', sub: motivo || `${contagem(nc, 'lugar', 'lugares')} de jataí e ${nt} de shiitake`, icone: 'moeda', preco: reais(P.preco), off: !!motivo, fn: () => comprarParcela(p) }] };
+  }
   return { titulo: 'Mata à venda', icone: 'mata', estado: `Parcela ${p + 1} da floresta nativa, com ${tem}. A mata é protegida: aqui só se colhe o que ela oferece.`,
     itens: [{ rotulo: 'Comprar a parcela', sub: motivo || `${P.arvores.length} árvores para coletar`, icone: 'moeda', preco: reais(P.preco), off: !!motivo, fn: () => comprarParcela(p) }] };
 }
@@ -33899,7 +33921,7 @@ function irAoUrgente(){
 function chipPulsa(id){ const e = $(id); e.classList.remove('pulsa'); void e.offsetWidth; e.classList.add('pulsa'); }
 
 // pedidos e oferta do dia
-const temNativa = prod => { if (PRODUTOS[prod].recanto) return RECANTO_VIS.aberto && recantoTem(PRODUTOS[prod].recanto); const t = PRODUTOS[prod].nativa; return !t || (S.mata || []).some((d, i) => d && MATA_SLOTS[i].tipo === t); };
+const temNativa = prod => { if (PRODUTOS[prod].recanto) return recantoTem(PRODUTOS[prod].recanto); const t = PRODUTOS[prod].nativa; return !t || (S.mata || []).some((d, i) => d && MATA_SLOTS[i].tipo === t); };
 function produtosLiberados(){ const n = nivel(); return ORDEM_PRODUTOS.filter(p => PRODUTOS[p].nivel <= n && !PRODUTOS[p].so && (!PRODUTOS[p].cercado || cercadoFeito(PRODUTOS[p].cercado)) && (!PRODUTOS[p].fab || estFab(PRODUTOS[p].fab).feita) && (!PRODUTOS[p].precisa || estFab(PRODUTOS[p].precisa).feita) && (!PRODUTOS[p].obra || obraConcluida(PRODUTOS[p].obra)) && temNativa(p) && (PRODUTOS[p].requer || []).every(temNativa)); }
 // ================= mural de pedidos
 // até três pedidos do Beto e do Jaca ao mesmo tempo (um por vez no começo, dois do nível 5, três do 10). O Pelúcio ganha
@@ -35010,6 +35032,7 @@ function objetivosPorNivel(){
   add(REFORMA.nivel[2], 'maurinho', '3ª reforma das fábricas: 6 vagas de produção, 12 nas ampliadas');
   for (const P of PARCELAS){
     const tem = [...new Set(P.arvores)];
+    if (P.recanto){ add(P.nivel, 'jatai', 'Aventura na mata: mel de jataí e shiitake', P.preco); continue; }
     add(P.nivel, NATIVAS[tem[0]].produto, `Aventura na mata: ${lista(tem.map(t => NATIVAS[t].nomeP.toLowerCase()))}`, P.preco);
   }
   return grupos;
@@ -36147,6 +36170,8 @@ async function iniciar(){
   montarMata(); montarCachoeira();
   if (mapaMigrado || zonasMigradas || mapa5Migrado || mapa6Migrado || mapa7Migrado || mapa8Migrado || mapa9Migrado || mapa10Migrado || mapa11Migrado || mapa12Migrado) conferirMapaNovo(); else if (hortaMigrada) conferirHorta();
   if (!Array.isArray(S.parcelas)) S.parcelas = []; if (!Array.isArray(S.mata)) S.mata = [];
+  // a parcela 12 tinha nativas antes de virar de shiitake e jataí: os lugares delas saem do save
+  if (S.mata.length > MATA_SLOTS.length) S.mata.length = MATA_SLOTS.length;
   PARCELAS.forEach((_, p) => { if (parcelaComprada(p)) abrirParcela(p); });
   if (abrirRecanto()) montarAbelhasJatai();
   montarPlacasMata();
